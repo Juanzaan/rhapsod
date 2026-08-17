@@ -1,6 +1,8 @@
 import { spawn, type ChildProcessByStdio } from "node:child_process";
 import { PassThrough, type Readable } from "node:stream";
 
+import ffmpegStaticPath from "ffmpeg-static";
+
 import { CHANNELS, SAMPLE_RATE } from "./opus-encoder.js";
 
 export interface FfmpegPcmOptions {
@@ -57,7 +59,7 @@ export function createFfmpegPcmStream(
 ): FfmpegPcmStream {
   const spawnProcess = options.spawnProcess ?? spawn;
   const child = spawnProcess(
-    options.binary ?? "ffmpeg",
+    options.binary ?? ffmpegStaticPath ?? "ffmpeg",
     buildFfmpegPcmArguments(url),
     {
       stdio: ["ignore", "pipe", "pipe"],

@@ -5,8 +5,9 @@ and keeps the voice transport isolated so TeamSpeak 6 support can be added once
 the TS3 implementation is stable.
 
 > [!IMPORTANT]
-> Rhapsod is in its foundation phase. Configuration and queue behavior are
-> implemented; the TS3 voice adapter is the next milestone.
+> Rhapsod is in its foundation phase. TS3 voice transport, buffered Opus
+> playback, YouTube queueing, and the audio test tone are implemented. Real
+> server validation is still required before calling the TS3 milestone stable.
 
 ## Requirements
 
@@ -18,9 +19,20 @@ the TS3 implementation is stable.
 FFmpeg will be provided as a project dependency; a global installation is not
 required.
 
-The YouTube resolver and chat command parser are implemented. Audio is not sent
-to TeamSpeak yet; wiring the resolver, FFmpeg pipeline, Opus encoder, and TS3
-voice adapter is the next milestone.
+The YouTube resolver, chat command parser, FFmpeg PCM pipeline, Opus encoder,
+and TS3 voice adapter are implemented. Set
+`RHAPSOD_AUDIO_TEST_TONE_SECONDS=3` to validate voice permissions and audio
+transport before testing YouTube playback.
+
+For servers that publish a TeamSpeak SRV record, query the port with:
+
+```powershell
+Resolve-DnsName _ts3._udp.example.com -Type SRV
+```
+
+For HolyPVP, the published TS3 voice port is currently `10569`; configure
+`RHAPSOD_TS3_HOST=ts.holypvp.net` and `RHAPSOD_TS3_PORT=10569` in your local
+`.env`. Do not commit that file or any TS3 identity generated under `data/`.
 
 ## Development
 
