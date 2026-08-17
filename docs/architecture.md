@@ -14,6 +14,8 @@ Playback queue         Permissions
         |
 FFmpeg / media resolver
         |
+   PCM framer / Opus
+        |
      VoiceClient
         |
 TeamSpeak 3 adapter (TeamSpeak 6 adapter later)
@@ -42,6 +44,10 @@ ServerQuery can administer a server and receive events, but it cannot transmit
 voice. The TS3 adapter therefore needs a headless voice client. The first
 candidate is `@honeybbq/teamspeak-client`; its API and behavior will be covered
 by an integration test before it becomes part of the stable boundary.
+
+Rhapsod sends 48 kHz stereo PCM in 20 ms frames through Opus Music (codec 5).
+The encoder enforces the 500-byte TS3 packet budget before the adapter sends a
+frame, and the scheduler uses monotonic absolute deadlines to avoid drift.
 
 ## Compatibility
 

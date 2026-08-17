@@ -6,6 +6,8 @@ import pino from "pino";
 
 import { Ts3IdentityStore } from "./adapters/ts3/identity-store.js";
 import { createTs3Connection } from "./adapters/ts3/ts3-connection.js";
+import { createRhapsodOpusEncoder } from "./audio/opus-encoder.js";
+import { playTestTone } from "./audio/test-tone-player.js";
 import { loadConfig } from "./config.js";
 
 async function main(): Promise<void> {
@@ -34,6 +36,25 @@ async function main(): Promise<void> {
   });
   await connection.connect();
   logger.info("Connected to TeamSpeak 3");
+
+  if (config.RHAPSOD_AUDIO_TEST_TONE_SECONDS > 0) {
+    const encoder = await createRhapsodOpusEncoder({
+      bitrate: config.RHAPSOD_OPUS_BITRATE,
+    });
+    try {
+      logger.info(
+        { durationSeconds: config.RHAPSOD_AUDIO_TEST_TONE_SECONDS },
+        "Playing audio test tone",
+      );
+      await playTestTone(
+        config.RHAPSOD_AUDIO_TEST_TONE_SECONDS,
+        encoder,
+        connection,
+      );
+    } finally {
+      encoder.close();
+    }
+  }
 
   const shutdown = (): void => {
     void connection.disconnect().finally(() => process.exit(0));

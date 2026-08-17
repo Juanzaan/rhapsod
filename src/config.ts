@@ -10,6 +10,13 @@ const configSchema = z.object({
   RHAPSOD_LOG_LEVEL: z
     .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
     .default("info"),
+  RHAPSOD_AUDIO_TEST_TONE_SECONDS: z.coerce.number().min(0).max(10).default(0),
+  RHAPSOD_OPUS_BITRATE: z.coerce
+    .number()
+    .int()
+    .min(64_000)
+    .max(160_000)
+    .default(128_000),
   RHAPSOD_TS3_CHANNEL_PASSWORD: optionalSecret,
   RHAPSOD_TS3_CHANNEL_NAME: optionalSecret,
   RHAPSOD_TS3_HOST: z.string().min(1),
