@@ -13,6 +13,7 @@ describe("parseChatCommand", () => {
       mode: "queue",
       name: "loop",
     });
+    expect(parseChatCommand("!tone")).toEqual({ name: "test-tone" });
   });
 
   it("does not treat normal chat as a command", () => {

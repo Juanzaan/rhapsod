@@ -86,9 +86,16 @@ async function main(): Promise<void> {
           playback.stop();
           await connection.sendChannelMessage("Reproducción detenida.");
           break;
+        case "test-tone":
+          await connection.sendChannelMessage(
+            "Reproduciendo tono de prueba (3 s)...",
+          );
+          await playTestTone(3, encoder, connection);
+          await connection.sendChannelMessage("Tono de prueba terminado.");
+          break;
         case "help":
           await connection.sendChannelMessage(
-            "Comandos: !play <YouTube> !queue !now-playing !skip !stop",
+            "Comandos: !play <YouTube> !queue !now-playing !skip !stop !test-tone",
           );
           break;
         default:
