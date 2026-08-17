@@ -26,6 +26,16 @@ TeamSpeak 3 adapter (TeamSpeak 6 adapter later)
 - `adapters` will contain TeamSpeak, FFmpeg, persistence, and API integrations.
 - Secrets are read from environment variables and never persisted by Rhapsod.
 
+## Media inputs
+
+The input parser recognizes local files, direct HTTP(S) media URLs, YouTube
+videos, and Spotify tracks/albums/playlists. Provider-specific resolution is a
+separate step. A Spotify URL is metadata, not an audio stream: the official
+Spotify Web API does not grant raw audio access. The initial Spotify provider
+will resolve metadata and use an explicitly configured, policy-compliant source
+strategy; direct Spotify playback can be added later through a separately
+licensed Connect/librespot backend.
+
 ## TeamSpeak 3
 
 ServerQuery can administer a server and receive events, but it cannot transmit
