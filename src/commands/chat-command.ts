@@ -10,6 +10,7 @@ export type ChatCommand =
   | { readonly name: "resume" }
   | { readonly name: "skip" }
   | { readonly name: "stop" }
+  | { readonly name: "test-tone" }
   | { readonly name: "volume"; readonly value: number };
 
 const COMMAND_ALIASES: Readonly<Record<string, ChatCommand["name"]>> = {
@@ -31,6 +32,8 @@ const COMMAND_ALIASES: Readonly<Record<string, ChatCommand["name"]>> = {
   s: "skip",
   skip: "skip",
   stop: "stop",
+  "test-tone": "test-tone",
+  tone: "test-tone",
   v: "volume",
   vol: "volume",
   volume: "volume",
