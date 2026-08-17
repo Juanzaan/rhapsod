@@ -1,4 +1,8 @@
-import { Client, type Identity } from "@honeybbq/teamspeak-client";
+import {
+  Client,
+  sendTextMessage,
+  type Identity,
+} from "@honeybbq/teamspeak-client";
 
 import type { AppConfig } from "../../config.js";
 
@@ -6,6 +10,7 @@ export interface Ts3Connection {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
   onTextMessage(handler: (message: string, senderUid: string) => void): void;
+  sendChannelMessage(message: string): Promise<void>;
   sendVoiceFrame(frame: Uint8Array): void;
 }
 
@@ -36,6 +41,8 @@ export function createTs3Connection(
       await client.waitConnected(AbortSignal.timeout(15_000));
     },
     disconnect: () => client.disconnect(),
+    sendChannelMessage: (message) =>
+      sendTextMessage(client, 2, client.channelID(), message),
     sendVoiceFrame: (frame) => client.sendVoice(frame, 5),
     onTextMessage: (handler) => {
       client.on("textMessage", (message) =>
