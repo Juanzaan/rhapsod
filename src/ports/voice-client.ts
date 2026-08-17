@@ -10,6 +10,5 @@ export interface VoiceConnectionOptions {
 export interface VoiceClient {
   connect(options: VoiceConnectionOptions): Promise<void>;
   disconnect(): Promise<void>;
-  sendAudio(stream: NodeJS.ReadableStream): Promise<void>;
-  stopAudio(): Promise<void>;
+  sendVoiceFrame(frame: Uint8Array): void;
 }
