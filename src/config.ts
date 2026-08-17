@@ -15,6 +15,7 @@ const configSchema = z.object({
   RHAPSOD_TS3_NICKNAME: z.string().min(1).max(30).default("Rhapsod"),
   RHAPSOD_TS3_PASSWORD: optionalSecret,
   RHAPSOD_TS3_PORT: z.coerce.number().int().min(1).max(65535).default(9987),
+  RHAPSOD_YTDLP_PATH: z.string().min(1).default("yt-dlp"),
 });
 
 export type AppConfig = z.infer<typeof configSchema>;
