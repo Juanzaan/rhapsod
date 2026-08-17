@@ -12,10 +12,15 @@ the TS3 implementation is stable.
 
 - Node.js 22.12 or newer
 - npm 10 or newer
+- `yt-dlp` available on `PATH` or configured through `RHAPSOD_YTDLP_PATH`
 - A TeamSpeak 3 server and permission for the bot to join and speak
 
 FFmpeg will be provided as a project dependency; a global installation is not
 required.
+
+The YouTube resolver and chat command parser are implemented. Audio is not sent
+to TeamSpeak yet; wiring the resolver, FFmpeg pipeline, Opus encoder, and TS3
+voice adapter is the next milestone.
 
 ## Development
 
@@ -35,6 +40,7 @@ must only exist in `.env` or the deployment secret store.
 ## Documentation
 
 - [Architecture](docs/architecture.md)
+- [Commands](docs/commands.md)
 - [Roadmap](docs/roadmap.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)

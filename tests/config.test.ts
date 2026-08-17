@@ -10,6 +10,7 @@ describe("loadConfig", () => {
       RHAPSOD_TS3_HOST: "ts.example.com",
       RHAPSOD_TS3_NICKNAME: "Rhapsod",
       RHAPSOD_TS3_PORT: 9987,
+      RHAPSOD_YTDLP_PATH: "yt-dlp",
     });
   });
 
