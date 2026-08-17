@@ -6,6 +6,7 @@ export interface Ts3Connection {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
   onTextMessage(handler: (message: string, senderUid: string) => void): void;
+  sendVoiceFrame(frame: Uint8Array): void;
 }
 
 export function createTs3Connection(
@@ -30,8 +31,12 @@ export function createTs3Connection(
   );
 
   return {
-    connect: () => client.connect(),
+    connect: async () => {
+      await client.connect();
+      await client.waitConnected(AbortSignal.timeout(15_000));
+    },
     disconnect: () => client.disconnect(),
+    sendVoiceFrame: (frame) => client.sendVoice(frame, 5),
     onTextMessage: (handler) => {
       client.on("textMessage", (message) =>
         handler(message.message, message.invokerUID),
