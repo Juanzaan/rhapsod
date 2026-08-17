@@ -10,7 +10,6 @@ const configSchema = z.object({
   RHAPSOD_LOG_LEVEL: z
     .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
     .default("info"),
-  RHAPSOD_TS3_CHANNEL_ID: optionalSecret,
   RHAPSOD_TS3_CHANNEL_PASSWORD: optionalSecret,
   RHAPSOD_TS3_CHANNEL_NAME: optionalSecret,
   RHAPSOD_TS3_HOST: z.string().min(1),
