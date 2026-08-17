@@ -41,6 +41,7 @@ must only exist in `.env` or the deployment secret store.
 
 - [Architecture](docs/architecture.md)
 - [Commands](docs/commands.md)
+- [Deployment](docs/deployment.md)
 - [Roadmap](docs/roadmap.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
