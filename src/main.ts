@@ -17,6 +17,7 @@ import {
   SystemYtDlpExecutor,
   YoutubeResolver,
 } from "./media/youtube/yt-dlp.js";
+import { SongLinkClient } from "./media/song-link.js";
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -77,6 +78,7 @@ async function main(): Promise<void> {
         config.RHAPSOD_YTDLP_COOKIES_PATH,
       ),
     ),
+    alternativeResolver: new SongLinkClient(),
   });
   const commandRateLimiter = new CommandRateLimiter();
   const handleChatCommand = async (
@@ -94,13 +96,17 @@ async function main(): Promise<void> {
         case "play": {
           await connection.sendChannelMessage("Preparando la reproducción...");
           const track = await playback.enqueue(command.input, senderName);
-          await connection.sendChannelMessage(`En cola: ${track.title}`);
+          await connection.sendChannelMessage(
+            `En cola: ${track.title}${track.alternativeProvider ? ` (fuente alternativa: ${track.alternativeProvider})` : ""}`,
+          );
           break;
         }
         case "search": {
           await connection.sendChannelMessage("Buscando en YouTube...");
           const track = await playback.enqueueSearch(command.input, senderName);
-          await connection.sendChannelMessage(`En cola: ${track.title}`);
+          await connection.sendChannelMessage(
+            `En cola: ${track.title}${track.alternativeProvider ? ` (fuente alternativa: ${track.alternativeProvider})` : ""}`,
+          );
           break;
         }
         case "pause":
