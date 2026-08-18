@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
 import type { YoutubeResource } from "../media-input.js";
-import { rankYoutubeCandidates } from "./search-ranking.js";
+import { rankYoutubeCandidatesAll } from "./search-ranking.js";
 
 const execFileAsync = promisify(execFile);
 const MAX_BUFFER_BYTES = 2 * 1024 * 1024;
@@ -57,6 +57,7 @@ export class YtDlpJobQueue<Input, Output> {
 export interface YoutubeTrackMetadata {
   readonly audioUrl?: string;
   readonly durationSeconds?: number;
+  readonly fallbackSources?: readonly string[];
   readonly id: string;
   readonly title: string;
   readonly webpageUrl: string;
@@ -154,22 +155,30 @@ export class YoutubeResolver {
     const raw = await this.executor.run(
       [
         "--dump-single-json",
-        "--format",
-        "bestaudio[acodec!=none]/bestaudio",
+        "--flat-playlist",
         "--playlist-end",
         "8",
         "--no-warnings",
-        "--skip-download",
         `ytsearch8:${normalizedQuery}`,
       ],
       30_000,
     );
     const candidates = (parseResponse(raw).entries ?? [])
       .filter((entry) => entry.id && entry.title)
-      .map((entry) => parseTrackResponse(entry));
-    const selected = rankYoutubeCandidates(normalizedQuery, candidates);
-    if (!selected) throw new Error("No encontré una coincidencia confiable en YouTube");
-    return selected;
+      .map((entry) => parseSearchCandidate(entry));
+    const ranked = rankYoutubeCandidatesAll(normalizedQuery, candidates);
+    if (ranked.length === 0)
+      throw new Error("No encontré una coincidencia confiable en YouTube");
+    const [selected, ...fallbacks] = ranked;
+    return Object.assign(
+      {},
+      selected,
+      fallbacks.length === 0
+        ? {}
+        : {
+            fallbackSources: fallbacks.map((candidate) => candidate.webpageUrl),
+          },
+    );
   }
 
   async getAudioUrl(resource: YoutubeResource): Promise<string> {
@@ -236,7 +245,7 @@ function parseResponse(raw: string): YtDlpJson {
   }
 }
 
-function parseTrackResponse(raw: string | YtDlpJson): YoutubeTrackMetadata {
+function parseTrackResponse(raw: string | YtDlpJson): YoutubeSearchCandidate {
   const response = typeof raw === "string" ? parseResponse(raw) : raw;
   if (!response.id || !response.title)
     throw new Error("yt-dlp returned incomplete video metadata");
@@ -252,6 +261,21 @@ function parseTrackResponse(raw: string | YtDlpJson): YoutubeTrackMetadata {
     ...(response.channel ? { channel: response.channel } : {}),
     ...(response.categories ? { categories: response.categories } : {}),
     ...(response.live_status ? { liveStatus: response.live_status } : {}),
+  };
+}
+
+function parseSearchCandidate(raw: YtDlpJson): YoutubeSearchCandidate {
+  const metadata = parseTrackResponse(raw);
+  return {
+    ...(metadata.durationSeconds === undefined
+      ? {}
+      : { durationSeconds: metadata.durationSeconds }),
+    id: metadata.id,
+    title: metadata.title,
+    webpageUrl: metadata.webpageUrl,
+    ...(metadata.channel ? { channel: metadata.channel } : {}),
+    ...(metadata.categories ? { categories: metadata.categories } : {}),
+    ...(metadata.liveStatus ? { liveStatus: metadata.liveStatus } : {}),
   };
 }
 

@@ -66,10 +66,38 @@ describe("YoutubeResolver", () => {
       webpageUrl: "https://www.youtube.com/watch?v=search_1",
     });
     expect(executor.calls[0]).toContain("ytsearch8:duki rockstar");
-    expect(executor.calls[0]).not.toContain("--flat-playlist");
+    expect(executor.calls[0]).toContain("--flat-playlist");
+    expect(executor.calls[0]).not.toContain("--format");
     expect(executor.calls[0]).toEqual(
       expect.arrayContaining(["--playlist-end", "8"]),
     );
+  });
+
+  it("keeps ranked runner-up candidates as audio fallbacks", async () => {
+    const executor = new FakeExecutor(
+      '{"entries":[{"id":"best","title":"The Weeknd - Starboy (Official Audio)","webpage_url":"https://www.youtube.com/watch?v=best"},{"id":"topic","title":"The Weeknd - Starboy","webpage_url":"https://www.youtube.com/watch?v=topic"},{"id":"cover","title":"Starboy Cover Remix","webpage_url":"https://www.youtube.com/watch?v=cover"}]}',
+    );
+    const resolver = new YoutubeResolver(executor);
+
+    await expect(resolver.search("the weeknd starboy")).resolves.toEqual({
+      fallbackSources: ["https://www.youtube.com/watch?v=best"],
+      id: "topic",
+      title: "The Weeknd - Starboy",
+      webpageUrl: "https://www.youtube.com/watch?v=topic",
+    });
+  });
+
+  it("does not treat flat search URLs as playable audio", async () => {
+    const executor = new FakeExecutor(
+      '{"entries":[{"id":"flat_1","title":"Artist - Song","url":"https://www.youtube.com/watch?v=flat_1"}]}',
+    );
+    const resolver = new YoutubeResolver(executor);
+
+    await expect(resolver.search("artist song")).resolves.toEqual({
+      id: "flat_1",
+      title: "Artist - Song",
+      webpageUrl: "https://www.youtube.com/watch?v=flat_1",
+    });
   });
 
   it("rejects an empty search result", async () => {
