@@ -57,11 +57,13 @@ Media resolver jobs are serialized so CPU-heavy `yt-dlp` processes cannot run
 in parallel and interfere with real-time audio. Playback URL jobs take priority
 over metadata jobs that are still waiting in the resolver queue.
 
-SoundCloud DRM handling is deliberately provider-aware: Rhapsod first attempts
-the supplied SoundCloud resource through `yt-dlp`. When the provider reports
-DRM, the optional SongLink adapter looks for a YouTube alternative and marks
-the queued track as an alternate source. It never attempts to bypass DRM and
-rejects the track when no alternative is available.
+SoundCloud uses an isolated public-web adapter. It follows `on.soundcloud.com`
+redirects, discovers and caches the current web client identifier, resolves
+authorized transcodings, and refreshes the identifier after an API `401`. The
+adapter is unofficial and may change with SoundCloud's frontend, so `yt-dlp`
+remains a fallback. When either provider reports DRM or a blocked track, the
+optional SongLink adapter looks for a YouTube alternative. Rhapsod never tries
+to bypass DRM and rejects the track when no authorized source is available.
 
 ## Compatibility
 

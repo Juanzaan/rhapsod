@@ -6,7 +6,7 @@ import type { FfmpegPlaybackSession } from "../src/audio/ffmpeg-player.js";
 import type { AudioPlayer } from "../src/audio/audio-player.js";
 import type { RhapsodOpusEncoder } from "../src/audio/opus-encoder.js";
 
-function setup() {
+function setup(options: { soundcloudResolver?: boolean } = {}) {
   const stopSession = vi.fn();
   const playbackResolvers: Array<() => void> = [];
   const createPlayback = vi.fn((): FfmpegPlaybackSession => ({
@@ -76,6 +76,18 @@ function setup() {
         }),
       ),
     },
+    ...(options.soundcloudResolver
+      ? {
+          soundcloudResolver: {
+            getAudioUrl: vi.fn(() =>
+              Promise.resolve("https://media.example/soundcloud-api"),
+            ),
+            getTrack: vi.fn(() =>
+              Promise.reject(new Error("SoundCloud API returned 503")),
+            ),
+          },
+        }
+      : {}),
   });
   return {
     createPlayback,
@@ -161,6 +173,20 @@ describe("YoutubePlaybackService", () => {
       alternativeProvider: "youtube",
       title: "Fallback Track",
     });
+  });
+
+  it("falls back to yt-dlp when the public SoundCloud API is unavailable", async () => {
+    const { resolver, service } = setup({ soundcloudResolver: true });
+
+    const track = await service.enqueue(
+      "https://soundcloud.com/artist/track",
+      "user-1",
+    );
+
+    expect(resolver.getTrackFromUrl).toHaveBeenCalledWith(
+      "https://soundcloud.com/artist/track",
+    );
+    expect(track.title).toBe("SoundCloud Track");
   });
 
   it("advances to the next track when playback completes", async () => {

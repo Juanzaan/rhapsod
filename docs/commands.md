@@ -24,8 +24,11 @@ chat once the TS3 adapter is connected.
 - **YouTube:** Rhapsod uses a local `yt-dlp` executable to obtain metadata and
   a temporary audio URL immediately before playback. Search returns the first
   matching video; playlists and Spotify resolution are not connected yet.
-- **SoundCloud:** individual track links use the same yt-dlp and FFmpeg
-  pipeline. Playlists are not expanded yet.
+- **SoundCloud:** individual tracks first use SoundCloud's public web API with
+  a dynamically discovered, cached client identifier. The identifier refreshes
+  after authorization failures; yt-dlp and YouTube alternatives remain
+  fallbacks. This unofficial API may change without notice. Playlists are not
+  expanded yet, and blocked/DRM tracks are never bypassed.
 - **Other sources:** Spotify links, local files, direct HTTPS audio URLs, and
   YouTube search are planned but currently rejected by `!play`.
 
