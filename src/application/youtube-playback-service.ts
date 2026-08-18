@@ -101,6 +101,17 @@ export class YoutubePlaybackService {
     this.#session?.player.resume();
   }
 
+  removeQueued(position: number): Track | undefined {
+    const track = this.#queue.snapshot()[position - 1];
+    return track ? this.#queue.remove(track.id) : undefined;
+  }
+
+  clearQueued(): number {
+    const count = this.#queue.length;
+    this.#queue.clear();
+    return count;
+  }
+
   #playNext(): Promise<void> {
     const track = this.#queue.next();
     if (!track) {
