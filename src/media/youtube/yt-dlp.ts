@@ -25,21 +25,21 @@ interface YtDlpJson {
 }
 
 export class SystemYtDlpExecutor implements YtDlpExecutor {
-  constructor(private readonly binaryPath: string) {}
+  constructor(
+    private readonly binaryPath: string,
+    private readonly cookiesPath?: string,
+  ) {}
 
   async run(
     argumentsList: readonly string[],
     timeoutMs: number,
   ): Promise<string> {
-    const { stdout } = await execFileAsync(
-      this.binaryPath,
-      [...argumentsList],
-      {
-        maxBuffer: MAX_BUFFER_BYTES,
-        timeout: timeoutMs,
-        windowsHide: true,
-      },
-    );
+    const ytDlpArguments = buildYtDlpArguments(argumentsList, this.cookiesPath);
+    const { stdout } = await execFileAsync(this.binaryPath, ytDlpArguments, {
+      maxBuffer: MAX_BUFFER_BYTES,
+      timeout: timeoutMs,
+      windowsHide: true,
+    });
     return stdout;
   }
 }
@@ -101,6 +101,15 @@ export class YoutubeResolver {
       throw new Error("yt-dlp did not return an HTTPS audio URL");
     return url;
   }
+}
+
+export function buildYtDlpArguments(
+  argumentsList: readonly string[],
+  cookiesPath?: string,
+): string[] {
+  return cookiesPath
+    ? ["--cookies", cookiesPath, ...argumentsList]
+    : [...argumentsList];
 }
 
 function parseResponse(raw: string): YtDlpJson {

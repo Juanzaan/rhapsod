@@ -45,7 +45,10 @@ async function main(): Promise<void> {
     encoder,
     output: connection,
     resolver: new YoutubeResolver(
-      new SystemYtDlpExecutor(config.RHAPSOD_YTDLP_PATH),
+      new SystemYtDlpExecutor(
+        config.RHAPSOD_YTDLP_PATH,
+        config.RHAPSOD_YTDLP_COOKIES_PATH,
+      ),
     ),
   });
   const commandRateLimiter = new CommandRateLimiter();
