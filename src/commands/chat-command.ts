@@ -8,6 +8,7 @@ export type ChatCommand =
   | { readonly name: "queue" }
   | { readonly name: "remove"; readonly position: number }
   | { readonly name: "resume" }
+  | { readonly input: string; readonly name: "search" }
   | { readonly name: "skip" }
   | { readonly name: "stop" }
   | { readonly name: "test-tone" }
@@ -29,6 +30,7 @@ const COMMAND_ALIASES: Readonly<Record<string, ChatCommand["name"]>> = {
   queue: "queue",
   remove: "remove",
   resume: "resume",
+  search: "search",
   rm: "remove",
   s: "skip",
   skip: "skip",
@@ -38,6 +40,8 @@ const COMMAND_ALIASES: Readonly<Record<string, ChatCommand["name"]>> = {
   v: "volume",
   vol: "volume",
   volume: "volume",
+  yt: "search",
+  youtube: "search",
 };
 
 export function parseChatCommand(
@@ -56,7 +60,10 @@ export function parseChatCommand(
   const argument = unwrapTeamSpeakUrl(argumentsList.join(" ").trim());
   switch (name) {
     case "play":
-      if (!argument) throw new Error("Usage: !play <link or file>");
+      if (!argument) throw new Error("Usage: !play <YouTube URL>");
+      return { input: argument, name };
+    case "search":
+      if (!argument) throw new Error("Usage: !yt <search terms>");
       return { input: argument, name };
     case "remove":
       return { name, position: parsePosition(argument) };

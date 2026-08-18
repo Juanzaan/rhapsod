@@ -69,17 +69,23 @@ export class YoutubeResolver {
       ],
       30_000,
     );
-    const response = parseResponse(raw);
-    if (!response.id || !response.title)
-      throw new Error("yt-dlp returned incomplete video metadata");
-    return {
-      ...(response.duration === undefined
-        ? {}
-        : { durationSeconds: response.duration }),
-      id: response.id,
-      title: response.title,
-      webpageUrl: response.webpage_url ?? youtubeUrl(response.id),
-    };
+    return parseTrackResponse(raw);
+  }
+
+  async search(query: string): Promise<YoutubeTrackMetadata> {
+    const normalizedQuery = query.trim();
+    if (!normalizedQuery) throw new Error("YouTube search cannot be empty");
+    const raw = await this.executor.run(
+      [
+        "--dump-single-json",
+        "--no-playlist",
+        "--no-warnings",
+        "--skip-download",
+        `ytsearch1:${normalizedQuery}`,
+      ],
+      30_000,
+    );
+    return parseTrackResponse(raw);
   }
 
   async getAudioUrl(resource: YoutubeResource): Promise<string> {
@@ -123,6 +129,20 @@ function parseResponse(raw: string): YtDlpJson {
   } catch {
     throw new Error("yt-dlp returned invalid JSON");
   }
+}
+
+function parseTrackResponse(raw: string): YoutubeTrackMetadata {
+  const response = parseResponse(raw);
+  if (!response.id || !response.title)
+    throw new Error("yt-dlp returned incomplete video metadata");
+  return {
+    ...(response.duration === undefined
+      ? {}
+      : { durationSeconds: response.duration }),
+    id: response.id,
+    title: response.title,
+    webpageUrl: response.webpage_url ?? youtubeUrl(response.id),
+  };
 }
 
 function youtubeUrl(videoId: string): string {

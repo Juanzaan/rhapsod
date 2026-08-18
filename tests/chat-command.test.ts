@@ -17,6 +17,10 @@ describe("parseChatCommand", () => {
       name: "loop",
     });
     expect(parseChatCommand("!tone")).toEqual({ name: "test-tone" });
+    expect(parseChatCommand("!yt duki rockstar")).toEqual({
+      input: "duki rockstar",
+      name: "search",
+    });
   });
 
   it("does not treat normal chat as a command", () => {

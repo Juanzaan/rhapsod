@@ -49,6 +49,21 @@ describe("YoutubeResolver", () => {
     expect(executor.calls[0]).toContain("--no-playlist");
   });
 
+  it("resolves the first YouTube search result", async () => {
+    const executor = new FakeExecutor(
+      '{"id":"search_1","title":"Found","webpage_url":"https://www.youtube.com/watch?v=search_1"}',
+    );
+    const resolver = new YoutubeResolver(executor);
+
+    await expect(resolver.search("duki rockstar")).resolves.toEqual({
+      id: "search_1",
+      title: "Found",
+      webpageUrl: "https://www.youtube.com/watch?v=search_1",
+    });
+    expect(executor.calls[0]).toContain("ytsearch1:duki rockstar");
+    expect(executor.calls[0]).toContain("--no-playlist");
+  });
+
   it("resolves only HTTPS audio endpoints", async () => {
     const resolver = new YoutubeResolver(
       new FakeExecutor("https://media.example/audio\n"),
