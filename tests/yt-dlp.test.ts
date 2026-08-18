@@ -50,7 +50,10 @@ describe("YoutubeResolver", () => {
     });
     expect(executor.calls[0]).toContain("--no-playlist");
     expect(executor.calls[0]).toEqual(
-      expect.arrayContaining(["--format", "bestaudio[acodec!=none]/bestaudio"]),
+      expect.arrayContaining([
+        "--format",
+        "bestaudio[acodec!=none]/bestaudio/best[acodec!=none]",
+      ]),
     );
   });
 
