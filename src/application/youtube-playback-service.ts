@@ -20,6 +20,14 @@ export interface PlaybackServiceOptions {
     error: Error,
   ) => void | Promise<void>;
   readonly onPlaybackStarted?: (track: Track) => void | Promise<void>;
+  readonly onTiming?: (timing: PlaybackTiming) => void;
+}
+
+export interface PlaybackTiming {
+  readonly cacheHit?: boolean;
+  readonly durationMs: number;
+  readonly stage: "metadata" | "audio-url";
+  readonly trackId: string;
 }
 
 export interface YoutubePlaybackResolver {
@@ -28,6 +36,14 @@ export interface YoutubePlaybackResolver {
   getTrack(resource: YoutubeResource): Promise<YoutubeTrackMetadata>;
   getTrackFromUrl(url: string): Promise<YoutubeTrackMetadata>;
   search(query: string): Promise<YoutubeTrackMetadata>;
+}
+
+const AUDIO_URL_FALLBACK_TTL_MS = 10 * 60_000;
+const AUDIO_URL_EXPIRY_MARGIN_MS = 60_000;
+
+interface PreparedAudio {
+  readonly url: string;
+  readonly expiresAt: number;
 }
 
 export class YoutubePlaybackService {
@@ -41,9 +57,11 @@ export class YoutubePlaybackService {
     error: Error,
   ) => void | Promise<void>;
   readonly #onPlaybackStarted: (track: Track) => void | Promise<void>;
+  readonly #onTiming: (timing: PlaybackTiming) => void;
   #current: Track | undefined;
   #session: FfmpegPlaybackSession | undefined;
   #generation = 0;
+  readonly #prepared = new Map<string, Promise<PreparedAudio>>();
 
   constructor(options: PlaybackServiceOptions) {
     this.#encoder = options.encoder;
@@ -52,6 +70,7 @@ export class YoutubePlaybackService {
     this.#createPlayback = options.createPlayback ?? playFfmpegUrl;
     this.#onPlaybackError = options.onPlaybackError ?? (() => undefined);
     this.#onPlaybackStarted = options.onPlaybackStarted ?? (() => undefined);
+    this.#onTiming = options.onTiming ?? (() => undefined);
   }
 
   get current(): Track | undefined {
@@ -63,9 +82,11 @@ export class YoutubePlaybackService {
   }
 
   async enqueue(input: string, requestedBy: string): Promise<Track> {
+    const startedAt = Date.now();
     const media = parseMediaInput(input);
     if (media.kind === "soundcloud") {
       const metadata = await this.#resolver.getTrackFromUrl(media.value);
+      this.#recordMetadataTiming(metadata, startedAt);
       return this.#enqueueMetadata(metadata, requestedBy);
     }
     if (media.kind !== "youtube" || media.resource.type !== "video") {
@@ -74,11 +95,14 @@ export class YoutubePlaybackService {
       );
     }
     const metadata = await this.#resolver.getTrack(media.resource);
+    this.#recordMetadataTiming(metadata, startedAt);
     return this.#enqueueMetadata(metadata, requestedBy);
   }
 
   async enqueueSearch(query: string, requestedBy: string): Promise<Track> {
+    const startedAt = Date.now();
     const metadata = await this.#resolver.search(query);
+    this.#recordMetadataTiming(metadata, startedAt);
     return this.#enqueueMetadata(metadata, requestedBy);
   }
 
@@ -89,12 +113,16 @@ export class YoutubePlaybackService {
       source: metadata.webpageUrl,
       title: metadata.title,
     };
+    if (metadata.audioUrl) this.#cacheAudioUrl(track, metadata.audioUrl);
     this.#queue.add(track);
     if (!this.#current) void this.#playNext();
+    else this.#prefetchNext();
     return track;
   }
 
   skip(): void {
+    this.#generation++;
+    if (this.#current) this.#prepared.delete(this.#current.source);
     this.#session?.stop();
     this.#session = undefined;
     this.#current = undefined;
@@ -107,6 +135,7 @@ export class YoutubePlaybackService {
     this.#session = undefined;
     this.#current = undefined;
     this.#queue.clear();
+    this.#prepared.clear();
   }
 
   pause(): void {
@@ -119,12 +148,15 @@ export class YoutubePlaybackService {
 
   removeQueued(position: number): Track | undefined {
     const track = this.#queue.snapshot()[position - 1];
-    return track ? this.#queue.remove(track.id) : undefined;
+    const removed = track ? this.#queue.remove(track.id) : undefined;
+    if (removed) this.#prepared.delete(removed.source);
+    return removed;
   }
 
   clearQueued(): number {
     const count = this.#queue.length;
     this.#queue.clear();
+    this.#prepared.clear();
     return count;
   }
 
@@ -136,13 +168,20 @@ export class YoutubePlaybackService {
     }
     const generation = ++this.#generation;
     this.#current = track;
-    return this.#resolver
-      .getAudioUrlFromUrl(track.source)
-      .then((url) => {
+    const audioResolutionStartedAt = Date.now();
+    return this.#getAudioUrl(track)
+      .then(({ cacheHit, url }) => {
+        this.#onTiming({
+          cacheHit,
+          durationMs: Date.now() - audioResolutionStartedAt,
+          stage: "audio-url",
+          trackId: track.id,
+        });
         if (generation !== this.#generation || this.#current !== track) return;
         const session = this.#createPlayback(url, this.#encoder, this.#output);
         this.#session = session;
         void this.#onPlaybackStarted(track);
+        this.#prefetchNext();
         return session.done;
       })
       .catch(async (error: unknown) => {
@@ -152,9 +191,79 @@ export class YoutubePlaybackService {
       })
       .then(() => {
         if (generation !== this.#generation || this.#current !== track) return;
+        this.#prepared.delete(track.source);
         this.#session = undefined;
         this.#current = undefined;
         return this.#playNext();
       });
   }
+
+  #cacheAudioUrl(track: Track, url: string): void {
+    this.#prepared.set(
+      track.source,
+      Promise.resolve({ url, expiresAt: audioUrlExpiresAt(url) }),
+    );
+  }
+
+  #getAudioUrl(track: Track): Promise<{ cacheHit: boolean; url: string }> {
+    const cached = this.#prepared.get(track.source);
+    if (cached) {
+      return cached.then((prepared) => {
+        if (prepared.expiresAt > Date.now()) {
+          return { cacheHit: true, url: prepared.url };
+        }
+        this.#prepared.delete(track.source);
+        return this.#resolveAudioUrl(track).then((url) => ({
+          cacheHit: false,
+          url,
+        }));
+      });
+    }
+    return this.#resolveAudioUrl(track).then((url) => ({
+      cacheHit: false,
+      url,
+    }));
+  }
+
+  #resolveAudioUrl(track: Track): Promise<string> {
+    const pending = this.#resolver
+      .getAudioUrlFromUrl(track.source)
+      .then((url) => ({
+        url,
+        expiresAt: audioUrlExpiresAt(url),
+      }));
+    this.#prepared.set(track.source, pending);
+    return pending.then((prepared) => prepared.url);
+  }
+
+  #prefetchNext(): void {
+    const next = this.#queue.snapshot()[0];
+    if (!next || this.#prepared.has(next.source)) return;
+    void this.#resolveAudioUrl(next).catch(() => {
+      this.#prepared.delete(next.source);
+    });
+  }
+
+  #recordMetadataTiming(
+    metadata: YoutubeTrackMetadata,
+    startedAt: number,
+  ): void {
+    this.#onTiming({
+      durationMs: Date.now() - startedAt,
+      stage: "metadata",
+      trackId: metadata.id,
+    });
+  }
+}
+
+function audioUrlExpiresAt(url: string): number {
+  try {
+    const expiresSeconds = Number(new URL(url).searchParams.get("expire"));
+    if (Number.isFinite(expiresSeconds) && expiresSeconds > 0) {
+      return expiresSeconds * 1_000 - AUDIO_URL_EXPIRY_MARGIN_MS;
+    }
+  } catch {
+    // The resolver already validates URLs; use a conservative TTL if parsing fails.
+  }
+  return Date.now() + AUDIO_URL_FALLBACK_TTL_MS;
 }

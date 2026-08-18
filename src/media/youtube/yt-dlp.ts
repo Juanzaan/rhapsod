@@ -11,6 +11,7 @@ export interface YtDlpExecutor {
 }
 
 export interface YoutubeTrackMetadata {
+  readonly audioUrl?: string;
   readonly durationSeconds?: number;
   readonly id: string;
   readonly title: string;
@@ -23,6 +24,8 @@ interface YtDlpJson {
   id?: string;
   title?: string;
   webpage_url?: string;
+  url?: string;
+  requested_downloads?: Array<{ url?: string }>;
 }
 
 export class SystemYtDlpExecutor implements YtDlpExecutor {
@@ -63,6 +66,8 @@ export class YoutubeResolver {
     const raw = await this.executor.run(
       [
         "--dump-single-json",
+        "--format",
+        "bestaudio[acodec!=none]/bestaudio",
         "--no-playlist",
         "--no-warnings",
         "--skip-download",
@@ -83,7 +88,8 @@ export class YoutubeResolver {
     const raw = await this.executor.run(
       [
         "--dump-single-json",
-        "--flat-playlist",
+        "--format",
+        "bestaudio[acodec!=none]/bestaudio",
         "--playlist-end",
         "1",
         "--no-warnings",
@@ -125,6 +131,8 @@ export class YoutubeResolver {
     const raw = await this.executor.run(
       [
         "--dump-single-json",
+        "--format",
+        "bestaudio[acodec!=none]/bestaudio",
         "--no-playlist",
         "--no-warnings",
         "--skip-download",
@@ -162,7 +170,9 @@ function parseTrackResponse(raw: string | YtDlpJson): YoutubeTrackMetadata {
   const response = typeof raw === "string" ? parseResponse(raw) : raw;
   if (!response.id || !response.title)
     throw new Error("yt-dlp returned incomplete video metadata");
+  const resolvedAudioUrl = audioUrl(response);
   return {
+    ...(resolvedAudioUrl === undefined ? {} : { audioUrl: resolvedAudioUrl }),
     ...(response.duration === undefined
       ? {}
       : { durationSeconds: response.duration }),
@@ -170,6 +180,11 @@ function parseTrackResponse(raw: string | YtDlpJson): YoutubeTrackMetadata {
     title: response.title,
     webpageUrl: response.webpage_url ?? youtubeUrl(response.id),
   };
+}
+
+function audioUrl(response: YtDlpJson): string | undefined {
+  const value = response.requested_downloads?.[0]?.url ?? response.url;
+  return value?.startsWith("https://") ? value : undefined;
 }
 
 function youtubeUrl(videoId: string): string {

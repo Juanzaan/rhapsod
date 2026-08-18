@@ -34,19 +34,23 @@ describe("YoutubeResolver", () => {
 
   it("uses a generated YouTube URL for metadata", async () => {
     const executor = new FakeExecutor(
-      '{"id":"abc_123","title":"Example","duration":120}',
+      '{"id":"abc_123","title":"Example","duration":120,"url":"https://media.example/audio"}',
     );
     const resolver = new YoutubeResolver(executor);
 
     await expect(
       resolver.getTrack({ id: "abc_123", type: "video" }),
     ).resolves.toEqual({
+      audioUrl: "https://media.example/audio",
       durationSeconds: 120,
       id: "abc_123",
       title: "Example",
       webpageUrl: "https://www.youtube.com/watch?v=abc_123",
     });
     expect(executor.calls[0]).toContain("--no-playlist");
+    expect(executor.calls[0]).toEqual(
+      expect.arrayContaining(["--format", "bestaudio[acodec!=none]/bestaudio"]),
+    );
   });
 
   it("resolves the first YouTube search result", async () => {
@@ -61,7 +65,7 @@ describe("YoutubeResolver", () => {
       webpageUrl: "https://www.youtube.com/watch?v=search_1",
     });
     expect(executor.calls[0]).toContain("ytsearch1:duki rockstar");
-    expect(executor.calls[0]).toContain("--flat-playlist");
+    expect(executor.calls[0]).not.toContain("--flat-playlist");
     expect(executor.calls[0]).toEqual(
       expect.arrayContaining(["--playlist-end", "1"]),
     );

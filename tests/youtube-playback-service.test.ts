@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { YoutubePlaybackService } from "../src/application/youtube-playback-service.js";
+import type { YoutubeTrackMetadata } from "../src/media/youtube/yt-dlp.js";
 import type { FfmpegPlaybackSession } from "../src/audio/ffmpeg-player.js";
 import type { AudioPlayer } from "../src/audio/audio-player.js";
 import type { RhapsodOpusEncoder } from "../src/audio/opus-encoder.js";
@@ -18,22 +19,25 @@ function setup() {
     getAudioUrlFromUrl: vi.fn(() =>
       Promise.resolve("https://media.example/audio"),
     ),
-    getTrack: vi.fn((resource: { id: string }) =>
+    getTrack: vi.fn((resource: { id: string }): Promise<YoutubeTrackMetadata> =>
       Promise.resolve({
+        audioUrl: `https://media.example/${resource.id}`,
         id: resource.id,
         title: `Track ${resource.id}`,
         webpageUrl: `https://www.youtube.com/watch?v=${resource.id}`,
       }),
     ),
-    getTrackFromUrl: vi.fn((url: string) =>
+    getTrackFromUrl: vi.fn((url: string): Promise<YoutubeTrackMetadata> =>
       Promise.resolve({
+        audioUrl: "https://media.example/soundcloud-track",
         id: "soundcloud-track",
         title: "SoundCloud Track",
         webpageUrl: url,
       }),
     ),
-    search: vi.fn((query: string) =>
+    search: vi.fn((query: string): Promise<YoutubeTrackMetadata> =>
       Promise.resolve({
+        audioUrl: "https://media.example/search-result",
         id: "search-result",
         title: `Search ${query}`,
         webpageUrl: "https://www.youtube.com/watch?v=search-result",
@@ -88,11 +92,9 @@ describe("YoutubePlaybackService", () => {
 
     expect(track.title).toBe("Track abc123");
     expect(service.current).toEqual(track);
-    expect(resolver.getAudioUrlFromUrl).toHaveBeenCalledWith(
-      "https://www.youtube.com/watch?v=abc123",
-    );
+    expect(resolver.getAudioUrlFromUrl).not.toHaveBeenCalled();
     expect(createPlayback).toHaveBeenCalledWith(
-      "https://media.example/audio",
+      "https://media.example/abc123",
       expect.anything(),
       expect.anything(),
     );
@@ -118,14 +120,54 @@ describe("YoutubePlaybackService", () => {
   });
 
   it("advances to the next track when playback completes", async () => {
-    const { playbackResolvers, service } = setup();
+    const { playbackResolvers, resolver, service } = setup();
+    resolver.getTrack.mockImplementation((resource: { id: string }) =>
+      Promise.resolve({
+        ...(resource.id === "first"
+          ? { audioUrl: "https://media.example/first" }
+          : {}),
+        id: resource.id,
+        title: `Track ${resource.id}`,
+        webpageUrl: `https://www.youtube.com/watch?v=${resource.id}`,
+      }),
+    );
     await service.enqueue("https://youtu.be/first", "user-1");
     await service.enqueue("https://youtu.be/second", "user-2");
     await new Promise((resolve) => setImmediate(resolve));
 
+    expect(resolver.getAudioUrlFromUrl).toHaveBeenCalledWith(
+      "https://www.youtube.com/watch?v=second",
+    );
+
     playbackResolvers[0]?.();
     await new Promise((resolve) => setImmediate(resolve));
 
+    expect(service.current?.id).toBe("second");
+  });
+
+  it("falls back to resolving playback when prefetched audio fails", async () => {
+    const { playbackResolvers, resolver, service } = setup();
+    resolver.getTrack.mockImplementation((resource: { id: string }) =>
+      Promise.resolve({
+        ...(resource.id === "first"
+          ? { audioUrl: "https://media.example/first" }
+          : {}),
+        id: resource.id,
+        title: `Track ${resource.id}`,
+        webpageUrl: `https://www.youtube.com/watch?v=${resource.id}`,
+      }),
+    );
+    resolver.getAudioUrlFromUrl
+      .mockRejectedValueOnce(new Error("prefetch failed"))
+      .mockResolvedValueOnce("https://media.example/fallback");
+
+    await service.enqueue("https://youtu.be/first", "user-1");
+    await service.enqueue("https://youtu.be/second", "user-2");
+    await new Promise((resolve) => setImmediate(resolve));
+    playbackResolvers[0]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(resolver.getAudioUrlFromUrl).toHaveBeenCalledTimes(2);
     expect(service.current?.id).toBe("second");
   });
 
@@ -155,6 +197,11 @@ describe("YoutubePlaybackService", () => {
 
   it("reports playback failures before advancing the queue", async () => {
     const { onPlaybackError, resolver, service } = setup();
+    resolver.getTrack.mockResolvedValueOnce({
+      id: "failed",
+      title: "Track failed",
+      webpageUrl: "https://www.youtube.com/watch?v=failed",
+    });
     resolver.getAudioUrlFromUrl.mockRejectedValueOnce(
       new Error("audio unavailable"),
     );
