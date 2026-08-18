@@ -107,7 +107,10 @@ async function main(): Promise<void> {
             tracks.length === 0
               ? "La cola está vacía."
               : tracks
-                  .map((track, index) => `${index + 1}. ${track.title}`)
+                  .map(
+                    (track, index) =>
+                      `${index + 1}. ${track.title} (por ${track.requestedBy})`,
+                  )
                   .join(" | "),
           );
           break;
@@ -133,7 +136,7 @@ async function main(): Promise<void> {
         case "now-playing":
           await connection.sendChannelMessage(
             playback.current
-              ? `Reproduciendo: ${playback.current.title}`
+              ? `Reproduciendo: ${playback.current.title} (por ${playback.current.requestedBy})`
               : "No hay nada reproduciéndose.",
           );
           break;
