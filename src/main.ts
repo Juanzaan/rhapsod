@@ -55,6 +55,9 @@ async function main(): Promise<void> {
     onPlaybackStarted: async (track) => {
       await connection.sendChannelMessage(`Reproduciendo: ${track.title}`);
     },
+    onTiming: (timing) => {
+      logger.info(timing, "Playback timing");
+    },
     onPlaybackError: async (track, error) => {
       logger.error({ error, trackId: track.id }, "YouTube playback failed");
       await connection.sendChannelMessage(
