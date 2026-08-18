@@ -113,12 +113,13 @@ async function main(): Promise<void> {
           await connection.sendChannelMessage(
             tracks.length === 0
               ? "La cola está vacía."
-              : tracks
-                  .map(
+              : [
+                  "Cola de reproducción:",
+                  ...tracks.map(
                     (track, index) =>
                       `${index + 1}. ${track.title} (por ${track.requestedBy})`,
-                  )
-                  .join(" | "),
+                  ),
+                ].join("\n"),
           );
           break;
         }
@@ -181,7 +182,19 @@ async function main(): Promise<void> {
           break;
         case "help":
           await connection.sendChannelMessage(
-            "Comandos: !play <YouTube/SoundCloud> | !yt <búsqueda> | !queue | !now-playing (!np) | !remove <n> | !clear | !skip | !stop | !pause | !resume | !test-tone",
+            [
+              "Comandos disponibles:",
+              "!play <URL> - Agregar YouTube o SoundCloud",
+              "!yt <búsqueda> - Buscar en YouTube",
+              "!queue - Mostrar la cola",
+              "!now-playing (!np) - Canción actual",
+              "!remove <n> - Quitar una posición",
+              "!clear - Vaciar la cola",
+              "!skip - Saltar la canción",
+              "!stop - Detener y vaciar",
+              "!pause / !resume - Pausar o continuar",
+              "!test-tone - Probar el audio",
+            ].join("\n"),
           );
           break;
         case "loop":
