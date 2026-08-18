@@ -28,6 +28,7 @@ const configSchema = z.object({
     .default("true")
     .transform((value) => value === "true"),
   RHAPSOD_YTDLP_PATH: z.string().min(1).default("yt-dlp"),
+  RHAPSOD_YTDLP_COOKIES_PATH: optionalSecret,
 });
 
 export type AppConfig = z.infer<typeof configSchema>;

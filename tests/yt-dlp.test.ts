@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildYtDlpArguments,
   YoutubeResolver,
   type YtDlpExecutor,
 } from "../src/media/youtube/yt-dlp.js";
@@ -17,6 +18,12 @@ class FakeExecutor implements YtDlpExecutor {
 }
 
 describe("YoutubeResolver", () => {
+  it("passes a private cookies file to yt-dlp when configured", () => {
+    expect(
+      buildYtDlpArguments(["--version"], "/run/rhapsod/cookies.txt"),
+    ).toEqual(["--cookies", "/run/rhapsod/cookies.txt", "--version"]);
+  });
+
   it("uses a generated YouTube URL for metadata", async () => {
     const executor = new FakeExecutor(
       '{"id":"abc_123","title":"Example","duration":120}',
