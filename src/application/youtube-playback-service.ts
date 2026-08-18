@@ -1,5 +1,8 @@
 import { parseMediaInput } from "../media/media-input.js";
-import type { YoutubeTrackMetadata } from "../media/youtube/yt-dlp.js";
+import type {
+  PlaylistExpansion,
+  YoutubeTrackMetadata,
+} from "../media/youtube/yt-dlp.js";
 import type { YoutubeResource } from "../media/media-input.js";
 import type { Track } from "../domain/track.js";
 import { PlaybackQueue } from "../domain/playback-queue.js";
@@ -23,6 +26,7 @@ export interface PlaybackServiceOptions {
   readonly alternativeResolver?: AlternativeSourceResolver;
   readonly soundcloudResolver?: SoundCloudResolver;
   readonly output: VoiceFrameOutput;
+  readonly playlistMaxTracks?: number;
   readonly createPlayback?: typeof playFfmpegUrl;
   readonly onPlaybackError?: (
     track: Track,
@@ -52,10 +56,20 @@ export interface YoutubePlaybackResolver {
   getTrack(resource: YoutubeResource): Promise<YoutubeTrackMetadata>;
   getTrackFromUrl(url: string): Promise<YoutubeTrackMetadata>;
   search(query: string): Promise<YoutubeTrackMetadata>;
+  expandPlaylist(
+    resource: YoutubeResource,
+    limit: number,
+  ): Promise<PlaylistExpansion>;
+}
+
+export interface PlaylistEnqueueResult {
+  readonly added: readonly Track[];
+  readonly remaining?: number;
 }
 
 const AUDIO_URL_FALLBACK_TTL_MS = 10 * 60_000;
 const AUDIO_URL_EXPIRY_MARGIN_MS = 60_000;
+const DEFAULT_PLAYLIST_MAX_TRACKS = 20;
 
 interface PreparedAudio {
   readonly url: string;
@@ -81,6 +95,7 @@ export class YoutubePlaybackService {
     reason: PlaybackEndReason,
   ) => void;
   readonly #onTiming: (timing: PlaybackTiming) => void;
+  readonly #playlistMaxTracks: number;
   #current: Track | undefined;
   #session: FfmpegPlaybackSession | undefined;
   #generation = 0;
@@ -101,6 +116,8 @@ export class YoutubePlaybackService {
     this.#onPlaybackStarted = options.onPlaybackStarted ?? (() => undefined);
     this.#onPlaybackFinished = options.onPlaybackFinished ?? (() => undefined);
     this.#onTiming = options.onTiming ?? (() => undefined);
+    this.#playlistMaxTracks =
+      options.playlistMaxTracks ?? DEFAULT_PLAYLIST_MAX_TRACKS;
   }
 
   get current(): Track | undefined {
@@ -175,6 +192,46 @@ export class YoutubePlaybackService {
     const metadata = await this.#resolver.search(query);
     this.#recordMetadataTiming(metadata, startedAt);
     return this.#enqueueMetadata(metadata, requestedBy);
+  }
+
+  async enqueuePlaylist(
+    resource: YoutubeResource,
+    requestedBy: string,
+  ): Promise<PlaylistEnqueueResult> {
+    if (resource.type !== "playlist")
+      throw new Error("Only YouTube playlists can be expanded");
+    const expansion = await this.#resolver.expandPlaylist(
+      resource,
+      this.#playlistMaxTracks,
+    );
+    const added: Track[] = [];
+    let duplicates = 0;
+    const addedIds = new Set<string>();
+    for (const metadata of expansion.tracks.slice(0, this.#playlistMaxTracks)) {
+      if (addedIds.has(metadata.id) || this.#current?.id === metadata.id) {
+        duplicates++;
+        continue;
+      }
+      try {
+        const track = this.#enqueueMetadata(metadata, requestedBy);
+        addedIds.add(track.id);
+        added.push(track);
+      } catch (error) {
+        if (error instanceof Error && /already queued/i.test(error.message)) {
+          duplicates++;
+          continue;
+        }
+        throw error;
+      }
+    }
+    return {
+      added,
+      ...(expansion.total === undefined
+        ? {}
+        : {
+            remaining: Math.max(0, expansion.total - added.length - duplicates),
+          }),
+    };
   }
 
   #enqueueMetadata(

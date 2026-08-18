@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { YoutubePlaybackService } from "../src/application/youtube-playback-service.js";
+import type { YoutubePlaybackResolver } from "../src/application/youtube-playback-service.js";
 import type { YoutubeTrackMetadata } from "../src/media/youtube/yt-dlp.js";
 import { SoundCloudDrmError } from "../src/media/soundcloud/public-api.js";
 import type { AlternativeSourceResolver } from "../src/media/song-link.js";
@@ -52,6 +53,9 @@ function setup(options: { soundcloudResolver?: boolean } = {}) {
         title: `Search ${query}`,
         webpageUrl: "https://www.youtube.com/watch?v=search-result",
       }),
+    ),
+    expandPlaylist: vi.fn<YoutubePlaybackResolver["expandPlaylist"]>(() =>
+      Promise.resolve({ tracks: [] }),
     ),
   };
   const encoder: RhapsodOpusEncoder = {
@@ -430,5 +434,102 @@ describe("YoutubePlaybackService", () => {
     await expect(
       service.enqueue("https://on.soundcloud.com/0Tbj4O1F7XxfV6DDjQ", "user-1"),
     ).rejects.toThrow("DRM protected");
+  });
+
+  it("enqueues a YouTube playlist up to the limit and reports the remainder", async () => {
+    const { resolver, service } = setup();
+    resolver.expandPlaylist.mockResolvedValueOnce({
+      total: 5,
+      tracks: [1, 2, 3].map((index) => ({
+        id: `p${index}`,
+        title: `Playlist Track ${index}`,
+        webpageUrl: `https://www.youtube.com/watch?v=p${index}`,
+      })),
+    });
+
+    const result = await service.enqueuePlaylist(
+      { id: "PL1", type: "playlist" },
+      "user-1",
+    );
+
+    expect(resolver.expandPlaylist).toHaveBeenCalledWith(
+      { id: "PL1", type: "playlist" },
+      20,
+    );
+    expect(result).toMatchObject({
+      added: [
+        expect.objectContaining({
+          id: "p1",
+          requestedBy: "user-1",
+          title: "Playlist Track 1",
+        }),
+        expect.objectContaining({ id: "p2" }),
+        expect.objectContaining({ id: "p3" }),
+      ],
+      remaining: 2,
+    });
+    expect(service.current?.id).toBe("p1");
+    expect(service.queue()).toHaveLength(2);
+  });
+
+  it("truncates a playlist beyond the configured limit", async () => {
+    const { resolver, service } = setup();
+    resolver.expandPlaylist.mockResolvedValueOnce({
+      total: 25,
+      tracks: Array.from({ length: 25 }, (_, index) => ({
+        id: `p${index + 1}`,
+        title: `Playlist Track ${index + 1}`,
+        webpageUrl: `https://www.youtube.com/watch?v=p${index + 1}`,
+      })),
+    });
+
+    const result = await service.enqueuePlaylist(
+      { id: "PL2", type: "playlist" },
+      "user-1",
+    );
+
+    expect(result.added).toHaveLength(20);
+    expect(result.remaining).toBe(5);
+  });
+
+  it("skips duplicate tracks while expanding a playlist", async () => {
+    const { resolver, service } = setup();
+    resolver.expandPlaylist.mockResolvedValueOnce({
+      total: 3,
+      tracks: [
+        {
+          id: "dup",
+          title: "Duplicate Track",
+          webpageUrl: "https://www.youtube.com/watch?v=dup",
+        },
+        {
+          id: "dup",
+          title: "Duplicate Track",
+          webpageUrl: "https://www.youtube.com/watch?v=dup",
+        },
+        {
+          id: "fresh",
+          title: "Fresh Track",
+          webpageUrl: "https://www.youtube.com/watch?v=fresh",
+        },
+      ],
+    });
+
+    const result = await service.enqueuePlaylist(
+      { id: "PL3", type: "playlist" },
+      "user-1",
+    );
+
+    expect(result.added.map((track) => track.id)).toEqual(["dup", "fresh"]);
+    expect(result.remaining).toBe(0);
+    expect(service.queue()).toHaveLength(1);
+  });
+
+  it("rejects expanding a video resource as a playlist", async () => {
+    const { service } = setup();
+
+    await expect(
+      service.enqueuePlaylist({ id: "v1", type: "video" }, "user-1"),
+    ).rejects.toThrow("Only YouTube playlists can be expanded");
   });
 });

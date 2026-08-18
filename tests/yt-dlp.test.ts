@@ -145,6 +145,49 @@ describe("YoutubeResolver", () => {
       ).getAudioUrlFromUrl("https://soundcloud.com/artist/track"),
     ).resolves.toBe("https://media.example/soundcloud");
   });
+
+  it("expands a YouTube playlist without resolving audio", async () => {
+    const executor = new FakeExecutor(
+      '{"playlist_count":3,"entries":[{"id":"p1","title":"Track One","url":"https://www.youtube.com/watch?v=p1"},{"id":"p2","title":"Track Two","url":"https://www.youtube.com/watch?v=p2"}]}',
+    );
+    const resolver = new YoutubeResolver(executor);
+
+    await expect(
+      resolver.expandPlaylist({ id: "PL123", type: "playlist" }, 20),
+    ).resolves.toEqual({
+      total: 3,
+      tracks: [
+        {
+          id: "p1",
+          title: "Track One",
+          webpageUrl: "https://www.youtube.com/watch?v=p1",
+        },
+        {
+          id: "p2",
+          title: "Track Two",
+          webpageUrl: "https://www.youtube.com/watch?v=p2",
+        },
+      ],
+    });
+    expect(executor.calls[0]).toContain("--flat-playlist");
+    expect(executor.calls[0]).not.toContain("--format");
+    expect(executor.calls[0]).toEqual(
+      expect.arrayContaining([
+        "--playlist-end",
+        "20",
+        "https://www.youtube.com/playlist?list=PL123",
+      ]),
+    );
+  });
+
+  it("rejects expanding a video as a playlist", async () => {
+    await expect(
+      new YoutubeResolver(new FakeExecutor("{}")).expandPlaylist(
+        { id: "v1", type: "video" },
+        20,
+      ),
+    ).rejects.toThrow("video cannot be expanded");
+  });
 });
 
 describe("YtDlpJobQueue", () => {
