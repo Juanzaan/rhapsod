@@ -21,6 +21,7 @@ const COMMAND_ALIASES: Readonly<Record<string, ChatCommand["name"]>> = {
   loop: "loop",
   np: "now-playing",
   now: "now-playing",
+  "now-playing": "now-playing",
   p: "play",
   pause: "pause",
   play: "play",

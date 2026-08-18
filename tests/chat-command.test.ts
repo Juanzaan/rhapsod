@@ -9,6 +9,9 @@ describe("parseChatCommand", () => {
       name: "play",
     });
     expect(parseChatCommand("!np")).toEqual({ name: "now-playing" });
+    expect(parseChatCommand("!now-playing")).toEqual({
+      name: "now-playing",
+    });
     expect(parseChatCommand("!loop queue")).toEqual({
       mode: "queue",
       name: "loop",
