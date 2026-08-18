@@ -15,11 +15,21 @@ function setup() {
   }));
   const resolver = {
     getAudioUrl: vi.fn(() => Promise.resolve("https://media.example/audio")),
+    getAudioUrlFromUrl: vi.fn(() =>
+      Promise.resolve("https://media.example/audio"),
+    ),
     getTrack: vi.fn((resource: { id: string }) =>
       Promise.resolve({
         id: resource.id,
         title: `Track ${resource.id}`,
         webpageUrl: `https://www.youtube.com/watch?v=${resource.id}`,
+      }),
+    ),
+    getTrackFromUrl: vi.fn((url: string) =>
+      Promise.resolve({
+        id: "soundcloud-track",
+        title: "SoundCloud Track",
+        webpageUrl: url,
       }),
     ),
     search: vi.fn((query: string) =>
@@ -78,16 +88,33 @@ describe("YoutubePlaybackService", () => {
 
     expect(track.title).toBe("Track abc123");
     expect(service.current).toEqual(track);
-    expect(resolver.getAudioUrl).toHaveBeenCalledWith({
-      id: "abc123",
-      type: "video",
-    });
+    expect(resolver.getAudioUrlFromUrl).toHaveBeenCalledWith(
+      "https://www.youtube.com/watch?v=abc123",
+    );
     expect(createPlayback).toHaveBeenCalledWith(
       "https://media.example/audio",
       expect.anything(),
       expect.anything(),
     );
     expect(onPlaybackStarted).toHaveBeenCalledWith(track);
+  });
+
+  it("queues and plays a SoundCloud track through the shared resolver", async () => {
+    const { resolver, service } = setup();
+
+    const track = await service.enqueue(
+      "https://soundcloud.com/artist/track",
+      "user-1",
+    );
+
+    expect(resolver.getTrackFromUrl).toHaveBeenCalledWith(
+      "https://soundcloud.com/artist/track",
+    );
+    expect(track).toMatchObject({
+      id: "soundcloud-track",
+      source: "https://soundcloud.com/artist/track",
+      title: "SoundCloud Track",
+    });
   });
 
   it("advances to the next track when playback completes", async () => {
@@ -128,7 +155,9 @@ describe("YoutubePlaybackService", () => {
 
   it("reports playback failures before advancing the queue", async () => {
     const { onPlaybackError, resolver, service } = setup();
-    resolver.getAudioUrl.mockRejectedValueOnce(new Error("audio unavailable"));
+    resolver.getAudioUrlFromUrl.mockRejectedValueOnce(
+      new Error("audio unavailable"),
+    );
 
     await service.enqueue("https://youtu.be/failed", "user-1");
     await new Promise((resolve) => setImmediate(resolve));

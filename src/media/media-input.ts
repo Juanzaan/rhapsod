@@ -1,5 +1,6 @@
 export type MediaInput =
   | { readonly kind: "file"; readonly value: string }
+  | { readonly kind: "soundcloud"; readonly value: string }
   | { readonly kind: "spotify"; readonly resource: SpotifyResource }
   | { readonly kind: "url"; readonly value: string }
   | { readonly kind: "youtube"; readonly resource: YoutubeResource };
@@ -23,6 +24,7 @@ const YOUTUBE_HOSTS = new Set([
   "m.youtube.com",
 ]);
 const SPOTIFY_HOST = "open.spotify.com";
+const SOUNDCLOUD_HOSTS = new Set(["soundcloud.com", "www.soundcloud.com"]);
 
 export function parseMediaInput(input: string): MediaInput {
   const value = input.trim();
@@ -46,6 +48,13 @@ export function parseMediaInput(input: string): MediaInput {
 
   const spotifyResource = parseSpotifyResource(url);
   if (spotifyResource) return { kind: "spotify", resource: spotifyResource };
+
+  if (
+    SOUNDCLOUD_HOSTS.has(url.hostname) &&
+    url.pathname.split("/").filter(Boolean).length === 2
+  ) {
+    return { kind: "soundcloud", value: url.toString() };
+  }
 
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new Error(`Unsupported media URL protocol: ${url.protocol}`);

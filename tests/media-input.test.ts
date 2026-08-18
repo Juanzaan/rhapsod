@@ -48,6 +48,21 @@ describe("parseMediaInput", () => {
     });
   });
 
+  it("classifies SoundCloud track links", () => {
+    expect(
+      parseMediaInput("https://soundcloud.com/artist-name/track-name?si=test"),
+    ).toEqual({
+      kind: "soundcloud",
+      value: "https://soundcloud.com/artist-name/track-name?si=test",
+    });
+    expect(
+      parseMediaInput("https://soundcloud.com/artist-name/sets/playlist-name"),
+    ).toEqual({
+      kind: "url",
+      value: "https://soundcloud.com/artist-name/sets/playlist-name",
+    });
+  });
+
   it("supports explicit local files and direct media URLs", () => {
     expect(parseMediaInput("file: ./music/song.mp3")).toEqual({
       kind: "file",

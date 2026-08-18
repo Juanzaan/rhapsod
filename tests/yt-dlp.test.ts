@@ -89,4 +89,24 @@ describe("YoutubeResolver", () => {
       }),
     ).rejects.toThrow("HTTPS");
   });
+
+  it("resolves metadata and audio from a provider URL", async () => {
+    const metadataExecutor = new FakeExecutor(
+      '{"id":"sc-1","title":"SoundCloud Track","webpage_url":"https://soundcloud.com/artist/track"}',
+    );
+    await expect(
+      new YoutubeResolver(metadataExecutor).getTrackFromUrl(
+        "https://soundcloud.com/artist/track",
+      ),
+    ).resolves.toMatchObject({ id: "sc-1", title: "SoundCloud Track" });
+    expect(metadataExecutor.calls[0]).toContain(
+      "https://soundcloud.com/artist/track",
+    );
+
+    await expect(
+      new YoutubeResolver(
+        new FakeExecutor("https://media.example/soundcloud\n"),
+      ).getAudioUrlFromUrl("https://soundcloud.com/artist/track"),
+    ).resolves.toBe("https://media.example/soundcloud");
+  });
 });

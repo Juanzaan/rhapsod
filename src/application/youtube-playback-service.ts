@@ -24,7 +24,9 @@ export interface PlaybackServiceOptions {
 
 export interface YoutubePlaybackResolver {
   getAudioUrl(resource: YoutubeResource): Promise<string>;
+  getAudioUrlFromUrl(url: string): Promise<string>;
   getTrack(resource: YoutubeResource): Promise<YoutubeTrackMetadata>;
+  getTrackFromUrl(url: string): Promise<YoutubeTrackMetadata>;
   search(query: string): Promise<YoutubeTrackMetadata>;
 }
 
@@ -62,9 +64,13 @@ export class YoutubePlaybackService {
 
   async enqueue(input: string, requestedBy: string): Promise<Track> {
     const media = parseMediaInput(input);
+    if (media.kind === "soundcloud") {
+      const metadata = await this.#resolver.getTrackFromUrl(media.value);
+      return this.#enqueueMetadata(metadata, requestedBy);
+    }
     if (media.kind !== "youtube" || media.resource.type !== "video") {
       throw new Error(
-        "Only YouTube video links are supported for playback yet",
+        "Only YouTube video and SoundCloud track links are supported for playback yet",
       );
     }
     const metadata = await this.#resolver.getTrack(media.resource);
@@ -131,7 +137,7 @@ export class YoutubePlaybackService {
     const generation = ++this.#generation;
     this.#current = track;
     return this.#resolver
-      .getAudioUrl({ id: track.id, type: "video" })
+      .getAudioUrlFromUrl(track.source)
       .then((url) => {
         if (generation !== this.#generation || this.#current !== track) return;
         const session = this.#createPlayback(url, this.#encoder, this.#output);
