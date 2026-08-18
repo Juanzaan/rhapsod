@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
 import type { YoutubeResource } from "../media-input.js";
+import { rankYoutubeCandidates } from "./search-ranking.js";
 
 const execFileAsync = promisify(execFile);
 const MAX_BUFFER_BYTES = 2 * 1024 * 1024;
@@ -59,6 +60,11 @@ export interface YoutubeTrackMetadata {
   readonly id: string;
   readonly title: string;
   readonly webpageUrl: string;
+}
+
+export interface YoutubeSearchCandidate extends YoutubeTrackMetadata {
+  readonly channel?: string;
+  readonly liveStatus?: string;
 }
 
 interface YtDlpJson {
@@ -147,16 +153,19 @@ export class YoutubeResolver {
         "--format",
         "bestaudio[acodec!=none]/bestaudio",
         "--playlist-end",
-        "1",
+        "8",
         "--no-warnings",
         "--skip-download",
-        `ytsearch1:${normalizedQuery}`,
+        `ytsearch8:${normalizedQuery}`,
       ],
       30_000,
     );
-    const response = parseResponse(raw).entries?.[0];
-    if (!response) throw new Error("yt-dlp returned no YouTube results");
-    return parseTrackResponse(response);
+    const candidates = (parseResponse(raw).entries ?? [])
+      .filter((entry) => entry.id && entry.title)
+      .map((entry) => parseTrackResponse(entry));
+    const selected = rankYoutubeCandidates(normalizedQuery, candidates);
+    if (!selected) throw new Error("No encontré una coincidencia confiable en YouTube");
+    return selected;
   }
 
   async getAudioUrl(resource: YoutubeResource): Promise<string> {
