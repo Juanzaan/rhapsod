@@ -19,6 +19,10 @@ the TS3 implementation is stable.
 FFmpeg will be provided as a project dependency; a global installation is not
 required.
 
+The YouTube resolver uses the configured private cookies file and yt-dlp's
+official EJS challenge solver for datacenter-friendly extraction. Keep both
+the cookies file and its path out of Git.
+
 The YouTube resolver, chat command parser, FFmpeg PCM pipeline, Opus encoder,
 and TS3 voice adapter are implemented. Set
 `RHAPSOD_AUDIO_TEST_TONE_SECONDS=3` to validate voice permissions and audio

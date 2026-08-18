@@ -21,7 +21,15 @@ describe("YoutubeResolver", () => {
   it("passes a private cookies file to yt-dlp when configured", () => {
     expect(
       buildYtDlpArguments(["--version"], "/run/rhapsod/cookies.txt"),
-    ).toEqual(["--cookies", "/run/rhapsod/cookies.txt", "--version"]);
+    ).toEqual([
+      "--cookies",
+      "/run/rhapsod/cookies.txt",
+      "--js-runtimes",
+      "node",
+      "--remote-components",
+      "ejs:github",
+      "--version",
+    ]);
   });
 
   it("uses a generated YouTube URL for metadata", async () => {

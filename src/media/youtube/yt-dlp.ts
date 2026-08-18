@@ -107,9 +107,14 @@ export function buildYtDlpArguments(
   argumentsList: readonly string[],
   cookiesPath?: string,
 ): string[] {
-  return cookiesPath
-    ? ["--cookies", cookiesPath, ...argumentsList]
-    : [...argumentsList];
+  return [
+    ...(cookiesPath ? ["--cookies", cookiesPath] : []),
+    "--js-runtimes",
+    "node",
+    "--remote-components",
+    "ejs:github",
+    ...argumentsList,
+  ];
 }
 
 function parseResponse(raw: string): YtDlpJson {
