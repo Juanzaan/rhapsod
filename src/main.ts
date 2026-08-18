@@ -18,6 +18,7 @@ import {
   YoutubeResolver,
 } from "./media/youtube/yt-dlp.js";
 import { SongLinkClient } from "./media/song-link.js";
+import { SoundCloudPublicApi } from "./media/soundcloud/public-api.js";
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -79,6 +80,7 @@ async function main(): Promise<void> {
       ),
     ),
     alternativeResolver: new SongLinkClient(),
+    soundcloudResolver: new SoundCloudPublicApi(),
   });
   const commandRateLimiter = new CommandRateLimiter();
   const handleChatCommand = async (

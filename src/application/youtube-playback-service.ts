@@ -11,11 +11,13 @@ import type { RhapsodOpusEncoder } from "../audio/opus-encoder.js";
 import type { VoiceFrameOutput } from "../audio/audio-player.js";
 import type { AudioPlayerMetrics } from "../audio/audio-player.js";
 import type { AlternativeSourceResolver } from "../media/song-link.js";
+import type { SoundCloudResolver } from "../media/soundcloud/public-api.js";
 
 export interface PlaybackServiceOptions {
   readonly encoder: RhapsodOpusEncoder;
   readonly resolver: YoutubePlaybackResolver;
   readonly alternativeResolver?: AlternativeSourceResolver;
+  readonly soundcloudResolver?: SoundCloudResolver;
   readonly output: VoiceFrameOutput;
   readonly createPlayback?: typeof playFfmpegUrl;
   readonly onPlaybackError?: (
@@ -61,6 +63,7 @@ export class YoutubePlaybackService {
   readonly #encoder: RhapsodOpusEncoder;
   readonly #resolver: YoutubePlaybackResolver;
   readonly #alternativeResolver: AlternativeSourceResolver | undefined;
+  readonly #soundcloudResolver: SoundCloudResolver | undefined;
   readonly #output: VoiceFrameOutput;
   readonly #createPlayback: typeof playFfmpegUrl;
   readonly #onPlaybackError: (
@@ -87,6 +90,7 @@ export class YoutubePlaybackService {
     this.#encoder = options.encoder;
     this.#resolver = options.resolver;
     this.#alternativeResolver = options.alternativeResolver;
+    this.#soundcloudResolver = options.soundcloudResolver;
     this.#output = options.output;
     this.#createPlayback = options.createPlayback ?? playFfmpegUrl;
     this.#onPlaybackError = options.onPlaybackError ?? (() => undefined);
@@ -108,15 +112,28 @@ export class YoutubePlaybackService {
     const media = parseMediaInput(input);
     if (media.kind === "soundcloud") {
       try {
-        const metadata = await this.#resolver.getTrackFromUrl(media.value);
+        const metadata = this.#soundcloudResolver
+          ? await this.#soundcloudResolver.getTrack(media.value)
+          : await this.#resolver.getTrackFromUrl(media.value);
         this.#recordMetadataTiming(metadata, startedAt);
         return this.#enqueueMetadata(metadata, requestedBy);
       } catch (error) {
-        if (!isDrmError(error) || !this.#alternativeResolver) throw error;
+        let providerError = error;
+        if (this.#soundcloudResolver && !isDrmError(providerError)) {
+          try {
+            const metadata = await this.#resolver.getTrackFromUrl(media.value);
+            this.#recordMetadataTiming(metadata, startedAt);
+            return this.#enqueueMetadata(metadata, requestedBy);
+          } catch (fallbackError) {
+            providerError = fallbackError;
+          }
+        }
+        if (!isDrmError(providerError) || !this.#alternativeResolver)
+          throw providerError;
         const alternative = await this.#alternativeResolver.findAlternative(
           media.value,
         );
-        if (!alternative) throw error;
+        if (!alternative) throw providerError;
         const metadata = await this.#resolver.getTrackFromUrl(alternative.url);
         this.#recordMetadataTiming(metadata, startedAt);
         return this.#enqueueMetadata(
@@ -282,8 +299,9 @@ export class YoutubePlaybackService {
   }
 
   #resolveAudioUrl(track: Track): Promise<string> {
-    const pending = this.#resolver
-      .getAudioUrlFromUrl(track.source)
+    const pending = (track.source.includes("soundcloud.com") && this.#soundcloudResolver
+      ? this.#soundcloudResolver.getAudioUrl(track.source)
+      : this.#resolver.getAudioUrlFromUrl(track.source))
       .then((url) => ({
         url,
         expiresAt: audioUrlExpiresAt(url),
