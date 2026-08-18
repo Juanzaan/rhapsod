@@ -40,4 +40,16 @@ describe("SongLinkClient", () => {
       ),
     ).resolves.toBeUndefined();
   });
+
+  it("treats provider timeouts as an unavailable alternative", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(() =>
+      Promise.reject(new DOMException("timed out", "TimeoutError")),
+    );
+
+    await expect(
+      new SongLinkClient({ fetch }).findAlternative(
+        "https://soundcloud.com/artist/track",
+      ),
+    ).resolves.toBeUndefined();
+  });
 });

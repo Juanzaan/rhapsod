@@ -28,17 +28,22 @@ export class SongLinkClient implements AlternativeSourceResolver {
   }
 
   async findAlternative(url: string): Promise<AlternativeSource | undefined> {
-    const endpoint = new URL(SONGLINK_ENDPOINT);
-    endpoint.searchParams.set("url", url);
-    endpoint.searchParams.set("userCountry", "UY");
-    const response = await this.#fetch(endpoint.toString(), {
-      signal: AbortSignal.timeout(this.#timeoutMs),
-    });
-    if (!response.ok) return undefined;
-    const data = (await response.json()) as SongLinkResponse;
-    const candidate = data.linksByPlatform?.youtube?.url;
-    if (!candidate || !isYouTubeUrl(candidate)) return undefined;
-    return { provider: "youtube", url: candidate };
+    try {
+      const endpoint = new URL(SONGLINK_ENDPOINT);
+      endpoint.searchParams.set("url", url);
+      endpoint.searchParams.set("userCountry", "UY");
+      const response = await this.#fetch(endpoint.toString(), {
+        signal: AbortSignal.timeout(this.#timeoutMs),
+      });
+      if (!response.ok) return undefined;
+      const data = (await response.json()) as SongLinkResponse;
+      const candidate = data.linksByPlatform?.youtube?.url;
+      if (!candidate || !isYouTubeUrl(candidate)) return undefined;
+      return { provider: "youtube", url: candidate };
+    } catch {
+      // Alternatives are best-effort. Preserve the original provider error.
+      return undefined;
+    }
   }
 }
 
