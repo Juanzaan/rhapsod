@@ -20,6 +20,23 @@ describe("parseChatCommand", () => {
     expect(parseChatCommand("play this please")).toBeUndefined();
   });
 
+  it("unwraps URLs formatted by TeamSpeak chat", () => {
+    expect(
+      parseChatCommand(
+        "!play [URL]https://www.youtube.com/watch?v=RqRBpGgC10g[/URL]",
+      ),
+    ).toEqual({
+      input: "https://www.youtube.com/watch?v=RqRBpGgC10g",
+      name: "play",
+    });
+    expect(
+      parseChatCommand("!play [url=https://youtu.be/RqRBpGgC10g]YouTube[/url]"),
+    ).toEqual({
+      input: "https://youtu.be/RqRBpGgC10g",
+      name: "play",
+    });
+  });
+
   it("validates numeric arguments and command usage", () => {
     expect(parseChatCommand("!volume 80")).toEqual({
       name: "volume",
