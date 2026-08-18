@@ -61,6 +61,7 @@ describe("AudioPlayer", () => {
     );
     expect(output.sendVoiceFrame).toHaveBeenCalledTimes(1);
     expect(player.metrics.framesSent).toBe(1);
+    expect(player.metrics.firstFrameDelayMs).toBeGreaterThanOrEqual(0);
   });
 
   it("reassembles a PCM frame across source chunks", () => {

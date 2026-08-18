@@ -26,6 +26,7 @@ export interface AudioPlayerClock {
 
 export interface AudioPlayerMetrics {
   readonly bufferedBytes: number;
+  readonly firstFrameDelayMs?: number;
   readonly framesSent: number;
   readonly maxBufferedBytes: number;
   readonly rebufferEvents: number;
@@ -41,6 +42,8 @@ export class AudioPlayer {
   #chunkOffset = 0;
   #bufferedBytes = 0;
   #framesSent = 0;
+  #firstFrameDelayMs: number | undefined;
+  #playStartedAt = 0;
   #maxBufferedBytes = 0;
   #rebufferEvents = 0;
   #underruns = 0;
@@ -71,6 +74,9 @@ export class AudioPlayer {
   get metrics(): AudioPlayerMetrics {
     return {
       bufferedBytes: this.#bufferedBytes,
+      ...(this.#firstFrameDelayMs === undefined
+        ? {}
+        : { firstFrameDelayMs: this.#firstFrameDelayMs }),
       framesSent: this.#framesSent,
       maxBufferedBytes: this.#maxBufferedBytes,
       rebufferEvents: this.#rebufferEvents,
@@ -82,6 +88,7 @@ export class AudioPlayer {
     this.stop();
     this.#resetSession();
     this.#source = source;
+    this.#playStartedAt = Date.now();
     this.#state = "buffering";
     this.#completion = new Promise<void>((resolve, reject) => {
       this.#resolveCompletion = resolve;
@@ -170,6 +177,7 @@ export class AudioPlayer {
     if (this.#bufferedBytes >= PCM_FRAME_BYTES) {
       const pcm = this.#readFrame();
       this.#output.sendVoiceFrame(this.#encoder.encode(pcm));
+      this.#firstFrameDelayMs ??= Date.now() - this.#playStartedAt;
       this.#framesSent++;
       if (
         this.#sourcePaused &&
@@ -271,6 +279,7 @@ export class AudioPlayer {
   #resetSession(): void {
     this.#resetBuffer();
     this.#framesSent = 0;
+    this.#firstFrameDelayMs = undefined;
     this.#maxBufferedBytes = 0;
     this.#rebufferEvents = 0;
     this.#underruns = 0;
