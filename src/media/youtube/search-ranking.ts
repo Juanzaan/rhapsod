@@ -29,6 +29,10 @@ export function scoreCandidate(
     : 0;
   if (title === normalizedQuery) score += 25;
   if (POSITIVE_TERMS.test(candidate.title)) score += 10;
+  if (candidate.channel && /topic|official|records|music/i.test(candidate.channel))
+    score += 8;
+  if (candidate.liveStatus === "is_live" || candidate.liveStatus === "is_upcoming")
+    score -= 30;
   if (PENALIZED_TERMS.test(candidate.title)) score -= 35;
   if (candidate.durationSeconds !== undefined && candidate.durationSeconds < 45)
     score -= 20;

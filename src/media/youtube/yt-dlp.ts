@@ -64,6 +64,7 @@ export interface YoutubeTrackMetadata {
 
 export interface YoutubeSearchCandidate extends YoutubeTrackMetadata {
   readonly channel?: string;
+  readonly categories?: readonly string[];
   readonly liveStatus?: string;
 }
 
@@ -72,6 +73,9 @@ interface YtDlpJson {
   entries?: YtDlpJson[];
   id?: string;
   title?: string;
+  channel?: string;
+  categories?: string[];
+  live_status?: string;
   webpage_url?: string;
   url?: string;
   requested_downloads?: Array<{ url?: string }>;
@@ -245,6 +249,9 @@ function parseTrackResponse(raw: string | YtDlpJson): YoutubeTrackMetadata {
     id: response.id,
     title: response.title,
     webpageUrl: response.webpage_url ?? youtubeUrl(response.id),
+    ...(response.channel ? { channel: response.channel } : {}),
+    ...(response.categories ? { categories: response.categories } : {}),
+    ...(response.live_status ? { liveStatus: response.live_status } : {}),
   };
 }
 
