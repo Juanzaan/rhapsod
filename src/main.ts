@@ -178,10 +178,6 @@ async function main(): Promise<void> {
             "El volumen todavía está en desarrollo; ajusta el volumen de TeamSpeak mientras se implementa el control PCM.",
           );
           break;
-        default:
-          await connection.sendChannelMessage(
-            `Comando !${command.name} todavía no está conectado.`,
-          );
       }
     } catch (error) {
       const messageText =
