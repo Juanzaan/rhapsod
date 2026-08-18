@@ -50,6 +50,8 @@ The encoder enforces the 500-byte TS3 packet budget before the adapter sends a
 frame, and the scheduler uses monotonic absolute deadlines to avoid drift. The
 player begins with a short PCM prebuffer and automatically rebuilds a larger
 buffer after an underrun instead of continuing with repeated audio gaps.
+Playback metrics include the delay until the first real audio frame and whether
+the session completed, was skipped, was stopped, or failed.
 
 Media resolver jobs are serialized so CPU-heavy `yt-dlp` processes cannot run
 in parallel and interfere with real-time audio. Playback URL jobs take priority

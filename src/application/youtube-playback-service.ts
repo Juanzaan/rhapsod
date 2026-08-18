@@ -24,9 +24,12 @@ export interface PlaybackServiceOptions {
   readonly onPlaybackFinished?: (
     track: Track,
     metrics: AudioPlayerMetrics,
+    reason: PlaybackEndReason,
   ) => void;
   readonly onTiming?: (timing: PlaybackTiming) => void;
 }
+
+export type PlaybackEndReason = "completed" | "error" | "skipped" | "stopped";
 
 export interface PlaybackTiming {
   readonly cacheHit?: boolean;
@@ -65,12 +68,17 @@ export class YoutubePlaybackService {
   readonly #onPlaybackFinished: (
     track: Track,
     metrics: AudioPlayerMetrics,
+    reason: PlaybackEndReason,
   ) => void;
   readonly #onTiming: (timing: PlaybackTiming) => void;
   #current: Track | undefined;
   #session: FfmpegPlaybackSession | undefined;
   #generation = 0;
   readonly #prepared = new Map<string, Promise<PreparedAudio>>();
+  readonly #sessionEndReasons = new WeakMap<
+    FfmpegPlaybackSession,
+    PlaybackEndReason
+  >();
 
   constructor(options: PlaybackServiceOptions) {
     this.#encoder = options.encoder;
@@ -133,6 +141,7 @@ export class YoutubePlaybackService {
   skip(): void {
     this.#generation++;
     if (this.#current) this.#prepared.delete(this.#current.source);
+    if (this.#session) this.#sessionEndReasons.set(this.#session, "skipped");
     this.#session?.stop();
     this.#session = undefined;
     this.#current = undefined;
@@ -141,6 +150,7 @@ export class YoutubePlaybackService {
 
   stop(): void {
     this.#generation++;
+    if (this.#session) this.#sessionEndReasons.set(this.#session, "stopped");
     this.#session?.stop();
     this.#session = undefined;
     this.#current = undefined;
@@ -192,9 +202,19 @@ export class YoutubePlaybackService {
         this.#session = session;
         void this.#onPlaybackStarted(track);
         this.#prefetchNext();
-        return session.done.finally(() => {
-          this.#onPlaybackFinished(track, session.player.metrics);
-        });
+        return session.done.then(
+          () => {
+            this.#onPlaybackFinished(
+              track,
+              session.player.metrics,
+              this.#sessionEndReasons.get(session) ?? "completed",
+            );
+          },
+          (error: unknown) => {
+            this.#onPlaybackFinished(track, session.player.metrics, "error");
+            throw error;
+          },
+        );
       })
       .catch(async (error: unknown) => {
         const playbackError =

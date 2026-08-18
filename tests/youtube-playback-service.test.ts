@@ -11,7 +11,15 @@ function setup() {
   const playbackResolvers: Array<() => void> = [];
   const createPlayback = vi.fn((): FfmpegPlaybackSession => ({
     done: new Promise<void>((resolve) => playbackResolvers.push(resolve)),
-    player: {} as AudioPlayer,
+    player: {
+      metrics: {
+        bufferedBytes: 0,
+        framesSent: 1,
+        maxBufferedBytes: 3_840,
+        rebufferEvents: 0,
+        underruns: 0,
+      },
+    } as AudioPlayer,
     stop: stopSession,
   }));
   const resolver = {
@@ -50,11 +58,13 @@ function setup() {
     pcmFrameBytes: 3_840,
   };
   const onPlaybackError = vi.fn();
+  const onPlaybackFinished = vi.fn();
   const onPlaybackStarted = vi.fn();
   const service = new YoutubePlaybackService({
     createPlayback,
     encoder,
     onPlaybackError,
+    onPlaybackFinished,
     onPlaybackStarted,
     output: { sendVoiceFrame: vi.fn() },
     resolver,
@@ -62,6 +72,7 @@ function setup() {
   return {
     createPlayback,
     onPlaybackError,
+    onPlaybackFinished,
     onPlaybackStarted,
     playbackResolvers,
     resolver,
@@ -120,7 +131,8 @@ describe("YoutubePlaybackService", () => {
   });
 
   it("advances to the next track when playback completes", async () => {
-    const { playbackResolvers, resolver, service } = setup();
+    const { onPlaybackFinished, playbackResolvers, resolver, service } =
+      setup();
     resolver.getTrack.mockImplementation((resource: { id: string }) =>
       Promise.resolve({
         ...(resource.id === "first"
@@ -143,6 +155,37 @@ describe("YoutubePlaybackService", () => {
     await new Promise((resolve) => setImmediate(resolve));
 
     expect(service.current?.id).toBe("second");
+    expect(onPlaybackFinished).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "first" }),
+      expect.anything(),
+      "completed",
+    );
+  });
+
+  it("reports skipped and stopped sessions separately", async () => {
+    const { onPlaybackFinished, playbackResolvers, service } = setup();
+    await service.enqueue("https://youtu.be/first", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    service.skip();
+    playbackResolvers[0]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(onPlaybackFinished).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: "first" }),
+      expect.anything(),
+      "skipped",
+    );
+
+    await service.enqueue("https://youtu.be/second", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+    service.stop();
+    playbackResolvers[1]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(onPlaybackFinished).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: "second" }),
+      expect.anything(),
+      "stopped",
+    );
   });
 
   it("falls back to resolving playback when prefetched audio fails", async () => {
