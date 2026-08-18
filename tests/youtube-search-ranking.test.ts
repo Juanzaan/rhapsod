@@ -50,4 +50,23 @@ describe("rankYoutubeCandidates", () => {
 
     expect(selected?.id).toBe("song");
   });
+
+  it("prefers official music channels when title relevance is similar", () => {
+    const selected = rankYoutubeCandidates("artist song", [
+      {
+        channel: "Random Uploads",
+        id: "random",
+        title: "Artist - Song",
+        webpageUrl: "https://youtube.com/watch?v=random",
+      },
+      {
+        channel: "Artist - Topic",
+        id: "topic",
+        title: "Artist - Song",
+        webpageUrl: "https://youtube.com/watch?v=topic",
+      },
+    ]);
+
+    expect(selected?.id).toBe("topic");
+  });
 });
