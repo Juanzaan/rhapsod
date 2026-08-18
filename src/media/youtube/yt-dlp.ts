@@ -6,6 +6,8 @@ import { rankYoutubeCandidatesAll } from "./search-ranking.js";
 
 const execFileAsync = promisify(execFile);
 const MAX_BUFFER_BYTES = 2 * 1024 * 1024;
+const AUDIO_FORMAT_SELECTOR =
+  "bestaudio[acodec!=none]/bestaudio/best[acodec!=none]";
 
 export interface YtDlpExecutor {
   run(
@@ -134,7 +136,7 @@ export class YoutubeResolver {
       [
         "--dump-single-json",
         "--format",
-        "bestaudio[acodec!=none]/bestaudio",
+        AUDIO_FORMAT_SELECTOR,
         "--no-playlist",
         "--no-warnings",
         "--skip-download",
@@ -192,7 +194,7 @@ export class YoutubeResolver {
       [
         "--get-url",
         "--format",
-        "bestaudio[acodec!=none]/bestaudio",
+        AUDIO_FORMAT_SELECTOR,
         "--no-playlist",
         "--no-warnings",
         url,
@@ -211,7 +213,7 @@ export class YoutubeResolver {
       [
         "--dump-single-json",
         "--format",
-        "bestaudio[acodec!=none]/bestaudio",
+        AUDIO_FORMAT_SELECTOR,
         "--no-playlist",
         "--no-warnings",
         "--skip-download",
