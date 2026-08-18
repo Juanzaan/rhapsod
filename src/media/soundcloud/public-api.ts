@@ -59,6 +59,7 @@ export class SoundCloudPublicApi implements SoundCloudResolver {
     const track = await this.#resolve(url);
     assertPlayable(track);
     const audioUrl = await this.#resolveTranscoding(track);
+    if (!audioUrl) throw new SoundCloudDrmError(drmMetadata(track));
     return {
       audioUrl,
       id: `soundcloud:${track.id}`,
@@ -70,7 +71,9 @@ export class SoundCloudPublicApi implements SoundCloudResolver {
   async getAudioUrl(url: string): Promise<string> {
     const track = await this.#resolve(url);
     assertPlayable(track);
-    return this.#resolveTranscoding(track);
+    const audioUrl = await this.#resolveTranscoding(track);
+    if (!audioUrl) throw new SoundCloudDrmError(drmMetadata(track));
+    return audioUrl;
   }
 
   async #resolve(url: string): Promise<SoundCloudTrack> {
@@ -80,17 +83,25 @@ export class SoundCloudPublicApi implements SoundCloudResolver {
     );
   }
 
-  async #resolveTranscoding(track: SoundCloudTrack): Promise<string> {
+  async #resolveTranscoding(
+    track: SoundCloudTrack,
+  ): Promise<string | undefined> {
     const transcodings = track.media?.transcodings ?? [];
-    const selected =
-      transcodings.find((item) => item.format?.protocol === "progressive") ??
-      transcodings.find((item) => item.format?.protocol === "hls");
-    if (!selected?.url)
-      throw new Error("SoundCloud returned no playable stream");
-    const response = await this.#apiRequest<{ url?: string }>(selected.url);
-    if (!response.url || !response.url.startsWith("https://"))
-      throw new Error("SoundCloud returned an invalid stream URL");
-    return response.url;
+    const candidates = transcodings.filter(
+      (item) =>
+        item.format?.protocol === "progressive" ||
+        item.format?.protocol === "hls",
+    );
+    for (const selected of candidates) {
+      if (!selected.url) continue;
+      try {
+        const response = await this.#apiRequest<{ url?: string }>(selected.url);
+        if (response.url?.startsWith("https://")) return response.url;
+      } catch {
+        // Try the next unencrypted transcoding before reporting DRM.
+      }
+    }
+    return undefined;
   }
 
   async #apiRequest<T>(pathOrUrl: string, retry = true): Promise<T> {
