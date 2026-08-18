@@ -87,6 +87,12 @@ async function main(): Promise<void> {
           await connection.sendChannelMessage(`En cola: ${track.title}`);
           break;
         }
+        case "search": {
+          await connection.sendChannelMessage("Buscando en YouTube...");
+          const track = await playback.enqueueSearch(command.input, senderUid);
+          await connection.sendChannelMessage(`En cola: ${track.title}`);
+          break;
+        }
         case "pause":
           playback.pause();
           await connection.sendChannelMessage("Reproducción pausada.");
@@ -165,7 +171,7 @@ async function main(): Promise<void> {
           break;
         case "help":
           await connection.sendChannelMessage(
-            "Comandos: !play <YouTube> | !queue | !now-playing (!np) | !remove <n> | !clear | !skip | !stop | !pause | !resume | !test-tone",
+            "Comandos: !play <YouTube> | !yt <búsqueda> | !queue | !now-playing (!np) | !remove <n> | !clear | !skip | !stop | !pause | !resume | !test-tone",
           );
           break;
         case "loop":

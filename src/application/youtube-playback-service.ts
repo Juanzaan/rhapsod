@@ -25,6 +25,7 @@ export interface PlaybackServiceOptions {
 export interface YoutubePlaybackResolver {
   getAudioUrl(resource: YoutubeResource): Promise<string>;
   getTrack(resource: YoutubeResource): Promise<YoutubeTrackMetadata>;
+  search(query: string): Promise<YoutubeTrackMetadata>;
 }
 
 export class YoutubePlaybackService {
@@ -67,6 +68,15 @@ export class YoutubePlaybackService {
       );
     }
     const metadata = await this.#resolver.getTrack(media.resource);
+    return this.#enqueueMetadata(metadata, requestedBy);
+  }
+
+  async enqueueSearch(query: string, requestedBy: string): Promise<Track> {
+    const metadata = await this.#resolver.search(query);
+    return this.#enqueueMetadata(metadata, requestedBy);
+  }
+
+  #enqueueMetadata(metadata: YoutubeTrackMetadata, requestedBy: string): Track {
     const track: Track = {
       id: metadata.id,
       requestedBy,

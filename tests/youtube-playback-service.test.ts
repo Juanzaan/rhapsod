@@ -22,6 +22,13 @@ function setup() {
         webpageUrl: `https://www.youtube.com/watch?v=${resource.id}`,
       }),
     ),
+    search: vi.fn((query: string) =>
+      Promise.resolve({
+        id: "search-result",
+        title: `Search ${query}`,
+        webpageUrl: "https://www.youtube.com/watch?v=search-result",
+      }),
+    ),
   };
   const encoder: RhapsodOpusEncoder = {
     close: vi.fn(),
@@ -50,6 +57,19 @@ function setup() {
 }
 
 describe("YoutubePlaybackService", () => {
+  it("queues the first resolved YouTube search result", async () => {
+    const { resolver, service } = setup();
+
+    const track = await service.enqueueSearch("duki rockstar", "user-1");
+
+    expect(resolver.search).toHaveBeenCalledWith("duki rockstar");
+    expect(track).toMatchObject({
+      id: "search-result",
+      requestedBy: "user-1",
+      title: "Search duki rockstar",
+    });
+  });
+
   it("resolves metadata, queues a track, and resolves audio at playback time", async () => {
     const { createPlayback, onPlaybackStarted, resolver, service } = setup();
 
