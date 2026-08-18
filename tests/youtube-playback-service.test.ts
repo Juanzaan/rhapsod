@@ -28,13 +28,22 @@ function setup() {
     encode: vi.fn(),
     pcmFrameBytes: 3_840,
   };
+  const onPlaybackError = vi.fn();
   const service = new YoutubePlaybackService({
     createPlayback,
     encoder,
+    onPlaybackError,
     output: { sendVoiceFrame: vi.fn() },
     resolver,
   });
-  return { createPlayback, playbackResolvers, resolver, service, stopSession };
+  return {
+    createPlayback,
+    onPlaybackError,
+    playbackResolvers,
+    resolver,
+    service,
+    stopSession,
+  };
 }
 
 describe("YoutubePlaybackService", () => {
@@ -80,6 +89,19 @@ describe("YoutubePlaybackService", () => {
     expect(stopSession).toHaveBeenCalled();
     expect(service.current).toBeUndefined();
     expect(service.queue()).toEqual([]);
+  });
+
+  it("reports playback failures before advancing the queue", async () => {
+    const { onPlaybackError, resolver, service } = setup();
+    resolver.getAudioUrl.mockRejectedValueOnce(new Error("audio unavailable"));
+
+    await service.enqueue("https://youtu.be/failed", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(onPlaybackError).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "failed" }),
+      expect.objectContaining({ message: "audio unavailable" }),
+    );
   });
 
   it("rejects unsupported providers before queueing", async () => {

@@ -15,6 +15,10 @@ export interface PlaybackServiceOptions {
   readonly resolver: YoutubePlaybackResolver;
   readonly output: VoiceFrameOutput;
   readonly createPlayback?: typeof playFfmpegUrl;
+  readonly onPlaybackError?: (
+    track: Track,
+    error: Error,
+  ) => void | Promise<void>;
 }
 
 export interface YoutubePlaybackResolver {
@@ -28,6 +32,10 @@ export class YoutubePlaybackService {
   readonly #resolver: YoutubePlaybackResolver;
   readonly #output: VoiceFrameOutput;
   readonly #createPlayback: typeof playFfmpegUrl;
+  readonly #onPlaybackError: (
+    track: Track,
+    error: Error,
+  ) => void | Promise<void>;
   #current: Track | undefined;
   #session: FfmpegPlaybackSession | undefined;
   #generation = 0;
@@ -37,6 +45,7 @@ export class YoutubePlaybackService {
     this.#resolver = options.resolver;
     this.#output = options.output;
     this.#createPlayback = options.createPlayback ?? playFfmpegUrl;
+    this.#onPlaybackError = options.onPlaybackError ?? (() => undefined);
   }
 
   get current(): Track | undefined {
@@ -97,7 +106,11 @@ export class YoutubePlaybackService {
         this.#session = session;
         return session.done;
       })
-      .catch(() => undefined)
+      .catch(async (error: unknown) => {
+        const playbackError =
+          error instanceof Error ? error : new Error(String(error));
+        await this.#onPlaybackError(track, playbackError);
+      })
       .then(() => {
         if (generation !== this.#generation || this.#current !== track) return;
         this.#session = undefined;

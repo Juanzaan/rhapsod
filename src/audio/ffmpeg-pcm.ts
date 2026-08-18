@@ -68,15 +68,24 @@ export function createFfmpegPcmStream(
   );
   const stream = new PassThrough({ highWaterMark: 256 * 1024 });
   let stopped = false;
+  let stderr = "";
 
   child.stdout.pipe(stream);
-  child.stderr.on("data", () => undefined);
+  child.stderr.on("data", (chunk: Buffer) => {
+    stderr = `${stderr}${chunk.toString("utf8")}`.slice(-8_192);
+  });
   child.on("error", (error) => stream.destroy(error));
   child.on("close", (code, signal) => {
     if (stopped) return;
     if (code === 0 || signal === "SIGTERM") stream.end();
-    else
-      stream.destroy(new Error(`FFmpeg exited with code ${code ?? "unknown"}`));
+    else {
+      const detail = stderr.trim();
+      stream.destroy(
+        new Error(
+          `FFmpeg exited with code ${code ?? "unknown"}${detail ? `: ${detail}` : ""}`,
+        ),
+      );
+    }
   });
 
   const stop = (): void => {
