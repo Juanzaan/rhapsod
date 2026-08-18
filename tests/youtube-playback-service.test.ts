@@ -29,16 +29,19 @@ function setup() {
     pcmFrameBytes: 3_840,
   };
   const onPlaybackError = vi.fn();
+  const onPlaybackStarted = vi.fn();
   const service = new YoutubePlaybackService({
     createPlayback,
     encoder,
     onPlaybackError,
+    onPlaybackStarted,
     output: { sendVoiceFrame: vi.fn() },
     resolver,
   });
   return {
     createPlayback,
     onPlaybackError,
+    onPlaybackStarted,
     playbackResolvers,
     resolver,
     service,
@@ -48,7 +51,7 @@ function setup() {
 
 describe("YoutubePlaybackService", () => {
   it("resolves metadata, queues a track, and resolves audio at playback time", async () => {
-    const { createPlayback, resolver, service } = setup();
+    const { createPlayback, onPlaybackStarted, resolver, service } = setup();
 
     const track = await service.enqueue("https://youtu.be/abc123", "user-1");
     await new Promise((resolve) => setImmediate(resolve));
@@ -64,6 +67,7 @@ describe("YoutubePlaybackService", () => {
       expect.anything(),
       expect.anything(),
     );
+    expect(onPlaybackStarted).toHaveBeenCalledWith(track);
   });
 
   it("advances to the next track when playback completes", async () => {
