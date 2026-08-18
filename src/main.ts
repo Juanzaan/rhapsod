@@ -10,6 +10,7 @@ import { createRhapsodOpusEncoder } from "./audio/opus-encoder.js";
 import { playTestTone } from "./audio/test-tone-player.js";
 import { YoutubePlaybackService } from "./application/youtube-playback-service.js";
 import { parseChatCommand } from "./commands/chat-command.js";
+import { CommandRateLimiter } from "./commands/command-rate-limiter.js";
 import { loadConfig } from "./config.js";
 import {
   SystemYtDlpExecutor,
@@ -47,6 +48,7 @@ async function main(): Promise<void> {
       new SystemYtDlpExecutor(config.RHAPSOD_YTDLP_PATH),
     ),
   });
+  const commandRateLimiter = new CommandRateLimiter();
   const handleChatCommand = async (
     message: string,
     senderUid: string,
@@ -54,6 +56,9 @@ async function main(): Promise<void> {
     try {
       const command = parseChatCommand(message);
       if (!command) return;
+      if (!commandRateLimiter.acquire(`user:${senderUid}`, 1_500).allowed) {
+        return;
+      }
       switch (command.name) {
         case "play": {
           const track = await playback.enqueue(command.input, senderUid);
@@ -87,6 +92,23 @@ async function main(): Promise<void> {
           await connection.sendChannelMessage("Reproducción detenida.");
           break;
         case "test-tone":
+          {
+            const toneLimit = commandRateLimiter.acquire(
+              "global:test-tone",
+              30_000,
+            );
+            if (!toneLimit.allowed) {
+              if (
+                commandRateLimiter.acquire("global:test-tone-feedback", 5_000)
+                  .allowed
+              ) {
+                await connection.sendChannelMessage(
+                  `El tono estará disponible en ${Math.ceil(toneLimit.retryAfterMs / 1_000)} s.`,
+                );
+              }
+              break;
+            }
+          }
           await connection.sendChannelMessage(
             "Reproduciendo tono de prueba (3 s)...",
           );
