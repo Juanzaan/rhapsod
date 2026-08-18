@@ -64,6 +64,7 @@ must only exist in `.env` or the deployment secret store.
 - [Commands](docs/commands.md)
 - [Deployment](docs/deployment.md)
 - [Roadmap](docs/roadmap.md)
+- [TS3 bot research](docs/research-ts3-bots.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
 
