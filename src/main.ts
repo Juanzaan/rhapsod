@@ -19,6 +19,7 @@ import {
 } from "./media/youtube/yt-dlp.js";
 import { SongLinkClient } from "./media/song-link.js";
 import { SoundCloudPublicApi } from "./media/soundcloud/public-api.js";
+import { parseMediaInput } from "./media/media-input.js";
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -97,10 +98,23 @@ async function main(): Promise<void> {
       switch (command.name) {
         case "play": {
           await connection.sendChannelMessage("Preparando la reproducción...");
-          const track = await playback.enqueue(command.input, senderName);
-          await connection.sendChannelMessage(
-            `En cola: ${track.title}${track.alternativeProvider ? ` (fuente alternativa: ${track.alternativeProvider})` : ""}`,
-          );
+          const media = parseMediaInput(command.input);
+          if (media.kind === "youtube" && media.resource.type === "playlist") {
+            const result = await playback.enqueuePlaylist(
+              media.resource,
+              senderName,
+            );
+            const message =
+              result.added.length === 0
+                ? "La playlist no tiene canciones reproducibles."
+                : `Se agregaron ${result.added.length} canciones a la cola${result.remaining ? ` (quedan ${result.remaining} fuera del límite)` : ""}.`;
+            await connection.sendChannelMessage(message);
+          } else {
+            const track = await playback.enqueue(command.input, senderName);
+            await connection.sendChannelMessage(
+              `En cola: ${track.title}${track.alternativeProvider ? ` (fuente alternativa: ${track.alternativeProvider})` : ""}`,
+            );
+          }
           break;
         }
         case "search": {
@@ -195,7 +209,7 @@ async function main(): Promise<void> {
           await connection.sendChannelMessage(
             [
               "Comandos disponibles:",
-              "!play <URL> - Agregar YouTube o SoundCloud",
+              "!play <URL> - Agregar YouTube, SoundCloud o playlist",
               "!yt <búsqueda> - Buscar en YouTube",
               "!queue - Mostrar la cola",
               "!now-playing (!np) - Canción actual",

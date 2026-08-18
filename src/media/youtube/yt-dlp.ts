@@ -79,9 +79,15 @@ interface YtDlpJson {
   channel?: string;
   categories?: string[];
   live_status?: string;
+  playlist_count?: number;
   webpage_url?: string;
   url?: string;
   requested_downloads?: Array<{ url?: string }>;
+}
+
+export interface PlaylistExpansion {
+  readonly total?: number;
+  readonly tracks: readonly YoutubeTrackMetadata[];
 }
 
 export class SystemYtDlpExecutor implements YtDlpExecutor {
@@ -189,6 +195,34 @@ export class YoutubeResolver {
     return this.getAudioUrlFromUrl(youtubeUrl(resource.id));
   }
 
+  async expandPlaylist(
+    resource: YoutubeResource,
+    limit: number,
+  ): Promise<PlaylistExpansion> {
+    if (resource.type !== "playlist")
+      throw new Error("A video cannot be expanded as a playlist");
+    const raw = await this.executor.run(
+      [
+        "--flat-playlist",
+        "--dump-single-json",
+        "--playlist-end",
+        String(limit),
+        "--no-warnings",
+        youtubePlaylistUrl(resource.id),
+      ],
+      45_000,
+    );
+    const response = parseResponse(raw);
+    return {
+      ...(typeof response.playlist_count === "number"
+        ? { total: response.playlist_count }
+        : {}),
+      tracks: (response.entries ?? [])
+        .filter((entry) => entry.id && entry.title)
+        .map((entry) => parseSearchCandidate(entry)),
+    };
+  }
+
   async getAudioUrlFromUrl(url: string): Promise<string> {
     const output = await this.executor.run(
       [
@@ -288,4 +322,8 @@ function audioUrl(response: YtDlpJson): string | undefined {
 
 function youtubeUrl(videoId: string): string {
   return `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`;
+}
+
+function youtubePlaylistUrl(playlistId: string): string {
+  return `https://www.youtube.com/playlist?list=${encodeURIComponent(playlistId)}`;
 }

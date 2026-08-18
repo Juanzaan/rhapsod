@@ -5,7 +5,7 @@ chat once the TS3 adapter is connected.
 
 | Command                     | Alias         | Description                                                     |
 | --------------------------- | ------------- | --------------------------------------------------------------- |
-| `!play <media URL>`         | `!p`          | Resolve a YouTube video or SoundCloud track.                    |
+| `!play <media URL>`         | `!p`          | Resolve a YouTube video, SoundCloud track, or YouTube playlist. |
 | `!yt <search terms>`        | `!search`     | Add the first matching YouTube video to the queue.              |
 | `!pause`                    | -             | Pause the current track.                                        |
 | `!resume`                   | -             | Resume the current track.                                       |
@@ -23,7 +23,9 @@ chat once the TS3 adapter is connected.
 
 - **YouTube:** Rhapsod uses a local `yt-dlp` executable to obtain metadata and
   a temporary audio URL immediately before playback. Search returns the first
-  matching video; playlists and Spotify resolution are not connected yet.
+  matching video; playlists add up to 20 tracks per `!play` (duplicates already
+  in the queue are skipped) and report how many were added. Spotify resolution
+  is not connected yet.
 - **SoundCloud:** individual tracks first use SoundCloud's public web API with
   a dynamically discovered, cached client identifier. The identifier refreshes
   after authorization failures; yt-dlp and YouTube alternatives remain
