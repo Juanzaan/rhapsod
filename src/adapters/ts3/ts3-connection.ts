@@ -38,8 +38,9 @@ export function createTs3Connection(
   return {
     connect: async () => {
       await client.connect();
-      // The TS3 crypto challenge can take longer on small burstable VPS sizes.
-      await client.waitConnected(AbortSignal.timeout(60_000));
+      await client.waitConnected(
+        AbortSignal.timeout(config.RHAPSOD_TS3_CONNECT_TIMEOUT_SECONDS * 1_000),
+      );
     },
     disconnect: () => client.disconnect(),
     sendChannelMessage: (message) =>

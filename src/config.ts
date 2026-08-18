@@ -19,6 +19,12 @@ const configSchema = z.object({
     .default(128_000),
   RHAPSOD_TS3_CHANNEL_PASSWORD: optionalSecret,
   RHAPSOD_TS3_CHANNEL_NAME: optionalSecret,
+  RHAPSOD_TS3_CONNECT_TIMEOUT_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(15)
+    .max(300)
+    .default(180),
   RHAPSOD_TS3_HOST: z.string().min(1),
   RHAPSOD_TS3_NICKNAME: z.string().min(1).max(30).default("Rhapsod"),
   RHAPSOD_TS3_PASSWORD: optionalSecret,
