@@ -32,5 +32,6 @@ RHAPSOD_FFMPEG_PATH=/usr/bin/ffmpeg
 `RHAPSOD_TS3_CHANNEL_PASSWORD` only when the target channel is protected.
 
 Run Rhapsod under Docker Compose or systemd. The process handles `SIGINT` and
-`SIGTERM` by disconnecting from TeamSpeak cleanly. Deployment manifests will be
-added once the audio pipeline is connected.
+`SIGTERM` by disconnecting from TeamSpeak cleanly. A production unit file and
+restart policy are still planned; until then, keep the process supervised by
+your chosen service manager rather than relying on an interactive SSH session.

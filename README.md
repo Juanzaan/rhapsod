@@ -16,17 +16,22 @@ the TS3 implementation is stable.
 - `yt-dlp` available on `PATH` or configured through `RHAPSOD_YTDLP_PATH`
 - A TeamSpeak 3 server and permission for the bot to join and speak
 
-FFmpeg will be provided as a project dependency; a global installation is not
-required.
+FFmpeg is bundled as a fallback for development, but a system installation is
+recommended in production. Set `RHAPSOD_FFMPEG_PATH=/usr/bin/ffmpeg` on Linux
+when the bundled binary is incompatible with the host CPU or libc.
 
 The YouTube resolver uses the configured private cookies file and yt-dlp's
 official EJS challenge solver for datacenter-friendly extraction. Keep both
 the cookies file and its path out of Git.
 
 The YouTube resolver, chat command parser, FFmpeg PCM pipeline, Opus encoder,
-and TS3 voice adapter are implemented. Set
+queue controls, and TS3 voice adapter are implemented. Set
 `RHAPSOD_AUDIO_TEST_TONE_SECONDS=3` to validate voice permissions and audio
 transport before testing YouTube playback.
+
+YouTube extraction may require a private cookies file and yt-dlp's EJS
+challenge solver when the bot runs from a datacenter IP. Cookies are secrets:
+keep them outside Git and use a dedicated account.
 
 For servers that publish a TeamSpeak SRV record, query the port with:
 

@@ -9,14 +9,14 @@
 
 ## Phase 2: Usable music bot
 
-- Chat commands for play, pause, resume, skip, stop, queue, and volume.
+- Chat commands for play, pause, resume, skip, stop, queue, and queue editing.
 - URL validation and configurable source allowlists.
 - User and server-group permissions.
 - Persistent queue and settings.
 
 ## Phase 3: Operations
 
-- Container image and documented deployment.
+- Container image, systemd unit, and documented deployment.
 - Structured metrics and operational runbook.
 - Multiple bot instances with isolated configuration.
 
