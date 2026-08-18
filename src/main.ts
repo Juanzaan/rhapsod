@@ -52,6 +52,9 @@ async function main(): Promise<void> {
             }),
         }),
     encoder,
+    onPlaybackStarted: async (track) => {
+      await connection.sendChannelMessage(`Reproduciendo: ${track.title}`);
+    },
     onPlaybackError: async (track, error) => {
       logger.error({ error, trackId: track.id }, "YouTube playback failed");
       await connection.sendChannelMessage(
@@ -79,10 +82,19 @@ async function main(): Promise<void> {
       }
       switch (command.name) {
         case "play": {
+          await connection.sendChannelMessage("Preparando la reproducción...");
           const track = await playback.enqueue(command.input, senderUid);
           await connection.sendChannelMessage(`En cola: ${track.title}`);
           break;
         }
+        case "pause":
+          playback.pause();
+          await connection.sendChannelMessage("Reproducción pausada.");
+          break;
+        case "resume":
+          playback.resume();
+          await connection.sendChannelMessage("Reproducción reanudada.");
+          break;
         case "queue": {
           const tracks = playback.queue();
           await connection.sendChannelMessage(

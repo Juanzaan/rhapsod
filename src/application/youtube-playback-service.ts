@@ -19,6 +19,7 @@ export interface PlaybackServiceOptions {
     track: Track,
     error: Error,
   ) => void | Promise<void>;
+  readonly onPlaybackStarted?: (track: Track) => void | Promise<void>;
 }
 
 export interface YoutubePlaybackResolver {
@@ -36,6 +37,7 @@ export class YoutubePlaybackService {
     track: Track,
     error: Error,
   ) => void | Promise<void>;
+  readonly #onPlaybackStarted: (track: Track) => void | Promise<void>;
   #current: Track | undefined;
   #session: FfmpegPlaybackSession | undefined;
   #generation = 0;
@@ -46,6 +48,7 @@ export class YoutubePlaybackService {
     this.#output = options.output;
     this.#createPlayback = options.createPlayback ?? playFfmpegUrl;
     this.#onPlaybackError = options.onPlaybackError ?? (() => undefined);
+    this.#onPlaybackStarted = options.onPlaybackStarted ?? (() => undefined);
   }
 
   get current(): Track | undefined {
@@ -90,6 +93,14 @@ export class YoutubePlaybackService {
     this.#queue.clear();
   }
 
+  pause(): void {
+    this.#session?.player.pause();
+  }
+
+  resume(): void {
+    this.#session?.player.resume();
+  }
+
   #playNext(): Promise<void> {
     const track = this.#queue.next();
     if (!track) {
@@ -104,6 +115,7 @@ export class YoutubePlaybackService {
         if (generation !== this.#generation || this.#current !== track) return;
         const session = this.#createPlayback(url, this.#encoder, this.#output);
         this.#session = session;
+        void this.#onPlaybackStarted(track);
         return session.done;
       })
       .catch(async (error: unknown) => {
