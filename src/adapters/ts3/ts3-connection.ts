@@ -9,7 +9,9 @@ import type { AppConfig } from "../../config.js";
 export interface Ts3Connection {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
-  onTextMessage(handler: (message: string, senderUid: string) => void): void;
+  onTextMessage(
+    handler: (message: string, senderUid: string, senderName: string) => void,
+  ): void;
   sendChannelMessage(message: string): Promise<void>;
   sendVoiceFrame(frame: Uint8Array): void;
 }
@@ -48,7 +50,7 @@ export function createTs3Connection(
     sendVoiceFrame: (frame) => client.sendVoice(frame, 5),
     onTextMessage: (handler) => {
       client.on("textMessage", (message) =>
-        handler(message.message, message.invokerUID),
+        handler(message.message, message.invokerUID, message.invokerName),
       );
     },
   };

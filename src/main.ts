@@ -76,6 +76,7 @@ async function main(): Promise<void> {
   const handleChatCommand = async (
     message: string,
     senderUid: string,
+    senderName: string,
   ): Promise<void> => {
     try {
       const command = parseChatCommand(message);
@@ -86,13 +87,13 @@ async function main(): Promise<void> {
       switch (command.name) {
         case "play": {
           await connection.sendChannelMessage("Preparando la reproducción...");
-          const track = await playback.enqueue(command.input, senderUid);
+          const track = await playback.enqueue(command.input, senderName);
           await connection.sendChannelMessage(`En cola: ${track.title}`);
           break;
         }
         case "search": {
           await connection.sendChannelMessage("Buscando en YouTube...");
-          const track = await playback.enqueueSearch(command.input, senderUid);
+          const track = await playback.enqueueSearch(command.input, senderName);
           await connection.sendChannelMessage(`En cola: ${track.title}`);
           break;
         }
@@ -197,8 +198,8 @@ async function main(): Promise<void> {
       await connection.sendChannelMessage(messageText);
     }
   };
-  connection.onTextMessage((message, senderUid) => {
-    void handleChatCommand(message, senderUid);
+  connection.onTextMessage((message, senderUid, senderName) => {
+    void handleChatCommand(message, senderUid, senderName);
   });
   await connection.connect();
   logger.info("Connected to TeamSpeak 3");
