@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import { YoutubePlaybackService } from "../src/application/youtube-playback-service.js";
 import type { YoutubeTrackMetadata } from "../src/media/youtube/yt-dlp.js";
+import { SoundCloudDrmError } from "../src/media/soundcloud/public-api.js";
+import type { AlternativeSourceResolver } from "../src/media/song-link.js";
 import type { FfmpegPlaybackSession } from "../src/audio/ffmpeg-player.js";
 import type { AudioPlayer } from "../src/audio/audio-player.js";
 import type { RhapsodOpusEncoder } from "../src/audio/opus-encoder.js";
@@ -57,6 +59,14 @@ function setup(options: { soundcloudResolver?: boolean } = {}) {
     encode: vi.fn(),
     pcmFrameBytes: 3_840,
   };
+  const alternativeResolver = {
+    findAlternative: vi.fn<AlternativeSourceResolver["findAlternative"]>(() =>
+      Promise.resolve({
+        provider: "youtube" as const,
+        url: "https://youtu.be/fallback",
+      }),
+    ),
+  };
   const onPlaybackError = vi.fn();
   const onPlaybackFinished = vi.fn();
   const onPlaybackStarted = vi.fn();
@@ -68,14 +78,7 @@ function setup(options: { soundcloudResolver?: boolean } = {}) {
     onPlaybackStarted,
     output: { sendVoiceFrame: vi.fn() },
     resolver,
-    alternativeResolver: {
-      findAlternative: vi.fn(() =>
-        Promise.resolve({
-          provider: "youtube" as const,
-          url: "https://youtu.be/fallback",
-        }),
-      ),
-    },
+    alternativeResolver,
     ...(options.soundcloudResolver
       ? {
           soundcloudResolver: {
@@ -90,6 +93,7 @@ function setup(options: { soundcloudResolver?: boolean } = {}) {
       : {}),
   });
   return {
+    alternativeResolver,
     createPlayback,
     onPlaybackError,
     onPlaybackFinished,
@@ -323,5 +327,108 @@ describe("YoutubePlaybackService", () => {
     await expect(
       service.enqueue("https://open.spotify.com/track/abc123", "user-1"),
     ).rejects.toThrow("Only YouTube");
+  });
+
+  it("falls back to the next ranked candidate when audio is unavailable", async () => {
+    const { createPlayback, onPlaybackError, resolver, service } = setup();
+    resolver.getTrack.mockResolvedValueOnce({
+      fallbackSources: ["https://www.youtube.com/watch?v=second"],
+      id: "best",
+      title: "Track best",
+      webpageUrl: "https://www.youtube.com/watch?v=best",
+    });
+    resolver.getAudioUrlFromUrl
+      .mockRejectedValueOnce(new Error("Requested format is not available"))
+      .mockResolvedValueOnce("https://media.example/second-audio");
+
+    await service.enqueue("https://youtu.be/best", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(resolver.getAudioUrlFromUrl).toHaveBeenNthCalledWith(
+      1,
+      "https://www.youtube.com/watch?v=best",
+    );
+    expect(resolver.getAudioUrlFromUrl).toHaveBeenNthCalledWith(
+      2,
+      "https://www.youtube.com/watch?v=second",
+    );
+    expect(createPlayback).toHaveBeenCalledWith(
+      "https://media.example/second-audio",
+      expect.anything(),
+      expect.anything(),
+    );
+    expect(onPlaybackError).not.toHaveBeenCalled();
+  });
+
+  it("reports the failure when every candidate has no playable audio", async () => {
+    const { onPlaybackError, resolver, service } = setup();
+    resolver.getTrack.mockResolvedValueOnce({
+      fallbackSources: ["https://www.youtube.com/watch?v=second"],
+      id: "best",
+      title: "Track best",
+      webpageUrl: "https://www.youtube.com/watch?v=best",
+    });
+    resolver.getAudioUrlFromUrl.mockRejectedValue(
+      new Error("Requested format is not available"),
+    );
+
+    await service.enqueue("https://youtu.be/best", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(onPlaybackError).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "best" }),
+      expect.objectContaining({
+        message: "Requested format is not available",
+      }),
+    );
+  });
+
+  it("searches YouTube by metadata when SoundCloud is DRM without a SongLink match", async () => {
+    const { alternativeResolver, resolver, service } = setup();
+    alternativeResolver.findAlternative.mockResolvedValueOnce(undefined);
+    resolver.getTrackFromUrl.mockRejectedValueOnce(
+      new SoundCloudDrmError({
+        artist: "Kanye West",
+        durationSeconds: 224,
+        title: "OK (feat. Don Toliver)",
+      }),
+    );
+    resolver.search.mockResolvedValueOnce({
+      id: "yt-fallback",
+      title: "Kanye West - OK (Official Audio)",
+      webpageUrl: "https://www.youtube.com/watch?v=yt-fallback",
+    });
+
+    const track = await service.enqueue(
+      "https://on.soundcloud.com/0Tbj4O1F7XxfV6DDjQ",
+      "user-1",
+    );
+
+    expect(resolver.search).toHaveBeenCalledWith(
+      "Kanye West OK (feat. Don Toliver)",
+    );
+    expect(track).toMatchObject({
+      alternativeProvider: "youtube",
+      id: "yt-fallback",
+      title: "Kanye West - OK (Official Audio)",
+    });
+  });
+
+  it("keeps the DRM error when metadata search finds no reliable match", async () => {
+    const { alternativeResolver, resolver, service } = setup();
+    alternativeResolver.findAlternative.mockResolvedValueOnce(undefined);
+    resolver.getTrackFromUrl.mockRejectedValueOnce(
+      new SoundCloudDrmError({
+        artist: "Kanye West",
+        title: "OK (feat. Don Toliver)",
+      }),
+    );
+    resolver.search.mockRejectedValueOnce(
+      new Error("No encontré una coincidencia confiable en YouTube"),
+    );
+
+    await expect(
+      service.enqueue("https://on.soundcloud.com/0Tbj4O1F7XxfV6DDjQ", "user-1"),
+    ).rejects.toThrow("DRM protected");
   });
 });

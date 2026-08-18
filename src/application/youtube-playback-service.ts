@@ -11,7 +11,11 @@ import type { RhapsodOpusEncoder } from "../audio/opus-encoder.js";
 import type { VoiceFrameOutput } from "../audio/audio-player.js";
 import type { AudioPlayerMetrics } from "../audio/audio-player.js";
 import type { AlternativeSourceResolver } from "../media/song-link.js";
-import type { SoundCloudResolver } from "../media/soundcloud/public-api.js";
+import {
+  SoundCloudDrmError,
+  type SoundCloudDrmMetadata,
+  type SoundCloudResolver,
+} from "../media/soundcloud/public-api.js";
 
 export interface PlaybackServiceOptions {
   readonly encoder: RhapsodOpusEncoder;
@@ -128,19 +132,32 @@ export class YoutubePlaybackService {
             providerError = fallbackError;
           }
         }
-        if (!isDrmError(providerError) || !this.#alternativeResolver)
-          throw providerError;
-        const alternative = await this.#alternativeResolver.findAlternative(
-          media.value,
-        );
-        if (!alternative) throw providerError;
-        const metadata = await this.#resolver.getTrackFromUrl(alternative.url);
-        this.#recordMetadataTiming(metadata, startedAt);
-        return this.#enqueueMetadata(
-          metadata,
-          requestedBy,
-          alternative.provider,
-        );
+        if (!isDrmError(providerError)) throw providerError;
+        if (this.#alternativeResolver) {
+          const alternative = await this.#alternativeResolver.findAlternative(
+            media.value,
+          );
+          if (alternative) {
+            const metadata = await this.#resolver.getTrackFromUrl(
+              alternative.url,
+            );
+            this.#recordMetadataTiming(metadata, startedAt);
+            return this.#enqueueMetadata(
+              metadata,
+              requestedBy,
+              alternative.provider,
+            );
+          }
+        }
+        if (providerError instanceof SoundCloudDrmError) {
+          const fallback = await this.#searchByMetadata(
+            providerError.metadata,
+            startedAt,
+          );
+          if (fallback)
+            return this.#enqueueMetadata(fallback, requestedBy, "youtube");
+        }
+        throw providerError;
       }
     }
     if (media.kind !== "youtube" || media.resource.type !== "video") {
@@ -171,6 +188,9 @@ export class YoutubePlaybackService {
       source: metadata.webpageUrl,
       title: metadata.title,
       ...(alternativeProvider ? { alternativeProvider } : {}),
+      ...(metadata.fallbackSources
+        ? { fallbackSources: metadata.fallbackSources }
+        : {}),
     };
     if (metadata.audioUrl) this.#cacheAudioUrl(track, metadata.audioUrl);
     this.#queue.add(track);
@@ -299,15 +319,28 @@ export class YoutubePlaybackService {
   }
 
   #resolveAudioUrl(track: Track): Promise<string> {
-    const pending = (track.source.includes("soundcloud.com") && this.#soundcloudResolver
-      ? this.#soundcloudResolver.getAudioUrl(track.source)
-      : this.#resolver.getAudioUrlFromUrl(track.source))
-      .then((url) => ({
-        url,
-        expiresAt: audioUrlExpiresAt(url),
-      }));
+    const pending = this.#resolvePlayableAudio(track).then((url) => ({
+      url,
+      expiresAt: audioUrlExpiresAt(url),
+    }));
     this.#prepared.set(track.source, pending);
     return pending.then((prepared) => prepared.url);
+  }
+
+  async #resolvePlayableAudio(track: Track): Promise<string> {
+    if (track.source.includes("soundcloud.com") && this.#soundcloudResolver) {
+      return this.#soundcloudResolver.getAudioUrl(track.source);
+    }
+    let lastError: unknown;
+    for (const source of [track.source, ...(track.fallbackSources ?? [])]) {
+      try {
+        return await this.#resolver.getAudioUrlFromUrl(source);
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    if (lastError instanceof Error) throw lastError;
+    throw new Error("No playable audio source");
   }
 
   #prefetchNext(): void {
@@ -327,6 +360,21 @@ export class YoutubePlaybackService {
       stage: "metadata",
       trackId: metadata.id,
     });
+  }
+
+  async #searchByMetadata(
+    metadata: SoundCloudDrmMetadata,
+    startedAt: number,
+  ): Promise<YoutubeTrackMetadata | undefined> {
+    const query = `${metadata.artist} ${metadata.title}`.trim();
+    if (!query) return undefined;
+    try {
+      const candidate = await this.#resolver.search(query);
+      this.#recordMetadataTiming(candidate, startedAt);
+      return candidate;
+    } catch {
+      return undefined;
+    }
   }
 }
 

@@ -11,12 +11,28 @@ interface Transcoding {
 
 interface SoundCloudTrack {
   readonly access?: string;
+  readonly duration?: number;
   readonly id?: number;
   readonly media?: { readonly transcodings?: Transcoding[] };
   readonly permalink_url?: string;
   readonly policy?: string;
+  readonly publisher_metadata?: { readonly artist?: string };
   readonly streamable?: boolean;
   readonly title?: string;
+  readonly user?: { readonly username?: string };
+}
+
+export interface SoundCloudDrmMetadata {
+  readonly artist: string;
+  readonly durationSeconds?: number;
+  readonly title: string;
+}
+
+export class SoundCloudDrmError extends Error {
+  constructor(readonly metadata: SoundCloudDrmMetadata) {
+    super("This SoundCloud track is DRM protected or blocked");
+    this.name = "SoundCloudDrmError";
+  }
 }
 
 export interface SoundCloudResolver {
@@ -69,7 +85,8 @@ export class SoundCloudPublicApi implements SoundCloudResolver {
     const selected =
       transcodings.find((item) => item.format?.protocol === "progressive") ??
       transcodings.find((item) => item.format?.protocol === "hls");
-    if (!selected?.url) throw new Error("SoundCloud returned no playable stream");
+    if (!selected?.url)
+      throw new Error("SoundCloud returned no playable stream");
     const response = await this.#apiRequest<{ url?: string }>(selected.url);
     if (!response.url || !response.url.startsWith("https://"))
       throw new Error("SoundCloud returned an invalid stream URL");
@@ -87,7 +104,8 @@ export class SoundCloudPublicApi implements SoundCloudResolver {
       this.#clientId = undefined;
       return this.#apiRequest<T>(pathOrUrl, false);
     }
-    if (!response.ok) throw new Error(`SoundCloud API returned ${response.status}`);
+    if (!response.ok)
+      throw new Error(`SoundCloud API returned ${response.status}`);
     return (await response.json()) as T;
   }
 
@@ -97,9 +115,14 @@ export class SoundCloudPublicApi implements SoundCloudResolver {
     const home = await this.#fetch(HOME_URL, {
       signal: AbortSignal.timeout(this.#timeoutMs),
     });
-    if (!home.ok) throw new Error("Unable to load SoundCloud client configuration");
+    if (!home.ok)
+      throw new Error("Unable to load SoundCloud client configuration");
     const html = await home.text();
-    const scripts = [...html.matchAll(/<script[^>]+src="(https:\/\/a-v2\.sndcdn\.com\/assets\/[^"?]+\.js)"/g)]
+    const scripts = [
+      ...html.matchAll(
+        /<script[^>]+src="(https:\/\/a-v2\.sndcdn\.com\/assets\/[^"?]+\.js)"/g,
+      ),
+    ]
       .map((match) => match[1])
       .filter((value): value is string => value !== undefined)
       .reverse();
@@ -109,7 +132,9 @@ export class SoundCloudPublicApi implements SoundCloudResolver {
       });
       if (!response.ok) continue;
       const source = await response.text();
-      const match = /client_id\s*[:=]\s*["']([A-Za-z0-9_-]{20,})["']/.exec(source);
+      const match = /client_id\s*[:=]\s*["']([A-Za-z0-9_-]{20,})["']/.exec(
+        source,
+      );
       if (!match?.[1]) continue;
       this.#clientId = {
         expiresAt: Date.now() + CLIENT_ID_TTL_MS,
@@ -137,8 +162,36 @@ function assertPlayable(track: SoundCloudTrack): void {
     track.policy === "BLOCK" ||
     track.streamable === false
   ) {
-    throw new Error("This SoundCloud track is DRM protected or blocked");
+    throw new SoundCloudDrmError(drmMetadata(track));
   }
   if (!track.id || !track.title)
     throw new Error("SoundCloud returned incomplete track metadata");
+}
+
+function drmMetadata(track: SoundCloudTrack): SoundCloudDrmMetadata {
+  return {
+    artist:
+      track.publisher_metadata?.artist ??
+      track.user?.username ??
+      artistFromPermalink(track.permalink_url) ??
+      "SoundCloud",
+    ...(track.duration === undefined
+      ? {}
+      : { durationSeconds: Math.round(track.duration / 1_000) }),
+    title: track.title ?? "Unknown track",
+  };
+}
+
+function artistFromPermalink(
+  permalinkUrl: string | undefined,
+): string | undefined {
+  if (!permalinkUrl) return undefined;
+  try {
+    const segment = new URL(permalinkUrl).pathname
+      .split("/")
+      .filter(Boolean)[0];
+    return segment ? decodeURIComponent(segment) : undefined;
+  } catch {
+    return undefined;
+  }
 }

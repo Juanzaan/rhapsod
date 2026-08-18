@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { rankYoutubeCandidates } from "../src/media/youtube/search-ranking.js";
+import {
+  rankYoutubeCandidates,
+  rankYoutubeCandidatesAll,
+} from "../src/media/youtube/search-ranking.js";
 
 describe("rankYoutubeCandidates", () => {
   it("prefers an official matching result over a cover", () => {
@@ -68,5 +71,42 @@ describe("rankYoutubeCandidates", () => {
     ]);
 
     expect(selected?.id).toBe("topic");
+  });
+
+  it("returns ordered candidates above the confidence threshold", () => {
+    const ranked = rankYoutubeCandidatesAll("the weeknd starboy", [
+      {
+        id: "official",
+        title: "The Weeknd - Starboy (Official Audio)",
+        webpageUrl: "https://youtube.com/watch?v=official",
+      },
+      {
+        id: "plain",
+        title: "The Weeknd - Starboy",
+        webpageUrl: "https://youtube.com/watch?v=plain",
+      },
+      {
+        id: "unrelated",
+        title: "Podcast sobre producción musical",
+        webpageUrl: "https://youtube.com/watch?v=unrelated",
+      },
+    ]);
+
+    expect(ranked.map((candidate) => candidate.id)).toEqual([
+      "plain",
+      "official",
+    ]);
+  });
+
+  it("returns an empty list when no candidate is reliable", () => {
+    expect(
+      rankYoutubeCandidatesAll("duki rockstar", [
+        {
+          id: "wrong",
+          title: "Documental sobre Duki",
+          webpageUrl: "https://youtube.com/watch?v=wrong",
+        },
+      ]),
+    ).toEqual([]);
   });
 });

@@ -258,6 +258,9 @@ function userFacingError(error: Error): string {
   if (/DRM protected/i.test(error.message)) {
     return "SoundCloud no permite reproducir esta pista porque está protegida con DRM. Probá otra versión o una fuente distinta.";
   }
+  if (/Requested format is not available/i.test(error.message)) {
+    return "YouTube no ofrece un formato de audio reproducible para ese video (puede ser un directo o un video restringido). Probá otra versión.";
+  }
   return error.message;
 }
 

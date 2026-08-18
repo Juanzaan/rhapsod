@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { SoundCloudPublicApi } from "../src/media/soundcloud/public-api.js";
+import {
+  SoundCloudDrmError,
+  SoundCloudPublicApi,
+} from "../src/media/soundcloud/public-api.js";
 
 const track = {
   access: "playable",
@@ -42,13 +45,19 @@ describe("SoundCloudPublicApi", () => {
       const url = requestUrl(input);
       if (url === "https://soundcloud.com/")
         return Promise.resolve(
-          response('<script src="https://a-v2.sndcdn.com/assets/app.js"></script>'),
+          response(
+            '<script src="https://a-v2.sndcdn.com/assets/app.js"></script>',
+          ),
         );
       if (url.includes("app.js"))
-        return Promise.resolve(response('client_id="abcdefghijklmnopqrstuvwx"'));
+        return Promise.resolve(
+          response('client_id="abcdefghijklmnopqrstuvwx"'),
+        );
       if (url.includes("/resolve?")) return Promise.resolve(response(track));
       if (url.includes("/progressive?"))
-        return Promise.resolve(response({ url: "https://media.example/audio.mp3" }));
+        return Promise.resolve(
+          response({ url: "https://media.example/audio.mp3" }),
+        );
       return Promise.reject(new Error(`Unexpected URL: ${url}`));
     });
 
@@ -63,22 +72,65 @@ describe("SoundCloudPublicApi", () => {
     });
   });
 
-  it("rejects tracks SoundCloud marks as blocked", async () => {
+  it("rejects tracks SoundCloud marks as blocked and keeps metadata", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>((input) => {
       const url = requestUrl(input);
       if (url === "https://soundcloud.com/")
         return Promise.resolve(
-          response('<script src="https://a-v2.sndcdn.com/assets/app.js"></script>'),
+          response(
+            '<script src="https://a-v2.sndcdn.com/assets/app.js"></script>',
+          ),
         );
       if (url.includes("app.js"))
-        return Promise.resolve(response('client_id="abcdefghijklmnopqrstuvwx"'));
+        return Promise.resolve(
+          response('client_id="abcdefghijklmnopqrstuvwx"'),
+        );
       return Promise.resolve(response({ ...track, access: "blocked" }));
+    });
+
+    const error = await new SoundCloudPublicApi({ fetch })
+      .getTrack("https://soundcloud.com/artist/track")
+      .catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(SoundCloudDrmError);
+    if (error instanceof SoundCloudDrmError) {
+      expect(error.metadata).toEqual({ artist: "artist", title: "Track" });
+    }
+  });
+
+  it("derives DRM metadata from publisher artist and duration", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>((input) => {
+      const url = requestUrl(input);
+      if (url === "https://soundcloud.com/")
+        return Promise.resolve(
+          response(
+            '<script src="https://a-v2.sndcdn.com/assets/app.js"></script>',
+          ),
+        );
+      if (url.includes("app.js"))
+        return Promise.resolve(
+          response('client_id="abcdefghijklmnopqrstuvwx"'),
+        );
+      return Promise.resolve(
+        response({
+          ...track,
+          access: "blocked",
+          duration: 224_000,
+          publisher_metadata: { artist: "Kanye West" },
+          title: "OK (feat. Don Toliver)",
+        }),
+      );
     });
 
     await expect(
       new SoundCloudPublicApi({ fetch }).getTrack(
         "https://soundcloud.com/artist/track",
       ),
-    ).rejects.toThrow("DRM protected or blocked");
+    ).rejects.toMatchObject({
+      metadata: {
+        artist: "Kanye West",
+        durationSeconds: 224,
+        title: "OK (feat. Don Toliver)",
+      },
+    });
   });
 });
