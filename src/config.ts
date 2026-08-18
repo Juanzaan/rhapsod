@@ -7,6 +7,7 @@ const optionalSecret = z.preprocess(
 
 const configSchema = z.object({
   RHAPSOD_DATA_DIR: z.string().min(1).default("./data"),
+  RHAPSOD_FFMPEG_PATH: optionalSecret,
   RHAPSOD_LOG_LEVEL: z
     .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
     .default("info"),

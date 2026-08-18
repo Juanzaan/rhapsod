@@ -14,6 +14,7 @@ describe("loadConfig", () => {
       RHAPSOD_YTDLP_PATH: "yt-dlp",
     });
     expect(config.RHAPSOD_YTDLP_COOKIES_PATH).toBeUndefined();
+    expect(config.RHAPSOD_FFMPEG_PATH).toBeUndefined();
   });
 
   it("rejects invalid voice ports", () => {

@@ -7,6 +7,7 @@ import pino from "pino";
 import { Ts3IdentityStore } from "./adapters/ts3/identity-store.js";
 import { createTs3Connection } from "./adapters/ts3/ts3-connection.js";
 import { createRhapsodOpusEncoder } from "./audio/opus-encoder.js";
+import { playFfmpegUrl } from "./audio/ffmpeg-player.js";
 import { playTestTone } from "./audio/test-tone-player.js";
 import { YoutubePlaybackService } from "./application/youtube-playback-service.js";
 import { parseChatCommand } from "./commands/chat-command.js";
@@ -42,6 +43,14 @@ async function main(): Promise<void> {
     bitrate: config.RHAPSOD_OPUS_BITRATE,
   });
   const playback = new YoutubePlaybackService({
+    ...(config.RHAPSOD_FFMPEG_PATH === undefined
+      ? {}
+      : {
+          createPlayback: (url, playbackEncoder, output) =>
+            playFfmpegUrl(url, playbackEncoder, output, {
+              binary: config.RHAPSOD_FFMPEG_PATH ?? "ffmpeg",
+            }),
+        }),
     encoder,
     onPlaybackError: async (track, error) => {
       logger.error({ error, trackId: track.id }, "YouTube playback failed");

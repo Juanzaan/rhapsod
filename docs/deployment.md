@@ -25,6 +25,7 @@ RHAPSOD_TS3_CHANNEL_NAME=Music
 RHAPSOD_DATA_DIR=/var/lib/rhapsod
 RHAPSOD_YTDLP_PATH=/usr/local/bin/yt-dlp
 RHAPSOD_YTDLP_COOKIES_PATH=
+RHAPSOD_FFMPEG_PATH=/usr/bin/ffmpeg
 ```
 
 `RHAPSOD_TS3_PASSWORD` is the optional server password. Use
