@@ -52,7 +52,7 @@ export function parseChatCommand(
   const name = COMMAND_ALIASES[rawName.toLowerCase()];
   if (!name) throw new Error(`Unknown command: ${rawName || "(empty)"}`);
 
-  const argument = argumentsList.join(" ").trim();
+  const argument = unwrapTeamSpeakUrl(argumentsList.join(" ").trim());
   switch (name) {
     case "play":
       if (!argument) throw new Error("Usage: !play <link or file>");
@@ -72,6 +72,16 @@ export function parseChatCommand(
         throw new Error(`Command !${rawName} does not accept arguments`);
       return { name };
   }
+}
+
+function unwrapTeamSpeakUrl(argument: string): string {
+  const wrappedUrl = argument.match(/^\[url\](https?:\/\/[^\]]+)\[\/url\]$/i);
+  if (wrappedUrl?.[1]) return wrappedUrl[1];
+
+  const labeledUrl = argument.match(
+    /^\[url=(https?:\/\/[^\]]+)\].*\[\/url\]$/i,
+  );
+  return labeledUrl?.[1] ?? argument;
 }
 
 function parsePosition(argument: string): number {
