@@ -8,6 +8,7 @@ describe("FFmpeg PCM source", () => {
     const args = buildFfmpegPcmArguments("https://cdn.example.test/audio");
 
     expect(args).toContain("-reconnect");
+    expect(args).not.toContain("-reconnect_at_eof");
     expect(args).toContain("-vn");
     expect(args).toContain("-f");
     expect(args).toContain("s16le");
