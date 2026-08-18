@@ -213,7 +213,9 @@ async function main(): Promise<void> {
       }
     } catch (error) {
       const messageText =
-        error instanceof Error ? error.message : "Error procesando comando";
+        error instanceof Error
+          ? userFacingError(error)
+          : "Error procesando comando";
       await connection.sendChannelMessage(messageText);
     }
   };
@@ -242,6 +244,13 @@ async function main(): Promise<void> {
   };
   process.once("SIGINT", shutdown);
   process.once("SIGTERM", shutdown);
+}
+
+function userFacingError(error: Error): string {
+  if (/DRM protected/i.test(error.message)) {
+    return "SoundCloud no permite reproducir esta pista porque está protegida con DRM. Probá otra versión o una fuente distinta.";
+  }
+  return error.message;
 }
 
 void main().catch((error: unknown) => {

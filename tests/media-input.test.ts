@@ -61,6 +61,12 @@ describe("parseMediaInput", () => {
       kind: "url",
       value: "https://soundcloud.com/artist-name/sets/playlist-name",
     });
+    expect(
+      parseMediaInput("https://on.soundcloud.com/0Tbj4O1F7XxfV6DDjQ"),
+    ).toEqual({
+      kind: "soundcloud",
+      value: "https://on.soundcloud.com/0Tbj4O1F7XxfV6DDjQ",
+    });
   });
 
   it("supports explicit local files and direct media URLs", () => {
