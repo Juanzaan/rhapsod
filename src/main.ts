@@ -165,7 +165,17 @@ async function main(): Promise<void> {
           break;
         case "help":
           await connection.sendChannelMessage(
-            "Comandos: !play <YouTube> !queue !now-playing !skip !stop !test-tone",
+            "Comandos: !play <YouTube> | !queue | !now-playing (!np) | !remove <n> | !clear | !skip | !stop | !pause | !resume | !test-tone",
+          );
+          break;
+        case "loop":
+          await connection.sendChannelMessage(
+            "El modo loop todavía está en desarrollo. Usa !queue, !remove y !clear para gestionar la cola.",
+          );
+          break;
+        case "volume":
+          await connection.sendChannelMessage(
+            "El volumen todavía está en desarrollo; ajusta el volumen de TeamSpeak mientras se implementa el control PCM.",
           );
           break;
         default:
