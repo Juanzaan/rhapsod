@@ -171,7 +171,7 @@ async function main(): Promise<void> {
           break;
         case "help":
           await connection.sendChannelMessage(
-            "Comandos: !play <YouTube> | !yt <búsqueda> | !queue | !now-playing (!np) | !remove <n> | !clear | !skip | !stop | !pause | !resume | !test-tone",
+            "Comandos: !play <YouTube/SoundCloud> | !yt <búsqueda> | !queue | !now-playing (!np) | !remove <n> | !clear | !skip | !stop | !pause | !resume | !test-tone",
           );
           break;
         case "loop":

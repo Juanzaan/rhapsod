@@ -73,6 +73,10 @@ export class YoutubeResolver {
     return parseTrackResponse(raw);
   }
 
+  getTrackFromUrl(url: string): Promise<YoutubeTrackMetadata> {
+    return this.#getTrackFromUrl(url);
+  }
+
   async search(query: string): Promise<YoutubeTrackMetadata> {
     const normalizedQuery = query.trim();
     if (!normalizedQuery) throw new Error("YouTube search cannot be empty");
@@ -96,6 +100,10 @@ export class YoutubeResolver {
   async getAudioUrl(resource: YoutubeResource): Promise<string> {
     if (resource.type !== "video")
       throw new Error("A playlist must be expanded before playback");
+    return this.getAudioUrlFromUrl(youtubeUrl(resource.id));
+  }
+
+  async getAudioUrlFromUrl(url: string): Promise<string> {
     const output = await this.executor.run(
       [
         "--get-url",
@@ -103,14 +111,28 @@ export class YoutubeResolver {
         "bestaudio[acodec!=none]/bestaudio",
         "--no-playlist",
         "--no-warnings",
-        youtubeUrl(resource.id),
+        url,
       ],
       45_000,
     );
-    const url = output.trim().split(/\r?\n/, 1)[0];
-    if (!url || !url.startsWith("https://"))
+    const audioUrl = output.trim().split(/\r?\n/, 1)[0];
+    if (!audioUrl || !audioUrl.startsWith("https://"))
       throw new Error("yt-dlp did not return an HTTPS audio URL");
-    return url;
+    return audioUrl;
+  }
+
+  async #getTrackFromUrl(url: string): Promise<YoutubeTrackMetadata> {
+    const raw = await this.executor.run(
+      [
+        "--dump-single-json",
+        "--no-playlist",
+        "--no-warnings",
+        "--skip-download",
+        url,
+      ],
+      30_000,
+    );
+    return parseTrackResponse(raw);
   }
 }
 

@@ -5,7 +5,7 @@ chat once the TS3 adapter is connected.
 
 | Command                     | Alias         | Description                                                     |
 | --------------------------- | ------------- | --------------------------------------------------------------- |
-| `!play <YouTube URL>`       | `!p`          | Resolve a YouTube video and add it to the queue.                |
+| `!play <media URL>`         | `!p`          | Resolve a YouTube video or SoundCloud track.                    |
 | `!yt <search terms>`        | `!search`     | Add the first matching YouTube video to the queue.              |
 | `!pause`                    | -             | Pause the current track.                                        |
 | `!resume`                   | -             | Resume the current track.                                       |
@@ -24,6 +24,8 @@ chat once the TS3 adapter is connected.
 - **YouTube:** Rhapsod uses a local `yt-dlp` executable to obtain metadata and
   a temporary audio URL immediately before playback. Search returns the first
   matching video; playlists and Spotify resolution are not connected yet.
+- **SoundCloud:** individual track links use the same yt-dlp and FFmpeg
+  pipeline. Playlists are not expanded yet.
 - **Other sources:** Spotify links, local files, direct HTTPS audio URLs, and
   YouTube search are planned but currently rejected by `!play`.
 
