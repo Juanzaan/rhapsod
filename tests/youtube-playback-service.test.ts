@@ -95,6 +95,17 @@ describe("YoutubePlaybackService", () => {
     expect(service.queue()).toEqual([]);
   });
 
+  it("removes queued tracks without stopping the current track", async () => {
+    const { service } = setup();
+    await service.enqueue("https://youtu.be/first", "user-1");
+    await service.enqueue("https://youtu.be/second", "user-2");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(service.removeQueued(1)?.id).toBe("second");
+    expect(service.queue()).toEqual([]);
+    expect(service.current?.id).toBe("first");
+  });
+
   it("reports playback failures before advancing the queue", async () => {
     const { onPlaybackError, resolver, service } = setup();
     resolver.getAudioUrl.mockRejectedValueOnce(new Error("audio unavailable"));

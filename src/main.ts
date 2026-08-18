@@ -106,6 +106,24 @@ async function main(): Promise<void> {
           );
           break;
         }
+        case "remove": {
+          const removed = playback.removeQueued(command.position);
+          await connection.sendChannelMessage(
+            removed
+              ? `Quitada de la cola: ${removed.title}`
+              : "No existe esa posición en la cola.",
+          );
+          break;
+        }
+        case "clear": {
+          const cleared = playback.clearQueued();
+          await connection.sendChannelMessage(
+            cleared === 0
+              ? "La cola ya estaba vacía."
+              : `Se quitaron ${cleared} pistas de la cola.`,
+          );
+          break;
+        }
         case "now-playing":
           await connection.sendChannelMessage(
             playback.current
