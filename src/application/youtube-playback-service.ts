@@ -10,10 +10,12 @@ import {
 import type { RhapsodOpusEncoder } from "../audio/opus-encoder.js";
 import type { VoiceFrameOutput } from "../audio/audio-player.js";
 import type { AudioPlayerMetrics } from "../audio/audio-player.js";
+import type { AlternativeSourceResolver } from "../media/song-link.js";
 
 export interface PlaybackServiceOptions {
   readonly encoder: RhapsodOpusEncoder;
   readonly resolver: YoutubePlaybackResolver;
+  readonly alternativeResolver?: AlternativeSourceResolver;
   readonly output: VoiceFrameOutput;
   readonly createPlayback?: typeof playFfmpegUrl;
   readonly onPlaybackError?: (
@@ -58,6 +60,7 @@ export class YoutubePlaybackService {
   readonly #queue = new PlaybackQueue();
   readonly #encoder: RhapsodOpusEncoder;
   readonly #resolver: YoutubePlaybackResolver;
+  readonly #alternativeResolver: AlternativeSourceResolver | undefined;
   readonly #output: VoiceFrameOutput;
   readonly #createPlayback: typeof playFfmpegUrl;
   readonly #onPlaybackError: (
@@ -83,6 +86,7 @@ export class YoutubePlaybackService {
   constructor(options: PlaybackServiceOptions) {
     this.#encoder = options.encoder;
     this.#resolver = options.resolver;
+    this.#alternativeResolver = options.alternativeResolver;
     this.#output = options.output;
     this.#createPlayback = options.createPlayback ?? playFfmpegUrl;
     this.#onPlaybackError = options.onPlaybackError ?? (() => undefined);
@@ -103,9 +107,24 @@ export class YoutubePlaybackService {
     const startedAt = Date.now();
     const media = parseMediaInput(input);
     if (media.kind === "soundcloud") {
-      const metadata = await this.#resolver.getTrackFromUrl(media.value);
-      this.#recordMetadataTiming(metadata, startedAt);
-      return this.#enqueueMetadata(metadata, requestedBy);
+      try {
+        const metadata = await this.#resolver.getTrackFromUrl(media.value);
+        this.#recordMetadataTiming(metadata, startedAt);
+        return this.#enqueueMetadata(metadata, requestedBy);
+      } catch (error) {
+        if (!isDrmError(error) || !this.#alternativeResolver) throw error;
+        const alternative = await this.#alternativeResolver.findAlternative(
+          media.value,
+        );
+        if (!alternative) throw error;
+        const metadata = await this.#resolver.getTrackFromUrl(alternative.url);
+        this.#recordMetadataTiming(metadata, startedAt);
+        return this.#enqueueMetadata(
+          metadata,
+          requestedBy,
+          alternative.provider,
+        );
+      }
     }
     if (media.kind !== "youtube" || media.resource.type !== "video") {
       throw new Error(
@@ -124,12 +143,17 @@ export class YoutubePlaybackService {
     return this.#enqueueMetadata(metadata, requestedBy);
   }
 
-  #enqueueMetadata(metadata: YoutubeTrackMetadata, requestedBy: string): Track {
+  #enqueueMetadata(
+    metadata: YoutubeTrackMetadata,
+    requestedBy: string,
+    alternativeProvider?: string,
+  ): Track {
     const track: Track = {
       id: metadata.id,
       requestedBy,
       source: metadata.webpageUrl,
       title: metadata.title,
+      ...(alternativeProvider ? { alternativeProvider } : {}),
     };
     if (metadata.audioUrl) this.#cacheAudioUrl(track, metadata.audioUrl);
     this.#queue.add(track);
@@ -286,6 +310,10 @@ export class YoutubePlaybackService {
       trackId: metadata.id,
     });
   }
+}
+
+function isDrmError(error: unknown): boolean {
+  return error instanceof Error && /DRM protected/i.test(error.message);
 }
 
 function audioUrlExpiresAt(url: string): number {

@@ -68,6 +68,14 @@ function setup() {
     onPlaybackStarted,
     output: { sendVoiceFrame: vi.fn() },
     resolver,
+    alternativeResolver: {
+      findAlternative: vi.fn(() =>
+        Promise.resolve({
+          provider: "youtube" as const,
+          url: "https://youtu.be/fallback",
+        }),
+      ),
+    },
   });
   return {
     createPlayback,
@@ -127,6 +135,31 @@ describe("YoutubePlaybackService", () => {
       id: "soundcloud-track",
       source: "https://soundcloud.com/artist/track",
       title: "SoundCloud Track",
+    });
+  });
+
+  it("falls back to YouTube when SoundCloud reports DRM", async () => {
+    const { resolver, service } = setup();
+    resolver.getTrackFromUrl
+      .mockRejectedValueOnce(new Error("This video is DRM protected"))
+      .mockResolvedValueOnce({
+        id: "fallback",
+        title: "Fallback Track",
+        webpageUrl: "https://www.youtube.com/watch?v=fallback",
+      });
+
+    const track = await service.enqueue(
+      "https://soundcloud.com/artist/track",
+      "user-1",
+    );
+
+    expect(resolver.getTrackFromUrl).toHaveBeenNthCalledWith(
+      2,
+      "https://youtu.be/fallback",
+    );
+    expect(track).toMatchObject({
+      alternativeProvider: "youtube",
+      title: "Fallback Track",
     });
   });
 
