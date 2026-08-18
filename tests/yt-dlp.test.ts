@@ -51,7 +51,7 @@ describe("YoutubeResolver", () => {
 
   it("resolves the first YouTube search result", async () => {
     const executor = new FakeExecutor(
-      '{"id":"search_1","title":"Found","webpage_url":"https://www.youtube.com/watch?v=search_1"}',
+      '{"entries":[{"id":"search_1","title":"Found","webpage_url":"https://www.youtube.com/watch?v=search_1"}]}',
     );
     const resolver = new YoutubeResolver(executor);
 
@@ -61,7 +61,16 @@ describe("YoutubeResolver", () => {
       webpageUrl: "https://www.youtube.com/watch?v=search_1",
     });
     expect(executor.calls[0]).toContain("ytsearch1:duki rockstar");
-    expect(executor.calls[0]).toContain("--no-playlist");
+    expect(executor.calls[0]).toContain("--flat-playlist");
+    expect(executor.calls[0]).toEqual(
+      expect.arrayContaining(["--playlist-end", "1"]),
+    );
+  });
+
+  it("rejects an empty search result", async () => {
+    await expect(
+      new YoutubeResolver(new FakeExecutor('{"entries":[]}')).search("missing"),
+    ).rejects.toThrow("no YouTube results");
   });
 
   it("resolves only HTTPS audio endpoints", async () => {

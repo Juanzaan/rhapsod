@@ -19,6 +19,7 @@ export interface YoutubeTrackMetadata {
 
 interface YtDlpJson {
   duration?: number;
+  entries?: YtDlpJson[];
   id?: string;
   title?: string;
   webpage_url?: string;
@@ -78,14 +79,18 @@ export class YoutubeResolver {
     const raw = await this.executor.run(
       [
         "--dump-single-json",
-        "--no-playlist",
+        "--flat-playlist",
+        "--playlist-end",
+        "1",
         "--no-warnings",
         "--skip-download",
         `ytsearch1:${normalizedQuery}`,
       ],
       30_000,
     );
-    return parseTrackResponse(raw);
+    const response = parseResponse(raw).entries?.[0];
+    if (!response) throw new Error("yt-dlp returned no YouTube results");
+    return parseTrackResponse(response);
   }
 
   async getAudioUrl(resource: YoutubeResource): Promise<string> {
@@ -131,8 +136,8 @@ function parseResponse(raw: string): YtDlpJson {
   }
 }
 
-function parseTrackResponse(raw: string): YoutubeTrackMetadata {
-  const response = parseResponse(raw);
+function parseTrackResponse(raw: string | YtDlpJson): YoutubeTrackMetadata {
+  const response = typeof raw === "string" ? parseResponse(raw) : raw;
   if (!response.id || !response.title)
     throw new Error("yt-dlp returned incomplete video metadata");
   return {
