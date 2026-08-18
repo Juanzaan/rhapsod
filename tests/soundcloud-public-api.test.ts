@@ -133,4 +133,64 @@ describe("SoundCloudPublicApi", () => {
       },
     });
   });
+
+  it("falls back to HLS when the progressive transcoding fails", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>((input) => {
+      const url = requestUrl(input);
+      if (url === "https://soundcloud.com/")
+        return Promise.resolve(
+          response(
+            '<script src="https://a-v2.sndcdn.com/assets/app.js"></script>',
+          ),
+        );
+      if (url.includes("app.js"))
+        return Promise.resolve(
+          response('client_id="abcdefghijklmnopqrstuvwx"'),
+        );
+      if (url.includes("/progressive"))
+        return Promise.resolve(new Response("{}", { status: 404 }));
+      if (url.includes("/hls"))
+        return Promise.resolve(
+          response({ url: "https://media.example/hls.m3u8" }),
+        );
+      return Promise.resolve(response(track));
+    });
+
+    await expect(
+      new SoundCloudPublicApi({ fetch }).getTrack(
+        "https://soundcloud.com/artist/track",
+      ),
+    ).resolves.toMatchObject({
+      audioUrl: "https://media.example/hls.m3u8",
+      id: "soundcloud:42",
+      title: "Track",
+    });
+  });
+
+  it("reports DRM with metadata when every unencrypted transcoding fails", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>((input) => {
+      const url = requestUrl(input);
+      if (url === "https://soundcloud.com/")
+        return Promise.resolve(
+          response(
+            '<script src="https://a-v2.sndcdn.com/assets/app.js"></script>',
+          ),
+        );
+      if (url.includes("app.js"))
+        return Promise.resolve(
+          response('client_id="abcdefghijklmnopqrstuvwx"'),
+        );
+      if (url.includes("/progressive") || url.includes("/hls"))
+        return Promise.resolve(new Response("{}", { status: 404 }));
+      return Promise.resolve(response(track));
+    });
+
+    await expect(
+      new SoundCloudPublicApi({ fetch }).getTrack(
+        "https://soundcloud.com/artist/track",
+      ),
+    ).rejects.toMatchObject({
+      metadata: { artist: "artist", title: "Track" },
+    });
+  });
 });
