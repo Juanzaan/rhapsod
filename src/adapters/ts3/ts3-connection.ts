@@ -38,7 +38,8 @@ export function createTs3Connection(
   return {
     connect: async () => {
       await client.connect();
-      await client.waitConnected(AbortSignal.timeout(15_000));
+      // The TS3 crypto challenge can take longer on small burstable VPS sizes.
+      await client.waitConnected(AbortSignal.timeout(60_000));
     },
     disconnect: () => client.disconnect(),
     sendChannelMessage: (message) =>
