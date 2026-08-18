@@ -25,6 +25,7 @@ const YOUTUBE_HOSTS = new Set([
 ]);
 const SPOTIFY_HOST = "open.spotify.com";
 const SOUNDCLOUD_HOSTS = new Set(["soundcloud.com", "www.soundcloud.com"]);
+const SOUNDCLOUD_SHORT_HOST = "on.soundcloud.com";
 
 export function parseMediaInput(input: string): MediaInput {
   const value = input.trim();
@@ -50,8 +51,10 @@ export function parseMediaInput(input: string): MediaInput {
   if (spotifyResource) return { kind: "spotify", resource: spotifyResource };
 
   if (
-    SOUNDCLOUD_HOSTS.has(url.hostname) &&
-    url.pathname.split("/").filter(Boolean).length === 2
+    (SOUNDCLOUD_HOSTS.has(url.hostname) &&
+      url.pathname.split("/").filter(Boolean).length === 2) ||
+    (url.hostname === SOUNDCLOUD_SHORT_HOST &&
+      url.pathname.split("/").filter(Boolean).length === 1)
   ) {
     return { kind: "soundcloud", value: url.toString() };
   }
