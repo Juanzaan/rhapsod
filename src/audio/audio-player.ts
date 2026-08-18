@@ -7,9 +7,10 @@ import {
   type RhapsodOpusEncoder,
 } from "./opus-encoder.js";
 
-const PREBUFFER_FRAMES = 10;
-const BUFFER_HIGH_WATER_FRAMES = 100;
-const BUFFER_LOW_WATER_FRAMES = 25;
+const PREBUFFER_FRAMES = 25;
+const RECOVERY_BUFFER_FRAMES = 50;
+const BUFFER_HIGH_WATER_FRAMES = 250;
+const BUFFER_LOW_WATER_FRAMES = 75;
 const MAX_UNDERRUN_FRAMES = 250;
 
 export type AudioPlayerState = "idle" | "buffering" | "playing" | "paused";
@@ -26,6 +27,8 @@ export interface AudioPlayerClock {
 export interface AudioPlayerMetrics {
   readonly bufferedBytes: number;
   readonly framesSent: number;
+  readonly maxBufferedBytes: number;
+  readonly rebufferEvents: number;
   readonly underruns: number;
 }
 
@@ -38,11 +41,14 @@ export class AudioPlayer {
   #chunkOffset = 0;
   #bufferedBytes = 0;
   #framesSent = 0;
+  #maxBufferedBytes = 0;
+  #rebufferEvents = 0;
   #underruns = 0;
-  #consecutiveUnderruns = 0;
   #source: Readable | undefined;
   #sourceEnded = false;
   #sourcePaused = false;
+  #recovering = false;
+  #recoveryTimer: NodeJS.Timeout | undefined;
   #state: AudioPlayerState = "idle";
   #completion: Promise<void> | undefined;
   #resolveCompletion: (() => void) | undefined;
@@ -66,6 +72,8 @@ export class AudioPlayer {
     return {
       bufferedBytes: this.#bufferedBytes,
       framesSent: this.#framesSent,
+      maxBufferedBytes: this.#maxBufferedBytes,
+      rebufferEvents: this.#rebufferEvents,
       underruns: this.#underruns,
     };
   }
@@ -96,13 +104,16 @@ export class AudioPlayer {
   resume(): void {
     if (this.#state !== "paused") return;
     this.#state =
-      this.#bufferedBytes >= PCM_FRAME_BYTES ? "playing" : "buffering";
+      this.#bufferedBytes >= this.#requiredBufferBytes()
+        ? "playing"
+        : "buffering";
     this.#resumeSource();
     if (this.#state === "playing") this.#clock.start(this.#sendNextFrame);
   }
 
   stop(): void {
     if (this.#state === "idle") return;
+    this.#clearRecoveryTimer();
     this.#clock.stop();
     this.#detachSource(true);
     this.#state = "idle";
@@ -116,14 +127,20 @@ export class AudioPlayer {
     if (chunk.byteLength > 0) {
       this.#chunks.push(chunk);
       this.#bufferedBytes += chunk.byteLength;
+      this.#maxBufferedBytes = Math.max(
+        this.#maxBufferedBytes,
+        this.#bufferedBytes,
+      );
     }
 
     if (
       this.#state === "buffering" &&
-      (this.#bufferedBytes >= PREBUFFER_FRAMES * PCM_FRAME_BYTES ||
+      (this.#bufferedBytes >= this.#requiredBufferBytes() ||
         (this.#sourceEnded && this.#bufferedBytes >= PCM_FRAME_BYTES))
     ) {
       this.#state = "playing";
+      this.#recovering = false;
+      this.#clearRecoveryTimer();
       this.#clock.start(this.#sendNextFrame);
     }
     if (this.#bufferedBytes >= BUFFER_HIGH_WATER_FRAMES * PCM_FRAME_BYTES) {
@@ -133,6 +150,7 @@ export class AudioPlayer {
 
   readonly #handleEnd = (): void => {
     this.#sourceEnded = true;
+    this.#clearRecoveryTimer();
     if (this.#state === "buffering") {
       if (this.#bufferedBytes >= PCM_FRAME_BYTES) {
         this.#state = "playing";
@@ -153,7 +171,6 @@ export class AudioPlayer {
       const pcm = this.#readFrame();
       this.#output.sendVoiceFrame(this.#encoder.encode(pcm));
       this.#framesSent++;
-      this.#consecutiveUnderruns = 0;
       if (
         this.#sourcePaused &&
         this.#bufferedBytes <= BUFFER_LOW_WATER_FRAMES * PCM_FRAME_BYTES
@@ -169,16 +186,20 @@ export class AudioPlayer {
     }
 
     this.#underruns++;
-    this.#consecutiveUnderruns++;
     this.#output.sendVoiceFrame(this.#encoder.encode(this.#silence));
     this.#framesSent++;
-    if (this.#consecutiveUnderruns >= MAX_UNDERRUN_FRAMES) {
+    this.#rebufferEvents++;
+    this.#recovering = true;
+    this.#state = "buffering";
+    this.#clock.stop();
+    this.#recoveryTimer = setTimeout(() => {
+      if (this.#state !== "buffering" || !this.#recovering) return;
       this.#fail(
         new Error(
           `Audio source stalled for ${MAX_UNDERRUN_FRAMES * FRAME_DURATION_MS}ms`,
         ),
       );
-    }
+    }, MAX_UNDERRUN_FRAMES * FRAME_DURATION_MS);
   };
 
   #readFrame(): Uint8Array {
@@ -218,6 +239,7 @@ export class AudioPlayer {
   }
 
   #finish(): void {
+    this.#clearRecoveryTimer();
     this.#clock.stop();
     this.#detachSource();
     this.#state = "idle";
@@ -227,6 +249,7 @@ export class AudioPlayer {
   }
 
   #fail(error: Error): void {
+    this.#clearRecoveryTimer();
     this.#clock.stop();
     this.#detachSource(true);
     this.#state = "idle";
@@ -248,10 +271,12 @@ export class AudioPlayer {
   #resetSession(): void {
     this.#resetBuffer();
     this.#framesSent = 0;
+    this.#maxBufferedBytes = 0;
+    this.#rebufferEvents = 0;
     this.#underruns = 0;
-    this.#consecutiveUnderruns = 0;
     this.#sourceEnded = false;
     this.#sourcePaused = false;
+    this.#recovering = false;
   }
 
   #resetBuffer(): void {
@@ -264,5 +289,17 @@ export class AudioPlayer {
     this.#completion = undefined;
     this.#resolveCompletion = undefined;
     this.#rejectCompletion = undefined;
+  }
+
+  #clearRecoveryTimer(): void {
+    if (this.#recoveryTimer !== undefined) clearTimeout(this.#recoveryTimer);
+    this.#recoveryTimer = undefined;
+  }
+
+  #requiredBufferBytes(): number {
+    return (
+      (this.#recovering ? RECOVERY_BUFFER_FRAMES : PREBUFFER_FRAMES) *
+      PCM_FRAME_BYTES
+    );
   }
 }

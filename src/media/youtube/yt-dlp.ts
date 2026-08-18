@@ -7,7 +7,50 @@ const execFileAsync = promisify(execFile);
 const MAX_BUFFER_BYTES = 2 * 1024 * 1024;
 
 export interface YtDlpExecutor {
-  run(argumentsList: readonly string[], timeoutMs: number): Promise<string>;
+  run(
+    argumentsList: readonly string[],
+    timeoutMs: number,
+    priority?: YtDlpJobPriority,
+  ): Promise<string>;
+}
+
+export type YtDlpJobPriority = "metadata" | "playback";
+
+interface QueuedJob<Input, Output> {
+  readonly input: Input;
+  readonly resolve: (output: Output) => void;
+  readonly reject: (error: unknown) => void;
+}
+
+export class YtDlpJobQueue<Input, Output> {
+  readonly #metadata: Array<QueuedJob<Input, Output>> = [];
+  readonly #playback: Array<QueuedJob<Input, Output>> = [];
+  #running = false;
+
+  constructor(private readonly execute: (input: Input) => Promise<Output>) {}
+
+  run(input: Input, priority: YtDlpJobPriority): Promise<Output> {
+    return new Promise<Output>((resolve, reject) => {
+      const jobs = priority === "playback" ? this.#playback : this.#metadata;
+      jobs.push({ input, reject, resolve });
+      void this.#drain();
+    });
+  }
+
+  async #drain(): Promise<void> {
+    if (this.#running) return;
+    const job = this.#playback.shift() ?? this.#metadata.shift();
+    if (!job) return;
+    this.#running = true;
+    try {
+      job.resolve(await this.execute(job.input));
+    } catch (error) {
+      job.reject(error);
+    } finally {
+      this.#running = false;
+      void this.#drain();
+    }
+  }
 }
 
 export interface YoutubeTrackMetadata {
@@ -29,22 +72,35 @@ interface YtDlpJson {
 }
 
 export class SystemYtDlpExecutor implements YtDlpExecutor {
+  readonly #jobs: YtDlpJobQueue<
+    { argumentsList: readonly string[]; timeoutMs: number },
+    string
+  >;
+
   constructor(
     private readonly binaryPath: string,
     private readonly cookiesPath?: string,
-  ) {}
+  ) {
+    this.#jobs = new YtDlpJobQueue(async ({ argumentsList, timeoutMs }) => {
+      const ytDlpArguments = buildYtDlpArguments(
+        argumentsList,
+        this.cookiesPath,
+      );
+      const { stdout } = await execFileAsync(this.binaryPath, ytDlpArguments, {
+        maxBuffer: MAX_BUFFER_BYTES,
+        timeout: timeoutMs,
+        windowsHide: true,
+      });
+      return stdout;
+    });
+  }
 
   async run(
     argumentsList: readonly string[],
     timeoutMs: number,
+    priority: YtDlpJobPriority = "metadata",
   ): Promise<string> {
-    const ytDlpArguments = buildYtDlpArguments(argumentsList, this.cookiesPath);
-    const { stdout } = await execFileAsync(this.binaryPath, ytDlpArguments, {
-      maxBuffer: MAX_BUFFER_BYTES,
-      timeout: timeoutMs,
-      windowsHide: true,
-    });
-    return stdout;
+    return this.#jobs.run({ argumentsList, timeoutMs }, priority);
   }
 }
 
@@ -120,6 +176,7 @@ export class YoutubeResolver {
         url,
       ],
       45_000,
+      "playback",
     );
     const audioUrl = output.trim().split(/\r?\n/, 1)[0];
     if (!audioUrl || !audioUrl.startsWith("https://"))

@@ -55,6 +55,9 @@ async function main(): Promise<void> {
     onPlaybackStarted: async (track) => {
       await connection.sendChannelMessage(`Reproduciendo: ${track.title}`);
     },
+    onPlaybackFinished: (track, metrics) => {
+      logger.info({ ...metrics, trackId: track.id }, "Playback metrics");
+    },
     onTiming: (timing) => {
       logger.info(timing, "Playback timing");
     },

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildYtDlpArguments,
+  YtDlpJobQueue,
   YoutubeResolver,
   type YtDlpExecutor,
 } from "../src/media/youtube/yt-dlp.js";
@@ -112,5 +113,37 @@ describe("YoutubeResolver", () => {
         new FakeExecutor("https://media.example/soundcloud\n"),
       ).getAudioUrlFromUrl("https://soundcloud.com/artist/track"),
     ).resolves.toBe("https://media.example/soundcloud");
+  });
+});
+
+describe("YtDlpJobQueue", () => {
+  it("runs one job at a time and prioritizes playback over queued metadata", async () => {
+    const order: string[] = [];
+    const releases: Array<() => void> = [];
+    const queue = new YtDlpJobQueue(async (label: string) => {
+      order.push(label);
+      await new Promise<void>((resolve) => releases.push(resolve));
+      return label;
+    });
+
+    const first = queue.run("metadata-1", "metadata");
+    const second = queue.run("metadata-2", "metadata");
+    const playback = queue.run("playback", "playback");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(order).toEqual(["metadata-1"]);
+    releases.shift()?.();
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(order).toEqual(["metadata-1", "playback"]);
+    releases.shift()?.();
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(order).toEqual(["metadata-1", "playback", "metadata-2"]);
+    releases.shift()?.();
+
+    await expect(Promise.all([first, second, playback])).resolves.toEqual([
+      "metadata-1",
+      "metadata-2",
+      "playback",
+    ]);
   });
 });
