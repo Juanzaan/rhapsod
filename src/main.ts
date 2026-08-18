@@ -43,6 +43,12 @@ async function main(): Promise<void> {
   });
   const playback = new YoutubePlaybackService({
     encoder,
+    onPlaybackError: async (track, error) => {
+      logger.error({ error, trackId: track.id }, "YouTube playback failed");
+      await connection.sendChannelMessage(
+        `Error reproduciendo ${track.title}: ${error.message}`,
+      );
+    },
     output: connection,
     resolver: new YoutubeResolver(
       new SystemYtDlpExecutor(
