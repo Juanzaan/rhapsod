@@ -47,7 +47,13 @@ by an integration test before it becomes part of the stable boundary.
 
 Rhapsod sends 48 kHz stereo PCM in 20 ms frames through Opus Music (codec 5).
 The encoder enforces the 500-byte TS3 packet budget before the adapter sends a
-frame, and the scheduler uses monotonic absolute deadlines to avoid drift.
+frame, and the scheduler uses monotonic absolute deadlines to avoid drift. The
+player begins with a short PCM prebuffer and automatically rebuilds a larger
+buffer after an underrun instead of continuing with repeated audio gaps.
+
+Media resolver jobs are serialized so CPU-heavy `yt-dlp` processes cannot run
+in parallel and interfere with real-time audio. Playback URL jobs take priority
+over metadata jobs that are still waiting in the resolver queue.
 
 ## Compatibility
 

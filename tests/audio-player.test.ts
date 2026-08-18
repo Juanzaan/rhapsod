@@ -45,11 +45,13 @@ function setup() {
 }
 
 describe("AudioPlayer", () => {
-  it("prebuffers PCM and emits one exact frame per clock tick", () => {
+  it("prebuffers 500ms of PCM and emits one exact frame per clock tick", () => {
     const { clock, encodeMock, output, player } = setup();
     const source = new PassThrough();
     void player.play(source);
-    source.write(Buffer.alloc(PCM_FRAME_BYTES * 10, 7));
+    source.write(Buffer.alloc(PCM_FRAME_BYTES * 24, 7));
+    expect(player.state).toBe("buffering");
+    source.write(Buffer.alloc(PCM_FRAME_BYTES, 7));
 
     expect(player.state).toBe("playing");
     clock.tick();
@@ -66,7 +68,7 @@ describe("AudioPlayer", () => {
     const source = new PassThrough();
     void player.play(source);
     source.write(Buffer.alloc(1_000, 1));
-    source.write(Buffer.alloc(PCM_FRAME_BYTES * 10 - 1_000, 2));
+    source.write(Buffer.alloc(PCM_FRAME_BYTES * 25 - 1_000, 2));
     clock.tick();
 
     const pcm = encodeMock.mock.calls[0]?.[0];
@@ -75,17 +77,44 @@ describe("AudioPlayer", () => {
     expect(pcm?.[1_000]).toBe(2);
   });
 
-  it("sends silence for a transient underrun", () => {
+  it("rebuilds a larger buffer after an underrun", () => {
     const { clock, encodeMock, player } = setup();
     const source = new PassThrough();
     void player.play(source);
-    source.write(Buffer.alloc(PCM_FRAME_BYTES * 10, 3));
-    for (let frame = 0; frame < 10; frame++) clock.tick();
+    source.write(Buffer.alloc(PCM_FRAME_BYTES * 25, 3));
+    for (let frame = 0; frame < 25; frame++) clock.tick();
     clock.tick();
 
     const silence = encodeMock.mock.calls.at(-1)?.[0];
     expect(silence?.every((value) => value === 0)).toBe(true);
     expect(player.metrics.underruns).toBe(1);
+    expect(player.metrics.rebufferEvents).toBe(1);
+    expect(player.state).toBe("buffering");
+
+    source.write(Buffer.alloc(PCM_FRAME_BYTES * 49, 3));
+    expect(player.state).toBe("buffering");
+    source.write(Buffer.alloc(PCM_FRAME_BYTES, 3));
+    expect(player.state).toBe("playing");
+  });
+
+  it("fails when an underrun cannot recover within five seconds", async () => {
+    vi.useFakeTimers();
+    try {
+      const { clock, player } = setup();
+      const source = new PassThrough();
+      const completion = player.play(source);
+      const failure = expect(completion).rejects.toThrow(
+        "Audio source stalled for 5000ms",
+      );
+      source.write(Buffer.alloc(PCM_FRAME_BYTES * 25));
+      for (let frame = 0; frame <= 25; frame++) clock.tick();
+
+      await vi.advanceTimersByTimeAsync(5_000);
+      await failure;
+      expect(player.state).toBe("idle");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("finishes after draining an ended source", async () => {
@@ -117,7 +146,7 @@ describe("AudioPlayer", () => {
     const pause = vi.spyOn(source, "pause");
     const resume = vi.spyOn(source, "resume");
     void player.play(source);
-    source.write(Buffer.alloc(PCM_FRAME_BYTES * 10));
+    source.write(Buffer.alloc(PCM_FRAME_BYTES * 25));
 
     player.pause();
     expect(player.state).toBe("paused");

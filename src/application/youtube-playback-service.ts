@@ -9,6 +9,7 @@ import {
 } from "../audio/ffmpeg-player.js";
 import type { RhapsodOpusEncoder } from "../audio/opus-encoder.js";
 import type { VoiceFrameOutput } from "../audio/audio-player.js";
+import type { AudioPlayerMetrics } from "../audio/audio-player.js";
 
 export interface PlaybackServiceOptions {
   readonly encoder: RhapsodOpusEncoder;
@@ -20,6 +21,10 @@ export interface PlaybackServiceOptions {
     error: Error,
   ) => void | Promise<void>;
   readonly onPlaybackStarted?: (track: Track) => void | Promise<void>;
+  readonly onPlaybackFinished?: (
+    track: Track,
+    metrics: AudioPlayerMetrics,
+  ) => void;
   readonly onTiming?: (timing: PlaybackTiming) => void;
 }
 
@@ -57,6 +62,10 @@ export class YoutubePlaybackService {
     error: Error,
   ) => void | Promise<void>;
   readonly #onPlaybackStarted: (track: Track) => void | Promise<void>;
+  readonly #onPlaybackFinished: (
+    track: Track,
+    metrics: AudioPlayerMetrics,
+  ) => void;
   readonly #onTiming: (timing: PlaybackTiming) => void;
   #current: Track | undefined;
   #session: FfmpegPlaybackSession | undefined;
@@ -70,6 +79,7 @@ export class YoutubePlaybackService {
     this.#createPlayback = options.createPlayback ?? playFfmpegUrl;
     this.#onPlaybackError = options.onPlaybackError ?? (() => undefined);
     this.#onPlaybackStarted = options.onPlaybackStarted ?? (() => undefined);
+    this.#onPlaybackFinished = options.onPlaybackFinished ?? (() => undefined);
     this.#onTiming = options.onTiming ?? (() => undefined);
   }
 
@@ -182,7 +192,9 @@ export class YoutubePlaybackService {
         this.#session = session;
         void this.#onPlaybackStarted(track);
         this.#prefetchNext();
-        return session.done;
+        return session.done.finally(() => {
+          this.#onPlaybackFinished(track, session.player.metrics);
+        });
       })
       .catch(async (error: unknown) => {
         const playbackError =
