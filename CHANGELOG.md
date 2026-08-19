@@ -8,6 +8,23 @@ for [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Audio quality and stability pass:
+  - Opus in-band FEC is now off by default (`RHAPSOD_OPUS_PACKET_LOSS_PERCENT`
+    defaults to `0`). The old default of 10% made the encoder permanently
+    reserve bitrate for packet loss, producing the muffled "underwater" sound.
+  - The frame scheduler no longer bursts catch-up frames after an event-loop
+    stall: it drops the missed frames and keeps a steady 20 ms cadence, so the
+    server never receives a jitter spike.
+  - Voice packets are declared as Opus Music (codec 6) instead of Opus Voice
+    (codec 5), matching how the stream is encoded.
+  - Global `unhandledRejection`/`uncaughtException` handlers keep the bot
+    running on transient failures and restart it via systemd on hard crashes.
+  - Playback pauses while the bot reconnects to TeamSpeak and resumes right
+    after, so no audio is sent into a dead socket.
+  - Graceful shutdown now bounds the disconnect wait to 5 seconds.
+
+### Added
+
 - GitHub Actions CI: every push and pull request runs the full check pipeline
   (format, lint, typecheck, tests, build).
 - Watchdog (`RHAPSOD_WATCHDOG_INTERVAL_MINUTES`, default 15, `0` disables):

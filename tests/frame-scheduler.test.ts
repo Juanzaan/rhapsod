@@ -26,7 +26,7 @@ describe("FrameScheduler", () => {
     expect(delays).toEqual([20, 15]);
   });
 
-  it("emits a catch-up burst for missed deadlines", () => {
+  it("skips missed deadlines and keeps a single frame per tick", () => {
     let now = 0;
     const callbacks: Array<() => void> = [];
     const delays: number[] = [];
@@ -44,12 +44,12 @@ describe("FrameScheduler", () => {
     now = 95;
     callbacks.shift()?.();
 
-    expect(onFrame).toHaveBeenCalledTimes(4);
-    expect(delays.at(-1)).toBe(5);
+    expect(onFrame).toHaveBeenCalledTimes(1);
+    expect(delays).toEqual([20, 20]);
     expect(callbacks).toHaveLength(1);
   });
 
-  it("caps catch-up bursts to keep the event loop responsive", () => {
+  it("does not emit a burst after a long stall", () => {
     let now = 0;
     const callbacks: Array<() => void> = [];
     const scheduler = new FrameScheduler({
@@ -65,7 +65,7 @@ describe("FrameScheduler", () => {
     now = 20_000;
     callbacks.shift()?.();
 
-    expect(onFrame).toHaveBeenCalledTimes(25);
+    expect(onFrame).toHaveBeenCalledTimes(1);
   });
 
   it("cancels a pending frame when stopped", () => {

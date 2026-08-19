@@ -29,6 +29,13 @@ import { startWatchdog } from "./watchdog.js";
 async function main(): Promise<void> {
   const config = loadConfig();
   const logger = pino({ level: config.RHAPSOD_LOG_LEVEL });
+  process.on("unhandledRejection", (reason: unknown) => {
+    logger.error({ reason }, "Unhandled promise rejection");
+  });
+  process.on("uncaughtException", (error: Error) => {
+    logger.error({ error }, "Uncaught exception; restarting");
+    process.exit(1);
+  });
   const adminUids = parseAdminUids(config.RHAPSOD_ADMIN_UIDS);
 
   logger.info(
@@ -463,6 +470,7 @@ async function main(): Promise<void> {
   connection.onConnectionLost((reason) => {
     if (reconnecting || shuttingDown) return;
     reconnecting = true;
+    playback.pause();
     void (async () => {
       for (let attempt = 1; attempt <= maxReconnectAttempts; attempt++) {
         logger.warn(
@@ -474,6 +482,7 @@ async function main(): Promise<void> {
           await connection.connect();
           logger.info({ attempt }, "Reconnected to TeamSpeak 3");
           reconnecting = false;
+          playback.resume();
           return;
         } catch (error) {
           logger.error({ attempt, error }, "TeamSpeak reconnect failed");
@@ -504,7 +513,11 @@ async function main(): Promise<void> {
   const shutdown = (): void => {
     playback.stop();
     encoder.close();
-    void connection.disconnect().finally(() => process.exit(0));
+    const disconnect = connection.disconnect();
+    void Promise.race([
+      disconnect,
+      new Promise((resolve) => setTimeout(resolve, 5_000)),
+    ]).finally(() => process.exit(0));
   };
   process.once("SIGINT", shutdown);
   process.once("SIGTERM", shutdown);
