@@ -24,6 +24,31 @@ describe("SongLinkClient", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
+  it("falls back to a SoundCloud alternative when YouTube is missing", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            linksByPlatform: {
+              soundcloud: {
+                url: "https://soundcloud.com/artist/track",
+              },
+            },
+          }),
+        ),
+      ),
+    );
+
+    await expect(
+      new SongLinkClient({ fetch }).findAlternative(
+        "https://music.apple.com/us/album/titulo/123?i=456",
+      ),
+    ).resolves.toEqual({
+      provider: "soundcloud",
+      url: "https://soundcloud.com/artist/track",
+    });
+  });
+
   it("ignores unavailable or unsafe alternatives", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>(() =>
       Promise.resolve(

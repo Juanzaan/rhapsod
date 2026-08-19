@@ -3,23 +3,23 @@
 Rhapsod commands use `!` by default. Commands are processed in TeamSpeak text
 chat once the TS3 adapter is connected.
 
-| Command                     | Alias                 | Description                                                                                        |
-| --------------------------- | --------------------- | -------------------------------------------------------------------------------------------------- |
-| `!play <URL or search>`     | `!p`                  | Resolve a YouTube video/playlist, SoundCloud or Spotify track, or search.                          |
-| `!yt <search terms>`        | `!search`, `!youtube` | Add the first matching YouTube video to the queue.                                                 |
-| `!pause`                    | -                     | Pause the current track.                                                                           |
-| `!resume`                   | -                     | Resume the current track.                                                                          |
-| `!skip`                     | `!s`                  | Skip the current track.                                                                            |
-| `!stop`                     | -                     | Stop playback and disconnect the player from the current track.                                    |
-| `!queue`                    | `!q`                  | Show the pending queue with per-track durations.                                                   |
-| `!now-playing`              | `!np`, `!now`         | Show the current track, duration and requester.                                                    |
-| `!volume <0-100>`           | `!vol`, `!v`          | Adjust the bot output volume (PCM gain before encoding; affects every listener).                   |
-| `!remove <position>`        | `!rm`                 | Remove a one-based queue position.                                                                 |
-| `!clear`                    | `!c`                  | Clear pending tracks.                                                                              |
-| `!shuffle`                  | -                     | Shuffle the pending queue (the current track keeps playing).                                       |
-| `!loop [off\|track\|queue]` | -                     | Repeat the current track (`track`) or the whole queue (`queue`); `!stop`/`!clear` disable looping. |
-| `!test-tone`                | `!tone`               | Play a 3-second test tone (rate-limited).                                                          |
-| `!help`                     | `!h`                  | Show the command summary.                                                                          |
+| Command                     | Alias                 | Description                                                                                         |
+| --------------------------- | --------------------- | --------------------------------------------------------------------------------------------------- |
+| `!play <URL or search>`     | `!p`                  | Resolve a YouTube video/playlist, SoundCloud, Spotify, Apple Music or Amazon Music link, or search. |
+| `!yt <search terms>`        | `!search`, `!youtube` | Add the first matching YouTube video to the queue.                                                  |
+| `!pause`                    | -                     | Pause the current track.                                                                            |
+| `!resume`                   | -                     | Resume the current track.                                                                           |
+| `!skip`                     | `!s`                  | Skip the current track.                                                                             |
+| `!stop`                     | -                     | Stop playback and disconnect the player from the current track.                                     |
+| `!queue`                    | `!q`                  | Show the pending queue with per-track durations.                                                    |
+| `!now-playing`              | `!np`, `!now`         | Show the current track, duration and requester.                                                     |
+| `!volume <0-100>`           | `!vol`, `!v`          | Adjust the bot output volume (PCM gain before encoding; affects every listener).                    |
+| `!remove <position>`        | `!rm`                 | Remove a one-based queue position.                                                                  |
+| `!clear`                    | `!c`                  | Clear pending tracks.                                                                               |
+| `!shuffle`                  | -                     | Shuffle the pending queue (the current track keeps playing).                                        |
+| `!loop [off\|track\|queue]` | -                     | Repeat the current track (`track`) or the whole queue (`queue`); `!stop`/`!clear` disable looping.  |
+| `!test-tone`                | `!tone`               | Play a 3-second test tone (rate-limited).                                                           |
+| `!help`                     | `!h`                  | Show the command summary.                                                                           |
 
 ## Source behavior
 
@@ -36,6 +36,10 @@ chat once the TS3 adapter is connected.
   credentials flow, no user login) and the matching "artist title" is searched
   on YouTube for playback. Playlists and albums expand up to 20 tracks per
   `!play` (paged requests with 429 backoff, duplicates skipped).
+- **Apple Music / Amazon Music:** these services have no public audio API, so
+  links are resolved through SongLink (Odesli), preferring the YouTube
+  equivalent (playlists included) and falling back to SoundCloud. If nothing
+  playable exists, `!play` says so instead of guessing.
 - **Search text:** `!play` accepts free text and runs the same YouTube search
   as `!yt` (fuzzy term matching, channel credits, and a shortened retry when
   nothing is reliable).

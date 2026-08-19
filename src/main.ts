@@ -146,6 +146,19 @@ async function main(): Promise<void> {
                 ? "La playlist o álbum no tiene canciones reproducibles."
                 : `Se agregaron ${result.added.length} canciones a la cola${result.remaining ? ` (quedan ${result.remaining} fuera del límite)` : ""}.`;
             await connection.sendChannelMessage(message);
+          } else if (
+            media.kind === "apple-music" ||
+            media.kind === "amazon-music"
+          ) {
+            const result = await playback.enqueueMusicLink(
+              media.value,
+              senderName,
+            );
+            const message =
+              result.added.length === 0
+                ? "No pude encontrar ese link en YouTube o SoundCloud."
+                : `Se agregaron ${result.added.length} canciones a la cola${result.remaining ? ` (quedan ${result.remaining} fuera del límite)` : ""}.`;
+            await connection.sendChannelMessage(message);
           } else {
             const track = await playback.enqueue(command.input, senderName);
             const viaSearch = media.kind === "file";
