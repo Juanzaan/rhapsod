@@ -16,6 +16,8 @@ export interface FfmpegPcmStream {
   stop(): void;
 }
 
+const STOP_GRACE_MS = 3_000;
+
 export function buildFfmpegPcmArguments(url: string): string[] {
   if (!/^https:\/\//i.test(url)) {
     throw new Error("FFmpeg audio input must use HTTPS");
@@ -92,6 +94,13 @@ export function createFfmpegPcmStream(
     child.stdout.unpipe(stream);
     stream.end();
     child.kill("SIGTERM");
+    const graceTimer = setTimeout(() => {
+      if (child.exitCode === null && child.signalCode === null) {
+        child.kill("SIGKILL");
+      }
+    }, STOP_GRACE_MS);
+    graceTimer.unref();
+    child.once("exit", () => clearTimeout(graceTimer));
   };
 
   stream.once("close", () => {
