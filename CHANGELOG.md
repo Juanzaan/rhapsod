@@ -12,11 +12,19 @@ for [Semantic Versioning](https://semver.org/).
   retries at most five times with a five-second delay, then shuts down instead
   of reconnecting forever.
 
+### Changed
+
+- `!volume`, `!stop`, `!clear`, `!shuffle` and `!loop` are no longer
+  admin-only: every command is open to everyone, and `RHAPSOD_ADMIN_UIDS`
+  only covers removing other users' tracks.
+- The default output volume is now 50% (previously 100%).
+
+### Added
+
 - State persistence: `!volume` and `!loop` survive restarts through
   `data/state.json` (atomic writes, corrupt files ignored).
-- `RHAPSOD_ADMIN_UIDS` (comma-separated TeamSpeak uids): only admins can use
-  `!stop`, `!clear`, `!shuffle`, `!volume` and change `!loop`; `!remove`
-  stays open to the requester of the track and admins.
+- `RHAPSOD_ADMIN_UIDS` (comma-separated TeamSpeak uids): allows admins to
+  remove tracks requested by other users with `!remove`.
 - `!stats` (`!st`): uptime, tracks played since start, current track, queue
   length and current volume/loop mode.
 - Queue ergonomics: `!playnext` (`!pn`/`!next`) promotes a single track,

@@ -125,7 +125,7 @@ export class YoutubePlaybackService {
   #generation = 0;
   #chainActive = false;
   #pendingSkips = 0;
-  #volumePercent = 100;
+  #volumePercent = 50;
   #tracksPlayed = 0;
   readonly #history: Track[] = [];
   #loopMode: LoopMode = "off";

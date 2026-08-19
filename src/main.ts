@@ -14,11 +14,7 @@ import { parseChatCommand } from "./commands/chat-command.js";
 import { CommandRateLimiter } from "./commands/command-rate-limiter.js";
 import { loadConfig } from "./config.js";
 import { FilePlaybackStateStore } from "./domain/state-store.js";
-import {
-  canRemoveTrack,
-  isAdminUid,
-  parseAdminUids,
-} from "./commands/permissions.js";
+import { canRemoveTrack, parseAdminUids } from "./commands/permissions.js";
 import {
   SystemYtDlpExecutor,
   YoutubeResolver,
@@ -279,12 +275,6 @@ async function main(): Promise<void> {
           break;
         }
         case "clear":
-          if (!isAdminUid(senderUid, adminUids)) {
-            await connection.sendChannelMessage(
-              "Solo el administrador del bot puede usar !clear.",
-            );
-            break;
-          }
           {
             const cleared = playback.clearQueued();
             await connection.sendChannelMessage(
@@ -295,12 +285,6 @@ async function main(): Promise<void> {
           }
           break;
         case "shuffle":
-          if (!isAdminUid(senderUid, adminUids)) {
-            await connection.sendChannelMessage(
-              "Solo el administrador del bot puede usar !shuffle.",
-            );
-            break;
-          }
           {
             const shuffled = playback.shuffleQueued();
             await connection.sendChannelMessage(
@@ -338,12 +322,6 @@ async function main(): Promise<void> {
           break;
         }
         case "stop":
-          if (!isAdminUid(senderUid, adminUids)) {
-            await connection.sendChannelMessage(
-              "Solo el administrador del bot puede usar !stop.",
-            );
-            break;
-          }
           playback.stop();
           await connection.sendChannelMessage("Reproducción detenida.");
           break;
@@ -399,12 +377,6 @@ async function main(): Promise<void> {
           break;
         case "loop":
           if (command.mode) {
-            if (!isAdminUid(senderUid, adminUids)) {
-              await connection.sendChannelMessage(
-                "Solo el administrador del bot puede cambiar el modo loop.",
-              );
-              break;
-            }
             playback.setLoopMode(command.mode);
             await connection.sendChannelMessage(
               command.mode === "off"
@@ -420,12 +392,6 @@ async function main(): Promise<void> {
           }
           break;
         case "volume":
-          if (!isAdminUid(senderUid, adminUids)) {
-            await connection.sendChannelMessage(
-              "Solo el administrador del bot puede usar !volume.",
-            );
-            break;
-          }
           playback.setVolume(command.value);
           await connection.sendChannelMessage(
             `Volumen ajustado a ${playback.volume}%.`,
