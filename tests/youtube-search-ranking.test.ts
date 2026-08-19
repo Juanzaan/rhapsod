@@ -377,6 +377,52 @@ describe("rankYoutubeCandidates", () => {
     expect(selected?.id).toBe("original");
   });
 
+  it("prefers the original master over a lyric video", () => {
+    const selected = rankYoutubeCandidates("duki rockstar", [
+      {
+        id: "lyrics",
+        title: "Duki - Rockstar (Lyrics)",
+        webpageUrl: "https://youtube.com/watch?v=lyrics",
+      },
+      {
+        id: "official",
+        title: "DUKI - Rockstar (Official Video)",
+        webpageUrl: "https://youtube.com/watch?v=official",
+      },
+    ]);
+
+    expect(selected?.id).toBe("official");
+  });
+
+  it("plays the lyric video when no master is available", () => {
+    const selected = rankYoutubeCandidates("duki rockstar", [
+      {
+        id: "lyrics",
+        title: "Duki - Rockstar (Lyrics)",
+        webpageUrl: "https://youtube.com/watch?v=lyrics",
+      },
+    ]);
+
+    expect(selected?.id).toBe("lyrics");
+  });
+
+  it("keeps the lyric version when the query asks for it", () => {
+    const selected = rankYoutubeCandidates("duki rockstar lyrics", [
+      {
+        id: "official",
+        title: "DUKI - Rockstar (Official Video)",
+        webpageUrl: "https://youtube.com/watch?v=official",
+      },
+      {
+        id: "lyrics",
+        title: "Duki - Rockstar (Lyrics)",
+        webpageUrl: "https://youtube.com/watch?v=lyrics",
+      },
+    ]);
+
+    expect(selected?.id).toBe("lyrics");
+  });
+
   it("does not penalize an event phrase the query asks for", () => {
     const selected = rankYoutubeCandidates(
       "ghost town kids see ghosts at camp flog gnaw",

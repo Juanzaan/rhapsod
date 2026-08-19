@@ -24,6 +24,10 @@ import type { SpotifyResolver } from "../media/spotify/api.js";
 
 export type LoopMode = "off" | "queue" | "track";
 
+export function volumeToGain(percent: number): number {
+  return 10 ** ((percent - 100) * 0.02);
+}
+
 interface PlaybackServiceOptions {
   readonly encoder: RhapsodOpusEncoder;
   readonly resolver: YoutubePlaybackResolver;
@@ -147,7 +151,7 @@ export class YoutubePlaybackService {
 
   setVolume(percent: number): void {
     this.#volumePercent = Math.max(0, Math.min(100, Math.round(percent)));
-    this.#session?.player.setVolume(this.#volumePercent / 100);
+    this.#session?.player.setVolume(volumeToGain(this.#volumePercent));
   }
 
   get loopMode(): LoopMode {
@@ -479,7 +483,7 @@ export class YoutubePlaybackService {
         });
         if (generation !== this.#generation || this.#current !== track) return;
         const session = this.#createPlayback(url, this.#encoder, this.#output);
-        session.player.setVolume(this.#volumePercent / 100);
+        session.player.setVolume(volumeToGain(this.#volumePercent));
         this.#session = session;
         void this.#onPlaybackStarted(track);
         this.#prefetchNext();

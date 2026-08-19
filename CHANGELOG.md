@@ -19,6 +19,15 @@ for [Semantic Versioning](https://semver.org/).
   keeping album/playlist playback close to the original masters.
 - Failed commands are now logged (`Command failed`) and transient network
   errors (`fetch failed`) get a friendly retry message.
+- Lyric videos are lightly penalized so official masters win when available,
+  but still play when nothing else matches (same skip rule when asked).
+- Audio pipeline: EBU R128 loudness normalization
+  (`RHAPSOD_LOUDNESS_TARGET_LUFS`, default -14 LUFS, `0` disables) so every
+  track plays at a consistent level with a -1.5 dBTP true-peak limiter; the
+  default Opus bitrate is now 96 kbit/s to keep VBR packets inside the
+  TeamSpeak 497-byte ceiling (no truncated frames on loud passages).
+- `!volume` now maps 0-100 to a perceptual gain curve (-40 dB to 0 dB),
+  matching how real volume controls behave.
 - `!queue`/`!now-playing` show per-track durations when known.
 - `!volume <0-100>`: PCM gain applied to frames before Opus encoding, affecting
   every listener; changes apply live to the current track.

@@ -11,6 +11,8 @@ describe("loadConfig", () => {
       RHAPSOD_TS3_NICKNAME: "Rhapsod",
       RHAPSOD_TS3_PORT: 9987,
       RHAPSOD_TS3_CONNECT_TIMEOUT_SECONDS: 180,
+      RHAPSOD_OPUS_BITRATE: 96000,
+      RHAPSOD_LOUDNESS_TARGET_LUFS: -14,
       RHAPSOD_YTDLP_PATH: "yt-dlp",
     });
     expect(config.RHAPSOD_YTDLP_COOKIES_PATH).toBeUndefined();
