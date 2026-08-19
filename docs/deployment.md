@@ -4,6 +4,21 @@ Rhapsod is a persistent service. It needs a machine or container that stays
 online, has outbound UDP access to the TeamSpeak 3 voice port, and can run
 Node.js, `yt-dlp`, and FFmpeg.
 
+## Remote access over Tailscale
+
+The production VM (Azure `rhapsod-vm`) is reachable over SSH only through the
+tailnet. The network security group rule `SSH` (priority 900) allows port 22
+solely from `100.64.0.0/10` (the CGNAT range Tailscale assigns), and the
+Defender for Cloud Just-In-Time VM access policy is disabled. The public IP
+`40.70.186.15` does not expose SSH.
+
+```bash
+ssh -i ~/.ssh/rhapsod-vm-key.pem rhapsod@100.80.92.115
+```
+
+To re-enable a machine, install Tailscale, sign in to the same tailnet
+(`Juanzaan@`), and run `tailscale up`.
+
 ## The bot identity
 
 On its first start Rhapsod generates a TeamSpeak client identity and stores it

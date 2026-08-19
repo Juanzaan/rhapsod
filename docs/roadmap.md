@@ -33,10 +33,10 @@ Preferences must never override a poor title/artist match. See
 
 ### Operations (Phase 3)
 
-Memory monitoring on the 897MB VM and proactive log review are partially in
-place (`MemoryMax=512M`, `MemorySwapMax=1G`). See
-[issue #8](https://github.com/Juanzaan/rhapsod/issues/8) and
-[issue #9](https://github.com/Juanzaan/rhapsod/issues/9) (SSH/NSG hardening).
+Done: periodic RSS/heap logging (`RHAPSOD_METRICS_INTERVAL_MINUTES`, see
+[issue #8](https://github.com/Juanzaan/rhapsod/issues/8)) and SSH restricted to
+the Tailscale tailnet (`100.64.0.0/10` NSG rule, JIT disabled; see
+[issue #9](https://github.com/Juanzaan/rhapsod/issues/9)).
 
 ### TeamSpeak 6 (Phase 4)
 
