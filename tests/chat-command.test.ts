@@ -24,6 +24,8 @@ describe("parseChatCommand", () => {
       input: "duki rockstar",
       name: "search",
     });
+    expect(parseChatCommand("!stats")).toEqual({ name: "stats" });
+    expect(parseChatCommand("!st")).toEqual({ name: "stats" });
   });
 
   it("does not treat normal chat as a command", () => {

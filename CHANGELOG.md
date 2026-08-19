@@ -8,6 +8,13 @@ for [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- State persistence: `!volume` and `!loop` survive restarts through
+  `data/state.json` (atomic writes, corrupt files ignored).
+- `RHAPSOD_ADMIN_UIDS` (comma-separated TeamSpeak uids): only admins can use
+  `!stop`, `!clear`, `!shuffle`, `!volume` and change `!loop`; `!remove`
+  stays open to the requester of the track and admins.
+- `!stats` (`!st`): uptime, tracks played since start, current track, queue
+  length and current volume/loop mode.
 - Spotify playlists and albums in `!play`: paged expansion through the Web API
   (up to 20 tracks, 429 backoff, duplicates skipped) with the same
   artist/title search and expected-duration ranking as tracks.

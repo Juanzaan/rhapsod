@@ -21,6 +21,7 @@ import {
 } from "../media/soundcloud/public-api.js";
 import type { SpotifyResource } from "../media/media-input.js";
 import type { SpotifyResolver } from "../media/spotify/api.js";
+import type { PlaybackStateStore } from "../domain/state-store.js";
 import {
   parseArtistTitle,
   type LyricsResolver,
@@ -40,6 +41,7 @@ interface PlaybackServiceOptions {
   readonly soundcloudResolver?: SoundCloudResolver;
   readonly spotifyResolver?: SpotifyResolver;
   readonly lyricsResolver?: LyricsResolver;
+  readonly stateStore?: PlaybackStateStore;
   readonly output: VoiceFrameOutput;
   readonly playlistMaxTracks?: number;
   readonly createPlayback?: typeof playFfmpegUrl;
@@ -102,6 +104,7 @@ export class YoutubePlaybackService {
   readonly #soundcloudResolver: SoundCloudResolver | undefined;
   readonly #spotifyResolver: SpotifyResolver | undefined;
   readonly #lyricsResolver: LyricsResolver | undefined;
+  readonly #stateStore: PlaybackStateStore | undefined;
   readonly #output: VoiceFrameOutput;
   readonly #createPlayback: typeof playFfmpegUrl;
   readonly #onPlaybackError: (
@@ -122,6 +125,7 @@ export class YoutubePlaybackService {
   #chainActive = false;
   #pendingSkips = 0;
   #volumePercent = 100;
+  #tracksPlayed = 0;
   #loopMode: LoopMode = "off";
   #loopPool: Track[] = [];
   readonly #prepared = new Map<string, Promise<PreparedAudio>>();
@@ -137,6 +141,7 @@ export class YoutubePlaybackService {
     this.#soundcloudResolver = options.soundcloudResolver;
     this.#spotifyResolver = options.spotifyResolver;
     this.#lyricsResolver = options.lyricsResolver;
+    this.#stateStore = options.stateStore;
     this.#output = options.output;
     this.#createPlayback = options.createPlayback ?? playFfmpegUrl;
     this.#onPlaybackError = options.onPlaybackError ?? (() => undefined);
@@ -145,6 +150,13 @@ export class YoutubePlaybackService {
     this.#onTiming = options.onTiming ?? (() => undefined);
     this.#playlistMaxTracks =
       options.playlistMaxTracks ?? DEFAULT_PLAYLIST_MAX_TRACKS;
+    const restored = this.#stateStore?.load();
+    if (restored?.volumePercent !== undefined) {
+      this.#volumePercent = restored.volumePercent;
+    }
+    if (restored?.loopMode !== undefined) {
+      this.#loopMode = restored.loopMode;
+    }
   }
 
   get current(): Track | undefined {
@@ -155,6 +167,10 @@ export class YoutubePlaybackService {
     return this.#queue.snapshot();
   }
 
+  get tracksPlayed(): number {
+    return this.#tracksPlayed;
+  }
+
   get volume(): number {
     return this.#volumePercent;
   }
@@ -162,6 +178,7 @@ export class YoutubePlaybackService {
   setVolume(percent: number): void {
     this.#volumePercent = Math.max(0, Math.min(100, Math.round(percent)));
     this.#session?.player.setVolume(volumeToGain(this.#volumePercent));
+    this.#persistState();
   }
 
   get loopMode(): LoopMode {
@@ -171,6 +188,7 @@ export class YoutubePlaybackService {
   setLoopMode(mode: LoopMode): void {
     this.#loopMode = mode;
     this.#loopPool = mode === "queue" ? [...this.#queue.snapshot()] : [];
+    this.#persistState();
   }
 
   async enqueue(input: string, requestedBy: string): Promise<Track> {
@@ -512,6 +530,7 @@ export class YoutubePlaybackService {
     this.#loopMode = "off";
     this.#loopPool = [];
     this.#prepared.clear();
+    this.#persistState();
   }
 
   pause(): void {
@@ -536,6 +555,7 @@ export class YoutubePlaybackService {
     this.#loopMode = "off";
     this.#loopPool = [];
     this.#prepared.clear();
+    this.#persistState();
     return count;
   }
 
@@ -543,6 +563,13 @@ export class YoutubePlaybackService {
     const count = this.#queue.length;
     this.#queue.shuffle();
     return count;
+  }
+
+  #persistState(): void {
+    this.#stateStore?.save({
+      loopMode: this.#loopMode,
+      volumePercent: this.#volumePercent,
+    });
   }
 
   #requestNext(): void {
@@ -594,6 +621,7 @@ export class YoutubePlaybackService {
         );
         session.player.setVolume(volumeToGain(this.#volumePercent));
         this.#session = session;
+        this.#tracksPlayed++;
         void Promise.resolve(this.#onPlaybackStarted(track)).catch(
           () => undefined,
         );
