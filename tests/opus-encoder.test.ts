@@ -34,6 +34,19 @@ describe("Rhapsod Opus encoder", () => {
     expect(PCM_FRAME_BYTES).toBe(3_840);
   });
 
+  it("encodes with high complexity and FEC under the packet budget", async () => {
+    const encoder = await createRhapsodOpusEncoder({
+      complexity: 10,
+      packetLossPercent: 10,
+    });
+    try {
+      const packet = encoder.encode(new Uint8Array(PCM_FRAME_BYTES));
+      expect(packet.byteLength).toBeLessThanOrEqual(TS3_MAX_OPUS_BYTES);
+    } finally {
+      encoder.close();
+    }
+  });
+
   it("rejects partial PCM frames", async () => {
     const encoder = await createRhapsodOpusEncoder();
     try {

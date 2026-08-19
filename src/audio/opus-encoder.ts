@@ -16,6 +16,8 @@ export const TS3_MAX_OPUS_BYTES = TS3_MAX_PACKET_BYTES - TS3_VOICE_HEADER_BYTES;
 
 interface OpusEncoderConfig {
   readonly bitrate?: number;
+  readonly complexity?: number;
+  readonly packetLossPercent?: number;
 }
 
 export interface RhapsodOpusEncoder {
@@ -31,12 +33,16 @@ export async function createRhapsodOpusEncoder(
     application: Application.Audio,
     bitrate: config.bitrate ?? 128_000,
     channels: CHANNELS,
-    complexity: 5,
+    complexity: config.complexity ?? 10,
     frameSize: SAMPLES_PER_CHANNEL,
     sampleRate: SAMPLE_RATE,
     signal: Signal.Music,
     vbr: true,
   });
+  if ((config.packetLossPercent ?? 0) > 0) {
+    encoder.setFec(true);
+    encoder.setPacketLossPercent(config.packetLossPercent ?? 0);
+  }
 
   return {
     pcmFrameBytes: PCM_FRAME_BYTES,

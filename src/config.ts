@@ -24,6 +24,13 @@ const configSchema = z.object({
     .min(64_000)
     .max(160_000)
     .default(96_000),
+  RHAPSOD_OPUS_COMPLEXITY: z.coerce.number().int().min(0).max(10).default(10),
+  RHAPSOD_OPUS_PACKET_LOSS_PERCENT: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(30)
+    .default(10),
   RHAPSOD_LOUDNESS_TARGET_LUFS: z.coerce.number().min(-30).max(0).default(-14),
   RHAPSOD_SPOTIFY_CLIENT_ID: optionalSecret,
   RHAPSOD_SPOTIFY_CLIENT_SECRET: optionalSecret,
