@@ -8,6 +8,14 @@ for [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Spotify playlist support after Spotify's February 2026 API migration, which
+  dropped anonymous playlist reads (`/playlists/{id}/tracks` now returns 403).
+  Set `RHAPSOD_SPOTIFY_REFRESH_TOKEN` (obtained with
+  `node scripts/spotify-auth.mjs`) to restore playlist expansion via the new
+  `/playlists/{id}/items` endpoint.
+- yt-dlp now requests the `web_embedded` YouTube player client, which is not
+  blocked on datacenter IPs ("The page needs to be reloaded" / bot-check
+  errors).
 - Overload protection:
   - Commands are processed with a concurrency gate
     (`RHAPSOD_MAX_CONCURRENT_COMMANDS`, default 3): extra commands get a

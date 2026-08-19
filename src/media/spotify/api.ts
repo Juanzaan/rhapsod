@@ -30,6 +30,7 @@ export interface SpotifyResolver {
 interface SpotifyApiOptions {
   readonly clientId: string;
   readonly clientSecret: string;
+  readonly refreshToken?: string;
   readonly fetch?: typeof fetch;
   readonly timeoutMs?: number;
 }
@@ -68,6 +69,7 @@ export class SpotifyApi implements SpotifyResolver {
   readonly name = "spotify";
   readonly #clientId: string;
   readonly #clientSecret: string;
+  readonly #refreshToken: string | undefined;
   readonly #fetch: typeof fetch;
   readonly #timeoutMs: number;
   #token: SpotifyToken | undefined;
@@ -75,6 +77,7 @@ export class SpotifyApi implements SpotifyResolver {
   constructor(options: SpotifyApiOptions) {
     this.#clientId = options.clientId;
     this.#clientSecret = options.clientSecret;
+    this.#refreshToken = options.refreshToken;
     this.#fetch = options.fetch ?? fetch;
     this.#timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   }
@@ -101,7 +104,7 @@ export class SpotifyApi implements SpotifyResolver {
     if (resource.type !== "playlist")
       throw new Error("Only Spotify playlists can be expanded");
     return this.#expandCollection(
-      `https://api.spotify.com/v1/playlists/${resource.id}/tracks`,
+      `https://api.spotify.com/v1/playlists/${resource.id}/${this.#refreshToken === undefined ? "tracks" : "items"}`,
       limit,
       (page) =>
         page.items.flatMap((item) => {
@@ -193,6 +196,11 @@ export class SpotifyApi implements SpotifyResolver {
         rateLimitAttempts--;
         continue;
       }
+      if (response.status === 403 && this.#refreshToken === undefined) {
+        throw new Error(
+          "Spotify API returned 403: reading playlists requires RHAPSOD_SPOTIFY_REFRESH_TOKEN (Spotify's 2026 API migration dropped the anonymous endpoint)",
+        );
+      }
       if (!response.ok) {
         throw new Error(`Spotify API returned ${response.status}`);
       }
@@ -204,6 +212,13 @@ export class SpotifyApi implements SpotifyResolver {
     if (this.#token && this.#token.expiresAt > Date.now()) {
       return this.#token.accessToken;
     }
+    const body =
+      this.#refreshToken === undefined
+        ? new URLSearchParams({ grant_type: "client_credentials" })
+        : new URLSearchParams({
+            grant_type: "refresh_token",
+            refresh_token: this.#refreshToken,
+          });
     const response = await this.#request(
       "https://accounts.spotify.com/api/token",
       {
@@ -211,12 +226,14 @@ export class SpotifyApi implements SpotifyResolver {
         "Content-Type": "application/x-www-form-urlencoded",
       },
       {
-        body: new URLSearchParams({ grant_type: "client_credentials" }),
+        body,
         method: "POST",
       },
     );
     if (!response.ok) {
-      throw new Error(`Spotify token request failed with ${response.status}`);
+      throw new Error(
+        `Spotify ${this.#refreshToken === undefined ? "token" : "refresh token"} request failed with ${response.status}`,
+      );
     }
     const json = (await response.json()) as {
       access_token?: string;

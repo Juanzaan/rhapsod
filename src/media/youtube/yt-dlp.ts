@@ -332,6 +332,8 @@ export function buildYtDlpArguments(
     "node",
     "--remote-components",
     "ejs:github",
+    "--extractor-args",
+    "youtube:player_client=web_embedded",
     ...argumentsList,
   ];
 }
