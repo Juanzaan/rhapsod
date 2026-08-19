@@ -287,6 +287,40 @@ describe("rankYoutubeCandidates", () => {
     expect(selected?.id).toBe("studio");
   });
 
+  it("prefers the original over a clean version", () => {
+    const selected = rankYoutubeCandidates("duki rockstar", [
+      {
+        id: "clean",
+        title: "Duki - Rockstar (Clean Version)",
+        webpageUrl: "https://youtube.com/watch?v=clean",
+      },
+      {
+        id: "original",
+        title: "DUKI - Rockstar (Official Video)",
+        webpageUrl: "https://youtube.com/watch?v=original",
+      },
+    ]);
+
+    expect(selected?.id).toBe("original");
+  });
+
+  it("keeps the clean version when the query asks for it", () => {
+    const selected = rankYoutubeCandidates("duki rockstar clean", [
+      {
+        id: "original",
+        title: "DUKI - Rockstar (Official Video)",
+        webpageUrl: "https://youtube.com/watch?v=original",
+      },
+      {
+        id: "clean",
+        title: "Duki - Rockstar (Clean)",
+        webpageUrl: "https://youtube.com/watch?v=clean",
+      },
+    ]);
+
+    expect(selected?.id).toBe("clean");
+  });
+
   it("does not penalize an event phrase the query asks for", () => {
     const selected = rankYoutubeCandidates(
       "ghost town kids see ghosts at camp flog gnaw",

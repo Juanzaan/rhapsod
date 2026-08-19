@@ -1,7 +1,7 @@
 import type { YoutubeSearchCandidate } from "./yt-dlp.js";
 
 const PENALIZED_TERMS =
-  /\b(cover|live|remix|reaction|review|shorts?|sped up|slowed|nightcore|karaoke|festival|tour|concert|session|acoustic|stadium|arena|radio|rehearsal|demo)\b/i;
+  /\b(cover|live|remix|reaction|review|shorts?|sped up|slowed|nightcore|karaoke|festival|tour|concert|session|acoustic|stadium|arena|radio|rehearsal|demo|clean|edited)\b/i;
 const LIVE_EVENT_CONTEXT =
   /\([^)]*\b(at|live|festival|tour|concert|session|stadium|arena|radio|acoustic)\b[^)]*\)/i;
 const POSITIVE_TERMS =
