@@ -8,6 +8,14 @@ for [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Persisted audio URL cache (`{RHAPSOD_DATA_DIR}/audio-url-cache.json`, 500
+  entries, pruned by expiry): once a track's stream URL has been resolved it is
+  reused across bot restarts until it expires, so repeat plays start instantly
+  without another yt-dlp round trip.
+- yt-dlp runs with a single extractor retry (`--extractor-retries 1`) instead
+  of the default three, so a YouTube-side throttling hiccup costs ~6s instead
+  of ~15s.
+
 - Persistent structured logs: every line is written as JSON both to stdout
   (captured by systemd) and to a rotating file under `{RHAPSOD_DATA_DIR}/logs`
   (`RHAPSOD_LOG_DIR` overrides the directory, `RHAPSOD_LOG_RETENTION_DAYS`

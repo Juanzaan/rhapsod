@@ -41,6 +41,8 @@ describe("YoutubeResolver", () => {
       "node",
       "--remote-components",
       "ejs:github",
+      "--extractor-retries",
+      "1",
       "--extractor-args",
       "youtube:player_client=web_embedded",
       "--version",
