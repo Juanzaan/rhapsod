@@ -3,11 +3,14 @@ type ChatCommand =
   | { readonly name: "help" }
   | { readonly name: "loop"; readonly mode?: "off" | "queue" | "track" }
   | { readonly name: "lyrics" }
+  | { readonly input: string; readonly name: "playnext" }
   | { readonly name: "now-playing" }
   | { readonly input: string; readonly name: "play" }
   | { readonly name: "pause" }
-  | { readonly name: "queue" }
-  | { readonly name: "remove"; readonly position: number }
+  | { readonly name: "queue"; readonly page?: number }
+  | { readonly name: "remove"; readonly from: number; readonly to: number }
+  | { readonly name: "history" }
+  | { readonly name: "move"; readonly from: number; readonly to: number }
   | { readonly name: "resume" }
   | { readonly input: string; readonly name: "search" }
   | { readonly name: "shuffle" }
@@ -25,12 +28,19 @@ const COMMAND_ALIASES: Readonly<Record<string, ChatCommand["name"]>> = {
   loop: "loop",
   ly: "lyrics",
   lyrics: "lyrics",
+  history: "history",
+  hist: "history",
+  move: "move",
+  mv: "move",
   np: "now-playing",
   now: "now-playing",
   "now-playing": "now-playing",
   p: "play",
   pause: "pause",
   play: "play",
+  playnext: "playnext",
+  pn: "playnext",
+  next: "playnext",
   q: "queue",
   queue: "queue",
   remove: "remove",
@@ -73,8 +83,15 @@ export function parseChatCommand(
     case "search":
       if (!argument) throw new Error("Usage: !yt <search terms>");
       return { input: argument, name };
+    case "playnext":
+      if (!argument) throw new Error("Usage: !playnext <URL or search terms>");
+      return { input: argument, name };
+    case "queue":
+      return argument ? { name, page: parsePage(argument) } : { name };
     case "remove":
-      return { name, position: parsePosition(argument) };
+      return { name, ...parseRange(argument, "remove") };
+    case "move":
+      return { name, ...parseMove(argument) };
     case "volume":
       return { name, value: parseVolume(argument) };
     case "loop":
@@ -100,14 +117,45 @@ function unwrapTeamSpeakUrl(argument: string): string {
   return labeledUrl?.[1] ?? argument;
 }
 
-function parsePosition(argument: string): number {
-  if (!/^\d+$/.test(argument))
-    throw new Error("Usage: !remove <queue position>");
+function parsePosition(
+  argument: string,
+  usage = "!remove <queue position>",
+): number {
+  if (!/^\d+$/.test(argument)) throw new Error(`Usage: ${usage}`);
   const position = Number(argument);
   if (!Number.isSafeInteger(position) || position < 1) {
     throw new Error("Queue position must be at least 1");
   }
   return position;
+}
+
+function parseRange(
+  argument: string,
+  command: "remove",
+): { from: number; to: number } {
+  const match = argument.match(/^(\d+)(?:-(\d+))?$/);
+  if (!match) throw new Error(`Usage: !${command} <position|from-to>`);
+  const from = parsePosition(match[1] ?? "", "!remove <position|from-to>");
+  const to =
+    match[2] === undefined
+      ? from
+      : parsePosition(match[2], "!remove <position|from-to>");
+  if (to < from) throw new Error("The range must be ascending");
+  return { from, to };
+}
+
+function parseMove(argument: string): { from: number; to: number } {
+  const parts = argument.split(/\s+/);
+  if (parts.length !== 2) throw new Error("Usage: !move <from> <to>");
+  return {
+    from: parsePosition(parts[0] ?? "", "!move <from> <to>"),
+    to: parsePosition(parts[1] ?? "", "!move <from> <to>"),
+  };
+}
+
+function parsePage(argument: string): number {
+  const page = parsePosition(argument, "!queue [page]");
+  return page;
 }
 
 function parseVolume(argument: string): number {

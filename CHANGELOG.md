@@ -15,6 +15,10 @@ for [Semantic Versioning](https://semver.org/).
   stays open to the requester of the track and admins.
 - `!stats` (`!st`): uptime, tracks played since start, current track, queue
   length and current volume/loop mode.
+- Queue ergonomics: `!playnext` (`!pn`/`!next`) promotes a single track,
+  `!move` (`!mv`) reorders pending tracks, `!remove` accepts inclusive ranges,
+  `!queue [page]` displays 10 tracks per page, and `!history` (`!hist`) shows
+  recently started tracks.
 - Spotify playlists and albums in `!play`: paged expansion through the Web API
   (up to 20 tracks, 429 backoff, duplicates skipped) with the same
   artist/title search and expected-duration ranking as tracks.

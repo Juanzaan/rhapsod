@@ -35,6 +35,59 @@ describe("PlaybackQueue", () => {
     );
   });
 
+  it("promotes tracks to the head", () => {
+    const queue = new PlaybackQueue();
+    queue.add(firstTrack);
+    queue.add(secondTrack);
+    expect(queue.moveToHead("track-2")).toBe(true);
+    expect(queue.snapshot().map((track) => track.id)).toEqual([
+      "track-2",
+      "track-1",
+    ]);
+    expect(queue.moveToHead("missing")).toBe(false);
+  });
+
+  it("moves tracks by one-based positions", () => {
+    const queue = new PlaybackQueue();
+    queue.add(firstTrack);
+    queue.add(secondTrack);
+    queue.add({
+      id: "track-3",
+      requestedBy: "carol",
+      source: "https://example.com/third",
+      title: "Third track",
+    });
+
+    expect(queue.move(3, 1)?.id).toBe("track-3");
+    expect(queue.snapshot().map((track) => track.id)).toEqual([
+      "track-3",
+      "track-1",
+      "track-2",
+    ]);
+    expect(queue.move(9, 1)).toBeUndefined();
+    expect(queue.move(1, 9)).toBeUndefined();
+    expect(queue.move(1, 1)).toBeUndefined();
+  });
+
+  it("removes inclusive ranges and caps them at the queue end", () => {
+    const queue = new PlaybackQueue();
+    queue.add(firstTrack);
+    queue.add(secondTrack);
+    queue.add({
+      id: "track-3",
+      requestedBy: "carol",
+      source: "https://example.com/third",
+      title: "Third track",
+    });
+
+    expect(queue.removeRange(2, 9).map((track) => track.id)).toEqual([
+      "track-2",
+      "track-3",
+    ]);
+    expect(queue.snapshot()).toEqual([firstTrack]);
+    expect(() => queue.removeRange(3, 2)).toThrow("Invalid range");
+  });
+
   it("returns an isolated snapshot", () => {
     const queue = new PlaybackQueue();
     queue.add(firstTrack);
