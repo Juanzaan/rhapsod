@@ -1,12 +1,16 @@
 import { createServer } from "node:http";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const REDIRECT_PORT = 8888;
 const REDIRECT_URI = `http://127.0.0.1:${REDIRECT_PORT}/callback`;
 const SCOPES = "playlist-read-private playlist-read-collaborative";
 
 function loadEnv() {
+  const envPath = join(dirname(fileURLToPath(import.meta.url)), "..", ".env");
   try {
-    process.loadEnvFile();
+    process.loadEnvFile(envPath);
+    console.log(`Cargado ${envPath}`);
   } catch {
     // No .env file; rely on environment variables.
   }
