@@ -18,6 +18,18 @@ class FakeExecutor implements YtDlpExecutor {
   }
 }
 
+class SequencedExecutor implements YtDlpExecutor {
+  readonly calls: string[][] = [];
+
+  constructor(private readonly outputs: readonly string[]) {}
+
+  run(argumentsList: readonly string[]): Promise<string> {
+    this.calls.push([...argumentsList]);
+    const output = this.outputs[this.calls.length - 1] ?? "";
+    return Promise.resolve(output);
+  }
+}
+
 describe("YoutubeResolver", () => {
   it("passes a private cookies file to yt-dlp when configured", () => {
     expect(
@@ -107,6 +119,23 @@ describe("YoutubeResolver", () => {
     await expect(
       new YoutubeResolver(new FakeExecutor('{"entries":[]}')).search("missing"),
     ).rejects.toThrow("No encontré una coincidencia confiable");
+  });
+
+  it("retries with a shorter query when no candidate is reliable", async () => {
+    const executor = new SequencedExecutor([
+      '{"entries":[{"id":"wrong","title":"Unrelated podcast","webpage_url":"https://www.youtube.com/watch?v=wrong"}]}',
+      '{"entries":[{"id":"search_1","title":"Duki Rockstar official video","webpage_url":"https://www.youtube.com/watch?v=search_1"}]}',
+    ]);
+    const resolver = new YoutubeResolver(executor);
+
+    await expect(resolver.search("duki rockstar")).resolves.toEqual({
+      id: "search_1",
+      title: "Duki Rockstar official video",
+      webpageUrl: "https://www.youtube.com/watch?v=search_1",
+    });
+    expect(executor.calls).toHaveLength(2);
+    expect(executor.calls[0]).toContain("ytsearch8:duki rockstar");
+    expect(executor.calls[1]).toContain("ytsearch8:duki");
   });
 
   it("resolves only HTTPS audio endpoints", async () => {
