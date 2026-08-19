@@ -154,9 +154,7 @@ export class YoutubePlaybackService {
           "Todavía solo soporto tracks sueltos de Spotify, no playlists ni álbumes.",
         );
       }
-      const spotifyTrack = await this.#spotifyResolver.getTrack(
-        media.resource,
-      );
+      const spotifyTrack = await this.#spotifyResolver.getTrack(media.resource);
       const query = `${spotifyTrack.artist} ${spotifyTrack.title}`.trim();
       if (!query) {
         throw new Error("No encontré los datos del track de Spotify.");

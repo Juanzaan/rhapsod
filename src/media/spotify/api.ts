@@ -112,7 +112,10 @@ export class SpotifyApi implements SpotifyResolver {
       access_token?: string;
       expires_in?: number;
     };
-    if (typeof json.access_token !== "string" || json.access_token.length === 0) {
+    if (
+      typeof json.access_token !== "string" ||
+      json.access_token.length === 0
+    ) {
       throw new Error("Spotify token response is missing access_token");
     }
     const expiresInSeconds = json.expires_in ?? 3600;

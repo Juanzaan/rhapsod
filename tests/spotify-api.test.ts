@@ -30,7 +30,9 @@ describe("SpotifyApi", () => {
         );
       }
       if (request(input) === "https://api.spotify.com/v1/tracks/abc123") {
-        expect(init?.headers).toMatchObject({ Authorization: "Bearer token-1" });
+        expect(init?.headers).toMatchObject({
+          Authorization: "Bearer token-1",
+        });
         return Promise.resolve(
           jsonResponse({
             artists: [{ name: "Duki" }],
@@ -101,9 +103,9 @@ describe("SpotifyApi", () => {
       fetch,
     });
 
-    await expect(
-      api.getTrack({ id: "abc123", type: "track" }),
-    ).rejects.toThrow("Spotify API returned 401");
+    await expect(api.getTrack({ id: "abc123", type: "track" })).rejects.toThrow(
+      "Spotify API returned 401",
+    );
     expect(fetch.mock.calls.length).toBe(4);
   });
 
@@ -120,9 +122,9 @@ describe("SpotifyApi", () => {
       fetch,
     });
 
-    await expect(
-      api.getTrack({ id: "abc123", type: "track" }),
-    ).rejects.toThrow("Spotify token request failed with 400");
+    await expect(api.getTrack({ id: "abc123", type: "track" })).rejects.toThrow(
+      "Spotify token request failed with 400",
+    );
   });
 
   it("matches Spotify links and exposes the provider name", () => {
