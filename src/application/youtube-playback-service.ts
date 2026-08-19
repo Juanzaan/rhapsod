@@ -76,6 +76,11 @@ export interface YoutubePlaybackResolver {
     query: string,
     expectedDurationSeconds?: number,
   ): Promise<YoutubeTrackMetadata>;
+  searchMany(
+    query: string,
+    expectedDurationSeconds?: number,
+    limit?: number,
+  ): Promise<readonly YoutubeTrackMetadata[]>;
   expandPlaylist(
     resource: YoutubeResource,
     limit: number,
@@ -233,6 +238,16 @@ export class YoutubePlaybackService {
       );
     }
     if (media.kind === "soundcloud") {
+      if (/\/sets\//i.test(media.value)) {
+        const result = await this.enqueueMusicLink(media.value, requestedBy);
+        const first = result.added[0];
+        if (!first) {
+          throw new Error(
+            "No pude encontrar ese set de SoundCloud en YouTube o SoundCloud.",
+          );
+        }
+        return first;
+      }
       try {
         const metadata = this.#soundcloudResolver
           ? await this.#soundcloudResolver.getTrack(media.value)
@@ -313,6 +328,21 @@ export class YoutubePlaybackService {
     const metadata = await this.#resolver.search(query);
     this.#recordMetadataTiming(metadata, startedAt);
     return this.#enqueueMetadata(metadata, requestedBy);
+  }
+
+  async enqueueSearchIndex(
+    query: string,
+    index: number,
+    requestedBy: string,
+  ): Promise<Track> {
+    const startedAt = Date.now();
+    const candidates = await this.#resolver.searchMany(query, undefined, 5);
+    const selected = candidates[index - 1];
+    if (!selected) {
+      throw new Error(`No hay resultado ${index} para esa búsqueda.`);
+    }
+    this.#recordMetadataTiming(selected, startedAt);
+    return this.#enqueueMetadata(selected, requestedBy);
   }
 
   async enqueueNext(input: string, requestedBy: string): Promise<Track> {

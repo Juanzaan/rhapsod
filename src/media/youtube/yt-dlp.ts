@@ -196,10 +196,45 @@ export class YoutubeResolver {
     throw new Error("No encontré una coincidencia confiable en YouTube");
   }
 
+  async searchMany(
+    query: string,
+    expectedDurationSeconds?: number,
+    limit = 5,
+  ): Promise<readonly YoutubeTrackMetadata[]> {
+    const normalizedQuery = query.trim();
+    if (!normalizedQuery) throw new Error("YouTube search cannot be empty");
+    const ranked = await this.#searchCandidates(
+      normalizedQuery,
+      expectedDurationSeconds,
+    );
+    if (ranked.length === 0) {
+      throw new Error("No encontré una coincidencia confiable en YouTube");
+    }
+    return ranked.slice(0, limit);
+  }
+
   async #searchOnce(
     query: string,
     expectedDurationSeconds?: number,
   ): Promise<YoutubeTrackMetadata | undefined> {
+    const ranked = await this.#searchCandidates(query, expectedDurationSeconds);
+    if (ranked.length === 0) return undefined;
+    const [selected, ...fallbacks] = ranked;
+    return Object.assign(
+      {},
+      selected,
+      fallbacks.length === 0
+        ? {}
+        : {
+            fallbackSources: fallbacks.map((candidate) => candidate.webpageUrl),
+          },
+    );
+  }
+
+  async #searchCandidates(
+    query: string,
+    expectedDurationSeconds?: number,
+  ): Promise<readonly YoutubeTrackMetadata[]> {
     const raw = await this.executor.run(
       [
         "--dump-single-json",
@@ -214,22 +249,7 @@ export class YoutubeResolver {
     const candidates = (parseResponse(raw).entries ?? [])
       .filter((entry) => entry.id && entry.title)
       .map((entry) => parseSearchCandidate(entry));
-    const ranked = rankYoutubeCandidatesAll(
-      query,
-      candidates,
-      expectedDurationSeconds,
-    );
-    if (ranked.length === 0) return undefined;
-    const [selected, ...fallbacks] = ranked;
-    return Object.assign(
-      {},
-      selected,
-      fallbacks.length === 0
-        ? {}
-        : {
-            fallbackSources: fallbacks.map((candidate) => candidate.webpageUrl),
-          },
-    );
+    return rankYoutubeCandidatesAll(query, candidates, expectedDurationSeconds);
   }
 
   async getAudioUrl(resource: YoutubeResource): Promise<string> {
