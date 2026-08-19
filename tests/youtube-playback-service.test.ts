@@ -15,6 +15,7 @@ import type { AudioPlayer } from "../src/audio/audio-player.js";
 import type { RhapsodOpusEncoder } from "../src/audio/opus-encoder.js";
 import type { DirectUrlResolver } from "../src/media/direct-url.js";
 import type { SerializedQueueTrack } from "../src/domain/state-store.js";
+import { AudioUrlCache } from "../src/application/audio-url-cache.js";
 
 function setup(
   options: {
@@ -31,6 +32,7 @@ function setup(
     soundcloudResolver?: boolean;
     spotifyResolver?: boolean;
     stateStore?: boolean;
+    audioUrlCache?: AudioUrlCache;
   } = {},
 ) {
   const stopSession = vi.fn();
@@ -207,6 +209,7 @@ function setup(
     ...(spotifyResolver ? { spotifyResolver } : {}),
     ...(lyricsResolver ? { lyricsResolver } : {}),
     ...(stateStore ? { stateStore } : {}),
+    ...(options.audioUrlCache ? { audioUrlCache: options.audioUrlCache } : {}),
     ...(options.maxQueueTracks
       ? { maxQueueTracks: options.maxQueueTracks }
       : {}),
@@ -1635,6 +1638,29 @@ describe("YoutubePlaybackService", () => {
       "https://ice1.somafm.com/groovesalad-128-mp3",
     );
     expect(createPlayback).toHaveBeenCalled();
+  });
+
+  it("reuses a persisted audio URL without calling yt-dlp", async () => {
+    const cache = AudioUrlCache.memoryOnly();
+    cache.set(
+      "https://www.youtube.com/watch?v=cached",
+      "https://media.example/cached",
+      Date.now() + 60_000,
+    );
+    const { resolver, service } = setup({ audioUrlCache: cache });
+    resolver.getTrack.mockImplementation((resource: { id: string }) =>
+      Promise.resolve({
+        id: resource.id,
+        title: `Track ${resource.id}`,
+        webpageUrl: `https://www.youtube.com/watch?v=${resource.id}`,
+      }),
+    );
+
+    await service.enqueue("https://youtu.be/cached", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(resolver.getAudioUrlFromUrl).not.toHaveBeenCalled();
+    expect(service.current?.id).toBe("cached");
   });
 
   it("rejects seek when nothing is playing", () => {

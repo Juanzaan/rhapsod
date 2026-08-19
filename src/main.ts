@@ -8,6 +8,7 @@ import { createRhapsodOpusEncoder } from "./audio/opus-encoder.js";
 import { playFfmpegUrl } from "./audio/ffmpeg-player.js";
 import { playTestTone } from "./audio/test-tone-player.js";
 import { YoutubePlaybackService } from "./application/youtube-playback-service.js";
+import { AudioUrlCache } from "./application/audio-url-cache.js";
 import { parseChatCommand } from "./commands/chat-command.js";
 import { CommandRateLimiter } from "./commands/command-rate-limiter.js";
 import { loadConfig } from "./config.js";
@@ -171,6 +172,9 @@ async function main(): Promise<void> {
     ),
     stateStore: new FilePlaybackStateStore(
       join(config.RHAPSOD_DATA_DIR, "state.json"),
+    ),
+    audioUrlCache: AudioUrlCache.load(
+      join(config.RHAPSOD_DATA_DIR, "audio-url-cache.json"),
     ),
     maxQueueTracks: config.RHAPSOD_MAX_QUEUE_TRACKS,
     maxTracksPerUser: config.RHAPSOD_MAX_TRACKS_PER_USER,

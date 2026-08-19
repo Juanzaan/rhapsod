@@ -24,6 +24,7 @@ import type { SpotifyResource } from "../media/media-input.js";
 import type { SpotifyResolver } from "../media/spotify/api.js";
 import type { PlaybackStateStore } from "../domain/state-store.js";
 import type { SerializedQueueTrack } from "../domain/state-store.js";
+import type { AudioUrlCache } from "./audio-url-cache.js";
 import {
   parseArtistTitle,
   type LyricsResolver,
@@ -45,6 +46,7 @@ interface PlaybackServiceOptions {
   readonly spotifyResolver?: SpotifyResolver;
   readonly lyricsResolver?: LyricsResolver;
   readonly stateStore?: PlaybackStateStore;
+  readonly audioUrlCache?: AudioUrlCache;
   readonly output: VoiceFrameOutput;
   readonly playlistMaxTracks?: number;
   readonly maxQueueTracks?: number;
@@ -137,6 +139,7 @@ export class YoutubePlaybackService {
     reason: PlaybackEndReason,
   ) => void;
   readonly #onTiming: (timing: PlaybackTiming) => void;
+  readonly #audioUrlCache: AudioUrlCache | undefined;
   readonly #playlistMaxTracks: number;
   readonly #maxQueueTracks: number;
   readonly #maxTracksPerUser: number;
@@ -173,6 +176,10 @@ export class YoutubePlaybackService {
     this.#onPlaybackStarted = options.onPlaybackStarted ?? (() => undefined);
     this.#onPlaybackFinished = options.onPlaybackFinished ?? (() => undefined);
     this.#onTiming = options.onTiming ?? (() => undefined);
+    this.#audioUrlCache = options.audioUrlCache;
+    for (const [source, entry] of this.#audioUrlCache?.entries() ?? []) {
+      this.#prepared.set(source, Promise.resolve(entry));
+    }
     this.#playlistMaxTracks =
       options.playlistMaxTracks ?? DEFAULT_PLAYLIST_MAX_TRACKS;
     this.#maxQueueTracks = options.maxQueueTracks ?? DEFAULT_MAX_QUEUE_TRACKS;
@@ -1135,7 +1142,9 @@ export class YoutubePlaybackService {
     let lastError: unknown;
     for (const source of [track.source, ...(track.fallbackSources ?? [])]) {
       try {
-        return await this.#resolver.getAudioUrlFromUrl(source);
+        const url = await this.#resolver.getAudioUrlFromUrl(source);
+        this.#audioUrlCache?.set(source, url, audioUrlExpiresAt(url));
+        return url;
       } catch (error) {
         lastError = error;
       }
