@@ -5,7 +5,7 @@ chat once the TS3 adapter is connected.
 
 | Command                     | Alias         | Description                                                     |
 | --------------------------- | ------------- | --------------------------------------------------------------- |
-| `!play <media URL>`         | `!p`          | Resolve a YouTube video, SoundCloud track, or YouTube playlist. |
+| `!play <URL or search>`     | `!p`          | Resolve a YouTube video, SoundCloud track, YouTube playlist, or search. |
 | `!yt <search terms>`        | `!search`     | Add the first matching YouTube video to the queue.              |
 | `!pause`                    | -             | Pause the current track.                                        |
 | `!resume`                   | -             | Resume the current track.                                       |
@@ -24,15 +24,17 @@ chat once the TS3 adapter is connected.
 - **YouTube:** Rhapsod uses a local `yt-dlp` executable to obtain metadata and
   a temporary audio URL immediately before playback. Search returns the first
   matching video; playlists add up to 20 tracks per `!play` (duplicates already
-  in the queue are skipped) and report how many were added. Spotify resolution
-  is not connected yet.
+  in the queue are skipped) and report how many were added.
 - **SoundCloud:** individual tracks first use SoundCloud's public web API with
   a dynamically discovered, cached client identifier. The identifier refreshes
   after authorization failures; yt-dlp and YouTube alternatives remain
   fallbacks. This unofficial API may change without notice. Playlists are not
   expanded yet, and blocked/DRM tracks are never bypassed.
-- **Other sources:** Spotify links, local files, direct HTTPS audio URLs, and
-  YouTube search are planned but currently rejected by `!play`.
+- **Search text:** `!play` accepts free text and runs the same YouTube search
+  as `!yt` (fuzzy term matching, channel credits, and a shortened retry when
+  nothing is reliable).
+- **Other sources:** Spotify links, local files, and direct HTTPS audio URLs
+  are rejected with a clear message; Spotify resolution is planned.
 
 No command may accept shell syntax. Rhapsod passes provider arguments directly
 to child processes and never invokes a shell.
