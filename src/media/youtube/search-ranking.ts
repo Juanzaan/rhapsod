@@ -49,7 +49,11 @@ export function scoreCandidate(
     candidate.liveStatus === "is_upcoming"
   )
     score -= 30;
-  if (PENALIZED_TERMS.test(candidate.title)) score -= 35;
+  if (
+    PENALIZED_TERMS.test(candidate.title) &&
+    !PENALIZED_TERMS.test(normalizedQuery)
+  )
+    score -= 35;
   if (candidate.durationSeconds !== undefined && candidate.durationSeconds < 45)
     score -= 20;
   return score;

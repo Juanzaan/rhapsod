@@ -109,4 +109,38 @@ describe("rankYoutubeCandidates", () => {
       ]),
     ).toEqual([]);
   });
+
+  it("prefers a remix when the query asks for one", () => {
+    const selected = rankYoutubeCandidates("anuel aa sola remix", [
+      {
+        id: "original",
+        title: "Anuel AA - Sola",
+        webpageUrl: "https://youtube.com/watch?v=original",
+      },
+      {
+        id: "remix",
+        title: "Anuel AA - Sola (Remix) ft. Daddy Yankee",
+        webpageUrl: "https://youtube.com/watch?v=remix",
+      },
+    ]);
+
+    expect(selected?.id).toBe("remix");
+  });
+
+  it("still penalizes remixes when the query does not ask for one", () => {
+    const selected = rankYoutubeCandidates("anuel aa sola", [
+      {
+        id: "original",
+        title: "Anuel AA - Sola",
+        webpageUrl: "https://youtube.com/watch?v=original",
+      },
+      {
+        id: "remix",
+        title: "Anuel AA - Sola (Remix)",
+        webpageUrl: "https://youtube.com/watch?v=remix",
+      },
+    ]);
+
+    expect(selected?.id).toBe("original");
+  });
 });
