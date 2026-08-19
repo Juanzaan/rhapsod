@@ -45,11 +45,11 @@ function setup() {
 }
 
 describe("AudioPlayer", () => {
-  it("prebuffers 500ms of PCM and emits one exact frame per clock tick", () => {
+  it("prebuffers 240ms of PCM and emits one exact frame per clock tick", () => {
     const { clock, encodeMock, output, player } = setup();
     const source = new PassThrough();
     void player.play(source);
-    source.write(Buffer.alloc(PCM_FRAME_BYTES * 24, 7));
+    source.write(Buffer.alloc(PCM_FRAME_BYTES * 11, 7));
     expect(player.state).toBe("buffering");
     source.write(Buffer.alloc(PCM_FRAME_BYTES, 7));
 
@@ -78,8 +78,8 @@ describe("AudioPlayer", () => {
     expect(pcm?.[1_000]).toBe(2);
   });
 
-  it("rebuilds a larger buffer after an underrun", () => {
-    const { clock, encodeMock, player } = setup();
+  it("keeps the frame flow alive and resumes real frames after an underrun", () => {
+    const { clock, encodeMock, output, player } = setup();
     const source = new PassThrough();
     void player.play(source);
     source.write(Buffer.alloc(PCM_FRAME_BYTES * 25, 3));
@@ -90,12 +90,18 @@ describe("AudioPlayer", () => {
     expect(silence?.every((value) => value === 0)).toBe(true);
     expect(player.metrics.underruns).toBe(1);
     expect(player.metrics.rebufferEvents).toBe(1);
-    expect(player.state).toBe("buffering");
-
-    source.write(Buffer.alloc(PCM_FRAME_BYTES * 49, 3));
-    expect(player.state).toBe("buffering");
-    source.write(Buffer.alloc(PCM_FRAME_BYTES, 3));
     expect(player.state).toBe("playing");
+
+    clock.tick();
+    expect(output.sendVoiceFrame).toHaveBeenCalledTimes(27);
+    expect(
+      encodeMock.mock.calls.at(-1)?.[0]?.every((value) => value === 0),
+    ).toBe(true);
+
+    source.write(Buffer.alloc(PCM_FRAME_BYTES, 3));
+    clock.tick();
+    expect(output.sendVoiceFrame).toHaveBeenCalledTimes(28);
+    expect(encodeMock.mock.calls.at(-1)?.[0]?.[0]).toBe(3);
   });
 
   it("fails when an underrun cannot recover within five seconds", async () => {
