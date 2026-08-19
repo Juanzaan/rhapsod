@@ -143,4 +143,40 @@ describe("rankYoutubeCandidates", () => {
 
     expect(selected?.id).toBe("original");
   });
+
+  it("matches titles with small spelling differences", () => {
+    const ranked = rankYoutubeCandidatesAll("make them pray", [
+      {
+        id: "pay",
+        title: "Drake - Make Them Pay",
+        webpageUrl: "https://youtube.com/watch?v=pay",
+      },
+      {
+        id: "cry",
+        title: "Make Them Cry",
+        webpageUrl: "https://youtube.com/watch?v=cry",
+      },
+    ]);
+
+    expect(ranked.map((candidate) => candidate.id)).toEqual(["pay"]);
+  });
+
+  it("credits the channel when it matches an artist term", () => {
+    const selected = rankYoutubeCandidates("drake make them pay", [
+      {
+        channel: "Random Uploads",
+        id: "reupload",
+        title: "Make Them Pay (reupload)",
+        webpageUrl: "https://youtube.com/watch?v=reupload",
+      },
+      {
+        channel: "Drake",
+        id: "channelMatch",
+        title: "Make Them Pay",
+        webpageUrl: "https://youtube.com/watch?v=channelMatch",
+      },
+    ]);
+
+    expect(selected?.id).toBe("channelMatch");
+  });
 });
