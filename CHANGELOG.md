@@ -39,6 +39,13 @@ for [Semantic Versioning](https://semver.org/).
   public API, no account), parsed from the track title; truncated to 1600
   characters to fit a TeamSpeak message.
 - `!queue`/`!now-playing` show per-track durations when known.
+
+### Fixed
+
+- Frame delivery no longer drops audio when the event loop stalls (e.g. while
+  yt-dlp resolves metadata after `!play`): missed frames are now sent as a
+  short catch-up burst (capped at 25 frames) instead of being skipped, so the
+  current track stops lagging while a new one is being queued.
 - `!volume <0-100>`: PCM gain applied to frames before Opus encoding, affecting
   every listener; changes apply live to the current track.
 - `!loop [off|track|queue]`: repeat the current track (`track`) or the whole
