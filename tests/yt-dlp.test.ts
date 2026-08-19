@@ -276,4 +276,26 @@ describe("YtDlpJobQueue", () => {
       "playback",
     ]);
   });
+
+  it("rejects jobs beyond the saturation cap with a friendly error", async () => {
+    const releases: Array<() => void> = [];
+    const queue = new YtDlpJobQueue(async (label: string) => {
+      await new Promise<void>((resolve) => releases.push(resolve));
+      return label;
+    });
+
+    const accepted = Array.from({ length: 9 }, (_, index) =>
+      queue.run(`job-${index}`, "metadata"),
+    );
+    const over = queue.run("overflow", "metadata");
+
+    expect(releases).toHaveLength(1);
+    await expect(over).rejects.toThrow("saturado");
+
+    for (let i = 0; i < 9; i++) {
+      releases.shift()?.();
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    await expect(Promise.all(accepted)).resolves.toHaveLength(9);
+  });
 });

@@ -351,6 +351,111 @@ describe("YoutubePlaybackService", () => {
     );
   });
 
+  it("coalesces rapid skips into one chain without playing skipped tracks", async () => {
+    const {
+      createPlayback,
+      onPlaybackFinished,
+      playbackResolvers,
+      resolver,
+      service,
+    } = setup();
+    resolver.getTrack.mockImplementation((resource: { id: string }) =>
+      Promise.resolve({
+        ...(resource.id === "first"
+          ? { audioUrl: "https://media.example/first" }
+          : {}),
+        id: resource.id,
+        title: `Track ${resource.id}`,
+        webpageUrl: `https://www.youtube.com/watch?v=${resource.id}`,
+      }),
+    );
+    for (const id of ["first", "second", "third", "fourth"]) {
+      await service.enqueue(`https://youtu.be/${id}`, "user-1");
+    }
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(service.current?.id).toBe("first");
+    expect(createPlayback).toHaveBeenCalledTimes(1);
+
+    service.skip();
+    service.skip();
+    service.skip();
+    service.skip();
+    playbackResolvers[0]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(createPlayback).toHaveBeenCalledTimes(1);
+    expect(service.current).toBeUndefined();
+    expect(service.queue()).toHaveLength(0);
+    expect(onPlaybackFinished).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: "first" }),
+      expect.anything(),
+      "skipped",
+    );
+  });
+
+  it("skips tracks queued behind a mid-resolution skip exactly once", async () => {
+    const { createPlayback, resolver, service } = setup();
+    const deferred: Array<() => void> = [];
+    resolver.getTrack.mockImplementation((resource: { id: string }) =>
+      Promise.resolve({
+        id: resource.id,
+        title: `Track ${resource.id}`,
+        webpageUrl: `https://www.youtube.com/watch?v=${resource.id}`,
+      }),
+    );
+    resolver.getAudioUrlFromUrl.mockImplementation(
+      ((url: string) =>
+        new Promise<string>((resolve) => {
+          deferred.push(() => resolve(`https://media.example/${url}`));
+        })) as unknown as () => Promise<string>,
+    );
+
+    await service.enqueue("https://youtu.be/first", "user-1");
+    await service.enqueue("https://youtu.be/second", "user-1");
+    await service.enqueue("https://youtu.be/third", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(service.current?.id).toBe("first");
+    expect(deferred).toHaveLength(2);
+
+    service.skip();
+    deferred[0]?.();
+    deferred[1]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(service.current?.id).toBe("second");
+    expect(createPlayback).toHaveBeenCalledTimes(1);
+    expect(resolver.getAudioUrlFromUrl).toHaveBeenCalledTimes(3);
+  });
+
+  it("does not start a new session when the queue empties from rapid skips", async () => {
+    const { createPlayback, playbackResolvers, resolver, service } = setup();
+    resolver.getTrack.mockImplementation((resource: { id: string }) =>
+      Promise.resolve({
+        ...(resource.id === "first"
+          ? { audioUrl: "https://media.example/first" }
+          : {}),
+        id: resource.id,
+        title: `Track ${resource.id}`,
+        webpageUrl: `https://www.youtube.com/watch?v=${resource.id}`,
+      }),
+    );
+    await service.enqueue("https://youtu.be/first", "user-1");
+    await service.enqueue("https://youtu.be/second", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(createPlayback).toHaveBeenCalledTimes(1);
+
+    service.skip();
+    service.skip();
+    playbackResolvers[0]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(service.current).toBeUndefined();
+    expect(createPlayback).toHaveBeenCalledTimes(1);
+    expect(resolver.getAudioUrlFromUrl).toHaveBeenCalledTimes(1);
+  });
+
   it("falls back to resolving playback when prefetched audio fails", async () => {
     const { playbackResolvers, resolver, service } = setup();
     resolver.getTrack.mockImplementation((resource: { id: string }) =>

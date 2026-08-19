@@ -25,6 +25,8 @@ interface QueuedJob<Input, Output> {
   readonly reject: (error: unknown) => void;
 }
 
+const MAX_QUEUED_JOBS = 8;
+
 export class YtDlpJobQueue<Input, Output> {
   readonly #metadata: Array<QueuedJob<Input, Output>> = [];
   readonly #playback: Array<QueuedJob<Input, Output>> = [];
@@ -35,6 +37,14 @@ export class YtDlpJobQueue<Input, Output> {
   run(input: Input, priority: YtDlpJobPriority): Promise<Output> {
     return new Promise<Output>((resolve, reject) => {
       const jobs = priority === "playback" ? this.#playback : this.#metadata;
+      if (jobs.length >= MAX_QUEUED_JOBS) {
+        reject(
+          new Error(
+            "El bot está saturado de búsquedas: probá de nuevo en unos segundos.",
+          ),
+        );
+        return;
+      }
       jobs.push({ input, reject, resolve });
       void this.#drain();
     });

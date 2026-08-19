@@ -46,6 +46,13 @@ for [Semantic Versioning](https://semver.org/).
   yt-dlp resolves metadata after `!play`): missed frames are now sent as a
   short catch-up burst (capped at 25 frames) instead of being skipped, so the
   current track stops lagging while a new one is being queued.
+- Rapid `!skip` bursts no longer wedge the bot: playback runs as a single
+  serialized chain, so consecutive skips coalesce into one audio resolution
+  instead of piling up wasted yt-dlp jobs that froze the queue for minutes
+  on long, uncached queues (search/playlist tracks).
+- yt-dlp jobs beyond 8 pending are rejected with a friendly Spanish message
+  instead of queuing forever ("El bot está saturado..."), and observer
+  callbacks (`onPlaybackStarted`) can no longer crash the playback chain.
 - `!volume <0-100>`: PCM gain applied to frames before Opus encoding, affecting
   every listener; changes apply live to the current track.
 - `!loop [off|track|queue]`: repeat the current track (`track`) or the whole
