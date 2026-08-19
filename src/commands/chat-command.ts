@@ -9,6 +9,7 @@ type ChatCommand =
   | { readonly name: "remove"; readonly position: number }
   | { readonly name: "resume" }
   | { readonly input: string; readonly name: "search" }
+  | { readonly name: "shuffle" }
   | { readonly name: "skip" }
   | { readonly name: "stop" }
   | { readonly name: "test-tone" }
@@ -33,6 +34,7 @@ const COMMAND_ALIASES: Readonly<Record<string, ChatCommand["name"]>> = {
   search: "search",
   rm: "remove",
   s: "skip",
+  shuffle: "shuffle",
   skip: "skip",
   stop: "stop",
   "test-tone": "test-tone",

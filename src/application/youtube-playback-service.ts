@@ -383,6 +383,9 @@ export class YoutubePlaybackService {
       requestedBy,
       source: metadata.webpageUrl,
       title: metadata.title,
+      ...(metadata.durationSeconds === undefined
+        ? {}
+        : { durationSeconds: metadata.durationSeconds }),
       ...(alternativeProvider ? { alternativeProvider } : {}),
       ...(metadata.fallbackSources
         ? { fallbackSources: metadata.fallbackSources }
@@ -438,6 +441,12 @@ export class YoutubePlaybackService {
     this.#loopMode = "off";
     this.#loopPool = [];
     this.#prepared.clear();
+    return count;
+  }
+
+  shuffleQueued(): number {
+    const count = this.#queue.length;
+    this.#queue.shuffle();
     return count;
   }
 

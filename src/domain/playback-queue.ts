@@ -28,6 +28,17 @@ export class PlaybackQueue {
     return [...this.#tracks];
   }
 
+  shuffle(): void {
+    for (let i = this.#tracks.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const current = this.#tracks[i];
+      const swap = this.#tracks[j];
+      if (current === undefined || swap === undefined) continue;
+      this.#tracks[i] = swap;
+      this.#tracks[j] = current;
+    }
+  }
+
   clear(): void {
     this.#tracks.length = 0;
   }

@@ -11,11 +11,12 @@ chat once the TS3 adapter is connected.
 | `!resume`                   | -                     | Resume the current track.                                                                          |
 | `!skip`                     | `!s`                  | Skip the current track.                                                                            |
 | `!stop`                     | -                     | Stop playback and disconnect the player from the current track.                                    |
-| `!queue`                    | `!q`                  | Show the pending queue.                                                                            |
-| `!now-playing`              | `!np`, `!now`         | Show the current track and requester.                                                              |
+| `!queue`                    | `!q`                  | Show the pending queue with per-track durations.                                                   |
+| `!now-playing`              | `!np`, `!now`         | Show the current track, duration and requester.                                                    |
 | `!volume <0-100>`           | `!vol`, `!v`          | Adjust the bot output volume (PCM gain before encoding; affects every listener).                   |
 | `!remove <position>`        | `!rm`                 | Remove a one-based queue position.                                                                 |
 | `!clear`                    | `!c`                  | Clear pending tracks.                                                                              |
+| `!shuffle`                  | -                     | Shuffle the pending queue (the current track keeps playing).                                       |
 | `!loop [off\|track\|queue]` | -                     | Repeat the current track (`track`) or the whole queue (`queue`); `!stop`/`!clear` disable looping. |
 | `!test-tone`                | `!tone`               | Play a 3-second test tone (rate-limited).                                                          |
 | `!help`                     | `!h`                  | Show the command summary.                                                                          |

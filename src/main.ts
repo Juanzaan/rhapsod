@@ -162,7 +162,7 @@ async function main(): Promise<void> {
                   "Cola de reproducción:",
                   ...tracks.map(
                     (track, index) =>
-                      `${index + 1}. ${track.title} (por ${track.requestedBy})`,
+                      `${index + 1}. ${track.title} (${formatDuration(track.durationSeconds)} - por ${track.requestedBy})`,
                   ),
                 ].join("\n"),
           );
@@ -186,10 +186,19 @@ async function main(): Promise<void> {
           );
           break;
         }
+        case "shuffle": {
+          const shuffled = playback.shuffleQueued();
+          await connection.sendChannelMessage(
+            shuffled === 0
+              ? "No hay pistas en la cola para mezclar."
+              : `Cola mezclada (${shuffled} pistas).`,
+          );
+          break;
+        }
         case "now-playing":
           await connection.sendChannelMessage(
             playback.current
-              ? `Reproduciendo: ${playback.current.title} (por ${playback.current.requestedBy})`
+              ? `Reproduciendo: ${playback.current.title} (${formatDuration(playback.current.durationSeconds)} - por ${playback.current.requestedBy})`
               : "No hay nada reproduciéndose.",
           );
           break;
@@ -235,6 +244,7 @@ async function main(): Promise<void> {
               "!now-playing (!np) - Canción actual",
               "!remove <n> - Quitar una posición",
               "!clear - Vaciar la cola",
+              "!shuffle - Mezclar la cola",
               "!skip - Saltar la canción",
               "!stop - Detener y vaciar",
               "!pause / !resume - Pausar o continuar",
@@ -301,6 +311,13 @@ async function main(): Promise<void> {
   };
   process.once("SIGINT", shutdown);
   process.once("SIGTERM", shutdown);
+}
+
+function formatDuration(durationSeconds: number | undefined): string {
+  if (durationSeconds === undefined) return "duración desconocida";
+  const minutes = Math.floor(durationSeconds / 60);
+  const seconds = durationSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
 function userFacingError(error: Error): string {
