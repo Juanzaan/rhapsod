@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 
 const REDIRECT_PORT = 8888;
-const REDIRECT_URI = `http://localhost:${REDIRECT_PORT}/callback`;
+const REDIRECT_URI = `http://127.0.0.1:${REDIRECT_PORT}/callback`;
 const SCOPES = "playlist-read-private playlist-read-collaborative";
 
 function loadEnv() {
