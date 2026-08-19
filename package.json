@@ -1,10 +1,25 @@
 {
   "name": "rhapsod",
-  "version": "0.1.0",
-  "description": "A self-hosted music bot for TeamSpeak 3.",
+  "version": "1.0.0",
+  "description": "A self-hosted music bot for TeamSpeak 3, designed for future TeamSpeak 6 support.",
   "license": "MIT",
   "private": true,
   "type": "module",
+  "keywords": [
+    "teamspeak",
+    "teamspeak3",
+    "music-bot",
+    "youtube",
+    "soundcloud",
+    "spotify",
+    "yt-dlp",
+    "opus",
+    "ffmpeg"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Juanzaan/rhapsod.git"
+  },
   "engines": {
     "node": ">=22.12.0"
   },
