@@ -294,6 +294,7 @@ async function main(): Promise<void> {
           break;
       }
     } catch (error) {
+      logger.warn({ command: message, error }, "Command failed");
       const messageText =
         error instanceof Error
           ? userFacingError(error)
@@ -341,6 +342,9 @@ function userFacingError(error: Error): string {
   }
   if (/Requested format is not available/i.test(error.message)) {
     return "YouTube no ofrece un formato de audio reproducible para ese video (puede ser un directo o un video restringido). Probá otra versión.";
+  }
+  if (/fetch failed/i.test(error.message)) {
+    return "Fallo momentáneo de red con el proveedor (Spotify/YouTube). Probá de nuevo en unos segundos.";
   }
   return error.message;
 }
