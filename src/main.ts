@@ -2,8 +2,6 @@ import "dotenv/config";
 
 import { join } from "node:path";
 
-import pino from "pino";
-
 import { Ts3IdentityStore } from "./adapters/ts3/identity-store.js";
 import { createTs3Connection } from "./adapters/ts3/ts3-connection.js";
 import { createRhapsodOpusEncoder } from "./audio/opus-encoder.js";
@@ -25,11 +23,20 @@ import { LyricsClient } from "./media/lyrics.js";
 import { SoundCloudPublicApi } from "./media/soundcloud/public-api.js";
 import { SpotifyApi } from "./media/spotify/api.js";
 import { parseMediaInput } from "./media/media-input.js";
+import { createRhapsodLogger } from "./observability/logger.js";
 import { startWatchdog } from "./watchdog.js";
 
 async function main(): Promise<void> {
   const config = loadConfig();
-  const logger = pino({ level: config.RHAPSOD_LOG_LEVEL });
+  const logger = await createRhapsodLogger({
+    level: config.RHAPSOD_LOG_LEVEL,
+    logDir: join(config.RHAPSOD_DATA_DIR, "logs"),
+    retentionDays: config.RHAPSOD_LOG_RETENTION_DAYS,
+  });
+  const trackTimings = new Map<
+    string,
+    { audioUrlMs?: number; cacheHit?: boolean; metadataMs?: number }
+  >();
   process.on("unhandledRejection", (reason: unknown) => {
     logger.error({ reason }, "Unhandled promise rejection");
   });
@@ -112,15 +119,41 @@ async function main(): Promise<void> {
       }),
     encoder,
     onPlaybackStarted: async (track) => {
+      const timings = trackTimings.get(track.id);
+      logger.info(
+        { ...timings, trackId: track.id, title: track.title },
+        "Playback started",
+      );
       await connection.sendChannelMessage(`Reproduciendo: ${track.title}`);
     },
     onPlaybackFinished: (track, metrics, reason) => {
+      const timings = trackTimings.get(track.id);
+      trackTimings.delete(track.id);
       logger.info(
-        { ...metrics, reason, trackId: track.id },
-        "Playback metrics",
+        {
+          ...timings,
+          ...metrics,
+          reason,
+          trackId: track.id,
+          title: track.title,
+        },
+        "Playback session",
       );
     },
     onTiming: (timing) => {
+      trackTimings.set(timing.trackId, {
+        ...(timing.stage === "metadata"
+          ? { metadataMs: timing.durationMs }
+          : {}),
+        ...(timing.stage === "audio-url"
+          ? {
+              audioUrlMs: timing.durationMs,
+              ...(timing.cacheHit === undefined
+                ? {}
+                : { cacheHit: timing.cacheHit }),
+            }
+          : {}),
+      });
       logger.info(timing, "Playback timing");
     },
     onPlaybackError: async (track, error) => {

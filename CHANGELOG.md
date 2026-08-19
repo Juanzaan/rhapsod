@@ -8,6 +8,14 @@ for [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Persistent structured logs: every line is written as JSON both to stdout
+  (captured by systemd) and to a rotating file under `{RHAPSOD_DATA_DIR}/logs`
+  (`RHAPSOD_LOG_DIR` overrides the directory, `RHAPSOD_LOG_RETENTION_DAYS`
+  controls how many days of files are kept, default 14). Each played track
+  produces a single `Playback session` summary line joining metadata, audio
+  URL resolution (with cache hit), first frame delay and end-of-track buffer
+  metrics, so latency problems are diagnosed from one log line.
+
 - `!seek <segundos>` jumps the current track to a new position (FFmpeg restarts
   the source with a `-ss` offset; the queue position is preserved) and
   `!previous` / `!prev` replays the last finished track. See
