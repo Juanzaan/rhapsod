@@ -8,6 +8,16 @@ for [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Direct audio URLs and radio streams: `!play <url>` (and plain pasting) now
+  accepts http(s) audio files (`.mp3`, `.ogg`, `.m4a`, `.aac`, `.opus`,
+  `.flac`, `.wav`), HLS playlists (`.m3u8`) and extensionless streams whose
+  `Content-Type` is audio (probed with a HEAD request). Tracks are probed with
+  `ffprobe` (title/artist tags or the filename; infinite streams are named
+  `Radio: <host>`), played straight through FFmpeg — no yt-dlp round trip.
+  See [issue #20](https://github.com/Juanzaan/rhapsod/issues/20).
+- FFmpeg sends a configurable User-Agent when opening audio URLs
+  (`RHAPSOD_FFMPEG_USER_AGENT`); some streams and CDNs reject the default
+  `Lavf/…` agent. See [issue #23](https://github.com/Juanzaan/rhapsod/issues/23).
 - The queue survives a bot restart, but only for users who are still connected
   to the TeamSpeak server at startup: pending tracks whose requester is offline
   are dropped. The persisted state (`state.json`) now includes the queue

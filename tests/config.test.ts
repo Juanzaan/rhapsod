@@ -23,8 +23,20 @@ describe("loadConfig", () => {
     });
     expect(config.RHAPSOD_YTDLP_COOKIES_PATH).toBeUndefined();
     expect(config.RHAPSOD_FFMPEG_PATH).toBeUndefined();
+    expect(config.RHAPSOD_FFMPEG_USER_AGENT).toBeUndefined();
+    expect(config.RHAPSOD_FFPROBE_PATH).toBeUndefined();
     expect(config.RHAPSOD_ADMIN_UIDS).toBe("");
     expect(config.RHAPSOD_DATA_DIR).toBe("./data");
+  });
+
+  it("loads optional FFmpeg probe settings", () => {
+    const config = loadConfig({
+      RHAPSOD_FFMPEG_USER_AGENT: "Rhapsod/1.0",
+      RHAPSOD_FFPROBE_PATH: "/usr/bin/ffprobe",
+      RHAPSOD_TS3_HOST: "ts.example.com",
+    });
+    expect(config.RHAPSOD_FFMPEG_USER_AGENT).toBe("Rhapsod/1.0");
+    expect(config.RHAPSOD_FFPROBE_PATH).toBe("/usr/bin/ffprobe");
   });
 
   it("loads configured admin uids", () => {

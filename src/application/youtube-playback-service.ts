@@ -14,6 +14,7 @@ import type { RhapsodOpusEncoder } from "../audio/opus-encoder.js";
 import type { VoiceFrameOutput } from "../audio/audio-player.js";
 import type { AudioPlayerMetrics } from "../audio/audio-player.js";
 import type { AlternativeSourceResolver } from "../media/song-link.js";
+import type { DirectUrlResolver } from "../media/direct-url.js";
 import {
   SoundCloudDrmError,
   type SoundCloudDrmMetadata,
@@ -39,6 +40,7 @@ interface PlaybackServiceOptions {
   readonly encoder: RhapsodOpusEncoder;
   readonly resolver: YoutubePlaybackResolver;
   readonly alternativeResolver?: AlternativeSourceResolver;
+  readonly directUrlResolver?: DirectUrlResolver;
   readonly soundcloudResolver?: SoundCloudResolver;
   readonly spotifyResolver?: SpotifyResolver;
   readonly lyricsResolver?: LyricsResolver;
@@ -114,6 +116,7 @@ export class YoutubePlaybackService {
   readonly #encoder: RhapsodOpusEncoder;
   readonly #resolver: YoutubePlaybackResolver;
   readonly #alternativeResolver: AlternativeSourceResolver | undefined;
+  readonly #directUrlResolver: DirectUrlResolver | undefined;
   readonly #soundcloudResolver: SoundCloudResolver | undefined;
   readonly #spotifyResolver: SpotifyResolver | undefined;
   readonly #lyricsResolver: LyricsResolver | undefined;
@@ -156,6 +159,7 @@ export class YoutubePlaybackService {
     this.#encoder = options.encoder;
     this.#resolver = options.resolver;
     this.#alternativeResolver = options.alternativeResolver;
+    this.#directUrlResolver = options.directUrlResolver;
     this.#soundcloudResolver = options.soundcloudResolver;
     this.#spotifyResolver = options.spotifyResolver;
     this.#lyricsResolver = options.lyricsResolver;
@@ -248,9 +252,17 @@ export class YoutubePlaybackService {
       return this.#enqueueMetadata(metadata, requestedBy, "spotify");
     }
     if (media.kind === "url") {
-      throw new Error(
-        "No reconozco ese link: pegá un link de YouTube o SoundCloud, o buscá con !yt.",
-      );
+      if (
+        !this.#directUrlResolver ||
+        !(await this.#directUrlResolver.match(media.value))
+      ) {
+        throw new Error(
+          "No reconozco ese link: pegá un link de YouTube o SoundCloud, una URL de audio directa (mp3, ogg, m3u8…), o buscá con !yt.",
+        );
+      }
+      const metadata = await this.#directUrlResolver.getTrack(media.value);
+      this.#recordMetadataTiming(metadata, startedAt);
+      return this.#enqueueMetadata(metadata, requestedBy, "direct-url");
     }
     if (media.kind === "soundcloud") {
       if (/\/sets\//i.test(media.value)) {
@@ -931,6 +943,12 @@ export class YoutubePlaybackService {
   }
 
   async #resolvePlayableAudio(track: Track): Promise<string> {
+    if (
+      this.#directUrlResolver &&
+      (await this.#directUrlResolver.match(track.source))
+    ) {
+      return this.#directUrlResolver.getAudioUrl(track.source);
+    }
     if (this.#soundcloudResolver?.match(track.source)) {
       return this.#soundcloudResolver.getAudioUrl(track.source);
     }

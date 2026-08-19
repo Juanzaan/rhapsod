@@ -29,7 +29,8 @@ Reviewing open issues in TS3AudioBot and ts3-musicbot, mapped to Rhapsod:
 - YouTube blocking datacenter IPs (TS3AudioBot #1059/#1061): add an opt-in
   yt-dlp OAuth flow for the VPS. See [issue #22](https://github.com/Juanzaan/rhapsod/issues/22).
 - Custom User-Agent for FFmpeg stream input (TS3AudioBot #1066): some HTTP
-  streams reject the default UA. See [issue #23](https://github.com/Juanzaan/rhapsod/issues/23).
+  streams reject the default UA. Shipped as `RHAPSOD_FFMPEG_USER_AGENT`.
+  See [issue #23](https://github.com/Juanzaan/rhapsod/issues/23).
 - Audio cutting out shortly after start (#1039) and laggy audio (#1027): our
   underrun recovery, URL expiry cache and the v1.1.0 scheduler/FEC fixes cover
   the known causes; audio health telemetry is tracked in
@@ -49,7 +50,8 @@ OpenTSMusicBot, xDroni/TS3-Music-Bot):
 - **Seek and `!previous`**: `!seek <seconds>` within the current track and
   `!previous` to replay the last one. See [issue #19](https://github.com/Juanzaan/rhapsod/issues/19).
 - **Radio streams and direct audio URLs**: let FFmpeg consume http(s) streams
-  (icecast, m3u8) instead of resolving everything through yt-dlp. See
+  (icecast, m3u8) instead of resolving everything through yt-dlp. Shipped:
+  `!play <audio-url>` accepts direct files, HLS and audio streams. See
   [issue #20](https://github.com/Juanzaan/rhapsod/issues/20).
 - **Welcome/join announcements**: greet users entering the bot's channel, with
   an optional short audio clip. See [issue #21](https://github.com/Juanzaan/rhapsod/issues/21).
@@ -57,8 +59,9 @@ OpenTSMusicBot, xDroni/TS3-Music-Bot):
 ### Queue persistence
 
 Save the pending queue and current track to `data/state.json` so a restart
-continues the session instead of dropping everything. See
-[issue #15](https://github.com/Juanzaan/rhapsod/issues/15).
+continues the session instead of dropping everything. Shipped: the queue is
+persisted continuously and restored at startup for users still connected to
+the server. See [issue #15](https://github.com/Juanzaan/rhapsod/issues/15).
 
 ### Audio health in `!stats`
 

@@ -13,10 +13,12 @@ import type { SpotifyResolver } from "../src/media/spotify/api.js";
 import type { LyricsResolver } from "../src/media/lyrics.js";
 import type { AudioPlayer } from "../src/audio/audio-player.js";
 import type { RhapsodOpusEncoder } from "../src/audio/opus-encoder.js";
+import type { DirectUrlResolver } from "../src/media/direct-url.js";
 import type { SerializedQueueTrack } from "../src/domain/state-store.js";
 
 function setup(
   options: {
+    directUrlResolver?: boolean;
     lyricsResolver?: boolean;
     maxQueueTracks?: number;
     maxTracksPerUser?: number;
@@ -146,6 +148,24 @@ function setup(
         name: "spotify",
       }
     : undefined;
+  const directUrlResolverMocks = {
+    getAudioUrl: vi.fn((url: string) => Promise.resolve(url)),
+    getTrack: vi.fn(() =>
+      Promise.resolve({
+        id: "direct-1",
+        title: "Radio: ice1.somafm.com",
+        webpageUrl: "https://ice1.somafm.com/groovesalad-128-mp3",
+      }),
+    ),
+    match: vi.fn(() => Promise.resolve(true)),
+  };
+  const directUrlResolver: DirectUrlResolver = {
+    ...directUrlResolverMocks,
+    name: "direct-url",
+  };
+  const directUrlResolverMock = options.directUrlResolver
+    ? directUrlResolver
+    : undefined;
   const lyricsResolver = options.lyricsResolver
     ? {
         search: vi.fn<LyricsResolver["search"]>(() =>
@@ -178,6 +198,9 @@ function setup(
     resolver,
     alternativeResolver,
     ...(options.soundcloudResolver ? { soundcloudResolver } : {}),
+    ...(directUrlResolverMock
+      ? { directUrlResolver: directUrlResolverMock }
+      : {}),
     ...(spotifyResolver ? { spotifyResolver } : {}),
     ...(lyricsResolver ? { lyricsResolver } : {}),
     ...(stateStore ? { stateStore } : {}),
@@ -191,6 +214,7 @@ function setup(
   return {
     alternativeResolver,
     createPlayback,
+    directUrlResolverMocks,
     lyricsResolver,
     onPlaybackError,
     onPlaybackFinished,
@@ -1481,5 +1505,50 @@ describe("YoutubePlaybackService", () => {
     ).rejects.toThrow("Ya hay una playlist");
     releaseFirst();
     await expect(first).resolves.toMatchObject({ added: [{ id: "p1" }] });
+  });
+
+  it("enqueues direct audio URLs through the direct URL resolver", async () => {
+    const { directUrlResolverMocks, service } = setup({
+      directUrlResolver: true,
+    });
+
+    const track = await service.enqueue(
+      "https://cdn.example.test/audio.mp3",
+      "user-1",
+    );
+
+    expect(directUrlResolverMocks.getTrack).toHaveBeenCalledWith(
+      "https://cdn.example.test/audio.mp3",
+    );
+    expect(track).toMatchObject({
+      requestedBy: "user-1",
+      title: "Radio: ice1.somafm.com",
+    });
+  });
+
+  it("rejects URLs the direct URL resolver does not match", async () => {
+    const { directUrlResolverMocks, service } = setup({
+      directUrlResolver: true,
+    });
+    directUrlResolverMocks.match.mockResolvedValue(false);
+
+    await expect(
+      service.enqueue("https://cdn.example.test/page.html", "user-1"),
+    ).rejects.toThrow("No reconozco ese link");
+  });
+
+  it("plays direct URLs without calling yt-dlp", async () => {
+    const { createPlayback, directUrlResolverMocks, resolver, service } = setup(
+      { directUrlResolver: true },
+    );
+
+    await service.enqueue("https://cdn.example.test/audio.mp3", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(resolver.getAudioUrlFromUrl).not.toHaveBeenCalled();
+    expect(directUrlResolverMocks.getAudioUrl).toHaveBeenCalledWith(
+      "https://ice1.somafm.com/groovesalad-128-mp3",
+    );
+    expect(createPlayback).toHaveBeenCalled();
   });
 });

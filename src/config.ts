@@ -9,6 +9,8 @@ const configSchema = z.object({
   RHAPSOD_ADMIN_UIDS: z.string().default(""),
   RHAPSOD_DATA_DIR: z.string().min(1).default("./data"),
   RHAPSOD_FFMPEG_PATH: optionalSecret,
+  RHAPSOD_FFMPEG_USER_AGENT: optionalSecret,
+  RHAPSOD_FFPROBE_PATH: optionalSecret,
   RHAPSOD_LOG_LEVEL: z
     .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
     .default("info"),
