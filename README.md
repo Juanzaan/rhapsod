@@ -54,6 +54,7 @@ Requirements: Node.js 22.12+, `yt-dlp` on PATH (or `RHAPSOD_YTDLP_PATH`), and a 
 | `!clear`                    | `!c`                  | Clear pending tracks                                                             |
 | `!shuffle`                  | -                     | Shuffle the pending queue                                                        |
 | `!loop [off\|track\|queue]` | -                     | Repeat the current track or the whole queue                                      |
+| `!lyrics`                   | `!ly`                 | Show the lyrics of the current track                                             |
 | `!test-tone`                | `!tone`               | Play a 3-second test tone (rate-limited)                                         |
 | `!help`                     | `!h`                  | Show the command summary                                                         |
 

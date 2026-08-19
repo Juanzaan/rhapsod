@@ -18,6 +18,7 @@ import {
   YoutubeResolver,
 } from "./media/youtube/yt-dlp.js";
 import { SongLinkClient } from "./media/song-link.js";
+import { LyricsClient } from "./media/lyrics.js";
 import { SoundCloudPublicApi } from "./media/soundcloud/public-api.js";
 import { SpotifyApi } from "./media/spotify/api.js";
 import { parseMediaInput } from "./media/media-input.js";
@@ -105,6 +106,7 @@ async function main(): Promise<void> {
     ),
     alternativeResolver: new SongLinkClient(),
     soundcloudResolver: new SoundCloudPublicApi(),
+    lyricsResolver: new LyricsClient(),
     ...(spotifyResolver ? { spotifyResolver } : {}),
   });
   const commandRateLimiter = new CommandRateLimiter();
@@ -280,6 +282,7 @@ async function main(): Promise<void> {
               "!test-tone - Probar el audio",
               "!volume <0-100> - Ajustar el volumen",
               "!loop [off|track|queue] - Repetir la pista o la cola",
+              "!lyrics (!ly) - Letra de la canción actual",
               "!help - Mostrar esta ayuda",
             ].join("\n"),
           );
@@ -306,6 +309,30 @@ async function main(): Promise<void> {
             `Volumen ajustado a ${playback.volume}%.`,
           );
           break;
+        case "lyrics": {
+          if (!playback.current) {
+            await connection.sendChannelMessage("No hay nada reproduciéndose.");
+            break;
+          }
+          await connection.sendChannelMessage("Buscando la letra...");
+          const lyrics = await playback.getLyrics();
+          if (!lyrics) {
+            await connection.sendChannelMessage(
+              `No encontré la letra de: ${playback.current.title}`,
+            );
+            break;
+          }
+          const title = lyrics.artist
+            ? `${lyrics.artist} - ${lyrics.title}`
+            : lyrics.title;
+          const maxChars = 1_600;
+          const body =
+            lyrics.plainLyrics.length > maxChars
+              ? `${lyrics.plainLyrics.slice(0, maxChars)}…`
+              : lyrics.plainLyrics;
+          await connection.sendChannelMessage(`${title}\n${body}`);
+          break;
+        }
       }
     } catch (error) {
       logger.warn({ command: message, error }, "Command failed");

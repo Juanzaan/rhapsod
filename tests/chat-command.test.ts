@@ -18,6 +18,8 @@ describe("parseChatCommand", () => {
     });
     expect(parseChatCommand("!tone")).toEqual({ name: "test-tone" });
     expect(parseChatCommand("!shuffle")).toEqual({ name: "shuffle" });
+    expect(parseChatCommand("!ly")).toEqual({ name: "lyrics" });
+    expect(parseChatCommand("!lyrics")).toEqual({ name: "lyrics" });
     expect(parseChatCommand("!yt duki rockstar")).toEqual({
       input: "duki rockstar",
       name: "search",

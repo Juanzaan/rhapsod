@@ -10,11 +10,16 @@ import { SoundCloudDrmError } from "../src/media/soundcloud/public-api.js";
 import type { AlternativeSourceResolver } from "../src/media/song-link.js";
 import type { FfmpegPlaybackSession } from "../src/audio/ffmpeg-player.js";
 import type { SpotifyResolver } from "../src/media/spotify/api.js";
+import type { LyricsResolver } from "../src/media/lyrics.js";
 import type { AudioPlayer } from "../src/audio/audio-player.js";
 import type { RhapsodOpusEncoder } from "../src/audio/opus-encoder.js";
 
 function setup(
-  options: { soundcloudResolver?: boolean; spotifyResolver?: boolean } = {},
+  options: {
+    soundcloudResolver?: boolean;
+    spotifyResolver?: boolean;
+    lyricsResolver?: boolean;
+  } = {},
 ) {
   const stopSession = vi.fn();
   const playbackResolvers: Array<() => void> = [];
@@ -116,6 +121,16 @@ function setup(
         name: "spotify",
       }
     : undefined;
+  const lyricsResolver = options.lyricsResolver
+    ? {
+        search: vi.fn<LyricsResolver["search"]>(() =>
+          Promise.resolve({
+            plainLyrics: "Letra de prueba",
+            title: "Rockstar",
+          }),
+        ),
+      }
+    : undefined;
   const service = new YoutubePlaybackService({
     createPlayback,
     encoder,
@@ -127,10 +142,12 @@ function setup(
     alternativeResolver,
     ...(options.soundcloudResolver ? { soundcloudResolver } : {}),
     ...(spotifyResolver ? { spotifyResolver } : {}),
+    ...(lyricsResolver ? { lyricsResolver } : {}),
   });
   return {
     alternativeResolver,
     createPlayback,
+    lyricsResolver,
     onPlaybackError,
     onPlaybackFinished,
     onPlaybackStarted,
@@ -156,6 +173,50 @@ describe("YoutubePlaybackService", () => {
       requestedBy: "user-1",
       title: "Search duki rockstar",
     });
+  });
+
+  it("returns lyrics for the current track, parsed from its title", async () => {
+    const { lyricsResolver, resolver, service } = setup({
+      lyricsResolver: true,
+    });
+    resolver.getTrack.mockResolvedValueOnce({
+      audioUrl: "https://media.example/lyrics-track",
+      id: "lyrics-track",
+      title: "Duki - Rockstar (Official Video)",
+      webpageUrl: "https://www.youtube.com/watch?v=lyrics-track",
+    });
+
+    await service.enqueue("https://youtu.be/lyrics-track", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const lyrics = await service.getLyrics();
+
+    expect(lyricsResolver!.search).toHaveBeenCalledWith("Duki", "Rockstar");
+    expect(lyrics).toMatchObject({ plainLyrics: "Letra de prueba" });
+  });
+
+  it("returns undefined for lyrics when nothing is playing", async () => {
+    const { lyricsResolver, service } = setup({ lyricsResolver: true });
+
+    expect(await service.getLyrics()).toBeUndefined();
+    expect(lyricsResolver!.search).not.toHaveBeenCalled();
+  });
+
+  it("returns undefined for lyrics when the resolver has none", async () => {
+    const { lyricsResolver, service } = setup({ lyricsResolver: true });
+    lyricsResolver!.search.mockResolvedValueOnce(undefined);
+    await service.enqueue("https://youtu.be/abc123", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(await service.getLyrics()).toBeUndefined();
+  });
+
+  it("returns undefined for lyrics when no lyrics resolver is configured", async () => {
+    const { service } = setup();
+    await service.enqueue("https://youtu.be/abc123", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(await service.getLyrics()).toBeUndefined();
   });
 
   it("resolves metadata, queues a track, and resolves audio at playback time", async () => {
