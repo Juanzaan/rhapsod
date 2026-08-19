@@ -27,6 +27,11 @@ for [Semantic Versioning](https://semver.org/).
   are dropped. The persisted state (`state.json`) now includes the queue
   (current track first), so `!colar`, `!mover`, `!quitar`, `!shuffle` and
   playback position changes are saved continuously.
+- Audio URL lookups for playback no longer wait for an in-flight playlist
+  expansion: yt-dlp jobs for the currently playing track run in parallel with
+  metadata jobs (up to two concurrent yt-dlp processes). A track starts as soon
+  as its URL is resolved instead of stalling ~5-10 s behind every queued
+  search, which made the start of a playlist sound laggy.
 - Spotify playlist support after Spotify's February 2026 API migration, which
   dropped anonymous playlist reads (`/playlists/{id}/tracks` now returns 403,
   `/items` requires extended quota mode that only organizations can request).

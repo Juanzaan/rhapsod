@@ -26,11 +26,12 @@ interface QueuedJob<Input, Output> {
 }
 
 const MAX_QUEUED_JOBS = 8;
+const MAX_CONCURRENT_JOBS = 2;
 
 export class YtDlpJobQueue<Input, Output> {
   readonly #metadata: Array<QueuedJob<Input, Output>> = [];
   readonly #playback: Array<QueuedJob<Input, Output>> = [];
-  #running = false;
+  #running = 0;
 
   constructor(private readonly execute: (input: Input) => Promise<Output>) {}
 
@@ -51,16 +52,19 @@ export class YtDlpJobQueue<Input, Output> {
   }
 
   async #drain(): Promise<void> {
-    if (this.#running) return;
-    const job = this.#playback.shift() ?? this.#metadata.shift();
+    if (this.#running >= MAX_CONCURRENT_JOBS) return;
+    if (this.#running > 0 && this.#playback.length === 0) return;
+    const job =
+      this.#playback.shift() ??
+      (this.#running === 0 ? this.#metadata.shift() : undefined);
     if (!job) return;
-    this.#running = true;
+    this.#running++;
     try {
       job.resolve(await this.execute(job.input));
     } catch (error) {
       job.reject(error);
     } finally {
-      this.#running = false;
+      this.#running--;
       void this.#drain();
     }
   }

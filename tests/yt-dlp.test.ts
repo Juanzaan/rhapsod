@@ -249,7 +249,7 @@ describe("YoutubeResolver", () => {
 });
 
 describe("YtDlpJobQueue", () => {
-  it("runs one job at a time and prioritizes playback over queued metadata", async () => {
+  it("runs metadata jobs one at a time and lets playback preempt an in-flight metadata job", async () => {
     const order: string[] = [];
     const releases: Array<() => void> = [];
     const queue = new YtDlpJobQueue(async (label: string) => {
@@ -263,7 +263,7 @@ describe("YtDlpJobQueue", () => {
     const playback = queue.run("playback", "playback");
     await new Promise((resolve) => setImmediate(resolve));
 
-    expect(order).toEqual(["metadata-1"]);
+    expect(order).toEqual(["metadata-1", "playback"]);
     releases.shift()?.();
     await new Promise((resolve) => setImmediate(resolve));
     expect(order).toEqual(["metadata-1", "playback"]);
@@ -275,6 +275,31 @@ describe("YtDlpJobQueue", () => {
     await expect(Promise.all([first, second, playback])).resolves.toEqual([
       "metadata-1",
       "metadata-2",
+      "playback",
+    ]);
+  });
+
+  it("starts a playback job immediately while a metadata job is in flight", async () => {
+    const order: string[] = [];
+    const releases: Array<() => void> = [];
+    const queue = new YtDlpJobQueue(async (label: string) => {
+      order.push(label);
+      await new Promise<void>((resolve) => releases.push(resolve));
+      return label;
+    });
+
+    const metadata = queue.run("metadata-1", "metadata");
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(order).toEqual(["metadata-1"]);
+
+    const playback = queue.run("playback", "playback");
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(order).toEqual(["metadata-1", "playback"]);
+
+    releases.shift()?.();
+    releases.shift()?.();
+    await expect(Promise.all([metadata, playback])).resolves.toEqual([
+      "metadata-1",
       "playback",
     ]);
   });
