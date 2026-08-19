@@ -19,6 +19,7 @@ import {
   type SoundCloudDrmMetadata,
   type SoundCloudResolver,
 } from "../media/soundcloud/public-api.js";
+import type { SpotifyResource } from "../media/media-input.js";
 import type { SpotifyResolver } from "../media/spotify/api.js";
 
 export type LoopMode = "off" | "queue" | "track";
@@ -177,7 +178,7 @@ export class YoutubePlaybackService {
       }
       if (media.resource.type !== "track") {
         throw new Error(
-          "Todavía solo soporto tracks sueltos de Spotify, no playlists ni álbumes.",
+          "Las playlists y álbumes de Spotify se expanden con !play desde el canal.",
         );
       }
       const spotifyTrack = await this.#spotifyResolver.getTrack(media.resource);
@@ -280,6 +281,78 @@ export class YoutubePlaybackService {
       }
       try {
         const track = this.#enqueueMetadata(metadata, requestedBy);
+        addedIds.add(track.id);
+        added.push(track);
+      } catch (error) {
+        if (error instanceof Error && /already queued/i.test(error.message)) {
+          duplicates++;
+          continue;
+        }
+        throw error;
+      }
+    }
+    return {
+      added,
+      ...(expansion.total === undefined
+        ? {}
+        : {
+            remaining: Math.max(0, expansion.total - added.length - duplicates),
+          }),
+    };
+  }
+
+  async enqueueSpotifyCollection(
+    resource: SpotifyResource,
+    requestedBy: string,
+  ): Promise<PlaylistEnqueueResult> {
+    if (!this.#spotifyResolver) {
+      throw new Error(
+        "Spotify no está configurado en este bot: pegá un link de YouTube o SoundCloud, o buscá con !yt.",
+      );
+    }
+    if (resource.type !== "playlist" && resource.type !== "album") {
+      throw new Error("Only Spotify collections can be expanded");
+    }
+    const expansion =
+      resource.type === "playlist"
+        ? await this.#spotifyResolver.expandPlaylist(
+            resource,
+            this.#playlistMaxTracks,
+          )
+        : await this.#spotifyResolver.expandAlbum(
+            resource,
+            this.#playlistMaxTracks,
+          );
+    const added: Track[] = [];
+    let duplicates = 0;
+    const addedIds = new Set<string>();
+    for (const spotifyTrack of expansion.tracks.slice(
+      0,
+      this.#playlistMaxTracks,
+    )) {
+      const query = `${spotifyTrack.artist} ${spotifyTrack.title}`.trim();
+      if (!query) {
+        duplicates++;
+        continue;
+      }
+      const startedAt = Date.now();
+      let metadata: YoutubeTrackMetadata;
+      try {
+        metadata = await this.#resolver.search(
+          query,
+          spotifyTrack.durationSeconds,
+        );
+      } catch {
+        duplicates++;
+        continue;
+      }
+      this.#recordMetadataTiming(metadata, startedAt);
+      if (addedIds.has(metadata.id) || this.#current?.id === metadata.id) {
+        duplicates++;
+        continue;
+      }
+      try {
+        const track = this.#enqueueMetadata(metadata, requestedBy, "spotify");
         addedIds.add(track.id);
         added.push(track);
       } catch (error) {

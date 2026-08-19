@@ -117,6 +117,19 @@ async function main(): Promise<void> {
                 ? "La playlist no tiene canciones reproducibles."
                 : `Se agregaron ${result.added.length} canciones a la cola${result.remaining ? ` (quedan ${result.remaining} fuera del límite)` : ""}.`;
             await connection.sendChannelMessage(message);
+          } else if (
+            media.kind === "spotify" &&
+            media.resource.type !== "track"
+          ) {
+            const result = await playback.enqueueSpotifyCollection(
+              media.resource,
+              senderName,
+            );
+            const message =
+              result.added.length === 0
+                ? "La playlist o álbum no tiene canciones reproducibles."
+                : `Se agregaron ${result.added.length} canciones a la cola${result.remaining ? ` (quedan ${result.remaining} fuera del límite)` : ""}.`;
+            await connection.sendChannelMessage(message);
           } else {
             const track = await playback.enqueue(command.input, senderName);
             const viaSearch = media.kind === "file";

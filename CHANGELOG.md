@@ -8,6 +8,9 @@ for [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Spotify playlists and albums in `!play`: paged expansion through the Web API
+  (up to 20 tracks, 429 backoff, duplicates skipped) with the same
+  artist/title search and expected-duration ranking as tracks.
 - `!volume <0-100>`: PCM gain applied to frames before Opus encoding, affecting
   every listener; changes apply live to the current track.
 - `!loop [off|track|queue]`: repeat the current track (`track`) or the whole
