@@ -111,8 +111,9 @@ async function main(): Promise<void> {
             await connection.sendChannelMessage(message);
           } else {
             const track = await playback.enqueue(command.input, senderName);
+            const viaSearch = media.kind === "file";
             await connection.sendChannelMessage(
-              `En cola: ${track.title}${track.alternativeProvider ? ` (fuente alternativa: ${track.alternativeProvider})` : ""}`,
+              `En cola: ${track.title}${viaSearch ? " (búsqueda)" : ""}${track.alternativeProvider ? ` (fuente alternativa: ${track.alternativeProvider})` : ""}`,
             );
           }
           break;
@@ -209,7 +210,7 @@ async function main(): Promise<void> {
           await connection.sendChannelMessage(
             [
               "Comandos disponibles:",
-              "!play <URL> - Agregar YouTube, SoundCloud o playlist",
+              "!play <URL o búsqueda> - Reproducir YouTube, SoundCloud, playlists o buscar",
               "!yt <búsqueda> - Buscar en YouTube",
               "!queue - Mostrar la cola",
               "!now-playing (!np) - Canción actual",

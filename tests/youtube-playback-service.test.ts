@@ -92,6 +92,8 @@ function setup(options: { soundcloudResolver?: boolean } = {}) {
             getTrack: vi.fn(() =>
               Promise.reject(new Error("SoundCloud API returned 503")),
             ),
+            match: vi.fn((input: string) => input.includes("soundcloud.com")),
+            name: "soundcloud",
           },
         }
       : {}),
@@ -330,7 +332,36 @@ describe("YoutubePlaybackService", () => {
 
     await expect(
       service.enqueue("https://open.spotify.com/track/abc123", "user-1"),
-    ).rejects.toThrow("Only YouTube");
+    ).rejects.toThrow("Los links de Spotify todavía no están soportados");
+  });
+
+  it("falls back to a YouTube search when given plain text", async () => {
+    const { resolver, service } = setup();
+
+    const track = await service.enqueue("duki rockstar", "user-1");
+
+    expect(resolver.search).toHaveBeenCalledWith("duki rockstar");
+    expect(track).toMatchObject({
+      id: "search-result",
+      requestedBy: "user-1",
+      title: "Search duki rockstar",
+    });
+  });
+
+  it("rejects explicit local file inputs", async () => {
+    const { service } = setup();
+
+    await expect(
+      service.enqueue("file:/tmp/song.mp3", "user-1"),
+    ).rejects.toThrow("Los archivos locales no están soportados");
+  });
+
+  it("rejects unrecognized generic URLs", async () => {
+    const { service } = setup();
+
+    await expect(
+      service.enqueue("https://example.com/some-page", "user-1"),
+    ).rejects.toThrow("No reconozco ese link");
   });
 
   it("falls back to the next ranked candidate when audio is unavailable", async () => {

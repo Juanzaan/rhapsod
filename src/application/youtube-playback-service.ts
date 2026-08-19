@@ -131,6 +131,24 @@ export class YoutubePlaybackService {
   async enqueue(input: string, requestedBy: string): Promise<Track> {
     const startedAt = Date.now();
     const media = parseMediaInput(input);
+    if (media.kind === "file") {
+      if (input.trim().startsWith("file:")) {
+        throw new Error(
+          "Los archivos locales no están soportados: pegá un link de YouTube o SoundCloud, o buscá con !yt.",
+        );
+      }
+      return this.enqueueSearch(media.value, requestedBy);
+    }
+    if (media.kind === "spotify") {
+      throw new Error(
+        "Los links de Spotify todavía no están soportados: pegá un link de YouTube o SoundCloud, o buscá con !yt.",
+      );
+    }
+    if (media.kind === "url") {
+      throw new Error(
+        "No reconozco ese link: pegá un link de YouTube o SoundCloud, o buscá con !yt.",
+      );
+    }
     if (media.kind === "soundcloud") {
       try {
         const metadata = this.#soundcloudResolver
@@ -179,7 +197,7 @@ export class YoutubePlaybackService {
     }
     if (media.kind !== "youtube" || media.resource.type !== "video") {
       throw new Error(
-        "Only YouTube video and SoundCloud track links are supported for playback yet",
+        "Solo se soportan videos de YouTube, links de SoundCloud y playlists de YouTube por ahora.",
       );
     }
     const metadata = await this.#resolver.getTrack(media.resource);
@@ -385,7 +403,7 @@ export class YoutubePlaybackService {
   }
 
   async #resolvePlayableAudio(track: Track): Promise<string> {
-    if (track.source.includes("soundcloud.com") && this.#soundcloudResolver) {
+    if (this.#soundcloudResolver?.match(track.source)) {
       return this.#soundcloudResolver.getAudioUrl(track.source);
     }
     let lastError: unknown;

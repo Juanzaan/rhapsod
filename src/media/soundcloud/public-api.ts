@@ -36,6 +36,8 @@ export class SoundCloudDrmError extends Error {
 }
 
 export interface SoundCloudResolver {
+  readonly name: string;
+  match(input: string): boolean;
   getAudioUrl(url: string): Promise<string>;
   getTrack(url: string): Promise<YoutubeTrackMetadata>;
 }
@@ -46,6 +48,7 @@ export interface SoundCloudPublicApiOptions {
 }
 
 export class SoundCloudPublicApi implements SoundCloudResolver {
+  readonly name = "soundcloud";
   readonly #fetch: typeof fetch;
   readonly #timeoutMs: number;
   #clientId: { expiresAt: number; value: string } | undefined;
@@ -53,6 +56,19 @@ export class SoundCloudPublicApi implements SoundCloudResolver {
   constructor(options: SoundCloudPublicApiOptions = {}) {
     this.#fetch = options.fetch ?? fetch;
     this.#timeoutMs = options.timeoutMs ?? 12_000;
+  }
+
+  match(input: string): boolean {
+    try {
+      const hostname = new URL(input).hostname;
+      return (
+        hostname === "soundcloud.com" ||
+        hostname === "www.soundcloud.com" ||
+        hostname === "on.soundcloud.com"
+      );
+    } catch {
+      return false;
+    }
   }
 
   async getTrack(url: string): Promise<YoutubeTrackMetadata> {

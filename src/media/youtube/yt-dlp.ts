@@ -2,6 +2,8 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
 import type { YoutubeResource } from "../media-input.js";
+import { parseMediaInput } from "../media-input.js";
+import type { MusicResolver } from "../music-resolver.js";
 import { rankYoutubeCandidatesAll } from "./search-ranking.js";
 
 const execFileAsync = promisify(execFile);
@@ -123,8 +125,26 @@ export class SystemYtDlpExecutor implements YtDlpExecutor {
   }
 }
 
-export class YoutubeResolver {
+export class YoutubeResolver implements MusicResolver {
+  readonly name = "youtube";
+
   constructor(private readonly executor: YtDlpExecutor) {}
+
+  match(input: string): boolean {
+    try {
+      return parseMediaInput(input).kind === "youtube";
+    } catch {
+      return false;
+    }
+  }
+
+  resolveTrack(input: string): Promise<YoutubeTrackMetadata> {
+    return this.getTrackFromUrl(input);
+  }
+
+  resolveAudioUrl(input: string): Promise<string> {
+    return this.getAudioUrlFromUrl(input);
+  }
 
   async isAvailable(): Promise<boolean> {
     try {
