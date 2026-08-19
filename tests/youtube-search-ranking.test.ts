@@ -247,4 +247,58 @@ describe("rankYoutubeCandidates", () => {
 
     expect(selected?.id).toBe("plain");
   });
+
+  it("rejects festival recordings with an event context in the title", () => {
+    const selected = rankYoutubeCandidates(
+      "kanye west kid cudi ghost town",
+      [
+        {
+          id: "festival",
+          title: "Ghost Town (Kids See Ghosts at Camp Flog Gnaw)",
+          webpageUrl: "https://youtube.com/watch?v=festival",
+        },
+      ],
+      271,
+    );
+
+    expect(selected).toBeUndefined();
+  });
+
+  it("prefers the studio upload over a festival recording", () => {
+    const selected = rankYoutubeCandidates(
+      "kanye west kid cudi ghost town",
+      [
+        {
+          channel: "Random Fan Channel",
+          id: "festival",
+          title: "Ghost Town (Kids See Ghosts at Camp Flog Gnaw)",
+          webpageUrl: "https://youtube.com/watch?v=festival",
+        },
+        {
+          channel: "Kids See Ghosts - Topic",
+          id: "studio",
+          title: "Ghost Town",
+          webpageUrl: "https://youtube.com/watch?v=studio",
+        },
+      ],
+      271,
+    );
+
+    expect(selected?.id).toBe("studio");
+  });
+
+  it("does not penalize an event phrase the query asks for", () => {
+    const selected = rankYoutubeCandidates(
+      "ghost town kids see ghosts at camp flog gnaw",
+      [
+        {
+          id: "festival",
+          title: "Ghost Town (Kids See Ghosts at Camp Flog Gnaw)",
+          webpageUrl: "https://youtube.com/watch?v=festival",
+        },
+      ],
+    );
+
+    expect(selected?.id).toBe("festival");
+  });
 });
