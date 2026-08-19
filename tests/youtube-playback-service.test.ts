@@ -6,6 +6,7 @@ import type { YoutubeTrackMetadata } from "../src/media/youtube/yt-dlp.js";
 import { SoundCloudDrmError } from "../src/media/soundcloud/public-api.js";
 import type { AlternativeSourceResolver } from "../src/media/song-link.js";
 import type { FfmpegPlaybackSession } from "../src/audio/ffmpeg-player.js";
+import type { SpotifyResolver } from "../src/media/spotify/api.js";
 import type { AudioPlayer } from "../src/audio/audio-player.js";
 import type { RhapsodOpusEncoder } from "../src/audio/opus-encoder.js";
 
@@ -84,6 +85,12 @@ function setup(
   const onPlaybackStarted = vi.fn();
   const spotifyResolver = options.spotifyResolver
     ? {
+        expandAlbum: vi.fn<SpotifyResolver["expandAlbum"]>(() =>
+          Promise.resolve({ tracks: [], total: 0 }),
+        ),
+        expandPlaylist: vi.fn<SpotifyResolver["expandPlaylist"]>(() =>
+          Promise.resolve({ tracks: [], total: 0 }),
+        ),
         getTrack: vi.fn(() =>
           Promise.resolve({
             artist: "Duki",
@@ -463,15 +470,102 @@ describe("YoutubePlaybackService", () => {
     });
   });
 
-  it("rejects Spotify playlists and albums", async () => {
+  it("rejects Spotify collections through the single-track path", async () => {
     const { service } = setup({ spotifyResolver: true });
 
     await expect(
       service.enqueue("https://open.spotify.com/playlist/abc123", "user-1"),
-    ).rejects.toThrow("solo soporto tracks sueltos");
+    ).rejects.toThrow("se expanden con !play");
     await expect(
       service.enqueue("https://open.spotify.com/album/abc123", "user-1"),
-    ).rejects.toThrow("solo soporto tracks sueltos");
+    ).rejects.toThrow("se expanden con !play");
+  });
+
+  it("expands Spotify playlists into the queue with deduplication", async () => {
+    const { resolver, service, spotifyResolver } = setup({
+      spotifyResolver: true,
+    });
+    resolver.search.mockImplementation(
+      (query: string): Promise<YoutubeTrackMetadata> =>
+        Promise.resolve({
+          audioUrl: `https://media.example/${query}`,
+          id: `yt-${query.replace(/\s+/g, "-")}`,
+          title: `YT ${query}`,
+          webpageUrl: `https://www.youtube.com/watch?v=yt-${query.replace(/\s+/g, "-")}`,
+        }),
+    );
+    spotifyResolver!.expandPlaylist.mockResolvedValueOnce({
+      tracks: [
+        {
+          artist: "Duki",
+          durationSeconds: 180,
+          id: "t1",
+          title: "Rockstar",
+        },
+        {
+          artist: "Kanye West",
+          durationSeconds: 271,
+          id: "t2",
+          title: "Ghost Town",
+        },
+      ],
+      total: 25,
+    });
+
+    const result = await service.enqueueSpotifyCollection(
+      { id: "p1", type: "playlist" },
+      "user-1",
+    );
+
+    expect(result.added).toHaveLength(2);
+    expect(result.remaining).toBe(23);
+    expect(resolver.search).toHaveBeenNthCalledWith(1, "Duki Rockstar", 180);
+    expect(resolver.search).toHaveBeenNthCalledWith(
+      2,
+      "Kanye West Ghost Town",
+      271,
+    );
+    expect(result.added[0]).toMatchObject({
+      alternativeProvider: "spotify",
+      requestedBy: "user-1",
+    });
+  });
+
+  it("skips Spotify tracks with no reliable YouTube match", async () => {
+    const { resolver, service, spotifyResolver } = setup({
+      spotifyResolver: true,
+    });
+    resolver.search.mockRejectedValueOnce(new Error("no match"));
+    spotifyResolver!.expandPlaylist.mockResolvedValueOnce({
+      tracks: [
+        { artist: "A", durationSeconds: 100, id: "x1", title: "One" },
+        { artist: "B", durationSeconds: 200, id: "x2", title: "Two" },
+      ],
+    });
+
+    const result = await service.enqueueSpotifyCollection(
+      { id: "p1", type: "playlist" },
+      "user-1",
+    );
+
+    expect(result.added).toHaveLength(1);
+    expect(result.added[0]?.title).toBe("Search B Two");
+  });
+
+  it("expands Spotify albums through the album endpoint", async () => {
+    const { service, spotifyResolver } = setup({ spotifyResolver: true });
+
+    const result = await service.enqueueSpotifyCollection(
+      { id: "a1", type: "album" },
+      "user-1",
+    );
+
+    expect(spotifyResolver!.expandAlbum).toHaveBeenCalledWith(
+      { id: "a1", type: "album" },
+      20,
+    );
+    expect(result.added).toEqual([]);
+    expect(result.remaining).toBe(0);
   });
 
   it("falls back to a YouTube search when given plain text", async () => {

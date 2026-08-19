@@ -33,8 +33,8 @@ chat once the TS3 adapter is connected.
   expanded yet, and blocked/DRM tracks are never bypassed.
 - **Spotify:** tracks are resolved through the official Web API (client
   credentials flow, no user login) and the matching "artist title" is searched
-  on YouTube for playback. Albums and playlists are rejected with a clear
-  message.
+  on YouTube for playback. Playlists and albums expand up to 20 tracks per
+  `!play` (paged requests with 429 backoff, duplicates skipped).
 - **Search text:** `!play` accepts free text and runs the same YouTube search
   as `!yt` (fuzzy term matching, channel credits, and a shortened retry when
   nothing is reliable).
