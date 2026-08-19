@@ -1279,12 +1279,14 @@ describe("YoutubePlaybackService", () => {
           {
             id: "a",
             requestedBy: "user-1",
+            requestedByUid: "uid-1",
             source: "https://www.youtube.com/watch?v=a",
             title: "Track a",
           },
           {
             id: "b",
             requestedBy: "user-2",
+            requestedByUid: "uid-2",
             source: "https://www.youtube.com/watch?v=b",
             title: "Track b",
           },
@@ -1293,7 +1295,7 @@ describe("YoutubePlaybackService", () => {
       stateStore: true,
     });
 
-    expect(service.restoreQueuedTracks(["user-2", "bot-uid"])).toBe(1);
+    expect(service.restoreQueuedTracks(["uid-2", "bot-uid"])).toBe(1);
     expect(service.current?.id).toBe("b");
     expect(service.queue()).toHaveLength(0);
 
@@ -1308,6 +1310,7 @@ describe("YoutubePlaybackService", () => {
           {
             id: "a",
             requestedBy: "user-1",
+            requestedByUid: "uid-1",
             source: "https://www.youtube.com/watch?v=a",
             title: "Track a",
           },
@@ -1329,18 +1332,21 @@ describe("YoutubePlaybackService", () => {
           {
             id: "a",
             requestedBy: "user-1",
+            requestedByUid: "uid-1",
             source: "https://www.youtube.com/watch?v=a",
             title: "Track a",
           },
           {
             id: "b",
             requestedBy: "user-1",
+            requestedByUid: "uid-1",
             source: "https://www.youtube.com/watch?v=b",
             title: "Track b",
           },
           {
             id: "c",
             requestedBy: "user-1",
+            requestedByUid: "uid-1",
             source: "https://www.youtube.com/watch?v=c",
             title: "Track c",
           },
@@ -1349,9 +1355,36 @@ describe("YoutubePlaybackService", () => {
       stateStore: true,
     });
 
-    expect(service.restoreQueuedTracks(["user-1"])).toBe(2);
+    expect(service.restoreQueuedTracks(["uid-1"])).toBe(2);
     expect(service.current?.id).toBe("a");
     expect(service.queue()).toHaveLength(1);
+  });
+
+  it("drops persisted entries without requestedByUid", () => {
+    const { service } = setup({
+      restoredState: {
+        queue: [
+          {
+            id: "a",
+            requestedBy: "user-1",
+            source: "https://www.youtube.com/watch?v=a",
+            title: "Track a",
+          },
+          {
+            id: "b",
+            requestedBy: "user-1",
+            requestedByUid: "uid-1",
+            source: "https://www.youtube.com/watch?v=b",
+            title: "Track b",
+          },
+        ],
+      },
+      stateStore: true,
+    });
+
+    expect(service.restoreQueuedTracks(["uid-1"])).toBe(1);
+    expect(service.current?.id).toBe("b");
+    expect(service.queue()).toHaveLength(0);
   });
 
   it("restores duration when present in the persisted entry", () => {
@@ -1362,6 +1395,7 @@ describe("YoutubePlaybackService", () => {
             durationSeconds: 42,
             id: "a",
             requestedBy: "user-1",
+            requestedByUid: "uid-1",
             source: "https://www.youtube.com/watch?v=a",
             title: "Track a",
           },
@@ -1370,7 +1404,7 @@ describe("YoutubePlaybackService", () => {
       stateStore: true,
     });
 
-    expect(service.restoreQueuedTracks(["user-1"])).toBe(1);
+    expect(service.restoreQueuedTracks(["uid-1"])).toBe(1);
     expect(service.current?.durationSeconds).toBe(42);
   });
 

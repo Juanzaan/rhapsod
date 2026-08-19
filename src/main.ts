@@ -174,6 +174,7 @@ async function main(): Promise<void> {
             const result = await playback.enqueuePlaylist(
               media.resource,
               senderName,
+              senderUid,
             );
             const message =
               result.added.length === 0
@@ -187,6 +188,7 @@ async function main(): Promise<void> {
             const result = await playback.enqueueSpotifyCollection(
               media.resource,
               senderName,
+              senderUid,
             );
             const message =
               result.added.length === 0
@@ -200,6 +202,7 @@ async function main(): Promise<void> {
             const result = await playback.enqueueMusicLink(
               media.value,
               senderName,
+              senderUid,
             );
             const message =
               result.added.length === 0
@@ -207,7 +210,11 @@ async function main(): Promise<void> {
                 : `Se agregaron ${result.added.length} canciones a la cola${result.remaining ? ` (quedan ${result.remaining} fuera del límite)` : ""}.`;
             await connection.sendChannelMessage(message);
           } else {
-            const track = await playback.enqueue(command.input, senderName);
+            const track = await playback.enqueue(
+              command.input,
+              senderName,
+              senderUid,
+            );
             const viaSearch = media.kind === "file";
             await connection.sendChannelMessage(
               `En cola: ${track.title}${viaSearch ? " (búsqueda)" : ""}`,
@@ -217,7 +224,11 @@ async function main(): Promise<void> {
         }
         case "playnext": {
           await connection.sendChannelMessage("Preparando la próxima pista...");
-          const track = await playback.enqueueNext(command.input, senderName);
+          const track = await playback.enqueueNext(
+            command.input,
+            senderName,
+            senderUid,
+          );
           await connection.sendChannelMessage(
             `Próxima en cola: ${track.title}`,
           );
@@ -229,6 +240,7 @@ async function main(): Promise<void> {
               command.input,
               command.index,
               senderName,
+              senderUid,
             );
             await connection.sendChannelMessage(
               `En cola (resultado ${command.index}): ${track.title}`,
@@ -236,7 +248,11 @@ async function main(): Promise<void> {
             break;
           }
           await connection.sendChannelMessage("Buscando en YouTube...");
-          const track = await playback.enqueueSearch(command.input, senderName);
+          const track = await playback.enqueueSearch(
+            command.input,
+            senderName,
+            senderUid,
+          );
           await connection.sendChannelMessage(`En cola: ${track.title}`);
           break;
         }

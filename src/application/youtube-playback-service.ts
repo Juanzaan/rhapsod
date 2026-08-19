@@ -218,7 +218,11 @@ export class YoutubePlaybackService {
     this.#persistState();
   }
 
-  async enqueue(input: string, requestedBy: string): Promise<Track> {
+  async enqueue(
+    input: string,
+    requestedBy: string,
+    requestedByUid?: string,
+  ): Promise<Track> {
     const startedAt = Date.now();
     const media = parseMediaInput(input);
     if (media.kind === "file") {
@@ -227,7 +231,7 @@ export class YoutubePlaybackService {
           "Los archivos locales no están soportados: pegá un link de YouTube o SoundCloud, o buscá con !yt.",
         );
       }
-      return this.enqueueSearch(media.value, requestedBy);
+      return this.enqueueSearch(media.value, requestedBy, requestedByUid);
     }
     if (media.kind === "spotify") {
       if (!this.#spotifyResolver) {
@@ -250,7 +254,12 @@ export class YoutubePlaybackService {
         spotifyTrack.durationSeconds,
       );
       this.#recordMetadataTiming(metadata, startedAt);
-      return this.#enqueueMetadata(metadata, requestedBy, "spotify");
+      return this.#enqueueMetadata(
+        metadata,
+        requestedBy,
+        "spotify",
+        requestedByUid,
+      );
     }
     if (media.kind === "url") {
       if (
@@ -263,11 +272,20 @@ export class YoutubePlaybackService {
       }
       const metadata = await this.#directUrlResolver.getTrack(media.value);
       this.#recordMetadataTiming(metadata, startedAt);
-      return this.#enqueueMetadata(metadata, requestedBy, "direct-url");
+      return this.#enqueueMetadata(
+        metadata,
+        requestedBy,
+        "direct-url",
+        requestedByUid,
+      );
     }
     if (media.kind === "soundcloud") {
       if (/\/sets\//i.test(media.value)) {
-        const result = await this.enqueueMusicLink(media.value, requestedBy);
+        const result = await this.enqueueMusicLink(
+          media.value,
+          requestedBy,
+          requestedByUid,
+        );
         const first = result.added[0];
         if (!first) {
           throw new Error(
@@ -281,14 +299,24 @@ export class YoutubePlaybackService {
           ? await this.#soundcloudResolver.getTrack(media.value)
           : await this.#resolver.getTrackFromUrl(media.value);
         this.#recordMetadataTiming(metadata, startedAt);
-        return this.#enqueueMetadata(metadata, requestedBy);
+        return this.#enqueueMetadata(
+          metadata,
+          requestedBy,
+          undefined,
+          requestedByUid,
+        );
       } catch (error) {
         let providerError = error;
         if (this.#soundcloudResolver && !isDrmError(providerError)) {
           try {
             const metadata = await this.#resolver.getTrackFromUrl(media.value);
             this.#recordMetadataTiming(metadata, startedAt);
-            return this.#enqueueMetadata(metadata, requestedBy);
+            return this.#enqueueMetadata(
+              metadata,
+              requestedBy,
+              undefined,
+              requestedByUid,
+            );
           } catch (fallbackError) {
             providerError = fallbackError;
           }
@@ -307,7 +335,12 @@ export class YoutubePlaybackService {
                 alternative.url,
               );
               this.#recordMetadataTiming(metadata, startedAt);
-              return this.#enqueueMetadata(metadata, requestedBy);
+              return this.#enqueueMetadata(
+                metadata,
+                requestedBy,
+                undefined,
+                requestedByUid,
+              );
             }
             const metadata = await this.#resolver.getTrackFromUrl(
               alternative.url,
@@ -317,6 +350,7 @@ export class YoutubePlaybackService {
               metadata,
               requestedBy,
               alternative.provider,
+              requestedByUid,
             );
           }
         }
@@ -326,13 +360,22 @@ export class YoutubePlaybackService {
             startedAt,
           );
           if (fallback)
-            return this.#enqueueMetadata(fallback, requestedBy, "youtube");
+            return this.#enqueueMetadata(
+              fallback,
+              requestedBy,
+              "youtube",
+              requestedByUid,
+            );
         }
         throw providerError;
       }
     }
     if (media.kind === "apple-music" || media.kind === "amazon-music") {
-      const result = await this.enqueueMusicLink(media.value, requestedBy);
+      const result = await this.enqueueMusicLink(
+        media.value,
+        requestedBy,
+        requestedByUid,
+      );
       const first = result.added[0];
       if (!first) {
         throw new Error(
@@ -348,20 +391,35 @@ export class YoutubePlaybackService {
     }
     const metadata = await this.#resolver.getTrack(media.resource);
     this.#recordMetadataTiming(metadata, startedAt);
-    return this.#enqueueMetadata(metadata, requestedBy);
+    return this.#enqueueMetadata(
+      metadata,
+      requestedBy,
+      undefined,
+      requestedByUid,
+    );
   }
 
-  async enqueueSearch(query: string, requestedBy: string): Promise<Track> {
+  async enqueueSearch(
+    query: string,
+    requestedBy: string,
+    requestedByUid?: string,
+  ): Promise<Track> {
     const startedAt = Date.now();
     const metadata = await this.#resolver.search(query);
     this.#recordMetadataTiming(metadata, startedAt);
-    return this.#enqueueMetadata(metadata, requestedBy);
+    return this.#enqueueMetadata(
+      metadata,
+      requestedBy,
+      undefined,
+      requestedByUid,
+    );
   }
 
   async enqueueSearchIndex(
     query: string,
     index: number,
     requestedBy: string,
+    requestedByUid?: string,
   ): Promise<Track> {
     const startedAt = Date.now();
     const candidates = await this.#resolver.searchMany(query, undefined, 5);
@@ -370,15 +428,24 @@ export class YoutubePlaybackService {
       throw new Error(`No hay resultado ${index} para esa búsqueda.`);
     }
     this.#recordMetadataTiming(selected, startedAt);
-    return this.#enqueueMetadata(selected, requestedBy);
+    return this.#enqueueMetadata(
+      selected,
+      requestedBy,
+      undefined,
+      requestedByUid,
+    );
   }
 
-  async enqueueNext(input: string, requestedBy: string): Promise<Track> {
+  async enqueueNext(
+    input: string,
+    requestedBy: string,
+    requestedByUid?: string,
+  ): Promise<Track> {
     const media = parseMediaInput(input);
     if (media.kind === "youtube" && media.resource.type === "playlist") {
       throw new Error("Las playlists se encolan con !play, no con !playnext.");
     }
-    const track = await this.enqueue(input, requestedBy);
+    const track = await this.enqueue(input, requestedBy, requestedByUid);
     this.#queue.moveToHead(track.id);
     if (this.#current) this.#prefetchNext();
     this.#persistState();
@@ -389,7 +456,8 @@ export class YoutubePlaybackService {
     const connected = new Set(connectedUids);
     let restored = 0;
     for (const entry of this.#persistedQueue) {
-      if (!connected.has(entry.requestedBy)) continue;
+      if (entry.requestedByUid === undefined) continue;
+      if (!connected.has(entry.requestedByUid)) continue;
       if (this.#queue.length >= this.#maxQueueTracks) break;
       try {
         this.#queue.add({
@@ -398,6 +466,7 @@ export class YoutubePlaybackService {
             : { durationSeconds: entry.durationSeconds }),
           id: entry.id,
           requestedBy: entry.requestedBy,
+          requestedByUid: entry.requestedByUid,
           source: entry.source,
           title: entry.title,
         });
@@ -443,6 +512,7 @@ export class YoutubePlaybackService {
   async enqueuePlaylist(
     resource: YoutubeResource,
     requestedBy: string,
+    requestedByUid?: string,
   ): Promise<PlaylistEnqueueResult> {
     if (resource.type !== "playlist")
       throw new Error("Only YouTube playlists can be expanded");
@@ -451,13 +521,18 @@ export class YoutubePlaybackService {
         resource,
         this.#playlistMaxTracks,
       );
-      return this.#enqueuePlaylistExpansion(expansion, requestedBy);
+      return this.#enqueuePlaylistExpansion(
+        expansion,
+        requestedBy,
+        requestedByUid,
+      );
     });
   }
 
   async enqueueMusicLink(
     input: string,
     requestedBy: string,
+    requestedByUid?: string,
   ): Promise<PlaylistEnqueueResult> {
     return this.#withExpansionSlot(async () => {
       if (!this.#alternativeResolver) {
@@ -482,7 +557,16 @@ export class YoutubePlaybackService {
           alternative.url,
         );
         this.#recordMetadataTiming(metadata, Date.now());
-        return { added: [this.#enqueueMetadata(metadata, requestedBy)] };
+        return {
+          added: [
+            this.#enqueueMetadata(
+              metadata,
+              requestedBy,
+              undefined,
+              requestedByUid,
+            ),
+          ],
+        };
       }
       const parsed = parseMediaInput(alternative.url);
       if (parsed.kind === "youtube" && parsed.resource.type === "playlist") {
@@ -490,17 +574,39 @@ export class YoutubePlaybackService {
           parsed.resource,
           this.#playlistMaxTracks,
         );
-        return this.#enqueuePlaylistExpansion(expansion, requestedBy);
+        return this.#enqueuePlaylistExpansion(
+          expansion,
+          requestedBy,
+          requestedByUid,
+        );
       }
       if (parsed.kind === "youtube" && parsed.resource.type === "video") {
         const metadata = await this.#resolver.getTrack(parsed.resource);
         this.#recordMetadataTiming(metadata, Date.now());
-        return { added: [this.#enqueueMetadata(metadata, requestedBy)] };
+        return {
+          added: [
+            this.#enqueueMetadata(
+              metadata,
+              requestedBy,
+              undefined,
+              requestedByUid,
+            ),
+          ],
+        };
       }
       if (parsed.kind === "soundcloud" && this.#soundcloudResolver) {
         const metadata = await this.#soundcloudResolver.getTrack(parsed.value);
         this.#recordMetadataTiming(metadata, Date.now());
-        return { added: [this.#enqueueMetadata(metadata, requestedBy)] };
+        return {
+          added: [
+            this.#enqueueMetadata(
+              metadata,
+              requestedBy,
+              undefined,
+              requestedByUid,
+            ),
+          ],
+        };
       }
       throw new Error(
         "El link alternativo no apunta a una fuente reproducible.",
@@ -511,6 +617,7 @@ export class YoutubePlaybackService {
   #enqueuePlaylistExpansion(
     expansion: PlaylistExpansion,
     requestedBy: string,
+    requestedByUid?: string,
   ): PlaylistEnqueueResult {
     const added: Track[] = [];
     let duplicates = 0;
@@ -522,7 +629,12 @@ export class YoutubePlaybackService {
         continue;
       }
       try {
-        const track = this.#enqueueMetadata(metadata, requestedBy);
+        const track = this.#enqueueMetadata(
+          metadata,
+          requestedBy,
+          undefined,
+          requestedByUid,
+        );
         addedIds.add(track.id);
         added.push(track);
       } catch (error) {
@@ -569,6 +681,7 @@ export class YoutubePlaybackService {
   async enqueueSpotifyCollection(
     resource: SpotifyResource,
     requestedBy: string,
+    requestedByUid?: string,
   ): Promise<PlaylistEnqueueResult> {
     return this.#withExpansionSlot(async () => {
       if (!this.#spotifyResolver) {
@@ -619,7 +732,12 @@ export class YoutubePlaybackService {
           continue;
         }
         try {
-          const track = this.#enqueueMetadata(metadata, requestedBy, "spotify");
+          const track = this.#enqueueMetadata(
+            metadata,
+            requestedBy,
+            "spotify",
+            requestedByUid,
+          );
           addedIds.add(track.id);
           added.push(track);
         } catch (error) {
@@ -654,10 +772,14 @@ export class YoutubePlaybackService {
     metadata: YoutubeTrackMetadata,
     requestedBy: string,
     alternativeProvider?: string,
+    requestedByUid?: string,
   ): Track {
     const track: Track = {
       id: metadata.id,
       requestedBy,
+      ...(requestedByUid === undefined
+        ? {}
+        : { requestedByUid: requestedByUid }),
       source: metadata.webpageUrl,
       title: metadata.title,
       ...(metadata.durationSeconds === undefined
@@ -811,6 +933,9 @@ export class YoutubePlaybackService {
           : { durationSeconds: track.durationSeconds }),
         id: track.id,
         requestedBy: track.requestedBy,
+        ...(track.requestedByUid === undefined
+          ? {}
+          : { requestedByUid: track.requestedByUid }),
         source: track.source,
         title: track.title,
       });
