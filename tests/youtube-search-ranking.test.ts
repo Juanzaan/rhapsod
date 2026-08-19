@@ -321,6 +321,62 @@ describe("rankYoutubeCandidates", () => {
     expect(selected?.id).toBe("clean");
   });
 
+  it("prefers the original over a bass boosted version", () => {
+    const selected = rankYoutubeCandidates("duki rockstar", [
+      {
+        id: "boosted",
+        title: "Duki - Rockstar [BASS BOOSTED]",
+        webpageUrl: "https://youtube.com/watch?v=boosted",
+      },
+      {
+        id: "original",
+        title: "DUKI - Rockstar (Official Video)",
+        webpageUrl: "https://youtube.com/watch?v=original",
+      },
+    ]);
+
+    expect(selected?.id).toBe("original");
+  });
+
+  it("keeps the bass boosted version when the query asks for it", () => {
+    const selected = rankYoutubeCandidates("duki rockstar bass boosted", [
+      {
+        id: "original",
+        title: "DUKI - Rockstar (Official Video)",
+        webpageUrl: "https://youtube.com/watch?v=original",
+      },
+      {
+        id: "boosted",
+        title: "Duki - Rockstar [BASS BOOSTED]",
+        webpageUrl: "https://youtube.com/watch?v=boosted",
+      },
+    ]);
+
+    expect(selected?.id).toBe("boosted");
+  });
+
+  it("prefers the original over an instrumental or 8d version", () => {
+    const selected = rankYoutubeCandidates("the weeknd starboy", [
+      {
+        id: "instrumental",
+        title: "The Weeknd - Starboy (Instrumental)",
+        webpageUrl: "https://youtube.com/watch?v=instrumental",
+      },
+      {
+        id: "eightd",
+        title: "Starboy 8D",
+        webpageUrl: "https://youtube.com/watch?v=eightd",
+      },
+      {
+        id: "original",
+        title: "The Weeknd - Starboy (Official Audio)",
+        webpageUrl: "https://youtube.com/watch?v=original",
+      },
+    ]);
+
+    expect(selected?.id).toBe("original");
+  });
+
   it("does not penalize an event phrase the query asks for", () => {
     const selected = rankYoutubeCandidates(
       "ghost town kids see ghosts at camp flog gnaw",

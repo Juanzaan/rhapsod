@@ -14,6 +14,11 @@ for [Semantic Versioning](https://semver.org/).
 - `!shuffle`: randomize the pending queue (the current track keeps playing).
 - Versions titled `clean`/`edited` are penalized in YouTube search unless the
   query explicitly asks for one (same rule as live/remix).
+- Altered-audio versions (`bass boosted`, `8d`, `instrumental`, `mashup`,
+  `reverb`, `extended`, ...) are penalized unless the query asks for them,
+  keeping album/playlist playback close to the original masters.
+- Failed commands are now logged (`Command failed`) and transient network
+  errors (`fetch failed`) get a friendly retry message.
 - `!queue`/`!now-playing` show per-track durations when known.
 - `!volume <0-100>`: PCM gain applied to frames before Opus encoding, affecting
   every listener; changes apply live to the current track.
