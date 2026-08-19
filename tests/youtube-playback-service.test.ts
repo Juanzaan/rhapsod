@@ -1,6 +1,9 @@
 import { describe, expect, it, vi, type Mock } from "vitest";
 
-import { YoutubePlaybackService } from "../src/application/youtube-playback-service.js";
+import {
+  volumeToGain,
+  YoutubePlaybackService,
+} from "../src/application/youtube-playback-service.js";
 import type { YoutubePlaybackResolver } from "../src/application/youtube-playback-service.js";
 import type { YoutubeTrackMetadata } from "../src/media/youtube/yt-dlp.js";
 import { SoundCloudDrmError } from "../src/media/soundcloud/public-api.js";
@@ -335,8 +338,16 @@ describe("YoutubePlaybackService", () => {
     expect(sessionSetVolumeMocks[0]).toHaveBeenCalledWith(1);
 
     service.setVolume(30);
-    expect(sessionSetVolumeMocks[0]).toHaveBeenLastCalledWith(0.3);
+    expect(sessionSetVolumeMocks[0]).toHaveBeenLastCalledWith(
+      expect.closeTo(0.0398, 4),
+    );
     expect(service.volume).toBe(30);
+  });
+
+  it("maps the volume percent with a perceptual gain curve", () => {
+    expect(volumeToGain(100)).toBe(1);
+    expect(volumeToGain(50)).toBeCloseTo(0.1, 5);
+    expect(volumeToGain(0)).toBeCloseTo(0.01, 5);
   });
 
   it("re-enqueues the finished track in track loop mode", async () => {

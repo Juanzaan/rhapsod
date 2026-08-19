@@ -63,27 +63,28 @@ See [docs/commands.md](docs/commands.md) for details and source behavior.
 
 All settings are environment variables (see `.env.example`):
 
-| Variable                              | Required | Description                                               |
-| ------------------------------------- | -------- | --------------------------------------------------------- |
-| `RHAPSOD_TS3_HOST`                    | yes      | TeamSpeak 3 server address                                |
-| `RHAPSOD_TS3_PORT`                    | no       | Voice port (default `9987`)                               |
-| `RHAPSOD_TS3_NICKNAME`                | no       | Bot nickname (default `Rhapsod`)                          |
-| `RHAPSOD_TS3_PASSWORD`                | no       | Server password                                           |
-| `RHAPSOD_TS3_CHANNEL_NAME`            | no       | Target channel; bot joins the default channel if unset    |
-| `RHAPSOD_TS3_CHANNEL_PASSWORD`        | no       | Target channel password                                   |
-| `RHAPSOD_TS3_CLIENT_DESCRIPTION`      | no       | Client description shown in TeamSpeak (BBCode allowed)    |
-| `RHAPSOD_TS3_CONNECT_TIMEOUT_SECONDS` | no       | Connect timeout (default `180`)                           |
-| `RHAPSOD_TS3_AUTO_CONNECT`            | no       | Connect at startup (default `true`)                       |
-| `RHAPSOD_DATA_DIR`                    | no       | Data directory for the TS3 identity (default `./data`)    |
-| `RHAPSOD_YTDLP_PATH`                  | no       | `yt-dlp` binary path (default `yt-dlp`)                   |
-| `RHAPSOD_YTDLP_COOKIES_PATH`          | no       | Private cookies file for datacenter extraction            |
-| `RHAPSOD_FFMPEG_PATH`                 | no       | System FFmpeg binary path                                 |
-| `RHAPSOD_OPUS_BITRATE`                | no       | Opus bitrate in bits/s (default `128000`)                 |
-| `RHAPSOD_SPOTIFY_CLIENT_ID`           | no       | Spotify app credentials (enables Spotify links)           |
-| `RHAPSOD_SPOTIFY_CLIENT_SECRET`       | no       | Same app's secret; used only for client credentials       |
-| `RHAPSOD_AUDIO_TEST_TONE_SECONDS`     | no       | Play a test tone for N seconds to validate voice setup    |
-| `RHAPSOD_LOG_LEVEL`                   | no       | pino log level (default `info`)                           |
-| `RHAPSOD_METRICS_INTERVAL_MINUTES`    | no       | Log RSS/heap every N minutes; `0` disables (default `15`) |
+| Variable                              | Required | Description                                                                                |
+| ------------------------------------- | -------- | ------------------------------------------------------------------------------------------ |
+| `RHAPSOD_TS3_HOST`                    | yes      | TeamSpeak 3 server address                                                                 |
+| `RHAPSOD_TS3_PORT`                    | no       | Voice port (default `9987`)                                                                |
+| `RHAPSOD_TS3_NICKNAME`                | no       | Bot nickname (default `Rhapsod`)                                                           |
+| `RHAPSOD_TS3_PASSWORD`                | no       | Server password                                                                            |
+| `RHAPSOD_TS3_CHANNEL_NAME`            | no       | Target channel; bot joins the default channel if unset                                     |
+| `RHAPSOD_TS3_CHANNEL_PASSWORD`        | no       | Target channel password                                                                    |
+| `RHAPSOD_TS3_CLIENT_DESCRIPTION`      | no       | Client description shown in TeamSpeak (BBCode allowed)                                     |
+| `RHAPSOD_TS3_CONNECT_TIMEOUT_SECONDS` | no       | Connect timeout (default `180`)                                                            |
+| `RHAPSOD_TS3_AUTO_CONNECT`            | no       | Connect at startup (default `true`)                                                        |
+| `RHAPSOD_DATA_DIR`                    | no       | Data directory for the TS3 identity (default `./data`)                                     |
+| `RHAPSOD_YTDLP_PATH`                  | no       | `yt-dlp` binary path (default `yt-dlp`)                                                    |
+| `RHAPSOD_YTDLP_COOKIES_PATH`          | no       | Private cookies file for datacenter extraction                                             |
+| `RHAPSOD_FFMPEG_PATH`                 | no       | System FFmpeg binary path                                                                  |
+| `RHAPSOD_OPUS_BITRATE`                | no       | Opus bitrate in bits/s (default `96000`; keep under the TeamSpeak 497-byte packet ceiling) |
+| `RHAPSOD_SPOTIFY_CLIENT_ID`           | no       | Spotify app credentials (enables Spotify links)                                            |
+| `RHAPSOD_SPOTIFY_CLIENT_SECRET`       | no       | Same app's secret; used only for client credentials                                        |
+| `RHAPSOD_AUDIO_TEST_TONE_SECONDS`     | no       | Play a test tone for N seconds to validate voice setup                                     |
+| `RHAPSOD_LOG_LEVEL`                   | no       | pino log level (default `info`)                                                            |
+| `RHAPSOD_LOUDNESS_TARGET_LUFS`        | no       | EBU R128 loudness target for playback; `0` disables (default `-14`)                        |
+| `RHAPSOD_METRICS_INTERVAL_MINUTES`    | no       | Log RSS/heap every N minutes; `0` disables (default `15`)                                  |
 
 Secrets (cookies, Spotify credentials, TS3 passwords) live only in `.env` or the
 deployment secret store — never in Git. For production under systemd see

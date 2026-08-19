@@ -8,6 +8,7 @@ import { CHANNELS, SAMPLE_RATE } from "./opus-encoder.js";
 export interface FfmpegPcmOptions {
   readonly binary?: string;
   readonly spawnProcess?: typeof spawn;
+  readonly loudnessTargetLufs?: number;
 }
 
 export interface FfmpegPcmStream {
@@ -18,12 +19,15 @@ export interface FfmpegPcmStream {
 
 const STOP_GRACE_MS = 3_000;
 
-export function buildFfmpegPcmArguments(url: string): string[] {
+export function buildFfmpegPcmArguments(
+  url: string,
+  options: FfmpegPcmOptions = {},
+): string[] {
   if (!/^https:\/\//i.test(url)) {
     throw new Error("FFmpeg audio input must use HTTPS");
   }
 
-  return [
+  const args = [
     "-hide_banner",
     "-loglevel",
     "error",
@@ -49,8 +53,15 @@ export function buildFfmpegPcmArguments(url: string): string[] {
     String(CHANNELS),
     "-acodec",
     "pcm_s16le",
-    "pipe:1",
   ];
+  if (
+    options.loudnessTargetLufs !== undefined &&
+    options.loudnessTargetLufs < 0
+  ) {
+    args.push("-af", `loudnorm=I=${options.loudnessTargetLufs}:TP=-1.5:LRA=11`);
+  }
+  args.push("pipe:1");
+  return args;
 }
 
 export function createFfmpegPcmStream(

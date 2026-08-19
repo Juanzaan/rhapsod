@@ -70,12 +70,11 @@ async function main(): Promise<void> {
       : undefined;
   const ffmpegPath = config.RHAPSOD_FFMPEG_PATH;
   const playback = new YoutubePlaybackService({
-    ...(ffmpegPath === undefined
-      ? {}
-      : {
-          createPlayback: (url, playbackEncoder, output) =>
-            playFfmpegUrl(url, playbackEncoder, output, { binary: ffmpegPath }),
-        }),
+    createPlayback: (url, playbackEncoder, output) =>
+      playFfmpegUrl(url, playbackEncoder, output, {
+        ...(ffmpegPath === undefined ? {} : { binary: ffmpegPath }),
+        loudnessTargetLufs: config.RHAPSOD_LOUDNESS_TARGET_LUFS,
+      }),
     encoder,
     onPlaybackStarted: async (track) => {
       await connection.sendChannelMessage(`Reproduciendo: ${track.title}`);

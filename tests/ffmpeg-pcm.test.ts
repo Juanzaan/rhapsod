@@ -20,6 +20,24 @@ describe("FFmpeg PCM source", () => {
     expect(args.at(-1)).toBe("pipe:1");
   });
 
+  it("applies loudness normalization when a target is configured", () => {
+    const args = buildFfmpegPcmArguments("https://cdn.example.test/audio", {
+      loudnessTargetLufs: -14,
+    });
+
+    expect(args).toContain("-af");
+    expect(args).toContain("loudnorm=I=-14:TP=-1.5:LRA=11");
+  });
+
+  it("skips loudness normalization when disabled", () => {
+    const args = buildFfmpegPcmArguments("https://cdn.example.test/audio", {
+      loudnessTargetLufs: 0,
+    });
+
+    expect(args).not.toContain("-af");
+    expect(args).not.toContain("loudnorm");
+  });
+
   it("rejects non-HTTPS inputs", () => {
     expect(() => buildFfmpegPcmArguments("http://example.test/audio")).toThrow(
       "must use HTTPS",
