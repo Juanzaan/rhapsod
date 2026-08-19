@@ -40,6 +40,18 @@ function requestUrl(input: string | URL | Request): string {
 }
 
 describe("SoundCloudPublicApi", () => {
+  it("matches SoundCloud links and exposes the provider name", () => {
+    const api = new SoundCloudPublicApi({ fetch: vi.fn() });
+
+    expect(api.name).toBe("soundcloud");
+    expect(api.match("https://soundcloud.com/artist/track")).toBe(true);
+    expect(api.match("https://on.soundcloud.com/0Tbj4O1F7XxfV6DDjQ")).toBe(
+      true,
+    );
+    expect(api.match("https://www.youtube.com/watch?v=abc123")).toBe(false);
+    expect(api.match("duki rockstar")).toBe(false);
+  });
+
   it("discovers a client id and resolves the progressive stream", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>((input) => {
       const url = requestUrl(input);
