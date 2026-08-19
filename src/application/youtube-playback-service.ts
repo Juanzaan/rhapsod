@@ -119,6 +119,8 @@ export class YoutubePlaybackService {
   #current: Track | undefined;
   #session: FfmpegPlaybackSession | undefined;
   #generation = 0;
+  #chainActive = false;
+  #pendingSkips = 0;
   #volumePercent = 100;
   #loopMode: LoopMode = "off";
   #loopPool: Track[] = [];
@@ -484,23 +486,24 @@ export class YoutubePlaybackService {
     };
     if (metadata.audioUrl) this.#cacheAudioUrl(track, metadata.audioUrl);
     this.#queue.add(track);
-    if (!this.#current) void this.#playNext();
-    else this.#prefetchNext();
+    this.#requestNext();
+    if (this.#current) this.#prefetchNext();
     return track;
   }
 
   skip(): void {
     this.#generation++;
+    this.#pendingSkips++;
     if (this.#current) this.#prepared.delete(this.#current.source);
     if (this.#session) this.#sessionEndReasons.set(this.#session, "skipped");
     this.#session?.stop();
     this.#session = undefined;
-    this.#current = undefined;
-    void this.#playNext();
+    this.#requestNext();
   }
 
   stop(): void {
     this.#generation++;
+    this.#pendingSkips = 0;
     if (this.#session) this.#sessionEndReasons.set(this.#session, "stopped");
     this.#session?.stop();
     this.#session = undefined;
@@ -528,6 +531,7 @@ export class YoutubePlaybackService {
 
   clearQueued(): number {
     const count = this.#queue.length;
+    this.#pendingSkips = 0;
     this.#queue.clear();
     this.#loopMode = "off";
     this.#loopPool = [];
@@ -541,60 +545,77 @@ export class YoutubePlaybackService {
     return count;
   }
 
-  #playNext(): Promise<void> {
-    if (this.#queue.length === 0 && this.#loopPool.length > 0) {
-      for (const pooled of this.#loopPool) {
-        try {
-          this.#queue.add(pooled);
-        } catch {
-          // already queued; skip
+  #requestNext(): void {
+    if (this.#chainActive) return;
+    void this.#playNext();
+  }
+
+  async #playNext(): Promise<void> {
+    if (this.#chainActive) return;
+    this.#chainActive = true;
+    try {
+      for (;;) {
+        if (this.#pendingSkips > 0) {
+          const toDrop =
+            this.#pendingSkips - (this.#current === undefined ? 0 : 1);
+          this.#pendingSkips = 0;
+          for (let i = 0; i < toDrop; i++) this.#queue.next();
         }
-      }
-      this.#loopPool = [];
-    }
-    const track = this.#queue.next();
-    if (!track) {
-      this.#current = undefined;
-      return Promise.resolve();
-    }
-    const generation = ++this.#generation;
-    this.#current = track;
-    const audioResolutionStartedAt = Date.now();
-    return this.#getAudioUrl(track)
-      .then(({ cacheHit, url }) => {
+        if (this.#queue.length === 0 && this.#loopPool.length > 0) {
+          for (const pooled of this.#loopPool) {
+            try {
+              this.#queue.add(pooled);
+            } catch {
+              // already queued; skip
+            }
+          }
+          this.#loopPool = [];
+        }
+        const track = this.#queue.next();
+        if (!track) {
+          this.#current = undefined;
+          return;
+        }
+        const generation = ++this.#generation;
+        this.#current = track;
+        const audioResolutionStartedAt = Date.now();
+        const resolved = await this.#resolveOrSkip(track, generation);
+        if (resolved === undefined) continue;
         this.#onTiming({
-          cacheHit,
+          cacheHit: resolved.cacheHit,
           durationMs: Date.now() - audioResolutionStartedAt,
           stage: "audio-url",
           trackId: track.id,
         });
-        if (generation !== this.#generation || this.#current !== track) return;
-        const session = this.#createPlayback(url, this.#encoder, this.#output);
+        const session = this.#createPlayback(
+          resolved.url,
+          this.#encoder,
+          this.#output,
+        );
         session.player.setVolume(volumeToGain(this.#volumePercent));
         this.#session = session;
-        void this.#onPlaybackStarted(track);
-        this.#prefetchNext();
-        return session.done.then(
-          () => {
-            this.#onPlaybackFinished(
-              track,
-              session.player.metrics,
-              this.#sessionEndReasons.get(session) ?? "completed",
-            );
-          },
-          (error: unknown) => {
-            this.#onPlaybackFinished(track, session.player.metrics, "error");
-            throw error;
-          },
+        void Promise.resolve(this.#onPlaybackStarted(track)).catch(
+          () => undefined,
         );
-      })
-      .catch(async (error: unknown) => {
-        const playbackError =
-          error instanceof Error ? error : new Error(String(error));
-        await this.#onPlaybackError(track, playbackError);
-      })
-      .then(() => {
-        if (generation !== this.#generation || this.#current !== track) return;
+        this.#prefetchNext();
+        let playbackError: unknown;
+        try {
+          await session.done;
+        } catch (error) {
+          playbackError = error;
+        }
+        this.#onPlaybackFinished(
+          track,
+          session.player.metrics,
+          this.#sessionEndReasons.get(session) ??
+            (playbackError !== undefined ? "error" : "completed"),
+        );
+        if (playbackError !== undefined) {
+          await this.#reportPlaybackError(track, playbackError);
+        }
+        if (generation !== this.#generation || this.#current !== track) {
+          continue;
+        }
         this.#prepared.delete(track.source);
         this.#session = undefined;
         this.#current = undefined;
@@ -607,8 +628,44 @@ export class YoutubePlaybackService {
         } else if (this.#loopMode === "queue") {
           this.#loopPool.push(track);
         }
-        return this.#playNext();
-      });
+      }
+    } finally {
+      this.#chainActive = false;
+    }
+  }
+
+  async #resolveOrSkip(
+    track: Track,
+    generation: number,
+  ): Promise<{ cacheHit: boolean; url: string } | undefined> {
+    try {
+      const resolved = await this.#getAudioUrl(track);
+      if (generation !== this.#generation || this.#current !== track) {
+        this.#prepared.delete(track.source);
+        return undefined;
+      }
+      return resolved;
+    } catch (error) {
+      if (generation !== this.#generation || this.#current !== track) {
+        this.#prepared.delete(track.source);
+        return undefined;
+      }
+      const playbackError =
+        error instanceof Error ? error : new Error(String(error));
+      await this.#reportPlaybackError(track, playbackError);
+      this.#prepared.delete(track.source);
+      return undefined;
+    }
+  }
+
+  async #reportPlaybackError(track: Track, error: unknown): Promise<void> {
+    const playbackError =
+      error instanceof Error ? error : new Error(String(error));
+    try {
+      await this.#onPlaybackError(track, playbackError);
+    } catch {
+      // Observability callbacks must never break the playback chain.
+    }
   }
 
   #cacheAudioUrl(track: Track, url: string): void {
