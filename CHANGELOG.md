@@ -27,6 +27,10 @@ for [Semantic Versioning](https://semver.org/).
   are dropped. The persisted state (`state.json`) now includes the queue
   (current track first), so `!colar`, `!mover`, `!quitar`, `!shuffle` and
   playback position changes are saved continuously.
+- The queue restore matches requesters by their TeamSpeak unique ID
+  (`client_uid`) instead of their display name, so tracks survive a restart
+  even when a user is reconnecting with a different nickname. The requester
+  UID is stored alongside each queued track.
 - Audio URL lookups for playback no longer wait for an in-flight playlist
   expansion: yt-dlp jobs for the currently playing track run in parallel with
   metadata jobs (up to two concurrent yt-dlp processes). A track starts as soon

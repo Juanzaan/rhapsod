@@ -6,6 +6,7 @@ export interface Track {
   readonly fallbackSources?: readonly string[];
   readonly id: TrackId;
   readonly requestedBy: string;
+  readonly requestedByUid?: string;
   readonly source: string;
   readonly title: string;
 }
