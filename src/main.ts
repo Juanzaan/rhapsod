@@ -42,6 +42,21 @@ async function main(): Promise<void> {
   const identity = await new Ts3IdentityStore(
     join(config.RHAPSOD_DATA_DIR, "ts3-identity.txt"),
   ).loadOrCreate();
+  const metricsIntervalMinutes = config.RHAPSOD_METRICS_INTERVAL_MINUTES;
+  if (metricsIntervalMinutes > 0) {
+    const reportMetrics = (): void => {
+      const { heapUsed, rss } = process.memoryUsage();
+      logger.info(
+        {
+          heapUsedMb: Math.round(heapUsed / 1_048_576),
+          rssMb: Math.round(rss / 1_048_576),
+        },
+        "Process metrics",
+      );
+    };
+    reportMetrics();
+    setInterval(reportMetrics, metricsIntervalMinutes * 60_000).unref();
+  }
   const connection = createTs3Connection(config, identity);
   const encoder = await createRhapsodOpusEncoder({
     bitrate: config.RHAPSOD_OPUS_BITRATE,
