@@ -7,7 +7,7 @@ this document summarizes the phases.
 
 ### v1.0.0 (2026-08-19) — stable
 
-Multi-source playback on the HolyPVP TeamSpeak server: YouTube (video, Shorts,
+Multi-source playback validated in production: YouTube (video, Shorts,
 playlists), SoundCloud tracks, Spotify tracks, and free-text search with fuzzy
 ranking. systemd deployment documented, memory limits applied, and production
 logs clean (0 underruns / 0 zombies over multi-hour sessions).
