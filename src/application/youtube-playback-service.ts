@@ -21,6 +21,11 @@ import {
 } from "../media/soundcloud/public-api.js";
 import type { SpotifyResource } from "../media/media-input.js";
 import type { SpotifyResolver } from "../media/spotify/api.js";
+import {
+  parseArtistTitle,
+  type LyricsResolver,
+  type TrackLyrics,
+} from "../media/lyrics.js";
 
 export type LoopMode = "off" | "queue" | "track";
 
@@ -34,6 +39,7 @@ interface PlaybackServiceOptions {
   readonly alternativeResolver?: AlternativeSourceResolver;
   readonly soundcloudResolver?: SoundCloudResolver;
   readonly spotifyResolver?: SpotifyResolver;
+  readonly lyricsResolver?: LyricsResolver;
   readonly output: VoiceFrameOutput;
   readonly playlistMaxTracks?: number;
   readonly createPlayback?: typeof playFfmpegUrl;
@@ -95,6 +101,7 @@ export class YoutubePlaybackService {
   readonly #alternativeResolver: AlternativeSourceResolver | undefined;
   readonly #soundcloudResolver: SoundCloudResolver | undefined;
   readonly #spotifyResolver: SpotifyResolver | undefined;
+  readonly #lyricsResolver: LyricsResolver | undefined;
   readonly #output: VoiceFrameOutput;
   readonly #createPlayback: typeof playFfmpegUrl;
   readonly #onPlaybackError: (
@@ -127,6 +134,7 @@ export class YoutubePlaybackService {
     this.#alternativeResolver = options.alternativeResolver;
     this.#soundcloudResolver = options.soundcloudResolver;
     this.#spotifyResolver = options.spotifyResolver;
+    this.#lyricsResolver = options.lyricsResolver;
     this.#output = options.output;
     this.#createPlayback = options.createPlayback ?? playFfmpegUrl;
     this.#onPlaybackError = options.onPlaybackError ?? (() => undefined);
@@ -283,6 +291,12 @@ export class YoutubePlaybackService {
     const metadata = await this.#resolver.search(query);
     this.#recordMetadataTiming(metadata, startedAt);
     return this.#enqueueMetadata(metadata, requestedBy);
+  }
+
+  async getLyrics(): Promise<TrackLyrics | undefined> {
+    if (!this.#lyricsResolver || !this.#current) return undefined;
+    const parsed = parseArtistTitle(this.#current.title);
+    return this.#lyricsResolver.search(parsed.artist, parsed.title);
   }
 
   async enqueuePlaylist(

@@ -2,6 +2,7 @@ type ChatCommand =
   | { readonly name: "clear" }
   | { readonly name: "help" }
   | { readonly name: "loop"; readonly mode?: "off" | "queue" | "track" }
+  | { readonly name: "lyrics" }
   | { readonly name: "now-playing" }
   | { readonly input: string; readonly name: "play" }
   | { readonly name: "pause" }
@@ -21,6 +22,8 @@ const COMMAND_ALIASES: Readonly<Record<string, ChatCommand["name"]>> = {
   h: "help",
   help: "help",
   loop: "loop",
+  ly: "lyrics",
+  lyrics: "lyrics",
   np: "now-playing",
   now: "now-playing",
   "now-playing": "now-playing",

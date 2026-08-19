@@ -18,6 +18,7 @@ chat once the TS3 adapter is connected.
 | `!clear`                    | `!c`                  | Clear pending tracks.                                                                               |
 | `!shuffle`                  | -                     | Shuffle the pending queue (the current track keeps playing).                                        |
 | `!loop [off\|track\|queue]` | -                     | Repeat the current track (`track`) or the whole queue (`queue`); `!stop`/`!clear` disable looping.  |
+| `!lyrics`                   | `!ly`                 | Show the lyrics of the current track, found via LRCLIB (best-effort, no account).                   |
 | `!test-tone`                | `!tone`               | Play a 3-second test tone (rate-limited).                                                           |
 | `!help`                     | `!h`                  | Show the command summary.                                                                           |
 

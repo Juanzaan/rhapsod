@@ -35,6 +35,9 @@ for [Semantic Versioning](https://semver.org/).
 - Apple Music and Amazon Music links in `!play`: resolved through SongLink to
   the YouTube equivalent (single tracks and playlists) with SoundCloud as
   fallback, since neither service exposes a public audio API.
+- `!lyrics` (`!ly`): plain lyrics for the current track through LRCLIB (free
+  public API, no account), parsed from the track title; truncated to 1600
+  characters to fit a TeamSpeak message.
 - `!queue`/`!now-playing` show per-track durations when known.
 - `!volume <0-100>`: PCM gain applied to frames before Opus encoding, affecting
   every listener; changes apply live to the current track.
