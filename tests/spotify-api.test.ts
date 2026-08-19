@@ -17,6 +17,10 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+function textResponse(body: string, status = 200): Response {
+  return new Response(body, { status });
+}
+
 describe("SpotifyApi", () => {
   it("requests a client credentials token and resolves track metadata", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>((input, init) => {
@@ -165,7 +169,85 @@ describe("SpotifyApi", () => {
     expect(expansion.total).toBe(1);
   });
 
-  it("fails with a migration hint when playlists return 403 without a refresh token", async () => {
+  it("falls back to the public embed page when the API blocks playlist reads", async () => {
+    const embedCalls = vi.fn();
+    const fetch = vi.fn<typeof globalThis.fetch>((input, init) => {
+      const url = request(input);
+      if (url === "https://accounts.spotify.com/api/token") {
+        return Promise.resolve(
+          jsonResponse({ access_token: "token-1", expires_in: 3600 }),
+        );
+      }
+      if (url.startsWith("https://api.spotify.com/v1/playlists/p1/tracks")) {
+        return Promise.resolve(jsonResponse({}, 403));
+      }
+      if (url.startsWith("https://open.spotify.com/embed/playlist/p1")) {
+        embedCalls();
+        expect(init?.headers).toMatchObject({
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        });
+        return Promise.resolve(
+          textResponse(
+            `{"uri":"spotify:track:t1","uid":"abc","title":"Rockstar","subtitle":"Duki","isExplicit":false,"duration":180000,"entityType":"track"},` +
+              `{"uri":"spotify:track:t2","uid":"def","title":"Ghost Town","subtitle":"Kanye West \\u0026 Kid Cudi","isExplicit":true,"duration":271000,"entityType":"track"}`,
+          ),
+        );
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const api = new SpotifyApi({
+      clientId: "id",
+      clientSecret: "secret",
+      fetch,
+    });
+
+    const expansion = await api.expandPlaylist(
+      { id: "p1", type: "playlist" },
+      2,
+    );
+
+    expect(expansion.tracks).toEqual([
+      { artist: "Duki", durationSeconds: 180, id: "t1", title: "Rockstar" },
+      {
+        artist: "Kanye West & Kid Cudi",
+        durationSeconds: 271,
+        id: "t2",
+        title: "Ghost Town",
+      },
+    ]);
+    expect(embedCalls).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails with a clear error when the API and the embed both fail", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>((input) => {
+      if (request(input) === "https://accounts.spotify.com/api/token") {
+        return Promise.resolve(
+          jsonResponse({ access_token: "token-1", expires_in: 3600 }),
+        );
+      }
+      if (
+        request(input).startsWith("https://api.spotify.com/v1/playlists/p1")
+      ) {
+        return Promise.resolve(jsonResponse({}, 404));
+      }
+      if (request(input).startsWith("https://open.spotify.com/embed")) {
+        return Promise.resolve(jsonResponse({}, 404));
+      }
+      throw new Error(`Unexpected request: ${request(input)}`);
+    });
+    const api = new SpotifyApi({
+      clientId: "id",
+      clientSecret: "secret",
+      fetch,
+    });
+
+    await expect(
+      api.expandPlaylist({ id: "p1", type: "playlist" }, 1),
+    ).rejects.toThrow("Spotify embed returned 404");
+  });
+
+  it("surfaces the embed error when the API 403s and the embed also fails", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>((input) => {
       if (request(input) === "https://accounts.spotify.com/api/token") {
         return Promise.resolve(
@@ -182,7 +264,7 @@ describe("SpotifyApi", () => {
 
     await expect(
       api.expandPlaylist({ id: "p1", type: "playlist" }, 1),
-    ).rejects.toThrow("RHAPSOD_SPOTIFY_REFRESH_TOKEN");
+    ).rejects.toThrow("Spotify embed returned 403");
   });
 
   it("fails with a clear error for HTTP failures", async () => {

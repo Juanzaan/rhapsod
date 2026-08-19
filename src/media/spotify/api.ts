@@ -48,6 +48,10 @@ interface SpotifyPageResponse {
 const DEFAULT_TIMEOUT_MS = 12_000;
 const TOKEN_EXPIRY_MARGIN_MS = 60_000;
 const PAGE_SIZE = 50;
+const EMBED_USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
+const EMBED_TRACK_PATTERN =
+  /"uri":"spotify:track:([A-Za-z0-9]+)"[\s\S]{0,200}?"title":"((?:[^"\\]|\\.)*)","subtitle":"((?:[^"\\]|\\.)*)"[\s\S]{0,300}?"duration":(\d+)/g;
 
 interface SpotifyToken {
   readonly accessToken: string;
@@ -63,6 +67,15 @@ interface SpotifyTrackResponse {
 
 function sleep(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function decodeEmbedText(value: string): string {
+  return value
+    .replace(/\\u([0-9a-fA-F]{4})/g, (_, hex: string) =>
+      String.fromCharCode(Number.parseInt(hex, 16)),
+    )
+    .replace(/\\"/g, '"')
+    .replace(/\\\\/g, "\\");
 }
 
 export class SpotifyApi implements SpotifyResolver {
@@ -103,15 +116,57 @@ export class SpotifyApi implements SpotifyResolver {
   ): Promise<SpotifyPlaylistExpansion> {
     if (resource.type !== "playlist")
       throw new Error("Only Spotify playlists can be expanded");
-    return this.#expandCollection(
-      `https://api.spotify.com/v1/playlists/${resource.id}/${this.#refreshToken === undefined ? "tracks" : "items"}`,
-      limit,
-      (page) =>
+    const collectionUrl = `https://api.spotify.com/v1/playlists/${resource.id}/${this.#refreshToken === undefined ? "tracks" : "items"}`;
+    try {
+      return await this.#expandCollection(collectionUrl, limit, (page) =>
         page.items.flatMap((item) => {
           const track = item && "track" in item ? item.track : null;
           return track ? [this.#toMetadata(track)] : [];
         }),
+      );
+    } catch (error) {
+      if (
+        !(error instanceof Error) ||
+        !/Spotify API returned (403|404)/.test(error.message)
+      ) {
+        throw error;
+      }
+      const embedded = await this.#expandPlaylistFromEmbed(resource.id, limit);
+      if (embedded.tracks.length > 0) return embedded;
+      throw new Error(
+        `Spotify API returned 404/403: la playlist no se puede leer por la API (Spotify solo da acceso a playlists a apps con extended quota) ni por el embed público`,
+        { cause: error },
+      );
+    }
+  }
+
+  async #expandPlaylistFromEmbed(
+    playlistId: string,
+    limit: number,
+  ): Promise<SpotifyPlaylistExpansion> {
+    const response = await this.#request(
+      `https://open.spotify.com/embed/playlist/${playlistId}`,
+      { "User-Agent": EMBED_USER_AGENT },
     );
+    if (!response.ok) {
+      throw new Error(`Spotify embed returned ${response.status}`);
+    }
+    const html = await response.text();
+    const tracks: SpotifyTrackMetadata[] = [];
+    const seen = new Set<string>();
+    for (const match of html.matchAll(EMBED_TRACK_PATTERN)) {
+      const id = match[1];
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      tracks.push({
+        artist: decodeEmbedText(match[3] ?? ""),
+        durationSeconds: Math.round(Number(match[4] ?? 0) / 1000),
+        id,
+        title: decodeEmbedText(match[2] ?? ""),
+      });
+      if (tracks.length >= limit) break;
+    }
+    return { tracks };
   }
 
   async expandAlbum(
