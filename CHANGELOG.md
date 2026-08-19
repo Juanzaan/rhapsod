@@ -27,6 +27,10 @@ for [Semantic Versioning](https://semver.org/).
   remove tracks requested by other users with `!remove`.
 - `!stats` (`!st`): uptime, tracks played since start, current track, queue
   length and current volume/loop mode.
+- SoundCloud sets (`/sets/` links) now expand through SongLink, playing the
+  equivalent YouTube playlist when available.
+- `!yt <n> <query>` queues the n-th ranked search result instead of the first
+  one.
 - Queue ergonomics: `!playnext` (`!pn`/`!next`) promotes a single track,
   `!move` (`!mv`) reorders pending tracks, `!remove` accepts inclusive ranges,
   `!queue [page]` displays 10 tracks per page, and `!history` (`!hist`) shows

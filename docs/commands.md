@@ -7,7 +7,7 @@ chat once the TS3 adapter is connected.
 | --------------------------- | --------------------- | --------------------------------------------------------------------------------------------------- |
 | `!play <URL or search>`     | `!p`                  | Resolve a YouTube video/playlist, SoundCloud, Spotify, Apple Music or Amazon Music link, or search. |
 | `!playnext <URL or search>` | `!pn`, `!next`        | Add a single track or search result at the front of the pending queue.                              |
-| `!yt <search terms>`        | `!search`, `!youtube` | Add the first matching YouTube video to the queue.                                                  |
+| `!yt [n] <search terms>`    | `!search`, `!youtube` | Add a matching YouTube video; a leading number picks the n-th ranked result.                        |
 | `!pause`                    | -                     | Pause the current track.                                                                            |
 | `!resume`                   | -                     | Resume the current track.                                                                           |
 | `!skip`                     | `!s`                  | Skip the current track.                                                                             |
@@ -45,8 +45,9 @@ chat once the TS3 adapter is connected.
 - **SoundCloud:** individual tracks first use SoundCloud's public web API with
   a dynamically discovered, cached client identifier. The identifier refreshes
   after authorization failures; yt-dlp and YouTube alternatives remain
-  fallbacks. This unofficial API may change without notice. Playlists are not
-  expanded yet, and blocked/DRM tracks are never bypassed.
+  fallbacks. This unofficial API may change without notice. Sets (`/sets/`)
+  are resolved through SongLink, expanding the equivalent YouTube playlist
+  when available; blocked/DRM tracks are never bypassed.
 - **Spotify:** tracks are resolved through the official Web API (client
   credentials flow, no user login) and the matching "artist title" is searched
   on YouTube for playback. Playlists and albums expand up to 20 tracks per

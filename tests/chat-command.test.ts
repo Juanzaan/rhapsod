@@ -24,6 +24,11 @@ describe("parseChatCommand", () => {
       input: "duki rockstar",
       name: "search",
     });
+    expect(parseChatCommand("!yt 3 duki rockstar")).toEqual({
+      index: 3,
+      input: "duki rockstar",
+      name: "search",
+    });
     expect(parseChatCommand("!stats")).toEqual({ name: "stats" });
     expect(parseChatCommand("!st")).toEqual({ name: "stats" });
     expect(parseChatCommand("!hist")).toEqual({ name: "history" });

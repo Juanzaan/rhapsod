@@ -72,6 +72,22 @@ function setup(
         webpageUrl: "https://www.youtube.com/watch?v=search-result",
       }),
     ),
+    searchMany: vi.fn((query: string): Promise<YoutubeTrackMetadata[]> =>
+      Promise.resolve([
+        {
+          audioUrl: "https://media.example/search-result",
+          id: "search-result",
+          title: `Search ${query}`,
+          webpageUrl: "https://www.youtube.com/watch?v=search-result",
+        },
+        {
+          audioUrl: "https://media.example/search-result-2",
+          id: "search-result-2",
+          title: `Search ${query} 2`,
+          webpageUrl: "https://www.youtube.com/watch?v=search-result-2",
+        },
+      ]),
+    ),
     expandPlaylist: vi.fn<YoutubePlaybackResolver["expandPlaylist"]>(() =>
       Promise.resolve({ tracks: [] }),
     ),
@@ -182,6 +198,34 @@ describe("YoutubePlaybackService", () => {
       requestedBy: "user-1",
       title: "Search duki rockstar",
     });
+  });
+
+  it("queues a ranked search result by one-based index", async () => {
+    const { resolver, service } = setup();
+
+    const track = await service.enqueueSearchIndex(
+      "duki rockstar",
+      2,
+      "user-1",
+    );
+
+    expect(resolver.searchMany).toHaveBeenCalledWith(
+      "duki rockstar",
+      undefined,
+      5,
+    );
+    expect(track).toMatchObject({
+      id: "search-result-2",
+      title: "Search duki rockstar 2",
+    });
+  });
+
+  it("rejects an out-of-range search index", async () => {
+    const { service } = setup();
+
+    await expect(
+      service.enqueueSearchIndex("duki rockstar", 9, "user-1"),
+    ).rejects.toThrow("No hay resultado 9");
   });
 
   it("returns lyrics for the current track, parsed from its title", async () => {

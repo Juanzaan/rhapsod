@@ -44,7 +44,7 @@ Requirements: Node.js 22.12+, `yt-dlp` on PATH (or `RHAPSOD_YTDLP_PATH`), and a 
 | --------------------------- | --------------------- | -------------------------------------------------------------------------------- |
 | `!play <URL or text>`       | `!p`                  | Queue a YouTube/SoundCloud/Spotify/Apple Music/Amazon Music link or run a search |
 | `!playnext <URL or text>`   | `!pn`, `!next`        | Add a single track or search result at the front of the pending queue            |
-| `!yt <search terms>`        | `!search`, `!youtube` | Add the first matching YouTube video to the queue                                |
+| `!yt [n] <search terms>`    | `!search`, `!youtube` | Add a matching YouTube video; a leading number picks the n-th ranked result      |
 | `!pause` / `!resume`        | -                     | Pause / resume the current track                                                 |
 | `!skip`                     | `!s`                  | Skip the current track                                                           |
 | `!stop`                     | -                     | Stop playback and clear the session                                              |

@@ -12,7 +12,7 @@ type ChatCommand =
   | { readonly name: "history" }
   | { readonly name: "move"; readonly from: number; readonly to: number }
   | { readonly name: "resume" }
-  | { readonly input: string; readonly name: "search" }
+  | { readonly index?: number; readonly input: string; readonly name: "search" }
   | { readonly name: "shuffle" }
   | { readonly name: "skip" }
   | { readonly name: "stats" }
@@ -80,9 +80,17 @@ export function parseChatCommand(
     case "play":
       if (!argument) throw new Error("Usage: !play <URL or search terms>");
       return { input: argument, name };
-    case "search":
+    case "search": {
+      const first = argument.split(/\s+/)[0] ?? "";
+      if (/^\d+$/.test(first)) {
+        const index = parsePosition(first, "!yt <n> <búsqueda>");
+        const query = argument.split(/\s+/).slice(1).join(" ").trim();
+        if (!query) throw new Error("Usage: !yt <n> <búsqueda>");
+        return { index, input: query, name };
+      }
       if (!argument) throw new Error("Usage: !yt <search terms>");
       return { input: argument, name };
+    }
     case "playnext":
       if (!argument) throw new Error("Usage: !playnext <URL or search terms>");
       return { input: argument, name };

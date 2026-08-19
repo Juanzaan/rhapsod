@@ -186,6 +186,17 @@ async function main(): Promise<void> {
           break;
         }
         case "search": {
+          if (command.index) {
+            const track = await playback.enqueueSearchIndex(
+              command.input,
+              command.index,
+              senderName,
+            );
+            await connection.sendChannelMessage(
+              `En cola (resultado ${command.index}): ${track.title}`,
+            );
+            break;
+          }
           await connection.sendChannelMessage("Buscando en YouTube...");
           const track = await playback.enqueueSearch(command.input, senderName);
           await connection.sendChannelMessage(`En cola: ${track.title}`);
@@ -355,7 +366,7 @@ async function main(): Promise<void> {
               "Comandos disponibles:",
               "!play <URL o búsqueda> - Reproducir YouTube, SoundCloud, Spotify, playlists o buscar",
               "!playnext (!pn) <URL o búsqueda> - Agregar como próxima pista",
-              "!yt <búsqueda> - Buscar en YouTube",
+              "!yt [n] <búsqueda> - Buscar en YouTube (el resultado n con un número)",
               "!queue [página] - Mostrar la cola",
               "!history (!hist) - Historial reciente",
               "!now-playing (!np) - Canción actual",
