@@ -9,6 +9,7 @@ export interface FfmpegPcmOptions {
   readonly binary?: string;
   readonly spawnProcess?: typeof spawn;
   readonly loudnessTargetLufs?: number;
+  readonly userAgent?: string;
 }
 
 export interface FfmpegPcmStream {
@@ -42,6 +43,11 @@ export function buildFfmpegPcmArguments(
     "1",
     "-reconnect_on_http_error",
     "4xx,5xx",
+  ];
+  if (options.userAgent !== undefined && options.userAgent.length > 0) {
+    args.push("-user_agent", options.userAgent);
+  }
+  args.push(
     "-i",
     url,
     "-vn",
@@ -53,7 +59,7 @@ export function buildFfmpegPcmArguments(
     String(CHANNELS),
     "-acodec",
     "pcm_s16le",
-  ];
+  );
   if (
     options.loudnessTargetLufs !== undefined &&
     options.loudnessTargetLufs < 0

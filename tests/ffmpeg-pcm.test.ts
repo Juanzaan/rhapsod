@@ -38,6 +38,23 @@ describe("FFmpeg PCM source", () => {
     expect(args).not.toContain("loudnorm");
   });
 
+  it("sends a custom User-Agent before the input URL when configured", () => {
+    const args = buildFfmpegPcmArguments("https://cdn.example.test/audio", {
+      userAgent: "Rhapsod/1.0",
+    });
+
+    const inputIndex = args.indexOf("-i");
+    expect(inputIndex).toBeGreaterThan(-1);
+    expect(args.indexOf("-user_agent")).toBeLessThan(inputIndex);
+    expect(args[args.indexOf("-user_agent") + 1]).toBe("Rhapsod/1.0");
+  });
+
+  it("omits the User-Agent flag when none is configured", () => {
+    const args = buildFfmpegPcmArguments("https://cdn.example.test/audio");
+
+    expect(args).not.toContain("-user_agent");
+  });
+
   it("rejects non-HTTPS inputs", () => {
     expect(() => buildFfmpegPcmArguments("http://example.test/audio")).toThrow(
       "must use HTTPS",

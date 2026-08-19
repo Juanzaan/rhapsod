@@ -20,6 +20,7 @@ import {
   YoutubeResolver,
 } from "./media/youtube/yt-dlp.js";
 import { SongLinkClient } from "./media/song-link.js";
+import { DirectUrlClient } from "./media/direct-url.js";
 import { LyricsClient } from "./media/lyrics.js";
 import { SoundCloudPublicApi } from "./media/soundcloud/public-api.js";
 import { SpotifyApi } from "./media/spotify/api.js";
@@ -96,11 +97,15 @@ async function main(): Promise<void> {
         })
       : undefined;
   const ffmpegPath = config.RHAPSOD_FFMPEG_PATH;
+  const ffmpegUserAgent = config.RHAPSOD_FFMPEG_USER_AGENT;
   const playback = new YoutubePlaybackService({
     createPlayback: (url, playbackEncoder, output) =>
       playFfmpegUrl(url, playbackEncoder, output, {
         ...(ffmpegPath === undefined ? {} : { binary: ffmpegPath }),
         loudnessTargetLufs: config.RHAPSOD_LOUDNESS_TARGET_LUFS,
+        ...(ffmpegUserAgent === undefined
+          ? {}
+          : { userAgent: ffmpegUserAgent }),
       }),
     encoder,
     onPlaybackStarted: async (track) => {
@@ -134,6 +139,11 @@ async function main(): Promise<void> {
     maxQueueTracks: config.RHAPSOD_MAX_QUEUE_TRACKS,
     maxTracksPerUser: config.RHAPSOD_MAX_TRACKS_PER_USER,
     alternativeResolver: new SongLinkClient(),
+    directUrlResolver: new DirectUrlClient({
+      ...(config.RHAPSOD_FFPROBE_PATH === undefined
+        ? {}
+        : { ffprobeBinary: config.RHAPSOD_FFPROBE_PATH }),
+    }),
     soundcloudResolver: new SoundCloudPublicApi(),
     lyricsResolver: new LyricsClient(),
     ...(spotifyResolver ? { spotifyResolver } : {}),
