@@ -1,7 +1,9 @@
 import type { YoutubeSearchCandidate } from "./yt-dlp.js";
 
 const PENALIZED_TERMS =
-  /\b(cover|live|remix|reaction|review|shorts?|sped up|slowed|nightcore|karaoke)\b/i;
+  /\b(cover|live|remix|reaction|review|shorts?|sped up|slowed|nightcore|karaoke|festival|tour|concert|session|acoustic|stadium|arena|radio|rehearsal|demo)\b/i;
+const LIVE_EVENT_CONTEXT =
+  /\([^)]*\b(at|live|festival|tour|concert|session|stadium|arena|radio|acoustic)\b[^)]*\)/i;
 const POSITIVE_TERMS =
   /\b(official audio|official video|topic|provided to youtube)\b/i;
 const CHANNEL_MATCH_BONUS = 12;
@@ -9,6 +11,7 @@ const MAX_CHANNEL_MATCH_BONUS = 24;
 const FUZZY_MIN_TERM_LENGTH = 4;
 const DURATION_TOLERANCE = 0.25;
 const DURATION_MISMATCH_PENALTY = 40;
+const VERSION_PENALTY = 35;
 
 export function rankYoutubeCandidates(
   query: string,
@@ -32,6 +35,7 @@ export function rankYoutubeCandidatesAll(
     .map((candidate) => ({
       candidate,
       score: scoreCandidate(
+        query,
         normalizedQuery,
         candidate,
         expectedDurationSeconds,
@@ -43,6 +47,7 @@ export function rankYoutubeCandidatesAll(
 }
 
 function scoreCandidate(
+  query: string,
   normalizedQuery: string,
   candidate: YoutubeSearchCandidate,
   expectedDurationSeconds?: number,
@@ -82,7 +87,12 @@ function scoreCandidate(
     PENALIZED_TERMS.test(candidate.title) &&
     !PENALIZED_TERMS.test(normalizedQuery)
   )
-    score -= 35;
+    score -= VERSION_PENALTY;
+  if (
+    LIVE_EVENT_CONTEXT.test(candidate.title) &&
+    !LIVE_EVENT_CONTEXT.test(query)
+  )
+    score -= VERSION_PENALTY;
   if (candidate.durationSeconds !== undefined && candidate.durationSeconds < 45)
     score -= 20;
   if (
