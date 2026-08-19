@@ -21,6 +21,8 @@ import {
 } from "../media/soundcloud/public-api.js";
 import type { SpotifyResolver } from "../media/spotify/api.js";
 
+export type LoopMode = "off" | "queue" | "track";
+
 interface PlaybackServiceOptions {
   readonly encoder: RhapsodOpusEncoder;
   readonly resolver: YoutubePlaybackResolver;
@@ -105,6 +107,9 @@ export class YoutubePlaybackService {
   #current: Track | undefined;
   #session: FfmpegPlaybackSession | undefined;
   #generation = 0;
+  #volumePercent = 100;
+  #loopMode: LoopMode = "off";
+  #loopPool: Track[] = [];
   readonly #prepared = new Map<string, Promise<PreparedAudio>>();
   readonly #sessionEndReasons = new WeakMap<
     FfmpegPlaybackSession,
@@ -133,6 +138,24 @@ export class YoutubePlaybackService {
 
   queue(): readonly Track[] {
     return this.#queue.snapshot();
+  }
+
+  get volume(): number {
+    return this.#volumePercent;
+  }
+
+  setVolume(percent: number): void {
+    this.#volumePercent = Math.max(0, Math.min(100, Math.round(percent)));
+    this.#session?.player.setVolume(this.#volumePercent / 100);
+  }
+
+  get loopMode(): LoopMode {
+    return this.#loopMode;
+  }
+
+  setLoopMode(mode: LoopMode): void {
+    this.#loopMode = mode;
+    this.#loopPool = mode === "queue" ? [...this.#queue.snapshot()] : [];
   }
 
   async enqueue(input: string, requestedBy: string): Promise<Track> {
@@ -316,6 +339,8 @@ export class YoutubePlaybackService {
     this.#session = undefined;
     this.#current = undefined;
     this.#queue.clear();
+    this.#loopMode = "off";
+    this.#loopPool = [];
     this.#prepared.clear();
   }
 
@@ -337,11 +362,23 @@ export class YoutubePlaybackService {
   clearQueued(): number {
     const count = this.#queue.length;
     this.#queue.clear();
+    this.#loopMode = "off";
+    this.#loopPool = [];
     this.#prepared.clear();
     return count;
   }
 
   #playNext(): Promise<void> {
+    if (this.#queue.length === 0 && this.#loopPool.length > 0) {
+      for (const pooled of this.#loopPool) {
+        try {
+          this.#queue.add(pooled);
+        } catch {
+          // already queued; skip
+        }
+      }
+      this.#loopPool = [];
+    }
     const track = this.#queue.next();
     if (!track) {
       this.#current = undefined;
@@ -360,6 +397,7 @@ export class YoutubePlaybackService {
         });
         if (generation !== this.#generation || this.#current !== track) return;
         const session = this.#createPlayback(url, this.#encoder, this.#output);
+        session.player.setVolume(this.#volumePercent / 100);
         this.#session = session;
         void this.#onPlaybackStarted(track);
         this.#prefetchNext();
@@ -387,6 +425,15 @@ export class YoutubePlaybackService {
         this.#prepared.delete(track.source);
         this.#session = undefined;
         this.#current = undefined;
+        if (this.#loopMode === "track") {
+          try {
+            this.#queue.add(track);
+          } catch {
+            // already queued; skip
+          }
+        } else if (this.#loopMode === "queue") {
+          this.#loopPool.push(track);
+        }
         return this.#playNext();
       });
   }

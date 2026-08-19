@@ -8,6 +8,10 @@ for [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `!volume <0-100>`: PCM gain applied to frames before Opus encoding, affecting
+  every listener; changes apply live to the current track.
+- `!loop [off|track|queue]`: repeat the current track (`track`) or the whole
+  queue (`queue`); `!stop`/`!clear` disable looping.
 - `RHAPSOD_TS3_CLIENT_DESCRIPTION` sets the bot's TeamSpeak client description
   (any client can set its own description; no server permissions needed).
 - `test:coverage` script.

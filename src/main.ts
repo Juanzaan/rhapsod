@@ -226,19 +226,32 @@ async function main(): Promise<void> {
               "!stop - Detener y vaciar",
               "!pause / !resume - Pausar o continuar",
               "!test-tone - Probar el audio",
-              "!volume / !loop - En desarrollo",
+              "!volume <0-100> - Ajustar el volumen",
+              "!loop [off|track|queue] - Repetir la pista o la cola",
               "!help - Mostrar esta ayuda",
             ].join("\n"),
           );
           break;
         case "loop":
-          await connection.sendChannelMessage(
-            "El modo loop todavía está en desarrollo. Usa !queue, !remove y !clear para gestionar la cola.",
-          );
+          if (command.mode) {
+            playback.setLoopMode(command.mode);
+            await connection.sendChannelMessage(
+              command.mode === "off"
+                ? "Modo loop desactivado."
+                : command.mode === "track"
+                  ? "Modo loop: pista actual en repetición."
+                  : "Modo loop: cola en repetición.",
+            );
+          } else {
+            await connection.sendChannelMessage(
+              `Modo loop actual: ${playback.loopMode}. Usá !loop [off|track|queue].`,
+            );
+          }
           break;
         case "volume":
+          playback.setVolume(command.value);
           await connection.sendChannelMessage(
-            "El volumen todavía está en desarrollo; ajusta el volumen de TeamSpeak mientras se implementa el control PCM.",
+            `Volumen ajustado a ${playback.volume}%.`,
           );
           break;
       }

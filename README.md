@@ -49,10 +49,10 @@ Requirements: Node.js 22.12+, `yt-dlp` on PATH (or `RHAPSOD_YTDLP_PATH`), and a 
 | `!stop`                     | -                     | Stop playback and clear the session                     |
 | `!queue`                    | `!q`                  | Show the pending queue                                  |
 | `!now-playing`              | `!np`, `!now`         | Show the current track                                  |
-| `!volume <0-100>`           | `!vol`, `!v`          | Reserved; PCM volume control not connected yet          |
+| `!volume <0-100>`           | `!vol`, `!v`          | Adjust the bot output volume (PCM gain before encoding) |
 | `!remove <position>`        | `!rm`                 | Remove a queue position                                 |
 | `!clear`                    | `!c`                  | Clear pending tracks                                    |
-| `!loop [off\|track\|queue]` | -                     | Reserved; loop modes not connected yet                  |
+| `!loop [off\|track\|queue]` | -                     | Repeat the current track or the whole queue             |
 | `!test-tone`                | `!tone`               | Play a 3-second test tone (rate-limited)                |
 | `!help`                     | `!h`                  | Show the command summary                                |
 
