@@ -36,6 +36,7 @@ const configSchema = z.object({
     .enum(["true", "false"])
     .default("true")
     .transform((value) => value === "true"),
+  RHAPSOD_TS3_CLIENT_DESCRIPTION: z.string().optional(),
   RHAPSOD_YTDLP_PATH: z.string().min(1).default("yt-dlp"),
   RHAPSOD_YTDLP_COOKIES_PATH: optionalSecret,
 });

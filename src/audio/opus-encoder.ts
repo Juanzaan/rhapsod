@@ -10,11 +10,11 @@ export const CHANNELS = 2;
 export const FRAME_DURATION_MS = 20;
 export const SAMPLES_PER_CHANNEL = (SAMPLE_RATE * FRAME_DURATION_MS) / 1000;
 export const PCM_FRAME_BYTES = SAMPLES_PER_CHANNEL * CHANNELS * 2;
-export const TS3_MAX_PACKET_BYTES = 500;
-export const TS3_VOICE_HEADER_BYTES = 3;
+const TS3_MAX_PACKET_BYTES = 500;
+const TS3_VOICE_HEADER_BYTES = 3;
 export const TS3_MAX_OPUS_BYTES = TS3_MAX_PACKET_BYTES - TS3_VOICE_HEADER_BYTES;
 
-export interface OpusEncoderConfig {
+interface OpusEncoderConfig {
   readonly bitrate?: number;
 }
 

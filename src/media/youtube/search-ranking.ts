@@ -30,7 +30,7 @@ export function rankYoutubeCandidatesAll(
     .map((item) => item.candidate);
 }
 
-export function scoreCandidate(
+function scoreCandidate(
   normalizedQuery: string,
   candidate: YoutubeSearchCandidate,
 ): number {

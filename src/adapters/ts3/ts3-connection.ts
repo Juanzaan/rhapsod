@@ -6,7 +6,7 @@ import {
 
 import type { AppConfig } from "../../config.js";
 
-export interface Ts3Connection {
+interface Ts3Connection {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
   onTextMessage(
@@ -43,6 +43,15 @@ export function createTs3Connection(
       await client.waitConnected(
         AbortSignal.timeout(config.RHAPSOD_TS3_CONNECT_TIMEOUT_SECONDS * 1_000),
       );
+      if (config.RHAPSOD_TS3_CLIENT_DESCRIPTION !== undefined) {
+        try {
+          await client.execCommand(
+            `clientset client_description=${escapeClientParam(config.RHAPSOD_TS3_CLIENT_DESCRIPTION)}`,
+          );
+        } catch {
+          // The description is cosmetic; keep the connection alive either way.
+        }
+      }
     },
     disconnect: () => client.disconnect(),
     sendChannelMessage: (message) =>
@@ -54,4 +63,12 @@ export function createTs3Connection(
       );
     },
   };
+}
+
+function escapeClientParam(value: string): string {
+  return value
+    .replace(/\\/g, "\\\\")
+    .replace(/\s/g, "\\s")
+    .replace(/\//g, "\\/")
+    .replace(/\|/g, "\\p");
 }

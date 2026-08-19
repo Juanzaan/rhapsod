@@ -57,6 +57,8 @@ Wants=network-online.target
 Environment=RHAPSOD_TS3_HOST=voice.example.com
 Environment=RHAPSOD_TS3_PORT=9987
 Environment=RHAPSOD_TS3_NICKNAME=Rhapsod
+Environment=RHAPSOD_TS3_CLIENT_DESCRIPTION=Rhapsod - [url=https://github.com/Juanzaan/rhapsod]github.com/Juanzaan/rhapsod[/url]
+Environment=RHAPSOD_DATA_DIR=/var/lib/rhapsod
 Environment=RHAPSOD_YTDLP_PATH=/usr/local/bin/yt-dlp
 Environment=RHAPSOD_YTDLP_COOKIES_PATH=/home/rhapsod/youtube-cookies.txt
 Environment=RHAPSOD_FFMPEG_PATH=/usr/bin/ffmpeg
@@ -72,10 +74,19 @@ TimeoutStopSec=15
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
+MemoryMax=512M
+MemorySwapMax=1G
 
 [Install]
 WantedBy=multi-user.target
 ```
+
+`RHAPSOD_TS3_CLIENT_DESCRIPTION` sets the bot's client description, which
+any client can set for itself — no server permissions required. BBCode is
+allowed (e.g. `[url=...]...[/url]`). `RHAPSOD_DATA_DIR` persists the TS3
+identity: give the unit a matching `StateDirectory=rhapsod` (and
+`Environment=RHAPSOD_DATA_DIR=/var/lib/rhapsod`) so the identity survives
+restarts.
 
 Rhapsod also loads a `.env` file from its working directory (`dotenv/config`),
 so non-secret runtime config can live there. Secrets such as the Spotify
@@ -89,5 +100,6 @@ journalctl -u rhapsod -f
 
 The process handles `SIGINT` and `SIGTERM` by disconnecting from TeamSpeak
 cleanly. `TimeoutStopSec=15` gives the shutdown sequence room; `Restart=always`
-recovers crashes. On resource-constrained VMs, consider `MemoryMax=` (see
-issue #8) and keep an eye on journald logs for `underruns` / `rebufferEvents`.
+recovers crashes. On resource-constrained VMs, keep the `MemoryMax=` /
+`MemorySwapMax=` limits (see issue #8) and watch journald logs for `underruns`
+/ `rebufferEvents`.

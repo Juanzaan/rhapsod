@@ -40,8 +40,8 @@ place (`MemoryMax=512M`, `MemorySwapMax=1G`). See
 
 ### TeamSpeak 6 (Phase 4)
 
-Implement a TS6 voice adapter behind the existing `VoiceClient` port and run
-the shared behavior suite against both protocols. See
+Implement a TS6 voice adapter behind the same connection contract the TS3
+adapter exposes and run the shared behavior suite against both protocols. See
 [issue #12](https://github.com/Juanzaan/rhapsod/issues/12).
 
 ## Design principles

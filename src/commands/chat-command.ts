@@ -1,4 +1,4 @@
-export type ChatCommand =
+type ChatCommand =
   | { readonly name: "clear" }
   | { readonly name: "help" }
   | { readonly name: "loop"; readonly mode?: "off" | "queue" | "track" }
@@ -60,7 +60,7 @@ export function parseChatCommand(
   const argument = unwrapTeamSpeakUrl(argumentsList.join(" ").trim());
   switch (name) {
     case "play":
-      if (!argument) throw new Error("Usage: !play <YouTube URL>");
+      if (!argument) throw new Error("Usage: !play <URL or search terms>");
       return { input: argument, name };
     case "search":
       if (!argument) throw new Error("Usage: !yt <search terms>");

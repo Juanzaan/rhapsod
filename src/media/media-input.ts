@@ -1,4 +1,4 @@
-export type MediaInput =
+type MediaInput =
   | { readonly kind: "file"; readonly value: string }
   | { readonly kind: "soundcloud"; readonly value: string }
   | { readonly kind: "spotify"; readonly resource: SpotifyResource }

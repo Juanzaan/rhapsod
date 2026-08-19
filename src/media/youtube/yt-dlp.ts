@@ -3,7 +3,6 @@ import { promisify } from "node:util";
 
 import type { YoutubeResource } from "../media-input.js";
 import { parseMediaInput } from "../media-input.js";
-import type { MusicResolver } from "../music-resolver.js";
 import { rankYoutubeCandidatesAll } from "./search-ranking.js";
 
 const execFileAsync = promisify(execFile);
@@ -19,8 +18,7 @@ export interface YtDlpExecutor {
   ): Promise<string>;
 }
 
-export type YtDlpJobPriority = "metadata" | "playback";
-
+type YtDlpJobPriority = "metadata" | "playback";
 interface QueuedJob<Input, Output> {
   readonly input: Input;
   readonly resolve: (output: Output) => void;
@@ -125,7 +123,7 @@ export class SystemYtDlpExecutor implements YtDlpExecutor {
   }
 }
 
-export class YoutubeResolver implements MusicResolver {
+export class YoutubeResolver {
   readonly name = "youtube";
 
   constructor(private readonly executor: YtDlpExecutor) {}
@@ -136,14 +134,6 @@ export class YoutubeResolver implements MusicResolver {
     } catch {
       return false;
     }
-  }
-
-  resolveTrack(input: string): Promise<YoutubeTrackMetadata> {
-    return this.getTrackFromUrl(input);
-  }
-
-  resolveAudioUrl(input: string): Promise<string> {
-    return this.getAudioUrlFromUrl(input);
   }
 
   async isAvailable(): Promise<boolean> {

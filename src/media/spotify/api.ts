@@ -1,7 +1,7 @@
 import { parseMediaInput } from "../media-input.js";
 import type { SpotifyResource } from "../media-input.js";
 
-export interface SpotifyTrackMetadata {
+interface SpotifyTrackMetadata {
   readonly artist: string;
   readonly durationSeconds: number;
   readonly id: string;
@@ -14,7 +14,7 @@ export interface SpotifyResolver {
   getTrack(resource: SpotifyResource): Promise<SpotifyTrackMetadata>;
 }
 
-export interface SpotifyApiOptions {
+interface SpotifyApiOptions {
   readonly clientId: string;
   readonly clientSecret: string;
   readonly fetch?: typeof fetch;

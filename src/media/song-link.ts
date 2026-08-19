@@ -1,6 +1,6 @@
 const SONGLINK_ENDPOINT = "https://api.song.link/v1-alpha.1/links";
 
-export interface AlternativeSource {
+interface AlternativeSource {
   readonly provider: "youtube";
   readonly url: string;
 }
@@ -13,7 +13,7 @@ interface SongLinkResponse {
   linksByPlatform?: Record<string, { url?: string }>;
 }
 
-export interface SongLinkClientOptions {
+interface SongLinkClientOptions {
   readonly fetch?: typeof fetch;
   readonly timeoutMs?: number;
 }
