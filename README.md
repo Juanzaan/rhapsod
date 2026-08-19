@@ -1,14 +1,7 @@
-<p align="center">
-  <img src="docs/assets/logo.svg" width="120" alt="Rhapsod logo" />
-</p>
+# Rhapsod
 
-<h1 align="center">Rhapsod</h1>
-
-<p align="center">
-  A self-hosted music bot for TeamSpeak 3.
-  <br />
-  <em>Architected so TeamSpeak 6 support can be added without touching the audio pipeline.</em>
-</p>
+A self-hosted music bot for TeamSpeak 3.
+_Architected so TeamSpeak 6 support can be added without touching the audio pipeline._
 
 <p align="center">
   <a href="https://github.com/Juanzaan/rhapsod/actions/workflows/ci.yml"><img src="https://github.com/Juanzaan/rhapsod/actions/workflows/ci.yml/badge.svg" alt="CI status" /></a>
