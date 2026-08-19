@@ -37,7 +37,7 @@ const configSchema = z.object({
     .int()
     .min(0)
     .max(30)
-    .default(10),
+    .default(0),
   RHAPSOD_LOUDNESS_TARGET_LUFS: z.coerce.number().min(-30).max(0).default(-14),
   RHAPSOD_SPOTIFY_CLIENT_ID: optionalSecret,
   RHAPSOD_SPOTIFY_CLIENT_SECRET: optionalSecret,

@@ -1,7 +1,5 @@
 import { FRAME_DURATION_MS } from "./opus-encoder.js";
 
-const MAX_CATCH_UP_FRAMES = 25;
-
 interface FrameSchedulerOptions {
   readonly now?: () => number;
   readonly schedule?: (callback: () => void, delayMs: number) => NodeJS.Timeout;
@@ -41,16 +39,11 @@ export class FrameScheduler {
     this.#timer = this.#schedule(() => {
       if (!this.#running) return;
       const now = this.#now();
-      const missedFrames = Math.max(
-        0,
-        Math.floor((now - this.#nextFrameAt) / FRAME_DURATION_MS),
-      );
-      const framesToSend = Math.min(missedFrames + 1, MAX_CATCH_UP_FRAMES);
-      for (let i = 0; i < framesToSend; i++) onFrame();
-      this.#nextFrameAt += (missedFrames + 1) * FRAME_DURATION_MS;
-      if (this.#nextFrameAt <= now) {
-        this.#nextFrameAt = now + FRAME_DURATION_MS;
+      if (now - this.#nextFrameAt > FRAME_DURATION_MS) {
+        this.#nextFrameAt = now;
       }
+      onFrame();
+      this.#nextFrameAt += FRAME_DURATION_MS;
       this.#scheduleNext(onFrame);
     }, delay);
   }

@@ -61,7 +61,7 @@ export function createTs3Connection(
     },
     sendChannelMessage: (message) =>
       sendTextMessage(client, 2, client.channelID(), message),
-    sendVoiceFrame: (frame) => client.sendVoice(frame, 5),
+    sendVoiceFrame: (frame) => client.sendVoice(frame, 6),
     onTextMessage: (handler) => {
       client.on("textMessage", (message) =>
         handler(message.message, message.invokerUID, message.invokerName),
