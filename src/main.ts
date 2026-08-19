@@ -122,7 +122,7 @@ async function main(): Promise<void> {
             const track = await playback.enqueue(command.input, senderName);
             const viaSearch = media.kind === "file";
             await connection.sendChannelMessage(
-              `En cola: ${track.title}${viaSearch ? " (búsqueda)" : ""}${track.alternativeProvider ? ` (fuente alternativa: ${track.alternativeProvider})` : ""}`,
+              `En cola: ${track.title}${viaSearch ? " (búsqueda)" : ""}`,
             );
           }
           break;
@@ -130,9 +130,7 @@ async function main(): Promise<void> {
         case "search": {
           await connection.sendChannelMessage("Buscando en YouTube...");
           const track = await playback.enqueueSearch(command.input, senderName);
-          await connection.sendChannelMessage(
-            `En cola: ${track.title}${track.alternativeProvider ? ` (fuente alternativa: ${track.alternativeProvider})` : ""}`,
-          );
+          await connection.sendChannelMessage(`En cola: ${track.title}`);
           break;
         }
         case "pause":
