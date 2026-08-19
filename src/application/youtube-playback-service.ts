@@ -44,6 +44,8 @@ interface PlaybackServiceOptions {
   readonly stateStore?: PlaybackStateStore;
   readonly output: VoiceFrameOutput;
   readonly playlistMaxTracks?: number;
+  readonly maxQueueTracks?: number;
+  readonly maxTracksPerUser?: number;
   readonly createPlayback?: typeof playFfmpegUrl;
   readonly onPlaybackError?: (
     track: Track,
@@ -95,7 +97,11 @@ interface PlaylistEnqueueResult {
 const AUDIO_URL_FALLBACK_TTL_MS = 10 * 60_000;
 const AUDIO_URL_EXPIRY_MARGIN_MS = 60_000;
 const DEFAULT_PLAYLIST_MAX_TRACKS = 20;
+const DEFAULT_MAX_QUEUE_TRACKS = 200;
+const DEFAULT_MAX_TRACKS_PER_USER = 30;
 const HISTORY_LIMIT = 20;
+
+class QueueLimitError extends Error {}
 
 interface PreparedAudio {
   readonly url: string;
@@ -125,6 +131,9 @@ export class YoutubePlaybackService {
   ) => void;
   readonly #onTiming: (timing: PlaybackTiming) => void;
   readonly #playlistMaxTracks: number;
+  readonly #maxQueueTracks: number;
+  readonly #maxTracksPerUser: number;
+  #expansionActive = false;
   #current: Track | undefined;
   #session: FfmpegPlaybackSession | undefined;
   #generation = 0;
@@ -157,6 +166,9 @@ export class YoutubePlaybackService {
     this.#onTiming = options.onTiming ?? (() => undefined);
     this.#playlistMaxTracks =
       options.playlistMaxTracks ?? DEFAULT_PLAYLIST_MAX_TRACKS;
+    this.#maxQueueTracks = options.maxQueueTracks ?? DEFAULT_MAX_QUEUE_TRACKS;
+    this.#maxTracksPerUser =
+      options.maxTracksPerUser ?? DEFAULT_MAX_TRACKS_PER_USER;
     const restored = this.#stateStore?.load();
     if (restored?.volumePercent !== undefined) {
       this.#volumePercent = restored.volumePercent;
@@ -384,57 +396,66 @@ export class YoutubePlaybackService {
   ): Promise<PlaylistEnqueueResult> {
     if (resource.type !== "playlist")
       throw new Error("Only YouTube playlists can be expanded");
-    const expansion = await this.#resolver.expandPlaylist(
-      resource,
-      this.#playlistMaxTracks,
-    );
-    return this.#enqueuePlaylistExpansion(expansion, requestedBy);
+    return this.#withExpansionSlot(async () => {
+      const expansion = await this.#resolver.expandPlaylist(
+        resource,
+        this.#playlistMaxTracks,
+      );
+      return this.#enqueuePlaylistExpansion(expansion, requestedBy);
+    });
   }
 
   async enqueueMusicLink(
     input: string,
     requestedBy: string,
   ): Promise<PlaylistEnqueueResult> {
-    if (!this.#alternativeResolver) {
-      throw new Error(
-        "Este bot no tiene resolución de links de Apple Music o Amazon Music configurada.",
-      );
-    }
-    const alternative = await this.#alternativeResolver.findAlternative(input);
-    if (!alternative) {
-      throw new Error(
-        "No pude encontrar ese link en YouTube o SoundCloud. Probá pegando el link directo de YouTube.",
-      );
-    }
-    if (alternative.provider === "soundcloud") {
-      if (!this.#soundcloudResolver) {
+    return this.#withExpansionSlot(async () => {
+      if (!this.#alternativeResolver) {
         throw new Error(
-          "El link solo existe en SoundCloud, pero ese proveedor no está configurado.",
+          "Este bot no tiene resolución de links de Apple Music o Amazon Music configurada.",
         );
       }
-      const metadata = await this.#soundcloudResolver.getTrack(alternative.url);
-      this.#recordMetadataTiming(metadata, Date.now());
-      return { added: [this.#enqueueMetadata(metadata, requestedBy)] };
-    }
-    const parsed = parseMediaInput(alternative.url);
-    if (parsed.kind === "youtube" && parsed.resource.type === "playlist") {
-      const expansion = await this.#resolver.expandPlaylist(
-        parsed.resource,
-        this.#playlistMaxTracks,
+      const alternative =
+        await this.#alternativeResolver.findAlternative(input);
+      if (!alternative) {
+        throw new Error(
+          "No pude encontrar ese link en YouTube o SoundCloud. Probá pegando el link directo de YouTube.",
+        );
+      }
+      if (alternative.provider === "soundcloud") {
+        if (!this.#soundcloudResolver) {
+          throw new Error(
+            "El link solo existe en SoundCloud, pero ese proveedor no está configurado.",
+          );
+        }
+        const metadata = await this.#soundcloudResolver.getTrack(
+          alternative.url,
+        );
+        this.#recordMetadataTiming(metadata, Date.now());
+        return { added: [this.#enqueueMetadata(metadata, requestedBy)] };
+      }
+      const parsed = parseMediaInput(alternative.url);
+      if (parsed.kind === "youtube" && parsed.resource.type === "playlist") {
+        const expansion = await this.#resolver.expandPlaylist(
+          parsed.resource,
+          this.#playlistMaxTracks,
+        );
+        return this.#enqueuePlaylistExpansion(expansion, requestedBy);
+      }
+      if (parsed.kind === "youtube" && parsed.resource.type === "video") {
+        const metadata = await this.#resolver.getTrack(parsed.resource);
+        this.#recordMetadataTiming(metadata, Date.now());
+        return { added: [this.#enqueueMetadata(metadata, requestedBy)] };
+      }
+      if (parsed.kind === "soundcloud" && this.#soundcloudResolver) {
+        const metadata = await this.#soundcloudResolver.getTrack(parsed.value);
+        this.#recordMetadataTiming(metadata, Date.now());
+        return { added: [this.#enqueueMetadata(metadata, requestedBy)] };
+      }
+      throw new Error(
+        "El link alternativo no apunta a una fuente reproducible.",
       );
-      return this.#enqueuePlaylistExpansion(expansion, requestedBy);
-    }
-    if (parsed.kind === "youtube" && parsed.resource.type === "video") {
-      const metadata = await this.#resolver.getTrack(parsed.resource);
-      this.#recordMetadataTiming(metadata, Date.now());
-      return { added: [this.#enqueueMetadata(metadata, requestedBy)] };
-    }
-    if (parsed.kind === "soundcloud" && this.#soundcloudResolver) {
-      const metadata = await this.#soundcloudResolver.getTrack(parsed.value);
-      this.#recordMetadataTiming(metadata, Date.now());
-      return { added: [this.#enqueueMetadata(metadata, requestedBy)] };
-    }
-    throw new Error("El link alternativo no apunta a una fuente reproducible.");
+    });
   }
 
   #enqueuePlaylistExpansion(
@@ -443,6 +464,7 @@ export class YoutubePlaybackService {
   ): PlaylistEnqueueResult {
     const added: Track[] = [];
     let duplicates = 0;
+    let halted = false;
     const addedIds = new Set<string>();
     for (const metadata of expansion.tracks.slice(0, this.#playlistMaxTracks)) {
       if (addedIds.has(metadata.id) || this.#current?.id === metadata.id) {
@@ -454,6 +476,10 @@ export class YoutubePlaybackService {
         addedIds.add(track.id);
         added.push(track);
       } catch (error) {
+        if (error instanceof QueueLimitError) {
+          halted = true;
+          break;
+        }
         if (error instanceof Error && /already queued/i.test(error.message)) {
           duplicates++;
           continue;
@@ -463,84 +489,115 @@ export class YoutubePlaybackService {
     }
     return {
       added,
-      ...(expansion.total === undefined
-        ? {}
-        : {
-            remaining: Math.max(0, expansion.total - added.length - duplicates),
-          }),
+      ...(halted || expansion.total !== undefined
+        ? {
+            remaining: Math.max(
+              0,
+              (expansion.total ?? expansion.tracks.length) -
+                added.length -
+                duplicates,
+            ),
+          }
+        : {}),
     };
+  }
+
+  async #withExpansionSlot<T>(operation: () => Promise<T>): Promise<T> {
+    if (this.#expansionActive) {
+      throw new Error(
+        "Ya hay una playlist o álbum expandiéndose; esperá un momento.",
+      );
+    }
+    this.#expansionActive = true;
+    try {
+      return await operation();
+    } finally {
+      this.#expansionActive = false;
+    }
   }
 
   async enqueueSpotifyCollection(
     resource: SpotifyResource,
     requestedBy: string,
   ): Promise<PlaylistEnqueueResult> {
-    if (!this.#spotifyResolver) {
-      throw new Error(
-        "Spotify no está configurado en este bot: pegá un link de YouTube o SoundCloud, o buscá con !yt.",
-      );
-    }
-    if (resource.type !== "playlist" && resource.type !== "album") {
-      throw new Error("Only Spotify collections can be expanded");
-    }
-    const expansion =
-      resource.type === "playlist"
-        ? await this.#spotifyResolver.expandPlaylist(
-            resource,
-            this.#playlistMaxTracks,
-          )
-        : await this.#spotifyResolver.expandAlbum(
-            resource,
-            this.#playlistMaxTracks,
-          );
-    const added: Track[] = [];
-    let duplicates = 0;
-    const addedIds = new Set<string>();
-    for (const spotifyTrack of expansion.tracks.slice(
-      0,
-      this.#playlistMaxTracks,
-    )) {
-      const query = `${spotifyTrack.artist} ${spotifyTrack.title}`.trim();
-      if (!query) {
-        duplicates++;
-        continue;
-      }
-      const startedAt = Date.now();
-      let metadata: YoutubeTrackMetadata;
-      try {
-        metadata = await this.#resolver.search(
-          query,
-          spotifyTrack.durationSeconds,
+    return this.#withExpansionSlot(async () => {
+      if (!this.#spotifyResolver) {
+        throw new Error(
+          "Spotify no está configurado en este bot: pegá un link de YouTube o SoundCloud, o buscá con !yt.",
         );
-      } catch {
-        duplicates++;
-        continue;
       }
-      this.#recordMetadataTiming(metadata, startedAt);
-      if (addedIds.has(metadata.id) || this.#current?.id === metadata.id) {
-        duplicates++;
-        continue;
+      if (resource.type !== "playlist" && resource.type !== "album") {
+        throw new Error("Only Spotify collections can be expanded");
       }
-      try {
-        const track = this.#enqueueMetadata(metadata, requestedBy, "spotify");
-        addedIds.add(track.id);
-        added.push(track);
-      } catch (error) {
-        if (error instanceof Error && /already queued/i.test(error.message)) {
+      const expansion =
+        resource.type === "playlist"
+          ? await this.#spotifyResolver.expandPlaylist(
+              resource,
+              this.#playlistMaxTracks,
+            )
+          : await this.#spotifyResolver.expandAlbum(
+              resource,
+              this.#playlistMaxTracks,
+            );
+      const added: Track[] = [];
+      let duplicates = 0;
+      let halted = false;
+      const addedIds = new Set<string>();
+      for (const spotifyTrack of expansion.tracks.slice(
+        0,
+        this.#playlistMaxTracks,
+      )) {
+        const query = `${spotifyTrack.artist} ${spotifyTrack.title}`.trim();
+        if (!query) {
           duplicates++;
           continue;
         }
-        throw error;
+        const startedAt = Date.now();
+        let metadata: YoutubeTrackMetadata;
+        try {
+          metadata = await this.#resolver.search(
+            query,
+            spotifyTrack.durationSeconds,
+          );
+        } catch {
+          duplicates++;
+          continue;
+        }
+        this.#recordMetadataTiming(metadata, startedAt);
+        if (addedIds.has(metadata.id) || this.#current?.id === metadata.id) {
+          duplicates++;
+          continue;
+        }
+        try {
+          const track = this.#enqueueMetadata(metadata, requestedBy, "spotify");
+          addedIds.add(track.id);
+          added.push(track);
+        } catch (error) {
+          if (error instanceof QueueLimitError) {
+            halted = true;
+            break;
+          }
+          if (error instanceof Error && /already queued/i.test(error.message)) {
+            duplicates++;
+            continue;
+          }
+          throw error;
+        }
       }
-    }
-    return {
-      added,
-      ...(expansion.total === undefined
-        ? {}
-        : {
-            remaining: Math.max(0, expansion.total - added.length - duplicates),
-          }),
-    };
+      return {
+        added,
+        ...(halted || expansion.total !== undefined
+          ? {
+              remaining: Math.max(
+                0,
+                (expansion.total ?? expansion.tracks.length) -
+                  added.length -
+                  duplicates,
+              ),
+            }
+          : {}),
+      };
+    });
   }
 
   #enqueueMetadata(
@@ -561,6 +618,19 @@ export class YoutubePlaybackService {
         ? { fallbackSources: metadata.fallbackSources }
         : {}),
     };
+    if (this.#queue.length >= this.#maxQueueTracks) {
+      throw new QueueLimitError(
+        `La cola está llena (máximo ${this.#maxQueueTracks} pistas).`,
+      );
+    }
+    const requesterCount = this.#queue
+      .snapshot()
+      .filter((queued) => queued.requestedBy === requestedBy).length;
+    if (requesterCount >= this.#maxTracksPerUser) {
+      throw new QueueLimitError(
+        `Límite de ${this.#maxTracksPerUser} pistas por usuario en la cola.`,
+      );
+    }
     if (metadata.audioUrl) this.#cacheAudioUrl(track, metadata.audioUrl);
     this.#queue.add(track);
     this.#requestNext();

@@ -22,6 +22,23 @@ logs clean (0 underruns / 0 zombies over multi-hour sessions).
 
 ## v2.0 (next)
 
+### Known-bug checks from other bots
+
+Reviewing open issues in TS3AudioBot and ts3-musicbot, mapped to Rhapsod:
+
+- YouTube blocking datacenter IPs (TS3AudioBot #1059/#1061): add an opt-in
+  yt-dlp OAuth flow for the VPS. See [issue #22](https://github.com/Juanzaan/rhapsod/issues/22).
+- Custom User-Agent for FFmpeg stream input (TS3AudioBot #1066): some HTTP
+  streams reject the default UA. See [issue #23](https://github.com/Juanzaan/rhapsod/issues/23).
+- Audio cutting out shortly after start (#1039) and laggy audio (#1027): our
+  underrun recovery, URL expiry cache and the v1.1.0 scheduler/FEC fixes cover
+  the known causes; audio health telemetry is tracked in
+  [issue #16](https://github.com/Juanzaan/rhapsod/issues/16).
+- Antiflood (TS3AudioBot #1001): shipped in the overload-protection pass
+  (command gate, queue caps, single-flight expansions).
+- Stuck states after errors (#992, #1030): covered by the serialized playback
+  chain, watchdog and global crash handlers.
+
 ### Research-driven features
 
 Findings from surveying existing TS3 music bots (TS3AudioBot, ts3-musicbot,

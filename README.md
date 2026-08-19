@@ -87,6 +87,9 @@ All settings are environment variables (see `.env.example`):
 | `RHAPSOD_LOUDNESS_TARGET_LUFS`        | no       | EBU R128 loudness target for playback; `0` disables (default `-14`)                        |
 | `RHAPSOD_METRICS_INTERVAL_MINUTES`    | no       | Log RSS/heap every N minutes; `0` disables (default `15`)                                  |
 | `RHAPSOD_WATCHDOG_INTERVAL_MINUTES`   | no       | Restart the process if the event loop stalls; `0` disables (default `15`)                  |
+| `RHAPSOD_MAX_CONCURRENT_COMMANDS`     | no       | Max commands processed at once; extra ones get a busy reply (default `3`)                  |
+| `RHAPSOD_MAX_QUEUE_TRACKS`            | no       | Max pending tracks in the queue (default `200`)                                            |
+| `RHAPSOD_MAX_TRACKS_PER_USER`         | no       | Max pending tracks per user in the queue (default `30`)                                    |
 
 Secrets (cookies, Spotify credentials, TS3 passwords) live only in `.env` or the
 deployment secret store — never in Git. For production under systemd see

@@ -6,6 +6,18 @@ for [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Overload protection:
+  - Commands are processed with a concurrency gate
+    (`RHAPSOD_MAX_CONCURRENT_COMMANDS`, default 3): extra commands get a
+    rate-limited "busy" reply instead of piling up yt-dlp jobs.
+  - The queue is capped (`RHAPSOD_MAX_QUEUE_TRACKS`, default 200) and each user
+    can only hold up to `RHAPSOD_MAX_TRACKS_PER_USER` (default 30) pending
+    tracks.
+  - Only one playlist/album expansion runs at a time; concurrent expansions get
+    a "wait" error and playlist imports stop early once a cap is hit.
+
 ### Fixed
 
 - Voice packets use codec 5 (Opus Music) as defined by the TS3 wire protocol;
