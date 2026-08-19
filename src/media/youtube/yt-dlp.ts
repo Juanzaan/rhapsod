@@ -167,20 +167,29 @@ export class YoutubeResolver {
     return this.#getTrackFromUrl(url);
   }
 
-  async search(query: string): Promise<YoutubeTrackMetadata> {
+  async search(
+    query: string,
+    expectedDurationSeconds?: number,
+  ): Promise<YoutubeTrackMetadata> {
     const normalizedQuery = query.trim();
     if (!normalizedQuery) throw new Error("YouTube search cannot be empty");
-    const match = await this.#searchOnce(normalizedQuery);
+    const match = await this.#searchOnce(
+      normalizedQuery,
+      expectedDurationSeconds,
+    );
     if (match) return match;
     const shortened = normalizedQuery.split(/\s+/).slice(0, -1).join(" ");
     if (shortened) {
-      const retry = await this.#searchOnce(shortened);
+      const retry = await this.#searchOnce(shortened, expectedDurationSeconds);
       if (retry) return retry;
     }
     throw new Error("No encontré una coincidencia confiable en YouTube");
   }
 
-  async #searchOnce(query: string): Promise<YoutubeTrackMetadata | undefined> {
+  async #searchOnce(
+    query: string,
+    expectedDurationSeconds?: number,
+  ): Promise<YoutubeTrackMetadata | undefined> {
     const raw = await this.executor.run(
       [
         "--dump-single-json",
@@ -195,7 +204,11 @@ export class YoutubeResolver {
     const candidates = (parseResponse(raw).entries ?? [])
       .filter((entry) => entry.id && entry.title)
       .map((entry) => parseSearchCandidate(entry));
-    const ranked = rankYoutubeCandidatesAll(query, candidates);
+    const ranked = rankYoutubeCandidatesAll(
+      query,
+      candidates,
+      expectedDurationSeconds,
+    );
     if (ranked.length === 0) return undefined;
     const [selected, ...fallbacks] = ranked;
     return Object.assign(

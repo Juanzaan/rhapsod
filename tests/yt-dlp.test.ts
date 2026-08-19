@@ -115,6 +115,20 @@ describe("YoutubeResolver", () => {
     });
   });
 
+  it("prefers the studio version when the expected duration is known", async () => {
+    const executor = new FakeExecutor(
+      '{"entries":[{"id":"live","title":"Duki Rockstar Live en Estadio","duration":320,"webpage_url":"https://www.youtube.com/watch?v=live"},{"id":"studio","title":"Duki Rockstar Official Video","duration":182,"webpage_url":"https://www.youtube.com/watch?v=studio"}]}',
+    );
+    const resolver = new YoutubeResolver(executor);
+
+    await expect(resolver.search("duki rockstar", 180)).resolves.toEqual({
+      durationSeconds: 182,
+      id: "studio",
+      title: "Duki Rockstar Official Video",
+      webpageUrl: "https://www.youtube.com/watch?v=studio",
+    });
+  });
+
   it("does not treat flat search URLs as playable audio", async () => {
     const executor = new FakeExecutor(
       '{"entries":[{"id":"flat_1","title":"Artist - Song","url":"https://www.youtube.com/watch?v=flat_1"}]}',

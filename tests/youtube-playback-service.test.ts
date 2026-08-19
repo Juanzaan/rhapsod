@@ -367,7 +367,7 @@ describe("YoutubePlaybackService", () => {
       id: "abc123",
       type: "track",
     });
-    expect(resolver.search).toHaveBeenCalledWith("Duki Rockstar");
+    expect(resolver.search).toHaveBeenCalledWith("Duki Rockstar", 180);
     expect(track).toMatchObject({
       alternativeProvider: "spotify",
       id: "search-result",
@@ -492,6 +492,7 @@ describe("YoutubePlaybackService", () => {
 
     expect(resolver.search).toHaveBeenCalledWith(
       "Kanye West OK (feat. Don Toliver)",
+      224,
     );
     expect(track).toMatchObject({
       alternativeProvider: "youtube",
