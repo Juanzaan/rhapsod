@@ -420,6 +420,32 @@ describe("YoutubePlaybackService", () => {
     expect(service.current?.id).toBe("first");
   });
 
+  it("shuffles only the pending tracks", async () => {
+    const { service } = setup();
+    await service.enqueue("https://youtu.be/first", "user-1");
+    await service.enqueue("https://youtu.be/second", "user-2");
+    await service.enqueue("https://youtu.be/third", "user-3");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(service.shuffleQueued()).toBe(2);
+    expect(service.current?.id).toBe("first");
+    expect(service.queue()).toHaveLength(2);
+  });
+
+  it("carries the track duration into the queue", async () => {
+    const { resolver, service } = setup();
+    resolver.getTrack.mockResolvedValueOnce({
+      durationSeconds: 120,
+      id: "first",
+      title: "Track first",
+      webpageUrl: "https://www.youtube.com/watch?v=first",
+    });
+
+    const track = await service.enqueue("https://youtu.be/first", "user-1");
+
+    expect(track.durationSeconds).toBe(120);
+  });
+
   it("reports playback failures before advancing the queue", async () => {
     const { onPlaybackError, resolver, service } = setup();
     resolver.getTrack.mockResolvedValueOnce({

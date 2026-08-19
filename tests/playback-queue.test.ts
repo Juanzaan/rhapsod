@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PlaybackQueue } from "../src/domain/playback-queue.js";
 import type { Track } from "../src/domain/track.js";
@@ -42,5 +42,35 @@ describe("PlaybackQueue", () => {
     queue.clear();
     expect(snapshot).toEqual([firstTrack]);
     expect(queue.length).toBe(0);
+  });
+
+  it("shuffles the pending tracks without dropping any", () => {
+    const random = vi.spyOn(Math, "random");
+    random
+      .mockReturnValueOnce(0.99)
+      .mockReturnValueOnce(0.0)
+      .mockReturnValueOnce(0.5);
+    const queue = new PlaybackQueue();
+    queue.add(firstTrack);
+    queue.add(secondTrack);
+    queue.add({
+      id: "track-3",
+      requestedBy: "carol",
+      source: "https://example.com/third",
+      title: "Third track",
+    });
+
+    queue.shuffle();
+
+    const shuffled = queue.snapshot();
+    expect(shuffled).toHaveLength(3);
+    expect(new Set(shuffled.map((track) => track.id))).toEqual(
+      new Set(["track-1", "track-2", "track-3"]),
+    );
+    random.mockRestore();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 });
