@@ -31,7 +31,63 @@ RHAPSOD_FFMPEG_PATH=/usr/bin/ffmpeg
 `RHAPSOD_TS3_PASSWORD` is the optional server password. Use
 `RHAPSOD_TS3_CHANNEL_PASSWORD` only when the target channel is protected.
 
-Run Rhapsod under Docker Compose or systemd. The process handles `SIGINT` and
-`SIGTERM` by disconnecting from TeamSpeak cleanly. A production unit file and
-restart policy are still planned; until then, keep the process supervised by
-your chosen service manager rather than relying on an interactive SSH session.
+Spotify track links in `!play` are optional. Create an app at
+<https://developer.spotify.com/dashboard> (Web API access; any HTTPS redirect
+URI works, it is never used), then set:
+
+```dotenv
+RHAPSOD_SPOTIFY_CLIENT_ID=
+RHAPSOD_SPOTIFY_CLIENT_SECRET=
+```
+
+The bot uses the client credentials flow only: no user login, no user data.
+When these variables are missing, Spotify links fail with a clear message.
+
+## systemd
+
+The production unit file used by the HolyPVP deployment:
+
+```ini
+[Unit]
+Description=Rhapsod TeamSpeak music bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Environment=RHAPSOD_TS3_HOST=ts.holypvp.net
+Environment=RHAPSOD_TS3_PORT=10569
+Environment=RHAPSOD_TS3_NICKNAME=Rhapsod
+Environment=RHAPSOD_YTDLP_PATH=/usr/local/bin/yt-dlp
+Environment=RHAPSOD_YTDLP_COOKIES_PATH=/home/rhapsod/youtube-cookies.txt
+Environment=RHAPSOD_FFMPEG_PATH=/usr/bin/ffmpeg
+Environment=RHAPSOD_SPOTIFY_CLIENT_ID=
+Environment=RHAPSOD_SPOTIFY_CLIENT_SECRET=
+Type=simple
+User=rhapsod
+WorkingDirectory=/home/rhapsod/rhapsod
+ExecStart=/usr/bin/node dist/main.js
+Restart=always
+RestartSec=5
+TimeoutStopSec=15
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Rhapsod also loads a `.env` file from its working directory (`dotenv/config`),
+so non-secret runtime config can live there. Secrets such as the Spotify
+credentials and the yt-dlp cookies file must not be committed.
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now rhapsod
+journalctl -u rhapsod -f
+```
+
+The process handles `SIGINT` and `SIGTERM` by disconnecting from TeamSpeak
+cleanly. `TimeoutStopSec=15` gives the shutdown sequence room; `Restart=always`
+recovers crashes. On resource-constrained VMs, consider `MemoryMax=` (see
+issue #8) and keep an eye on journald logs for `underruns` / `rebufferEvents`.
