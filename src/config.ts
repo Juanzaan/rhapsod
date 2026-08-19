@@ -24,6 +24,24 @@ const configSchema = z.object({
     .min(0)
     .max(1440)
     .default(15),
+  RHAPSOD_MAX_CONCURRENT_COMMANDS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(20)
+    .default(3),
+  RHAPSOD_MAX_QUEUE_TRACKS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(1000)
+    .default(200),
+  RHAPSOD_MAX_TRACKS_PER_USER: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(200)
+    .default(30),
   RHAPSOD_AUDIO_TEST_TONE_SECONDS: z.coerce.number().min(0).max(10).default(0),
   RHAPSOD_OPUS_BITRATE: z.coerce
     .number()

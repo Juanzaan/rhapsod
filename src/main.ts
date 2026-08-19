@@ -128,12 +128,17 @@ async function main(): Promise<void> {
     stateStore: new FilePlaybackStateStore(
       join(config.RHAPSOD_DATA_DIR, "state.json"),
     ),
+    maxQueueTracks: config.RHAPSOD_MAX_QUEUE_TRACKS,
+    maxTracksPerUser: config.RHAPSOD_MAX_TRACKS_PER_USER,
     alternativeResolver: new SongLinkClient(),
     soundcloudResolver: new SoundCloudPublicApi(),
     lyricsResolver: new LyricsClient(),
     ...(spotifyResolver ? { spotifyResolver } : {}),
   });
   const commandRateLimiter = new CommandRateLimiter();
+  const maxConcurrentCommands = 3;
+  let activeCommands = 0;
+  let busyFeedbackAt = 0;
   const handleChatCommand = async (
     message: string,
     senderUid: string,
@@ -456,11 +461,25 @@ async function main(): Promise<void> {
         error instanceof Error
           ? userFacingError(error)
           : "Error procesando comando";
-      await connection.sendChannelMessage(messageText);
+      await connection.sendChannelMessage(messageText).catch(() => undefined);
     }
   };
   connection.onTextMessage((message, senderUid, senderName) => {
-    void handleChatCommand(message, senderUid, senderName);
+    if (activeCommands >= maxConcurrentCommands) {
+      if (Date.now() - busyFeedbackAt > 5_000) {
+        busyFeedbackAt = Date.now();
+        void connection
+          .sendChannelMessage(
+            "El bot está procesando varios pedidos a la vez; probá de nuevo en unos segundos.",
+          )
+          .catch(() => undefined);
+      }
+      return;
+    }
+    activeCommands++;
+    void handleChatCommand(message, senderUid, senderName).finally(() => {
+      activeCommands--;
+    });
   });
   await connection.connect();
   logger.info("Connected to TeamSpeak 3");

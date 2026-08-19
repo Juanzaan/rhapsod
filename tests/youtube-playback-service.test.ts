@@ -17,6 +17,8 @@ import type { RhapsodOpusEncoder } from "../src/audio/opus-encoder.js";
 function setup(
   options: {
     lyricsResolver?: boolean;
+    maxQueueTracks?: number;
+    maxTracksPerUser?: number;
     soundcloudResolver?: boolean;
     spotifyResolver?: boolean;
     stateStore?: boolean;
@@ -167,6 +169,12 @@ function setup(
     ...(spotifyResolver ? { spotifyResolver } : {}),
     ...(lyricsResolver ? { lyricsResolver } : {}),
     ...(stateStore ? { stateStore } : {}),
+    ...(options.maxQueueTracks
+      ? { maxQueueTracks: options.maxQueueTracks }
+      : {}),
+    ...(options.maxTracksPerUser
+      ? { maxTracksPerUser: options.maxTracksPerUser }
+      : {}),
   });
   return {
     alternativeResolver,
@@ -1255,5 +1263,79 @@ describe("YoutubePlaybackService", () => {
 
     expect(service.history().map((track) => track.id)).toEqual(["b", "a"]);
     expect(service.history()[0]?.requestedBy).toBe("bob");
+  });
+
+  it("rejects enqueues beyond the total queue cap", async () => {
+    const { service } = setup({ maxQueueTracks: 1 });
+
+    await service.enqueue("https://youtu.be/a", "user-1");
+    await service.enqueue("https://youtu.be/b", "user-1");
+
+    await expect(
+      service.enqueue("https://youtu.be/c", "user-1"),
+    ).rejects.toThrow("La cola está llena");
+  });
+
+  it("rejects enqueues beyond the per-user cap", async () => {
+    const { service } = setup({ maxTracksPerUser: 1 });
+
+    await service.enqueue("https://youtu.be/a", "user-1");
+    await service.enqueue("https://youtu.be/b", "user-1");
+
+    await expect(
+      service.enqueue("https://youtu.be/c", "user-1"),
+    ).rejects.toThrow("Límite de 1 pistas por usuario");
+    await expect(
+      service.enqueue("https://youtu.be/x", "user-2"),
+    ).resolves.toMatchObject({ id: "x" });
+  });
+
+  it("halts a playlist expansion when the queue cap is hit", async () => {
+    const { resolver, service } = setup({ maxQueueTracks: 1 });
+    resolver.expandPlaylist.mockResolvedValueOnce({
+      total: 5,
+      tracks: Array.from({ length: 5 }, (_, index) => ({
+        id: `p${index + 1}`,
+        title: `Playlist Track ${index + 1}`,
+        webpageUrl: `https://www.youtube.com/watch?v=p${index + 1}`,
+      })),
+    });
+
+    const result = await service.enqueuePlaylist(
+      { id: "PL3", type: "playlist" },
+      "user-1",
+    );
+
+    expect(result.added).toHaveLength(2);
+    expect(result.remaining).toBe(3);
+  });
+
+  it("rejects concurrent playlist expansions", async () => {
+    const { resolver, service } = setup();
+    let releaseFirst!: () => void;
+    resolver.expandPlaylist.mockReturnValueOnce(
+      new Promise((resolve) => {
+        releaseFirst = () =>
+          resolve({
+            tracks: [
+              {
+                id: "p1",
+                title: "Playlist Track",
+                webpageUrl: "https://www.youtube.com/watch?v=p1",
+              },
+            ],
+          });
+      }),
+    );
+
+    const first = service.enqueuePlaylist(
+      { id: "PL4", type: "playlist" },
+      "user-1",
+    );
+    await expect(
+      service.enqueuePlaylist({ id: "PL5", type: "playlist" }, "user-2"),
+    ).rejects.toThrow("Ya hay una playlist");
+    releaseFirst();
+    await expect(first).resolves.toMatchObject({ added: [{ id: "p1" }] });
   });
 });

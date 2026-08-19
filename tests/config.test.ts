@@ -17,6 +17,9 @@ describe("loadConfig", () => {
       RHAPSOD_LOUDNESS_TARGET_LUFS: -14,
       RHAPSOD_YTDLP_PATH: "yt-dlp",
       RHAPSOD_WATCHDOG_INTERVAL_MINUTES: 15,
+      RHAPSOD_MAX_CONCURRENT_COMMANDS: 3,
+      RHAPSOD_MAX_QUEUE_TRACKS: 200,
+      RHAPSOD_MAX_TRACKS_PER_USER: 30,
     });
     expect(config.RHAPSOD_YTDLP_COOKIES_PATH).toBeUndefined();
     expect(config.RHAPSOD_FFMPEG_PATH).toBeUndefined();
