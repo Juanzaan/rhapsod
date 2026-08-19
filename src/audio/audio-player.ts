@@ -7,10 +7,9 @@ import {
   type RhapsodOpusEncoder,
 } from "./opus-encoder.js";
 
-const PREBUFFER_FRAMES = 25;
-const RECOVERY_BUFFER_FRAMES = 50;
+const PREBUFFER_FRAMES = 12;
 const BUFFER_HIGH_WATER_FRAMES = 250;
-const BUFFER_LOW_WATER_FRAMES = 75;
+const BUFFER_LOW_WATER_FRAMES = 150;
 const MAX_UNDERRUN_FRAMES = 250;
 
 export type AudioPlayerState = "idle" | "buffering" | "playing" | "paused";
@@ -179,6 +178,10 @@ export class AudioPlayer {
       this.#output.sendVoiceFrame(this.#encoder.encode(pcm));
       this.#firstFrameDelayMs ??= Date.now() - this.#playStartedAt;
       this.#framesSent++;
+      if (this.#recovering) {
+        this.#recovering = false;
+        this.#clearRecoveryTimer();
+      }
       if (
         this.#sourcePaused &&
         this.#bufferedBytes <= BUFFER_LOW_WATER_FRAMES * PCM_FRAME_BYTES
@@ -196,18 +199,18 @@ export class AudioPlayer {
     this.#underruns++;
     this.#output.sendVoiceFrame(this.#encoder.encode(this.#silence));
     this.#framesSent++;
-    this.#rebufferEvents++;
-    this.#recovering = true;
-    this.#state = "buffering";
-    this.#clock.stop();
-    this.#recoveryTimer = setTimeout(() => {
-      if (this.#state !== "buffering" || !this.#recovering) return;
-      this.#fail(
-        new Error(
-          `Audio source stalled for ${MAX_UNDERRUN_FRAMES * FRAME_DURATION_MS}ms`,
-        ),
-      );
-    }, MAX_UNDERRUN_FRAMES * FRAME_DURATION_MS);
+    if (!this.#recovering) {
+      this.#recovering = true;
+      this.#rebufferEvents++;
+      this.#recoveryTimer = setTimeout(() => {
+        if (!this.#recovering) return;
+        this.#fail(
+          new Error(
+            `Audio source stalled for ${MAX_UNDERRUN_FRAMES * FRAME_DURATION_MS}ms`,
+          ),
+        );
+      }, MAX_UNDERRUN_FRAMES * FRAME_DURATION_MS);
+    }
   };
 
   #readFrame(): Uint8Array {
@@ -306,9 +309,6 @@ export class AudioPlayer {
   }
 
   #requiredBufferBytes(): number {
-    return (
-      (this.#recovering ? RECOVERY_BUFFER_FRAMES : PREBUFFER_FRAMES) *
-      PCM_FRAME_BYTES
-    );
+    return PREBUFFER_FRAMES * PCM_FRAME_BYTES;
   }
 }
