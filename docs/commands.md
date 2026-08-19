@@ -3,22 +3,22 @@
 Rhapsod commands use `!` by default. Commands are processed in TeamSpeak text
 chat once the TS3 adapter is connected.
 
-| Command                     | Alias                 | Description                                                               |
-| --------------------------- | --------------------- | ------------------------------------------------------------------------- |
-| `!play <URL or search>`     | `!p`                  | Resolve a YouTube video/playlist, SoundCloud or Spotify track, or search. |
-| `!yt <search terms>`        | `!search`, `!youtube` | Add the first matching YouTube video to the queue.                        |
-| `!pause`                    | -                     | Pause the current track.                                                  |
-| `!resume`                   | -                     | Resume the current track.                                                 |
-| `!skip`                     | `!s`                  | Skip the current track.                                                   |
-| `!stop`                     | -                     | Stop playback and disconnect the player from the current track.           |
-| `!queue`                    | `!q`                  | Show the pending queue.                                                   |
-| `!now-playing`              | `!np`, `!now`         | Show the current track and requester.                                     |
-| `!volume <0-100>`           | `!vol`, `!v`          | Reserved; PCM volume control is not connected yet.                        |
-| `!remove <position>`        | `!rm`                 | Remove a one-based queue position.                                        |
-| `!clear`                    | `!c`                  | Clear pending tracks.                                                     |
-| `!loop [off\|track\|queue]` | -                     | Reserved; loop modes are not connected yet.                               |
-| `!test-tone`                | `!tone`               | Play a 3-second test tone (rate-limited).                                 |
-| `!help`                     | `!h`                  | Show the command summary.                                                 |
+| Command                     | Alias                 | Description                                                                                        |
+| --------------------------- | --------------------- | -------------------------------------------------------------------------------------------------- |
+| `!play <URL or search>`     | `!p`                  | Resolve a YouTube video/playlist, SoundCloud or Spotify track, or search.                          |
+| `!yt <search terms>`        | `!search`, `!youtube` | Add the first matching YouTube video to the queue.                                                 |
+| `!pause`                    | -                     | Pause the current track.                                                                           |
+| `!resume`                   | -                     | Resume the current track.                                                                          |
+| `!skip`                     | `!s`                  | Skip the current track.                                                                            |
+| `!stop`                     | -                     | Stop playback and disconnect the player from the current track.                                    |
+| `!queue`                    | `!q`                  | Show the pending queue.                                                                            |
+| `!now-playing`              | `!np`, `!now`         | Show the current track and requester.                                                              |
+| `!volume <0-100>`           | `!vol`, `!v`          | Adjust the bot output volume (PCM gain before encoding; affects every listener).                   |
+| `!remove <position>`        | `!rm`                 | Remove a one-based queue position.                                                                 |
+| `!clear`                    | `!c`                  | Clear pending tracks.                                                                              |
+| `!loop [off\|track\|queue]` | -                     | Repeat the current track (`track`) or the whole queue (`queue`); `!stop`/`!clear` disable looping. |
+| `!test-tone`                | `!tone`               | Play a 3-second test tone (rate-limited).                                                          |
+| `!help`                     | `!h`                  | Show the command summary.                                                                          |
 
 ## Source behavior
 

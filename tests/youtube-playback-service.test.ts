@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, type Mock } from "vitest";
 
 import { YoutubePlaybackService } from "../src/application/youtube-playback-service.js";
 import type { YoutubePlaybackResolver } from "../src/application/youtube-playback-service.js";
@@ -14,19 +14,25 @@ function setup(
 ) {
   const stopSession = vi.fn();
   const playbackResolvers: Array<() => void> = [];
-  const createPlayback = vi.fn((): FfmpegPlaybackSession => ({
-    done: new Promise<void>((resolve) => playbackResolvers.push(resolve)),
-    player: {
-      metrics: {
-        bufferedBytes: 0,
-        framesSent: 1,
-        maxBufferedBytes: 3_840,
-        rebufferEvents: 0,
-        underruns: 0,
-      },
-    } as AudioPlayer,
-    stop: stopSession,
-  }));
+  const sessionSetVolumeMocks: Mock<(gain: number) => void>[] = [];
+  const createPlayback = vi.fn((): FfmpegPlaybackSession => {
+    const setVolume = vi.fn<(gain: number) => void>();
+    sessionSetVolumeMocks.push(setVolume);
+    return {
+      done: new Promise<void>((resolve) => playbackResolvers.push(resolve)),
+      player: {
+        metrics: {
+          bufferedBytes: 0,
+          framesSent: 1,
+          maxBufferedBytes: 3_840,
+          rebufferEvents: 0,
+          underruns: 0,
+        },
+        setVolume,
+      } as unknown as AudioPlayer,
+      stop: stopSession,
+    };
+  });
   const resolver = {
     getAudioUrl: vi.fn(() => Promise.resolve("https://media.example/audio")),
     getAudioUrlFromUrl: vi.fn(() =>
@@ -124,6 +130,7 @@ function setup(
     playbackResolvers,
     resolver,
     service,
+    sessionSetVolumeMocks,
     spotifyResolver,
     stopSession,
   };
@@ -312,6 +319,87 @@ describe("YoutubePlaybackService", () => {
     expect(stopSession).toHaveBeenCalled();
     expect(service.current).toBeUndefined();
     expect(service.queue()).toEqual([]);
+  });
+
+  it("applies the volume to the active and future sessions", async () => {
+    const { service, sessionSetVolumeMocks } = setup();
+    await service.enqueue("https://youtu.be/first", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(sessionSetVolumeMocks[0]).toHaveBeenCalledWith(1);
+
+    service.setVolume(30);
+    expect(sessionSetVolumeMocks[0]).toHaveBeenLastCalledWith(0.3);
+    expect(service.volume).toBe(30);
+  });
+
+  it("re-enqueues the finished track in track loop mode", async () => {
+    const { createPlayback, playbackResolvers, service } = setup();
+    service.setLoopMode("track");
+    await service.enqueue("https://youtu.be/first", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(createPlayback).toHaveBeenCalledTimes(1);
+
+    playbackResolvers[0]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(createPlayback).toHaveBeenCalledTimes(2);
+    expect(createPlayback).toHaveBeenNthCalledWith(
+      2,
+      "https://media.example/audio",
+      expect.anything(),
+      expect.anything(),
+    );
+    expect(service.current?.id).toBe("first");
+  });
+
+  it("replays the queue from the beginning in queue loop mode", async () => {
+    const { createPlayback, playbackResolvers, service } = setup();
+    await service.enqueue("https://youtu.be/first", "user-1");
+    await service.enqueue("https://youtu.be/second", "user-2");
+    await new Promise((resolve) => setImmediate(resolve));
+    service.setLoopMode("queue");
+    expect(service.loopMode).toBe("queue");
+
+    playbackResolvers[0]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+    playbackResolvers[1]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(createPlayback).toHaveBeenCalledTimes(3);
+    expect(createPlayback).toHaveBeenNthCalledWith(
+      3,
+      "https://media.example/audio",
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it("does not loop the finished track after a skip", async () => {
+    const { createPlayback, playbackResolvers, service } = setup();
+    service.setLoopMode("track");
+    await service.enqueue("https://youtu.be/first", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    service.skip();
+    playbackResolvers[0]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(createPlayback).toHaveBeenCalledTimes(1);
+    expect(service.current).toBeUndefined();
+  });
+
+  it("disables looping when the queue is cleared or stopped", async () => {
+    const { playbackResolvers, service } = setup();
+    service.setLoopMode("queue");
+    await service.enqueue("https://youtu.be/first", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+    service.clearQueued();
+
+    playbackResolvers[0]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(service.loopMode).toBe("off");
+    expect(service.current).toBeUndefined();
   });
 
   it("removes queued tracks without stopping the current track", async () => {

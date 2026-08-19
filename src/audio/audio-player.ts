@@ -12,6 +12,21 @@ const BUFFER_HIGH_WATER_FRAMES = 250;
 const BUFFER_LOW_WATER_FRAMES = 150;
 const MAX_UNDERRUN_FRAMES = 250;
 
+export function applyGain(pcm: Uint8Array, gain: number): Uint8Array {
+  if (gain === 1) return pcm;
+  const output = new Uint8Array(pcm.byteLength);
+  for (let i = 0; i < pcm.byteLength; i += 2) {
+    const low = pcm[i] ?? 0;
+    const high = pcm[i + 1] ?? 0;
+    let sample = low | (high << 8);
+    if (sample & 0x8000) sample -= 0x10000;
+    sample = Math.max(-32768, Math.min(32767, Math.round(sample * gain)));
+    output[i] = sample & 0xff;
+    output[i + 1] = (sample >> 8) & 0xff;
+  }
+  return output;
+}
+
 type AudioPlayerState = "idle" | "buffering" | "playing" | "paused";
 
 export interface VoiceFrameOutput {
@@ -52,6 +67,7 @@ export class AudioPlayer {
   #recovering = false;
   #recoveryTimer: NodeJS.Timeout | undefined;
   #state: AudioPlayerState = "idle";
+  #gain = 1;
   #completion: Promise<void> | undefined;
   #resolveCompletion: (() => void) | undefined;
   #rejectCompletion: ((error: Error) => void) | undefined;
@@ -68,6 +84,10 @@ export class AudioPlayer {
 
   get state(): AudioPlayerState {
     return this.#state;
+  }
+
+  setVolume(gain: number): void {
+    this.#gain = Math.max(0, Math.min(1, gain));
   }
 
   get metrics(): AudioPlayerMetrics {
@@ -174,7 +194,7 @@ export class AudioPlayer {
   readonly #sendNextFrame = (): void => {
     if (this.#state !== "playing") return;
     if (this.#bufferedBytes >= PCM_FRAME_BYTES) {
-      const pcm = this.#readFrame();
+      const pcm = applyGain(this.#readFrame(), this.#gain);
       this.#output.sendVoiceFrame(this.#encoder.encode(pcm));
       this.#firstFrameDelayMs ??= Date.now() - this.#playStartedAt;
       this.#framesSent++;

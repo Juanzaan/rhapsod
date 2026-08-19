@@ -3,6 +3,7 @@ import { PassThrough } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  applyGain,
   AudioPlayer,
   type AudioPlayerClock,
 } from "../src/audio/audio-player.js";
@@ -176,5 +177,63 @@ describe("AudioPlayer", () => {
     await expect(completion).resolves.toBeUndefined();
     expect(source.destroyed).toBe(true);
     expect(player.state).toBe("idle");
+  });
+
+  it("applies the configured gain to encoded frames", () => {
+    const { clock, encodeMock, player } = setup();
+    const source = new PassThrough();
+    void player.play(source);
+    player.setVolume(0.5);
+    const frame = Buffer.alloc(PCM_FRAME_BYTES * 12);
+    frame[0] = 0x10;
+    frame[1] = 0x10;
+    source.write(frame);
+    clock.tick();
+
+    const pcm = encodeMock.mock.calls[0]?.[0];
+    expect(pcm?.[0]).toBe(0x08);
+    expect(pcm?.[1]).toBe(0x08);
+  });
+});
+
+describe("applyGain", () => {
+  it("returns the same buffer at full gain", () => {
+    const pcm = new Uint8Array([0x34, 0x12, 0x00, 0x80]);
+    expect(applyGain(pcm, 1)).toBe(pcm);
+  });
+
+  it("scales sample amplitudes", () => {
+    const pcm = new Uint8Array(PCM_FRAME_BYTES);
+    pcm[0] = 0xfe;
+    pcm[1] = 0x7f;
+    pcm[2] = 0x00;
+    pcm[3] = 0x80;
+
+    const output = applyGain(pcm, 0.5);
+
+    expect(output[0]).toBe(0xff);
+    expect(output[1]).toBe(0x3f);
+    expect(output[2]).toBe(0x00);
+    expect(output[3]).toBe(0xc0);
+  });
+
+  it("clamps samples to the int16 range", () => {
+    const pcm = new Uint8Array(PCM_FRAME_BYTES);
+    pcm[0] = 0xff;
+    pcm[1] = 0x7f;
+
+    const output = applyGain(pcm, 2);
+
+    expect(output[0]).toBe(0xff);
+    expect(output[1]).toBe(0x7f);
+  });
+
+  it("zeroes the frame at zero gain", () => {
+    const pcm = new Uint8Array(PCM_FRAME_BYTES);
+    pcm.fill(7);
+
+    expect(Array.from(applyGain(pcm, 0))).toEqual(
+      new Array(PCM_FRAME_BYTES).fill(0),
+    );
   });
 });
