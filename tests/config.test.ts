@@ -19,6 +19,16 @@ describe("loadConfig", () => {
     });
     expect(config.RHAPSOD_YTDLP_COOKIES_PATH).toBeUndefined();
     expect(config.RHAPSOD_FFMPEG_PATH).toBeUndefined();
+    expect(config.RHAPSOD_ADMIN_UIDS).toBe("");
+    expect(config.RHAPSOD_DATA_DIR).toBe("./data");
+  });
+
+  it("loads configured admin uids", () => {
+    const config = loadConfig({
+      RHAPSOD_ADMIN_UIDS: "UID1,UID2",
+      RHAPSOD_TS3_HOST: "ts.example.com",
+    });
+    expect(config.RHAPSOD_ADMIN_UIDS).toBe("UID1,UID2");
   });
 
   it("rejects invalid voice ports", () => {

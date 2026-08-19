@@ -16,9 +16,10 @@ import type { RhapsodOpusEncoder } from "../src/audio/opus-encoder.js";
 
 function setup(
   options: {
+    lyricsResolver?: boolean;
     soundcloudResolver?: boolean;
     spotifyResolver?: boolean;
-    lyricsResolver?: boolean;
+    stateStore?: boolean;
   } = {},
 ) {
   const stopSession = vi.fn();
@@ -131,6 +132,12 @@ function setup(
         ),
       }
     : undefined;
+  const stateStore = options.stateStore
+    ? {
+        load: vi.fn(() => ({ loopMode: "track" as const, volumePercent: 30 })),
+        save: vi.fn(),
+      }
+    : undefined;
   const service = new YoutubePlaybackService({
     createPlayback,
     encoder,
@@ -143,6 +150,7 @@ function setup(
     ...(options.soundcloudResolver ? { soundcloudResolver } : {}),
     ...(spotifyResolver ? { spotifyResolver } : {}),
     ...(lyricsResolver ? { lyricsResolver } : {}),
+    ...(stateStore ? { stateStore } : {}),
   });
   return {
     alternativeResolver,
@@ -157,6 +165,7 @@ function setup(
     sessionSetVolumeMocks,
     soundcloudResolver,
     spotifyResolver,
+    stateStore,
     stopSession,
   };
 }
@@ -1105,5 +1114,61 @@ describe("YoutubePlaybackService", () => {
     await expect(
       service.enqueuePlaylist({ id: "v1", type: "video" }, "user-1"),
     ).rejects.toThrow("Only YouTube playlists can be expanded");
+  });
+
+  it("restores volume and loop mode from the state store", () => {
+    const { service, stateStore } = setup({ stateStore: true });
+
+    expect(service.volume).toBe(30);
+    expect(service.loopMode).toBe("track");
+    expect(stateStore!.load).toHaveBeenCalled();
+  });
+
+  it("persists volume and loop changes to the state store", () => {
+    const { service, stateStore } = setup({ stateStore: true });
+
+    service.setVolume(55);
+    service.setLoopMode("queue");
+
+    expect(stateStore!.save).toHaveBeenCalledWith({
+      loopMode: "queue",
+      volumePercent: 55,
+    });
+  });
+
+  it("persists the loop reset when the queue is cleared or playback stops", () => {
+    const { service, stateStore } = setup({ stateStore: true });
+
+    service.setLoopMode("queue");
+    service.clearQueued();
+    expect(stateStore!.save).toHaveBeenLastCalledWith({
+      loopMode: "off",
+      volumePercent: 30,
+    });
+
+    service.setLoopMode("track");
+    service.stop();
+    expect(stateStore!.save).toHaveBeenLastCalledWith({
+      loopMode: "off",
+      volumePercent: 30,
+    });
+  });
+
+  it("counts every track that actually starts playing", async () => {
+    const { playbackResolvers, service } = setup();
+
+    await service.enqueue("https://youtu.be/a", "user-1");
+    await service.enqueue("https://youtu.be/b", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(service.tracksPlayed).toBe(1);
+
+    playbackResolvers[0]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(service.tracksPlayed).toBe(2);
+    expect(service.current?.id).toBe("b");
+
+    playbackResolvers[1]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(service.current).toBeUndefined();
   });
 });

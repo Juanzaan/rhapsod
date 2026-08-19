@@ -46,14 +46,15 @@ Requirements: Node.js 22.12+, `yt-dlp` on PATH (or `RHAPSOD_YTDLP_PATH`), and a 
 | `!yt <search terms>`        | `!search`, `!youtube` | Add the first matching YouTube video to the queue                                |
 | `!pause` / `!resume`        | -                     | Pause / resume the current track                                                 |
 | `!skip`                     | `!s`                  | Skip the current track                                                           |
-| `!stop`                     | -                     | Stop playback and clear the session                                              |
+| `!stop`                     | -                     | Stop playback and clear the session (admin)                                      |
 | `!queue`                    | `!q`                  | Show the pending queue with durations                                            |
 | `!now-playing`              | `!np`, `!now`         | Show the current track                                                           |
-| `!volume <0-100>`           | `!vol`, `!v`          | Adjust the bot output volume (PCM gain before encoding)                          |
-| `!remove <position>`        | `!rm`                 | Remove a queue position                                                          |
-| `!clear`                    | `!c`                  | Clear pending tracks                                                             |
-| `!shuffle`                  | -                     | Shuffle the pending queue                                                        |
-| `!loop [off\|track\|queue]` | -                     | Repeat the current track or the whole queue                                      |
+| `!stats`                    | `!st`                 | Show uptime, tracks played, current track, queue and volume/loop state           |
+| `!volume <0-100>`           | `!vol`, `!v`          | Adjust the bot output volume (admin; persists across restarts)                   |
+| `!remove <position>`        | `!rm`                 | Remove a queue position (requester or admin)                                     |
+| `!clear`                    | `!c`                  | Clear pending tracks (admin)                                                     |
+| `!shuffle`                  | -                     | Shuffle the pending queue (admin)                                                |
+| `!loop [off\|track\|queue]` | -                     | Repeat the current track or the whole queue (admin; persists across restarts)    |
 | `!lyrics`                   | `!ly`                 | Show the lyrics of the current track                                             |
 | `!test-tone`                | `!tone`               | Play a 3-second test tone (rate-limited)                                         |
 | `!help`                     | `!h`                  | Show the command summary                                                         |
@@ -75,7 +76,8 @@ All settings are environment variables (see `.env.example`):
 | `RHAPSOD_TS3_CLIENT_DESCRIPTION`      | no       | Client description shown in TeamSpeak (BBCode allowed)                                     |
 | `RHAPSOD_TS3_CONNECT_TIMEOUT_SECONDS` | no       | Connect timeout (default `180`)                                                            |
 | `RHAPSOD_TS3_AUTO_CONNECT`            | no       | Connect at startup (default `true`)                                                        |
-| `RHAPSOD_DATA_DIR`                    | no       | Data directory for the TS3 identity (default `./data`)                                     |
+| `RHAPSOD_ADMIN_UIDS`                  | no       | Comma-separated TeamSpeak uids with bot-admin rights (empty = no admins)                   |
+| `RHAPSOD_DATA_DIR`                    | no       | Data directory for the TS3 identity and `state.json` (default `./data`)                    |
 | `RHAPSOD_YTDLP_PATH`                  | no       | `yt-dlp` binary path (default `yt-dlp`)                                                    |
 | `RHAPSOD_YTDLP_COOKIES_PATH`          | no       | Private cookies file for datacenter extraction                                             |
 | `RHAPSOD_FFMPEG_PATH`                 | no       | System FFmpeg binary path                                                                  |

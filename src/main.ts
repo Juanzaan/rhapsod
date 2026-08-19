@@ -13,6 +13,12 @@ import { YoutubePlaybackService } from "./application/youtube-playback-service.j
 import { parseChatCommand } from "./commands/chat-command.js";
 import { CommandRateLimiter } from "./commands/command-rate-limiter.js";
 import { loadConfig } from "./config.js";
+import { FilePlaybackStateStore } from "./domain/state-store.js";
+import {
+  canRemoveTrack,
+  isAdminUid,
+  parseAdminUids,
+} from "./commands/permissions.js";
 import {
   SystemYtDlpExecutor,
   YoutubeResolver,
@@ -26,6 +32,7 @@ import { parseMediaInput } from "./media/media-input.js";
 async function main(): Promise<void> {
   const config = loadConfig();
   const logger = pino({ level: config.RHAPSOD_LOG_LEVEL });
+  const adminUids = parseAdminUids(config.RHAPSOD_ADMIN_UIDS);
 
   logger.info(
     {
@@ -103,6 +110,9 @@ async function main(): Promise<void> {
         config.RHAPSOD_YTDLP_PATH,
         config.RHAPSOD_YTDLP_COOKIES_PATH,
       ),
+    ),
+    stateStore: new FilePlaybackStateStore(
+      join(config.RHAPSOD_DATA_DIR, "state.json"),
     ),
     alternativeResolver: new SongLinkClient(),
     soundcloudResolver: new SoundCloudPublicApi(),
@@ -200,6 +210,21 @@ async function main(): Promise<void> {
           break;
         }
         case "remove": {
+          const track = playback.queue()[command.position - 1];
+          if (
+            track &&
+            !canRemoveTrack({
+              adminUids,
+              requesterName: track.requestedBy,
+              senderName,
+              senderUid,
+            })
+          ) {
+            await connection.sendChannelMessage(
+              "Solo el administrador del bot o quien la encoló puede quitar esa pista.",
+            );
+            break;
+          }
           const removed = playback.removeQueued(command.position);
           await connection.sendChannelMessage(
             removed
@@ -208,24 +233,38 @@ async function main(): Promise<void> {
           );
           break;
         }
-        case "clear": {
-          const cleared = playback.clearQueued();
-          await connection.sendChannelMessage(
-            cleared === 0
-              ? "La cola ya estaba vacía."
-              : `Se quitaron ${cleared} pistas de la cola.`,
-          );
+        case "clear":
+          if (!isAdminUid(senderUid, adminUids)) {
+            await connection.sendChannelMessage(
+              "Solo el administrador del bot puede usar !clear.",
+            );
+            break;
+          }
+          {
+            const cleared = playback.clearQueued();
+            await connection.sendChannelMessage(
+              cleared === 0
+                ? "La cola ya estaba vacía."
+                : `Se quitaron ${cleared} pistas de la cola.`,
+            );
+          }
           break;
-        }
-        case "shuffle": {
-          const shuffled = playback.shuffleQueued();
-          await connection.sendChannelMessage(
-            shuffled === 0
-              ? "No hay pistas en la cola para mezclar."
-              : `Cola mezclada (${shuffled} pistas).`,
-          );
+        case "shuffle":
+          if (!isAdminUid(senderUid, adminUids)) {
+            await connection.sendChannelMessage(
+              "Solo el administrador del bot puede usar !shuffle.",
+            );
+            break;
+          }
+          {
+            const shuffled = playback.shuffleQueued();
+            await connection.sendChannelMessage(
+              shuffled === 0
+                ? "No hay pistas en la cola para mezclar."
+                : `Cola mezclada (${shuffled} pistas).`,
+            );
+          }
           break;
-        }
         case "now-playing":
           await connection.sendChannelMessage(
             playback.current
@@ -237,7 +276,29 @@ async function main(): Promise<void> {
           playback.skip();
           await connection.sendChannelMessage("Pista saltada.");
           break;
+        case "stats": {
+          const uptimeSeconds = process.uptime();
+          const hours = Math.floor(uptimeSeconds / 3_600);
+          const minutes = Math.floor((uptimeSeconds % 3_600) / 60);
+          const lines = [
+            `Uptime: ${hours}h ${minutes}m`,
+            `Canciones reproducidas: ${playback.tracksPlayed}`,
+            playback.current
+              ? `Actual: ${playback.current.title} (${formatDuration(playback.current.durationSeconds)})`
+              : "Actual: nada reproduciéndose",
+            `En cola: ${playback.queue().length} pista(s)`,
+            `Volumen: ${playback.volume}% - Loop: ${playback.loopMode}`,
+          ];
+          await connection.sendChannelMessage(lines.join("\n"));
+          break;
+        }
         case "stop":
+          if (!isAdminUid(senderUid, adminUids)) {
+            await connection.sendChannelMessage(
+              "Solo el administrador del bot puede usar !stop.",
+            );
+            break;
+          }
           playback.stop();
           await connection.sendChannelMessage("Reproducción detenida.");
           break;
@@ -283,12 +344,19 @@ async function main(): Promise<void> {
               "!volume <0-100> - Ajustar el volumen",
               "!loop [off|track|queue] - Repetir la pista o la cola",
               "!lyrics (!ly) - Letra de la canción actual",
+              "!stats (!st) - Estado del bot (solo lectura)",
               "!help - Mostrar esta ayuda",
             ].join("\n"),
           );
           break;
         case "loop":
           if (command.mode) {
+            if (!isAdminUid(senderUid, adminUids)) {
+              await connection.sendChannelMessage(
+                "Solo el administrador del bot puede cambiar el modo loop.",
+              );
+              break;
+            }
             playback.setLoopMode(command.mode);
             await connection.sendChannelMessage(
               command.mode === "off"
@@ -304,6 +372,12 @@ async function main(): Promise<void> {
           }
           break;
         case "volume":
+          if (!isAdminUid(senderUid, adminUids)) {
+            await connection.sendChannelMessage(
+              "Solo el administrador del bot puede usar !volume.",
+            );
+            break;
+          }
           playback.setVolume(command.value);
           await connection.sendChannelMessage(
             `Volumen ajustado a ${playback.volume}%.`,

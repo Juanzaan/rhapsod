@@ -10,20 +10,29 @@ chat once the TS3 adapter is connected.
 | `!pause`                    | -                     | Pause the current track.                                                                            |
 | `!resume`                   | -                     | Resume the current track.                                                                           |
 | `!skip`                     | `!s`                  | Skip the current track.                                                                             |
-| `!stop`                     | -                     | Stop playback and disconnect the player from the current track.                                     |
+| `!stop`                     | -                     | Stop playback and disconnect the player from the current track (admin).                             |
 | `!queue`                    | `!q`                  | Show the pending queue with per-track durations.                                                    |
 | `!now-playing`              | `!np`, `!now`         | Show the current track, duration and requester.                                                     |
-| `!volume <0-100>`           | `!vol`, `!v`          | Adjust the bot output volume (PCM gain before encoding; affects every listener).                    |
-| `!remove <position>`        | `!rm`                 | Remove a one-based queue position.                                                                  |
-| `!clear`                    | `!c`                  | Clear pending tracks.                                                                               |
-| `!shuffle`                  | -                     | Shuffle the pending queue (the current track keeps playing).                                        |
-| `!loop [off\|track\|queue]` | -                     | Repeat the current track (`track`) or the whole queue (`queue`); `!stop`/`!clear` disable looping.  |
+| `!stats`                    | `!st`                 | Show uptime, tracks played since start, current track, queue length and volume/loop state.          |
+| `!volume <0-100>`           | `!vol`, `!v`          | Adjust the bot output volume (admin; persists in `state.json`).                                     |
+| `!remove <position>`        | `!rm`                 | Remove a one-based queue position (the requester of the track or an admin).                         |
+| `!clear`                    | `!c`                  | Clear pending tracks (admin).                                                                       |
+| `!shuffle`                  | -                     | Shuffle the pending queue (admin; the current track keeps playing).                                 |
+| `!loop [off\|track\|queue]` | -                     | Repeat the current track (`track`) or the whole queue (`queue`); admin; persists in `state.json`.   |
 | `!lyrics`                   | `!ly`                 | Show the lyrics of the current track, found via LRCLIB (best-effort, no account).                   |
 | `!test-tone`                | `!tone`               | Play a 3-second test tone (rate-limited).                                                           |
 | `!help`                     | `!h`                  | Show the command summary.                                                                           |
 
 ## Source behavior
 
+- **Permissions:** commands listed as admin (`!stop`, `!clear`, `!shuffle`,
+  `!volume`, `!loop` changes) require the sender's TeamSpeak uid to be listed
+  in `RHAPSOD_ADMIN_UIDS`. Without configured admins, those commands are
+  denied. `!remove` is allowed for the track's requester and admins. Every
+  other command stays open to everyone.
+- **Persistence:** `!volume` and `!loop` are saved to `data/state.json`
+  (atomic write) and restored at startup; `!stop`/`!clear` reset looping and
+  persist the change.
 - **YouTube:** Rhapsod uses a local `yt-dlp` executable to obtain metadata and
   a temporary audio URL immediately before playback. Search returns the first
   matching video; playlists add up to 20 tracks per `!play` (duplicates already
