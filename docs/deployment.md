@@ -45,7 +45,7 @@ When these variables are missing, Spotify links fail with a clear message.
 
 ## systemd
 
-The production unit file used by the HolyPVP deployment:
+Example production unit file (adjust the environment values for your server):
 
 ```ini
 [Unit]
@@ -54,8 +54,8 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-Environment=RHAPSOD_TS3_HOST=ts.holypvp.net
-Environment=RHAPSOD_TS3_PORT=10569
+Environment=RHAPSOD_TS3_HOST=voice.example.com
+Environment=RHAPSOD_TS3_PORT=9987
 Environment=RHAPSOD_TS3_NICKNAME=Rhapsod
 Environment=RHAPSOD_YTDLP_PATH=/usr/local/bin/yt-dlp
 Environment=RHAPSOD_YTDLP_COOKIES_PATH=/home/rhapsod/youtube-cookies.txt
