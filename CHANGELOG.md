@@ -8,6 +8,10 @@ for [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- TeamSpeak reconnect protection: after a kick or runtime disconnect, the bot
+  retries at most five times with a five-second delay, then shuts down instead
+  of reconnecting forever.
+
 - State persistence: `!volume` and `!loop` survive restarts through
   `data/state.json` (atomic writes, corrupt files ignored).
 - `RHAPSOD_ADMIN_UIDS` (comma-separated TeamSpeak uids): only admins can use

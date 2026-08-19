@@ -66,6 +66,7 @@ async function main(): Promise<void> {
     setInterval(reportMetrics, metricsIntervalMinutes * 60_000).unref();
   }
   const connection = createTs3Connection(config, identity);
+  const maxReconnectAttempts = 5;
   const encoder = await createRhapsodOpusEncoder({
     bitrate: config.RHAPSOD_OPUS_BITRATE,
     complexity: config.RHAPSOD_OPUS_COMPLEXITY,
@@ -469,6 +470,37 @@ async function main(): Promise<void> {
   });
   await connection.connect();
   logger.info("Connected to TeamSpeak 3");
+
+  let reconnecting = false;
+  let shuttingDown = false;
+  connection.onConnectionLost((reason) => {
+    if (reconnecting || shuttingDown) return;
+    reconnecting = true;
+    void (async () => {
+      for (let attempt = 1; attempt <= maxReconnectAttempts; attempt++) {
+        logger.warn(
+          { attempt, maxReconnectAttempts, reason },
+          "TeamSpeak connection lost; reconnecting",
+        );
+        await new Promise((resolve) => setTimeout(resolve, 5_000));
+        try {
+          await connection.connect();
+          logger.info({ attempt }, "Reconnected to TeamSpeak 3");
+          reconnecting = false;
+          return;
+        } catch (error) {
+          logger.error({ attempt, error }, "TeamSpeak reconnect failed");
+        }
+      }
+      logger.error(
+        { maxReconnectAttempts },
+        "Reconnect limit reached; stopping bot",
+      );
+      shuttingDown = true;
+      await connection.disconnect().catch(() => undefined);
+      process.exitCode = 0;
+    })();
+  });
 
   if (config.RHAPSOD_AUDIO_TEST_TONE_SECONDS > 0) {
     logger.info(

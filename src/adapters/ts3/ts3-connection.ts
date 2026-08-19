@@ -9,6 +9,7 @@ import type { AppConfig } from "../../config.js";
 interface Ts3Connection {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
+  onConnectionLost(handler: (reason: "kicked" | "disconnected") => void): void;
   onTextMessage(
     handler: (message: string, senderUid: string, senderName: string) => void,
   ): void;
@@ -54,6 +55,10 @@ export function createTs3Connection(
       }
     },
     disconnect: () => client.disconnect(),
+    onConnectionLost: (handler) => {
+      client.on("kicked", () => handler("kicked"));
+      client.on("disconnected", () => handler("disconnected"));
+    },
     sendChannelMessage: (message) =>
       sendTextMessage(client, 2, client.channelID(), message),
     sendVoiceFrame: (frame) => client.sendVoice(frame, 5),

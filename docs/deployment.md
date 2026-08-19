@@ -83,7 +83,7 @@ Type=simple
 User=rhapsod
 WorkingDirectory=/home/rhapsod/rhapsod
 ExecStart=/usr/bin/node dist/main.js
-Restart=always
+Restart=on-failure
 RestartSec=5
 TimeoutStopSec=15
 NoNewPrivileges=true
@@ -114,7 +114,9 @@ journalctl -u rhapsod -f
 ```
 
 The process handles `SIGINT` and `SIGTERM` by disconnecting from TeamSpeak
-cleanly. `TimeoutStopSec=15` gives the shutdown sequence room; `Restart=always`
-recovers crashes. On resource-constrained VMs, keep the `MemoryMax=` /
+cleanly. After a runtime disconnect or kick, it retries at most five times,
+with a five-second delay, then exits normally. `TimeoutStopSec=15` gives the
+shutdown sequence room; `Restart=on-failure` recovers crashes without restarting
+after the intentional reconnect-limit shutdown. On resource-constrained VMs, keep the `MemoryMax=` /
 `MemorySwapMax=` limits (see issue #8) and watch journald logs for `underruns`
 / `rebufferEvents`.
