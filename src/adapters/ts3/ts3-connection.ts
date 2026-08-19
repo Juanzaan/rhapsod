@@ -1,5 +1,6 @@
 import {
   Client,
+  listClients,
   sendTextMessage,
   type Identity,
 } from "@honeybbq/teamspeak-client";
@@ -9,6 +10,7 @@ import type { AppConfig } from "../../config.js";
 interface Ts3Connection {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
+  listConnectedClientUids(): Promise<readonly string[]>;
   onConnectionLost(handler: (reason: "kicked" | "disconnected") => void): void;
   onTextMessage(
     handler: (message: string, senderUid: string, senderName: string) => void,
@@ -55,6 +57,16 @@ export function createTs3Connection(
       }
     },
     disconnect: () => client.disconnect(),
+    listConnectedClientUids: async () => {
+      try {
+        const clients = await listClients(client);
+        return clients
+          .filter((entry) => entry.type === 0)
+          .map((entry) => entry.uid);
+      } catch {
+        return [];
+      }
+    },
     onConnectionLost: (handler) => {
       client.on("kicked", () => handler("kicked"));
       client.on("disconnected", () => handler("disconnected"));

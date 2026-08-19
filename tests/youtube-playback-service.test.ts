@@ -13,12 +13,18 @@ import type { SpotifyResolver } from "../src/media/spotify/api.js";
 import type { LyricsResolver } from "../src/media/lyrics.js";
 import type { AudioPlayer } from "../src/audio/audio-player.js";
 import type { RhapsodOpusEncoder } from "../src/audio/opus-encoder.js";
+import type { SerializedQueueTrack } from "../src/domain/state-store.js";
 
 function setup(
   options: {
     lyricsResolver?: boolean;
     maxQueueTracks?: number;
     maxTracksPerUser?: number;
+    restoredState?: {
+      loopMode?: "off" | "queue" | "track";
+      queue?: readonly SerializedQueueTrack[];
+      volumePercent?: number;
+    };
     soundcloudResolver?: boolean;
     spotifyResolver?: boolean;
     stateStore?: boolean;
@@ -152,7 +158,13 @@ function setup(
     : undefined;
   const stateStore = options.stateStore
     ? {
-        load: vi.fn(() => ({ loopMode: "track" as const, volumePercent: 30 })),
+        load: vi.fn(
+          () =>
+            options.restoredState ?? {
+              loopMode: "track" as const,
+              volumePercent: 30,
+            },
+        ),
         save: vi.fn(),
       }
     : undefined;
@@ -1184,6 +1196,7 @@ describe("YoutubePlaybackService", () => {
 
     expect(stateStore!.save).toHaveBeenCalledWith({
       loopMode: "queue",
+      queue: [],
       volumePercent: 55,
     });
   });
@@ -1195,6 +1208,7 @@ describe("YoutubePlaybackService", () => {
     service.clearQueued();
     expect(stateStore!.save).toHaveBeenLastCalledWith({
       loopMode: "off",
+      queue: [],
       volumePercent: 30,
     });
 
@@ -1202,8 +1216,138 @@ describe("YoutubePlaybackService", () => {
     service.stop();
     expect(stateStore!.save).toHaveBeenLastCalledWith({
       loopMode: "off",
+      queue: [],
       volumePercent: 30,
     });
+  });
+
+  it("persists the queue with the current track at the head", async () => {
+    const { service, stateStore } = setup({ stateStore: true });
+
+    await service.enqueue("https://youtu.be/a", "user-1");
+    await service.enqueue("https://youtu.be/b", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(stateStore!.save).toHaveBeenLastCalledWith({
+      loopMode: "track",
+      queue: [
+        {
+          id: "a",
+          requestedBy: "user-1",
+          source: "https://www.youtube.com/watch?v=a",
+          title: "Track a",
+        },
+        {
+          id: "b",
+          requestedBy: "user-1",
+          source: "https://www.youtube.com/watch?v=b",
+          title: "Track b",
+        },
+      ],
+      volumePercent: 30,
+    });
+  });
+
+  it("restores queued tracks only for users still connected", async () => {
+    const { createPlayback, service } = setup({
+      restoredState: {
+        queue: [
+          {
+            id: "a",
+            requestedBy: "user-1",
+            source: "https://www.youtube.com/watch?v=a",
+            title: "Track a",
+          },
+          {
+            id: "b",
+            requestedBy: "user-2",
+            source: "https://www.youtube.com/watch?v=b",
+            title: "Track b",
+          },
+        ],
+      },
+      stateStore: true,
+    });
+
+    expect(service.restoreQueuedTracks(["user-2", "bot-uid"])).toBe(1);
+    expect(service.current?.id).toBe("b");
+    expect(service.queue()).toHaveLength(0);
+
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(createPlayback).toHaveBeenCalled();
+  });
+
+  it("clears the persisted queue when nobody is connected", () => {
+    const { createPlayback, service } = setup({
+      restoredState: {
+        queue: [
+          {
+            id: "a",
+            requestedBy: "user-1",
+            source: "https://www.youtube.com/watch?v=a",
+            title: "Track a",
+          },
+        ],
+      },
+      stateStore: true,
+    });
+
+    expect(service.restoreQueuedTracks(["bot-uid"])).toBe(0);
+    expect(service.queue()).toHaveLength(0);
+    expect(createPlayback).not.toHaveBeenCalled();
+  });
+
+  it("restores at most maxQueueTracks entries", () => {
+    const { service } = setup({
+      maxQueueTracks: 2,
+      restoredState: {
+        queue: [
+          {
+            id: "a",
+            requestedBy: "user-1",
+            source: "https://www.youtube.com/watch?v=a",
+            title: "Track a",
+          },
+          {
+            id: "b",
+            requestedBy: "user-1",
+            source: "https://www.youtube.com/watch?v=b",
+            title: "Track b",
+          },
+          {
+            id: "c",
+            requestedBy: "user-1",
+            source: "https://www.youtube.com/watch?v=c",
+            title: "Track c",
+          },
+        ],
+      },
+      stateStore: true,
+    });
+
+    expect(service.restoreQueuedTracks(["user-1"])).toBe(2);
+    expect(service.current?.id).toBe("a");
+    expect(service.queue()).toHaveLength(1);
+  });
+
+  it("restores duration when present in the persisted entry", () => {
+    const { service } = setup({
+      restoredState: {
+        queue: [
+          {
+            durationSeconds: 42,
+            id: "a",
+            requestedBy: "user-1",
+            source: "https://www.youtube.com/watch?v=a",
+            title: "Track a",
+          },
+        ],
+      },
+      stateStore: true,
+    });
+
+    expect(service.restoreQueuedTracks(["user-1"])).toBe(1);
+    expect(service.current?.durationSeconds).toBe(42);
   });
 
   it("counts every track that actually starts playing", async () => {

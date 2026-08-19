@@ -3,14 +3,61 @@ import { dirname } from "node:path";
 
 import type { LoopMode } from "../application/youtube-playback-service.js";
 
+export interface SerializedQueueTrack {
+  readonly durationSeconds?: number;
+  readonly id: string;
+  readonly requestedBy: string;
+  readonly source: string;
+  readonly title: string;
+}
+
 export interface PlaybackState {
   readonly loopMode?: LoopMode;
+  readonly queue?: readonly SerializedQueueTrack[];
   readonly volumePercent?: number;
 }
 
 export interface PlaybackStateStore {
   load(): PlaybackState;
   save(state: PlaybackState): void;
+}
+
+const MAX_QUEUE_ENTRIES = 1000;
+
+function parseQueue(raw: unknown): readonly SerializedQueueTrack[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const entries: SerializedQueueTrack[] = [];
+  for (const entry of raw) {
+    if (typeof entry !== "object" || entry === null) continue;
+    const record = entry as Record<string, unknown>;
+    if (
+      typeof record.id !== "string" ||
+      record.id.length === 0 ||
+      typeof record.title !== "string" ||
+      record.title.length === 0 ||
+      typeof record.source !== "string" ||
+      record.source.length === 0 ||
+      typeof record.requestedBy !== "string" ||
+      record.requestedBy.length === 0
+    ) {
+      continue;
+    }
+    const durationSeconds =
+      typeof record.durationSeconds === "number" &&
+      Number.isFinite(record.durationSeconds) &&
+      record.durationSeconds > 0
+        ? Math.round(record.durationSeconds)
+        : undefined;
+    entries.push({
+      ...(durationSeconds === undefined ? {} : { durationSeconds }),
+      id: record.id,
+      requestedBy: record.requestedBy,
+      source: record.source,
+      title: record.title,
+    });
+    if (entries.length >= MAX_QUEUE_ENTRIES) break;
+  }
+  return entries;
 }
 
 export class FilePlaybackStateStore implements PlaybackStateStore {
@@ -38,9 +85,11 @@ export class FilePlaybackStateStore implements PlaybackStateStore {
         parsed.loopMode === "track"
           ? parsed.loopMode
           : undefined;
+      const queue = parseQueue(parsed.queue);
       return {
         ...(volumePercent === undefined ? {} : { volumePercent }),
         ...(loopMode === undefined ? {} : { loopMode }),
+        ...(queue === undefined ? {} : { queue }),
       };
     } catch {
       return {};

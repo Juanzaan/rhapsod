@@ -8,6 +8,11 @@ for [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- The queue survives a bot restart, but only for users who are still connected
+  to the TeamSpeak server at startup: pending tracks whose requester is offline
+  are dropped. The persisted state (`state.json`) now includes the queue
+  (current track first), so `!colar`, `!mover`, `!quitar`, `!shuffle` and
+  playback position changes are saved continuously.
 - Spotify playlist support after Spotify's February 2026 API migration, which
   dropped anonymous playlist reads (`/playlists/{id}/tracks` now returns 403,
   `/items` requires extended quota mode that only organizations can request).
