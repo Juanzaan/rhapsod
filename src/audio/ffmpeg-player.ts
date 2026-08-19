@@ -10,7 +10,7 @@ import {
 } from "./ffmpeg-pcm.js";
 import { type RhapsodOpusEncoder } from "./opus-encoder.js";
 
-export interface FfmpegPlaybackOptions extends FfmpegPcmOptions {
+interface FfmpegPlaybackOptions extends FfmpegPcmOptions {
   readonly clock?: AudioPlayerClock;
   readonly createStream?: (
     url: string,

@@ -53,14 +53,13 @@ async function main(): Promise<void> {
           clientSecret: config.RHAPSOD_SPOTIFY_CLIENT_SECRET,
         })
       : undefined;
+  const ffmpegPath = config.RHAPSOD_FFMPEG_PATH;
   const playback = new YoutubePlaybackService({
-    ...(config.RHAPSOD_FFMPEG_PATH === undefined
+    ...(ffmpegPath === undefined
       ? {}
       : {
           createPlayback: (url, playbackEncoder, output) =>
-            playFfmpegUrl(url, playbackEncoder, output, {
-              binary: config.RHAPSOD_FFMPEG_PATH ?? "ffmpeg",
-            }),
+            playFfmpegUrl(url, playbackEncoder, output, { binary: ffmpegPath }),
         }),
     encoder,
     onPlaybackStarted: async (track) => {
@@ -217,7 +216,7 @@ async function main(): Promise<void> {
           await connection.sendChannelMessage(
             [
               "Comandos disponibles:",
-              "!play <URL o búsqueda> - Reproducir YouTube, SoundCloud, playlists o buscar",
+              "!play <URL o búsqueda> - Reproducir YouTube, SoundCloud, Spotify, playlists o buscar",
               "!yt <búsqueda> - Buscar en YouTube",
               "!queue - Mostrar la cola",
               "!now-playing (!np) - Canción actual",
@@ -227,6 +226,8 @@ async function main(): Promise<void> {
               "!stop - Detener y vaciar",
               "!pause / !resume - Pausar o continuar",
               "!test-tone - Probar el audio",
+              "!volume / !loop - En desarrollo",
+              "!help - Mostrar esta ayuda",
             ].join("\n"),
           );
           break;

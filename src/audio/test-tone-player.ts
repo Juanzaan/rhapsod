@@ -1,15 +1,12 @@
 import { FrameScheduler } from "./frame-scheduler.js";
 import { FRAME_DURATION_MS, type RhapsodOpusEncoder } from "./opus-encoder.js";
 import { TestToneGenerator } from "./test-tone.js";
-
-export interface TestToneOutput {
-  sendVoiceFrame(frame: Uint8Array): void;
-}
+import type { VoiceFrameOutput } from "./audio-player.js";
 
 export function playTestTone(
   durationSeconds: number,
   encoder: RhapsodOpusEncoder,
-  output: TestToneOutput,
+  output: VoiceFrameOutput,
 ): Promise<void> {
   if (durationSeconds <= 0 || !Number.isFinite(durationSeconds)) {
     return Promise.resolve();

@@ -1,6 +1,6 @@
 import { FRAME_DURATION_MS } from "./opus-encoder.js";
 
-export interface FrameSchedulerOptions {
+interface FrameSchedulerOptions {
   readonly now?: () => number;
   readonly schedule?: (callback: () => void, delayMs: number) => NodeJS.Timeout;
   readonly cancel?: (timer: NodeJS.Timeout) => void;

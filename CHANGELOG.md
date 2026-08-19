@@ -8,14 +8,23 @@ for [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `RHAPSOD_TS3_CLIENT_DESCRIPTION` sets the bot's TeamSpeak client description
+  (any client can set its own description; no server permissions needed).
+- `test:coverage` script.
+
+## [1.0.0] - 2026-08-19
+
+### Added
+
 - Spotify track links in `!play`: metadata via the Spotify Web API (client
-  credentials flow) and YouTube equivalent searched by "artist title".
-  Requires `RHAPSOD_SPOTIFY_CLIENT_ID` / `RHAPSOD_SPOTIFY_CLIENT_SECRET`.
+  credentials flow, no user login) and the matching "artist title" searched on
+  YouTube for playback. Requires `RHAPSOD_SPOTIFY_CLIENT_ID` /
+  `RHAPSOD_SPOTIFY_CLIENT_SECRET`.
 - `!play` accepts free text and runs the YouTube search (same behavior as
   `!yt`). Unsupported providers (local files, generic URLs, Spotify
   playlists/albums) fail with clear messages.
-- Common `MusicResolver` contract (`src/media/music-resolver.ts`) implemented
-  by the YouTube, SoundCloud, and Spotify resolvers.
+- Resolver contract defined by the application service
+  (`YoutubePlaybackResolver`) with `name`/`match` on each media provider.
 
 ### Fixed
 
@@ -27,11 +36,13 @@ for [Semantic Versioning](https://semver.org/).
 - Search ranking rejected valid results: no penalty for version terms present
   in the query, fuzzy term matching (Levenshtein ≤ 1), channel-name credits,
   and a shortened-query retry (`4b1101a`, `67bc1d5`).
-- Spot on the production unit file: `SPOTIFY_*` renamed to `RHAPSOD_SPOTIFY_*`
-  so the config schema picks them up.
+- Spotify credentials on the production unit file: `SPOTIFY_*` renamed to
+  `RHAPSOD_SPOTIFY_*` so the config schema picks them up.
 
 ### Changed
 
 - Chat messages no longer announce "fuente alternativa".
 - Deployment documented for systemd with the production unit file
-  (`docs/deployment.md`).
+  (`docs/deployment.md`), including `MemoryMax`/`MemorySwapMax` limits.
+- Removed dead `src/ports` contracts and superseded abstractions; the TS3
+  adapter now exposes the only connection contract the application needs.

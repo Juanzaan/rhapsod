@@ -42,7 +42,7 @@ export interface SoundCloudResolver {
   getTrack(url: string): Promise<YoutubeTrackMetadata>;
 }
 
-export interface SoundCloudPublicApiOptions {
+interface SoundCloudPublicApiOptions {
   readonly fetch?: typeof fetch;
   readonly timeoutMs?: number;
 }

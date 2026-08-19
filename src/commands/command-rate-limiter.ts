@@ -1,4 +1,4 @@
-export interface RateLimitResult {
+interface RateLimitResult {
   readonly allowed: boolean;
   readonly retryAfterMs: number;
 }

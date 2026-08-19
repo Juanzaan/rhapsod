@@ -21,7 +21,7 @@ import {
 } from "../media/soundcloud/public-api.js";
 import type { SpotifyResolver } from "../media/spotify/api.js";
 
-export interface PlaybackServiceOptions {
+interface PlaybackServiceOptions {
   readonly encoder: RhapsodOpusEncoder;
   readonly resolver: YoutubePlaybackResolver;
   readonly alternativeResolver?: AlternativeSourceResolver;
@@ -43,9 +43,9 @@ export interface PlaybackServiceOptions {
   readonly onTiming?: (timing: PlaybackTiming) => void;
 }
 
-export type PlaybackEndReason = "completed" | "error" | "skipped" | "stopped";
+type PlaybackEndReason = "completed" | "error" | "skipped" | "stopped";
 
-export interface PlaybackTiming {
+interface PlaybackTiming {
   readonly cacheHit?: boolean;
   readonly durationMs: number;
   readonly stage: "metadata" | "audio-url";
@@ -64,7 +64,7 @@ export interface YoutubePlaybackResolver {
   ): Promise<PlaylistExpansion>;
 }
 
-export interface PlaylistEnqueueResult {
+interface PlaylistEnqueueResult {
   readonly added: readonly Track[];
   readonly remaining?: number;
 }

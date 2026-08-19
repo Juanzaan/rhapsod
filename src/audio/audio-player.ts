@@ -12,7 +12,7 @@ const BUFFER_HIGH_WATER_FRAMES = 250;
 const BUFFER_LOW_WATER_FRAMES = 150;
 const MAX_UNDERRUN_FRAMES = 250;
 
-export type AudioPlayerState = "idle" | "buffering" | "playing" | "paused";
+type AudioPlayerState = "idle" | "buffering" | "playing" | "paused";
 
 export interface VoiceFrameOutput {
   sendVoiceFrame(frame: Uint8Array): void;
