@@ -7,6 +7,7 @@ describe("loadConfig", () => {
     const config = loadConfig({ RHAPSOD_TS3_HOST: "ts.example.com" });
     expect(config).toMatchObject({
       RHAPSOD_LOG_LEVEL: "info",
+      RHAPSOD_LOG_RETENTION_DAYS: 14,
       RHAPSOD_TS3_HOST: "ts.example.com",
       RHAPSOD_TS3_NICKNAME: "Rhapsod",
       RHAPSOD_TS3_PORT: 9987,
@@ -27,6 +28,7 @@ describe("loadConfig", () => {
     expect(config.RHAPSOD_FFPROBE_PATH).toBeUndefined();
     expect(config.RHAPSOD_ADMIN_UIDS).toBe("");
     expect(config.RHAPSOD_DATA_DIR).toBe("./data");
+    expect(config.RHAPSOD_LOG_DIR).toBeUndefined();
   });
 
   it("loads optional FFmpeg probe settings", () => {
@@ -37,6 +39,16 @@ describe("loadConfig", () => {
     });
     expect(config.RHAPSOD_FFMPEG_USER_AGENT).toBe("Rhapsod/1.0");
     expect(config.RHAPSOD_FFPROBE_PATH).toBe("/usr/bin/ffprobe");
+  });
+
+  it("loads log file settings", () => {
+    const config = loadConfig({
+      RHAPSOD_LOG_DIR: "/var/log/rhapsod",
+      RHAPSOD_LOG_RETENTION_DAYS: "30",
+      RHAPSOD_TS3_HOST: "ts.example.com",
+    });
+    expect(config.RHAPSOD_LOG_DIR).toBe("/var/log/rhapsod");
+    expect(config.RHAPSOD_LOG_RETENTION_DAYS).toBe(30);
   });
 
   it("loads configured admin uids", () => {
