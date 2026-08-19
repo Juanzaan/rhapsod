@@ -616,7 +616,7 @@ describe("YoutubePlaybackService", () => {
     const { service, sessionSetVolumeMocks } = setup();
     await service.enqueue("https://youtu.be/first", "user-1");
     await new Promise((resolve) => setImmediate(resolve));
-    expect(sessionSetVolumeMocks[0]).toHaveBeenCalledWith(1);
+    expect(sessionSetVolumeMocks[0]).toHaveBeenCalledWith(volumeToGain(50));
 
     service.setVolume(30);
     expect(sessionSetVolumeMocks[0]).toHaveBeenLastCalledWith(

@@ -47,17 +47,17 @@ Requirements: Node.js 22.12+, `yt-dlp` on PATH (or `RHAPSOD_YTDLP_PATH`), and a 
 | `!yt <search terms>`        | `!search`, `!youtube` | Add the first matching YouTube video to the queue                                |
 | `!pause` / `!resume`        | -                     | Pause / resume the current track                                                 |
 | `!skip`                     | `!s`                  | Skip the current track                                                           |
-| `!stop`                     | -                     | Stop playback and clear the session (admin)                                      |
+| `!stop`                     | -                     | Stop playback and clear the session                                              |
 | `!queue [page]`             | `!q`                  | Show 10 pending tracks per page with durations                                   |
 | `!history`                  | `!hist`               | Show the 10 most recently started tracks                                         |
 | `!now-playing`              | `!np`, `!now`         | Show the current track                                                           |
 | `!stats`                    | `!st`                 | Show uptime, tracks played, current track, queue and volume/loop state           |
-| `!volume <0-100>`           | `!vol`, `!v`          | Adjust the bot output volume (admin; persists across restarts)                   |
+| `!volume <0-100>`           | `!vol`, `!v`          | Adjust the bot output volume (default `50`; persists across restarts)            |
 | `!move <from> <to>`         | `!mv`                 | Move a pending track to another position                                         |
 | `!remove <n\|from-to>`      | `!rm`                 | Remove a queue position or inclusive range (requester or admin)                  |
-| `!clear`                    | `!c`                  | Clear pending tracks (admin)                                                     |
-| `!shuffle`                  | -                     | Shuffle the pending queue (admin)                                                |
-| `!loop [off\|track\|queue]` | -                     | Repeat the current track or the whole queue (admin; persists across restarts)    |
+| `!clear`                    | `!c`                  | Clear pending tracks                                                             |
+| `!shuffle`                  | -                     | Shuffle the pending queue                                                        |
+| `!loop [off\|track\|queue]` | -                     | Repeat the current track or the whole queue (persists across restarts)           |
 | `!lyrics`                   | `!ly`                 | Show the lyrics of the current track                                             |
 | `!test-tone`                | `!tone`               | Play a 3-second test tone (rate-limited)                                         |
 | `!help`                     | `!h`                  | Show the command summary                                                         |
