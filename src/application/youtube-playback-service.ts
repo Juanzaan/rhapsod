@@ -226,6 +226,16 @@ export class YoutubePlaybackService {
             media.value,
           );
           if (alternative) {
+            if (
+              alternative.provider === "soundcloud" &&
+              this.#soundcloudResolver
+            ) {
+              const metadata = await this.#soundcloudResolver.getTrack(
+                alternative.url,
+              );
+              this.#recordMetadataTiming(metadata, startedAt);
+              return this.#enqueueMetadata(metadata, requestedBy);
+            }
             const metadata = await this.#resolver.getTrackFromUrl(
               alternative.url,
             );
@@ -247,6 +257,16 @@ export class YoutubePlaybackService {
         }
         throw providerError;
       }
+    }
+    if (media.kind === "apple-music" || media.kind === "amazon-music") {
+      const result = await this.enqueueMusicLink(media.value, requestedBy);
+      const first = result.added[0];
+      if (!first) {
+        throw new Error(
+          "No pude encontrar esa canción en YouTube o SoundCloud.",
+        );
+      }
+      return first;
     }
     if (media.kind !== "youtube" || media.resource.type !== "video") {
       throw new Error(
@@ -275,6 +295,59 @@ export class YoutubePlaybackService {
       resource,
       this.#playlistMaxTracks,
     );
+    return this.#enqueuePlaylistExpansion(expansion, requestedBy);
+  }
+
+  async enqueueMusicLink(
+    input: string,
+    requestedBy: string,
+  ): Promise<PlaylistEnqueueResult> {
+    if (!this.#alternativeResolver) {
+      throw new Error(
+        "Este bot no tiene resolución de links de Apple Music o Amazon Music configurada.",
+      );
+    }
+    const alternative = await this.#alternativeResolver.findAlternative(input);
+    if (!alternative) {
+      throw new Error(
+        "No pude encontrar ese link en YouTube o SoundCloud. Probá pegando el link directo de YouTube.",
+      );
+    }
+    if (alternative.provider === "soundcloud") {
+      if (!this.#soundcloudResolver) {
+        throw new Error(
+          "El link solo existe en SoundCloud, pero ese proveedor no está configurado.",
+        );
+      }
+      const metadata = await this.#soundcloudResolver.getTrack(alternative.url);
+      this.#recordMetadataTiming(metadata, Date.now());
+      return { added: [this.#enqueueMetadata(metadata, requestedBy)] };
+    }
+    const parsed = parseMediaInput(alternative.url);
+    if (parsed.kind === "youtube" && parsed.resource.type === "playlist") {
+      const expansion = await this.#resolver.expandPlaylist(
+        parsed.resource,
+        this.#playlistMaxTracks,
+      );
+      return this.#enqueuePlaylistExpansion(expansion, requestedBy);
+    }
+    if (parsed.kind === "youtube" && parsed.resource.type === "video") {
+      const metadata = await this.#resolver.getTrack(parsed.resource);
+      this.#recordMetadataTiming(metadata, Date.now());
+      return { added: [this.#enqueueMetadata(metadata, requestedBy)] };
+    }
+    if (parsed.kind === "soundcloud" && this.#soundcloudResolver) {
+      const metadata = await this.#soundcloudResolver.getTrack(parsed.value);
+      this.#recordMetadataTiming(metadata, Date.now());
+      return { added: [this.#enqueueMetadata(metadata, requestedBy)] };
+    }
+    throw new Error("El link alternativo no apunta a una fuente reproducible.");
+  }
+
+  #enqueuePlaylistExpansion(
+    expansion: PlaylistExpansion,
+    requestedBy: string,
+  ): PlaylistEnqueueResult {
     const added: Track[] = [];
     let duplicates = 0;
     const addedIds = new Set<string>();

@@ -1,7 +1,7 @@
 const SONGLINK_ENDPOINT = "https://api.song.link/v1-alpha.1/links";
 
 interface AlternativeSource {
-  readonly provider: "youtube";
+  readonly provider: "soundcloud" | "youtube";
   readonly url: string;
 }
 
@@ -37,9 +37,16 @@ export class SongLinkClient implements AlternativeSourceResolver {
       });
       if (!response.ok) return undefined;
       const data = (await response.json()) as SongLinkResponse;
-      const candidate = data.linksByPlatform?.youtube?.url;
-      if (!candidate || !isYouTubeUrl(candidate)) return undefined;
-      return { provider: "youtube", url: candidate };
+      const candidates = data.linksByPlatform;
+      const youtube = candidates?.youtube?.url;
+      if (youtube && isYouTubeUrl(youtube)) {
+        return { provider: "youtube", url: youtube };
+      }
+      const soundcloud = candidates?.soundcloud?.url;
+      if (soundcloud && isSoundCloudUrl(soundcloud)) {
+        return { provider: "soundcloud", url: soundcloud };
+      }
+      return undefined;
     } catch {
       // Alternatives are best-effort. Preserve the original provider error.
       return undefined;
@@ -55,6 +62,20 @@ function isYouTubeUrl(value: string): boolean {
       (url.hostname === "youtube.com" ||
         url.hostname === "www.youtube.com" ||
         url.hostname === "youtu.be")
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isSoundCloudUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === "https:" &&
+      (url.hostname === "soundcloud.com" ||
+        url.hostname === "www.soundcloud.com" ||
+        url.hostname === "on.soundcloud.com")
     );
   } catch {
     return false;

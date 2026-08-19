@@ -2,6 +2,8 @@ type MediaInput =
   | { readonly kind: "file"; readonly value: string }
   | { readonly kind: "soundcloud"; readonly value: string }
   | { readonly kind: "spotify"; readonly resource: SpotifyResource }
+  | { readonly kind: "apple-music"; readonly value: string }
+  | { readonly kind: "amazon-music"; readonly value: string }
   | { readonly kind: "url"; readonly value: string }
   | { readonly kind: "youtube"; readonly resource: YoutubeResource };
 
@@ -24,8 +26,15 @@ const YOUTUBE_HOSTS = new Set([
   "m.youtube.com",
 ]);
 const SPOTIFY_HOST = "open.spotify.com";
+const APPLE_MUSIC_HOSTS = new Set(["music.apple.com", "itunes.apple.com"]);
 const SOUNDCLOUD_HOSTS = new Set(["soundcloud.com", "www.soundcloud.com"]);
 const SOUNDCLOUD_SHORT_HOST = "on.soundcloud.com";
+
+function isAmazonMusicHost(hostname: string): boolean {
+  return (
+    hostname === "music.amazon.com" || hostname.startsWith("music.amazon.")
+  );
+}
 
 export function parseMediaInput(input: string): MediaInput {
   const value = input.trim();
@@ -49,6 +58,14 @@ export function parseMediaInput(input: string): MediaInput {
 
   const spotifyResource = parseSpotifyResource(url);
   if (spotifyResource) return { kind: "spotify", resource: spotifyResource };
+
+  if (APPLE_MUSIC_HOSTS.has(url.hostname)) {
+    return { kind: "apple-music", value: url.toString() };
+  }
+
+  if (isAmazonMusicHost(url.hostname)) {
+    return { kind: "amazon-music", value: url.toString() };
+  }
 
   if (
     (SOUNDCLOUD_HOSTS.has(url.hostname) &&

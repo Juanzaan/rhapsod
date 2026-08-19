@@ -80,6 +80,37 @@ describe("parseMediaInput", () => {
     });
   });
 
+  it("classifies Apple Music and Amazon Music links", () => {
+    expect(
+      parseMediaInput(
+        "https://music.apple.com/us/album/titulo/123456789?i=987654321",
+      ),
+    ).toEqual({
+      kind: "apple-music",
+      value: "https://music.apple.com/us/album/titulo/123456789?i=987654321",
+    });
+    expect(
+      parseMediaInput("https://itunes.apple.com/ar/album/titulo/123456789"),
+    ).toEqual({
+      kind: "apple-music",
+      value: "https://itunes.apple.com/ar/album/titulo/123456789",
+    });
+    expect(
+      parseMediaInput(
+        "https://music.amazon.com/albums/B0ABC123?trackAsin=B0XYZ",
+      ),
+    ).toEqual({
+      kind: "amazon-music",
+      value: "https://music.amazon.com/albums/B0ABC123?trackAsin=B0XYZ",
+    });
+    expect(parseMediaInput("https://music.amazon.com.mx/tracks/B0XYZ")).toEqual(
+      {
+        kind: "amazon-music",
+        value: "https://music.amazon.com.mx/tracks/B0XYZ",
+      },
+    );
+  });
+
   it("rejects empty and malformed provider inputs", () => {
     expect(() => parseMediaInput(" ")).toThrow("cannot be empty");
     expect(() =>

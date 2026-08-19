@@ -83,6 +83,16 @@ function setup(
       }),
     ),
   };
+  const soundcloudResolver = {
+    getAudioUrl: vi.fn(() =>
+      Promise.resolve("https://media.example/soundcloud-api"),
+    ),
+    getTrack: vi.fn<() => Promise<YoutubeTrackMetadata>>(() =>
+      Promise.reject(new Error("SoundCloud API returned 503")),
+    ),
+    match: vi.fn((input: string) => input.includes("soundcloud.com")),
+    name: "soundcloud",
+  };
   const onPlaybackError = vi.fn();
   const onPlaybackFinished = vi.fn();
   const onPlaybackStarted = vi.fn();
@@ -115,20 +125,7 @@ function setup(
     output: { sendVoiceFrame: vi.fn() },
     resolver,
     alternativeResolver,
-    ...(options.soundcloudResolver
-      ? {
-          soundcloudResolver: {
-            getAudioUrl: vi.fn(() =>
-              Promise.resolve("https://media.example/soundcloud-api"),
-            ),
-            getTrack: vi.fn(() =>
-              Promise.reject(new Error("SoundCloud API returned 503")),
-            ),
-            match: vi.fn((input: string) => input.includes("soundcloud.com")),
-            name: "soundcloud",
-          },
-        }
-      : {}),
+    ...(options.soundcloudResolver ? { soundcloudResolver } : {}),
     ...(spotifyResolver ? { spotifyResolver } : {}),
   });
   return {
@@ -141,6 +138,7 @@ function setup(
     resolver,
     service,
     sessionSetVolumeMocks,
+    soundcloudResolver,
     spotifyResolver,
     stopSession,
   };
@@ -329,6 +327,114 @@ describe("YoutubePlaybackService", () => {
     expect(stopSession).toHaveBeenCalled();
     expect(service.current).toBeUndefined();
     expect(service.queue()).toEqual([]);
+  });
+
+  it("queues a single track from a music service link", async () => {
+    const { alternativeResolver, resolver, service } = setup();
+    alternativeResolver.findAlternative.mockResolvedValue({
+      provider: "youtube",
+      url: "https://youtu.be/fallback",
+    });
+
+    const result = await service.enqueueMusicLink(
+      "https://music.apple.com/us/album/titulo/123?i=456",
+      "user-1",
+    );
+
+    expect(resolver.getTrack).toHaveBeenCalledWith({
+      id: "fallback",
+      type: "video",
+    });
+    expect(result.added).toHaveLength(1);
+    expect(result.added[0]).toMatchObject({
+      id: "fallback",
+      requestedBy: "user-1",
+    });
+  });
+
+  it("expands a music service link that resolves to a YouTube playlist", async () => {
+    const { alternativeResolver, resolver, service } = setup();
+    alternativeResolver.findAlternative.mockResolvedValue({
+      provider: "youtube",
+      url: "https://www.youtube.com/playlist?list=PLabc123",
+    });
+    resolver.expandPlaylist.mockResolvedValue({
+      tracks: [
+        {
+          id: "t1",
+          title: "Track 1",
+          webpageUrl: "https://www.youtube.com/watch?v=t1",
+        },
+        {
+          id: "t2",
+          title: "Track 2",
+          webpageUrl: "https://www.youtube.com/watch?v=t2",
+        },
+      ],
+      total: 2,
+    });
+
+    const result = await service.enqueueMusicLink(
+      "https://music.amazon.com/albums/B0ABC123",
+      "user-1",
+    );
+
+    expect(result.added).toHaveLength(2);
+    expect(result.remaining).toBe(0);
+  });
+
+  it("plays a SoundCloud alternative when the music service link has no YouTube match", async () => {
+    const { alternativeResolver, service, soundcloudResolver } = setup({
+      soundcloudResolver: true,
+    });
+    alternativeResolver.findAlternative.mockResolvedValue({
+      provider: "soundcloud",
+      url: "https://soundcloud.com/artist/track",
+    });
+    soundcloudResolver.getTrack.mockResolvedValue({
+      audioUrl: "https://media.example/soundcloud-api",
+      id: "sc-track",
+      title: "SoundCloud Track",
+      webpageUrl: "https://soundcloud.com/artist/track",
+    });
+
+    const result = await service.enqueueMusicLink(
+      "https://music.apple.com/us/album/titulo/123?i=456",
+      "user-1",
+    );
+
+    expect(soundcloudResolver.getTrack).toHaveBeenCalledWith(
+      "https://soundcloud.com/artist/track",
+    );
+    expect(result.added[0]).toMatchObject({ id: "sc-track" });
+  });
+
+  it("rejects music service links with no resolvable alternative", async () => {
+    const { alternativeResolver, service } = setup();
+    alternativeResolver.findAlternative.mockResolvedValue(undefined);
+
+    await expect(
+      service.enqueueMusicLink(
+        "https://music.apple.com/us/album/x/1?i=2",
+        "user-1",
+      ),
+    ).rejects.toThrow("No pude encontrar ese link en YouTube o SoundCloud");
+  });
+
+  it("resolves Apple Music and Amazon Music links through the main enqueue path", async () => {
+    const { service } = setup();
+
+    const appleTrack = await service.enqueue(
+      "https://music.apple.com/us/album/titulo/123?i=456",
+      "user-1",
+    );
+    expect(appleTrack.id).toBe("fallback");
+
+    const amazonTrack = await service.enqueue(
+      "https://music.amazon.com/albums/B0ABC123?trackAsin=B0XYZ",
+      "user-2",
+    );
+    expect(amazonTrack.id).toBe("fallback");
   });
 
   it("applies the volume to the active and future sessions", async () => {

@@ -19,7 +19,7 @@
 
 ## Features
 
-- **Multi-source playback** — YouTube videos, Shorts and playlists, SoundCloud tracks, and Spotify tracks (metadata only, playback via YouTube).
+- **Multi-source playback** — YouTube videos, Shorts and playlists, SoundCloud tracks, Spotify tracks (metadata only, playback via YouTube), and Apple Music / Amazon Music links (resolved via SongLink).
 - **Smart search** — `!play` and `!yt` accept free text and rank YouTube candidates with fuzzy term matching, channel credits, duration checks, and a shortened-query retry when nothing is reliable.
 - **Playlist queue** — pause, resume, skip, stop, remove, and clear; playlists add up to 20 tracks per command with duplicate detection.
 - **Resilient audio transport** — buffered Opus voice stream that keeps the frame flow alive during underruns and force-kills stuck FFmpeg processes.
@@ -40,22 +40,22 @@ Requirements: Node.js 22.12+, `yt-dlp` on PATH (or `RHAPSOD_YTDLP_PATH`), and a 
 
 ## Commands
 
-| Command                     | Alias                 | Description                                             |
-| --------------------------- | --------------------- | ------------------------------------------------------- |
-| `!play <URL or text>`       | `!p`                  | Queue a YouTube/SoundCloud/Spotify link or run a search |
-| `!yt <search terms>`        | `!search`, `!youtube` | Add the first matching YouTube video to the queue       |
-| `!pause` / `!resume`        | -                     | Pause / resume the current track                        |
-| `!skip`                     | `!s`                  | Skip the current track                                  |
-| `!stop`                     | -                     | Stop playback and clear the session                     |
-| `!queue`                    | `!q`                  | Show the pending queue with durations                   |
-| `!now-playing`              | `!np`, `!now`         | Show the current track                                  |
-| `!volume <0-100>`           | `!vol`, `!v`          | Adjust the bot output volume (PCM gain before encoding) |
-| `!remove <position>`        | `!rm`                 | Remove a queue position                                 |
-| `!clear`                    | `!c`                  | Clear pending tracks                                    |
-| `!shuffle`                  | -                     | Shuffle the pending queue                               |
-| `!loop [off\|track\|queue]` | -                     | Repeat the current track or the whole queue             |
-| `!test-tone`                | `!tone`               | Play a 3-second test tone (rate-limited)                |
-| `!help`                     | `!h`                  | Show the command summary                                |
+| Command                     | Alias                 | Description                                                                      |
+| --------------------------- | --------------------- | -------------------------------------------------------------------------------- |
+| `!play <URL or text>`       | `!p`                  | Queue a YouTube/SoundCloud/Spotify/Apple Music/Amazon Music link or run a search |
+| `!yt <search terms>`        | `!search`, `!youtube` | Add the first matching YouTube video to the queue                                |
+| `!pause` / `!resume`        | -                     | Pause / resume the current track                                                 |
+| `!skip`                     | `!s`                  | Skip the current track                                                           |
+| `!stop`                     | -                     | Stop playback and clear the session                                              |
+| `!queue`                    | `!q`                  | Show the pending queue with durations                                            |
+| `!now-playing`              | `!np`, `!now`         | Show the current track                                                           |
+| `!volume <0-100>`           | `!vol`, `!v`          | Adjust the bot output volume (PCM gain before encoding)                          |
+| `!remove <position>`        | `!rm`                 | Remove a queue position                                                          |
+| `!clear`                    | `!c`                  | Clear pending tracks                                                             |
+| `!shuffle`                  | -                     | Shuffle the pending queue                                                        |
+| `!loop [off\|track\|queue]` | -                     | Repeat the current track or the whole queue                                      |
+| `!test-tone`                | `!tone`               | Play a 3-second test tone (rate-limited)                                         |
+| `!help`                     | `!h`                  | Show the command summary                                                         |
 
 See [docs/commands.md](docs/commands.md) for details and source behavior.
 
