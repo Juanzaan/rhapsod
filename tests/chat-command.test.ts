@@ -26,6 +26,11 @@ describe("parseChatCommand", () => {
     });
     expect(parseChatCommand("!stats")).toEqual({ name: "stats" });
     expect(parseChatCommand("!st")).toEqual({ name: "stats" });
+    expect(parseChatCommand("!hist")).toEqual({ name: "history" });
+    expect(parseChatCommand("!pn duki rockstar")).toEqual({
+      input: "duki rockstar",
+      name: "playnext",
+    });
   });
 
   it("does not treat normal chat as a command", () => {
@@ -54,9 +59,28 @@ describe("parseChatCommand", () => {
       name: "volume",
       value: 80,
     });
-    expect(parseChatCommand("!rm 3")).toEqual({ name: "remove", position: 3 });
+    expect(parseChatCommand("!rm 3")).toEqual({
+      from: 3,
+      name: "remove",
+      to: 3,
+    });
+    expect(parseChatCommand("!remove 2-5")).toEqual({
+      from: 2,
+      name: "remove",
+      to: 5,
+    });
+    expect(parseChatCommand("!mv 5 2")).toEqual({
+      from: 5,
+      name: "move",
+      to: 2,
+    });
+    expect(parseChatCommand("!queue 3")).toEqual({ name: "queue", page: 3 });
     expect(() => parseChatCommand("!volume 101")).toThrow("between 0 and 100");
     expect(() => parseChatCommand("!play")).toThrow("Usage: !play");
+    expect(() => parseChatCommand("!playnext")).toThrow("Usage: !playnext");
+    expect(() => parseChatCommand("!remove 5-2")).toThrow("ascending");
+    expect(() => parseChatCommand("!move 2")).toThrow("Usage: !move");
+    expect(() => parseChatCommand("!queue 0")).toThrow("at least 1");
     expect(() => parseChatCommand("!unknown")).toThrow("Unknown command");
   });
 });

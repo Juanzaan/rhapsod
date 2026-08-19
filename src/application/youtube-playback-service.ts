@@ -90,6 +90,7 @@ interface PlaylistEnqueueResult {
 const AUDIO_URL_FALLBACK_TTL_MS = 10 * 60_000;
 const AUDIO_URL_EXPIRY_MARGIN_MS = 60_000;
 const DEFAULT_PLAYLIST_MAX_TRACKS = 20;
+const HISTORY_LIMIT = 20;
 
 interface PreparedAudio {
   readonly url: string;
@@ -126,6 +127,7 @@ export class YoutubePlaybackService {
   #pendingSkips = 0;
   #volumePercent = 100;
   #tracksPlayed = 0;
+  readonly #history: Track[] = [];
   #loopMode: LoopMode = "off";
   #loopPool: Track[] = [];
   readonly #prepared = new Map<string, Promise<PreparedAudio>>();
@@ -311,6 +313,33 @@ export class YoutubePlaybackService {
     const metadata = await this.#resolver.search(query);
     this.#recordMetadataTiming(metadata, startedAt);
     return this.#enqueueMetadata(metadata, requestedBy);
+  }
+
+  async enqueueNext(input: string, requestedBy: string): Promise<Track> {
+    const media = parseMediaInput(input);
+    if (media.kind === "youtube" && media.resource.type === "playlist") {
+      throw new Error("Las playlists se encolan con !play, no con !playnext.");
+    }
+    const track = await this.enqueue(input, requestedBy);
+    this.#queue.moveToHead(track.id);
+    if (this.#current) this.#prefetchNext();
+    return track;
+  }
+
+  moveQueued(fromPosition: number, toPosition: number): Track | undefined {
+    const moved = this.#queue.move(fromPosition, toPosition);
+    if (moved && this.#current) this.#prefetchNext();
+    return moved;
+  }
+
+  removeQueuedRange(fromPosition: number, toPosition: number): Track[] {
+    const removed = this.#queue.removeRange(fromPosition, toPosition);
+    for (const track of removed) this.#prepared.delete(track.source);
+    return removed;
+  }
+
+  history(): readonly Track[] {
+    return [...this.#history];
   }
 
   async getLyrics(): Promise<TrackLyrics | undefined> {
@@ -565,6 +594,12 @@ export class YoutubePlaybackService {
     return count;
   }
 
+  #recordHistory(track: Track): void {
+    this.#history.unshift(track);
+    if (this.#history.length > HISTORY_LIMIT)
+      this.#history.length = HISTORY_LIMIT;
+  }
+
   #persistState(): void {
     this.#stateStore?.save({
       loopMode: this.#loopMode,
@@ -622,6 +657,7 @@ export class YoutubePlaybackService {
         session.player.setVolume(volumeToGain(this.#volumePercent));
         this.#session = session;
         this.#tracksPlayed++;
+        this.#recordHistory(track);
         void Promise.resolve(this.#onPlaybackStarted(track)).catch(
           () => undefined,
         );

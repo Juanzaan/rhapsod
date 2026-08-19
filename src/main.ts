@@ -180,6 +180,14 @@ async function main(): Promise<void> {
           }
           break;
         }
+        case "playnext": {
+          await connection.sendChannelMessage("Preparando la próxima pista...");
+          const track = await playback.enqueueNext(command.input, senderName);
+          await connection.sendChannelMessage(
+            `Próxima en cola: ${track.title}`,
+          );
+          break;
+        }
         case "search": {
           await connection.sendChannelMessage("Buscando en YouTube...");
           const track = await playback.enqueueSearch(command.input, senderName);
@@ -196,40 +204,76 @@ async function main(): Promise<void> {
           break;
         case "queue": {
           const tracks = playback.queue();
+          const pageSize = 10;
+          const pages = Math.max(1, Math.ceil(tracks.length / pageSize));
+          const page = command.page ?? 1;
           await connection.sendChannelMessage(
             tracks.length === 0
               ? "La cola está vacía."
+              : page > pages
+                ? `La cola tiene ${pages} página(s). Usá !queue ${pages}.`
+                : [
+                    `Cola de reproducción (página ${page}/${pages}):`,
+                    ...tracks
+                      .slice((page - 1) * pageSize, page * pageSize)
+                      .map(
+                        (track, index) =>
+                          `${(page - 1) * pageSize + index + 1}. ${track.title} (${formatDuration(track.durationSeconds)} - por ${track.requestedBy})`,
+                      ),
+                  ].join("\n"),
+          );
+          break;
+        }
+        case "history": {
+          const history = playback.history().slice(0, 10);
+          await connection.sendChannelMessage(
+            history.length === 0
+              ? "Todavía no se reprodujo ninguna pista."
               : [
-                  "Cola de reproducción:",
-                  ...tracks.map(
+                  "Historial reciente:",
+                  ...history.map(
                     (track, index) =>
-                      `${index + 1}. ${track.title} (${formatDuration(track.durationSeconds)} - por ${track.requestedBy})`,
+                      `${index + 1}. ${track.title} (por ${track.requestedBy})`,
                   ),
                 ].join("\n"),
           );
           break;
         }
+        case "move": {
+          const moved = playback.moveQueued(command.from, command.to);
+          await connection.sendChannelMessage(
+            moved
+              ? `Movida a la posición ${command.to}: ${moved.title}`
+              : command.from === command.to
+                ? "La pista ya está en esa posición."
+                : "No existe alguna de esas posiciones en la cola.",
+          );
+          break;
+        }
         case "remove": {
-          const track = playback.queue()[command.position - 1];
-          if (
-            track &&
-            !canRemoveTrack({
-              adminUids,
-              requesterName: track.requestedBy,
-              senderName,
-              senderUid,
-            })
-          ) {
+          const selected = playback.queue().slice(command.from - 1, command.to);
+          const unauthorized = selected.some(
+            (track) =>
+              !canRemoveTrack({
+                adminUids,
+                requesterName: track.requestedBy,
+                senderName,
+                senderUid,
+              }),
+          );
+          if (unauthorized) {
             await connection.sendChannelMessage(
-              "Solo el administrador del bot o quien la encoló puede quitar esa pista.",
+              "Solo el administrador del bot puede quitar rangos con pistas de otros usuarios.",
             );
             break;
           }
-          const removed = playback.removeQueued(command.position);
+          const removed = playback.removeQueuedRange(command.from, command.to);
           await connection.sendChannelMessage(
-            removed
-              ? `Quitada de la cola: ${removed.title}`
-              : "No existe esa posición en la cola.",
+            removed.length === 0
+              ? "No existe esa posición en la cola."
+              : removed.length === 1
+                ? `Quitada de la cola: ${removed[0]?.title}`
+                : `Se quitaron ${removed.length} pistas de la cola.`,
           );
           break;
         }
@@ -331,10 +375,13 @@ async function main(): Promise<void> {
             [
               "Comandos disponibles:",
               "!play <URL o búsqueda> - Reproducir YouTube, SoundCloud, Spotify, playlists o buscar",
+              "!playnext (!pn) <URL o búsqueda> - Agregar como próxima pista",
               "!yt <búsqueda> - Buscar en YouTube",
-              "!queue - Mostrar la cola",
+              "!queue [página] - Mostrar la cola",
+              "!history (!hist) - Historial reciente",
               "!now-playing (!np) - Canción actual",
-              "!remove <n> - Quitar una posición",
+              "!move (!mv) <origen> <destino> - Mover una pista",
+              "!remove <n|a-b> - Quitar una posición o rango",
               "!clear - Vaciar la cola",
               "!shuffle - Mezclar la cola",
               "!skip - Saltar la canción",

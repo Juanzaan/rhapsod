@@ -1171,4 +1171,45 @@ describe("YoutubePlaybackService", () => {
     await new Promise((resolve) => setImmediate(resolve));
     expect(service.current).toBeUndefined();
   });
+
+  it("promotes playnext ahead of the pending queue", async () => {
+    const { service } = setup();
+
+    await service.enqueue("https://youtu.be/a", "user-1");
+    await service.enqueue("https://youtu.be/b", "user-1");
+    const promoted = await service.enqueueNext("https://youtu.be/c", "user-2");
+
+    expect(promoted.id).toBe("c");
+    expect(service.queue().map((track) => track.id)).toEqual(["c", "b"]);
+  });
+
+  it("moves and removes ranges from the pending queue", async () => {
+    const { service } = setup();
+
+    await service.enqueue("https://youtu.be/a", "user-1");
+    await service.enqueue("https://youtu.be/b", "user-1");
+    await service.enqueue("https://youtu.be/c", "user-1");
+    await service.enqueue("https://youtu.be/d", "user-1");
+
+    expect(service.moveQueued(3, 1)?.id).toBe("d");
+    expect(service.queue().map((track) => track.id)).toEqual(["d", "b", "c"]);
+    expect(service.removeQueuedRange(2, 3).map((track) => track.id)).toEqual([
+      "b",
+      "c",
+    ]);
+    expect(service.queue().map((track) => track.id)).toEqual(["d"]);
+  });
+
+  it("records most recently started tracks in history order", async () => {
+    const { playbackResolvers, service } = setup();
+
+    await service.enqueue("https://youtu.be/a", "alice");
+    await service.enqueue("https://youtu.be/b", "bob");
+    await new Promise((resolve) => setImmediate(resolve));
+    playbackResolvers[0]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(service.history().map((track) => track.id)).toEqual(["b", "a"]);
+    expect(service.history()[0]?.requestedBy).toBe("bob");
+  });
 });

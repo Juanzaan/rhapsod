@@ -43,15 +43,18 @@ Requirements: Node.js 22.12+, `yt-dlp` on PATH (or `RHAPSOD_YTDLP_PATH`), and a 
 | Command                     | Alias                 | Description                                                                      |
 | --------------------------- | --------------------- | -------------------------------------------------------------------------------- |
 | `!play <URL or text>`       | `!p`                  | Queue a YouTube/SoundCloud/Spotify/Apple Music/Amazon Music link or run a search |
+| `!playnext <URL or text>`   | `!pn`, `!next`        | Add a single track or search result at the front of the pending queue            |
 | `!yt <search terms>`        | `!search`, `!youtube` | Add the first matching YouTube video to the queue                                |
 | `!pause` / `!resume`        | -                     | Pause / resume the current track                                                 |
 | `!skip`                     | `!s`                  | Skip the current track                                                           |
 | `!stop`                     | -                     | Stop playback and clear the session (admin)                                      |
-| `!queue`                    | `!q`                  | Show the pending queue with durations                                            |
+| `!queue [page]`             | `!q`                  | Show 10 pending tracks per page with durations                                   |
+| `!history`                  | `!hist`               | Show the 10 most recently started tracks                                         |
 | `!now-playing`              | `!np`, `!now`         | Show the current track                                                           |
 | `!stats`                    | `!st`                 | Show uptime, tracks played, current track, queue and volume/loop state           |
 | `!volume <0-100>`           | `!vol`, `!v`          | Adjust the bot output volume (admin; persists across restarts)                   |
-| `!remove <position>`        | `!rm`                 | Remove a queue position (requester or admin)                                     |
+| `!move <from> <to>`         | `!mv`                 | Move a pending track to another position                                         |
+| `!remove <n\|from-to>`      | `!rm`                 | Remove a queue position or inclusive range (requester or admin)                  |
 | `!clear`                    | `!c`                  | Clear pending tracks (admin)                                                     |
 | `!shuffle`                  | -                     | Shuffle the pending queue (admin)                                                |
 | `!loop [off\|track\|queue]` | -                     | Repeat the current track or the whole queue (admin; persists across restarts)    |
