@@ -55,6 +55,25 @@ describe("FFmpeg PCM source", () => {
     expect(args).not.toContain("-user_agent");
   });
 
+  it("seeks the input when a start offset is configured", () => {
+    const args = buildFfmpegPcmArguments("https://cdn.example.test/audio", {
+      seekSeconds: 42,
+    });
+
+    const inputIndex = args.indexOf("-i");
+    expect(inputIndex).toBeGreaterThan(-1);
+    expect(args.indexOf("-ss")).toBeLessThan(inputIndex);
+    expect(args[args.indexOf("-ss") + 1]).toBe("42");
+  });
+
+  it("omits the seek flag when the offset is zero", () => {
+    const args = buildFfmpegPcmArguments("https://cdn.example.test/audio", {
+      seekSeconds: 0,
+    });
+
+    expect(args).not.toContain("-ss");
+  });
+
   it("rejects non-HTTPS inputs", () => {
     expect(() => buildFfmpegPcmArguments("http://example.test/audio")).toThrow(
       "must use HTTPS",

@@ -8,6 +8,10 @@ for [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `!seek <segundos>` jumps the current track to a new position (FFmpeg restarts
+  the source with a `-ss` offset; the queue position is preserved) and
+  `!previous` / `!prev` replays the last finished track. See
+  [issue #19](https://github.com/Juanzaan/rhapsod/issues/19).
 - Direct audio URLs and radio streams: `!play <url>` (and plain pasting) now
   accepts http(s) audio files (`.mp3`, `.ogg`, `.m4a`, `.aac`, `.opus`,
   `.flac`, `.wav`), HLS playlists (`.m3u8`) and extensionless streams whose

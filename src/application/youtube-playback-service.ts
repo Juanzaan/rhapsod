@@ -143,6 +143,7 @@ export class YoutubePlaybackService {
   #session: FfmpegPlaybackSession | undefined;
   #generation = 0;
   #chainActive = false;
+  #pendingSeek: number | undefined;
   #pendingSkips = 0;
   #volumePercent = 50;
   #tracksPlayed = 0;
@@ -691,6 +692,7 @@ export class YoutubePlaybackService {
   skip(): void {
     this.#generation++;
     this.#pendingSkips++;
+    this.#pendingSeek = undefined;
     if (this.#current) this.#prepared.delete(this.#current.source);
     if (this.#session) this.#sessionEndReasons.set(this.#session, "skipped");
     this.#session?.stop();
@@ -701,6 +703,7 @@ export class YoutubePlaybackService {
   stop(): void {
     this.#generation++;
     this.#pendingSkips = 0;
+    this.#pendingSeek = undefined;
     if (this.#session) this.#sessionEndReasons.set(this.#session, "stopped");
     this.#session?.stop();
     this.#session = undefined;
@@ -710,6 +713,44 @@ export class YoutubePlaybackService {
     this.#loopPool = [];
     this.#prepared.clear();
     this.#persistState();
+  }
+
+  seek(seconds: number): void {
+    if (!this.#current || !this.#session) {
+      throw new Error("No hay nada reproduciéndose para saltar de posición.");
+    }
+    let target = Math.max(0, Math.floor(seconds));
+    if (this.#current.durationSeconds !== undefined) {
+      target = Math.min(target, Math.max(0, this.#current.durationSeconds - 1));
+    }
+    this.#pendingSeek = target;
+    this.#generation++;
+    if (this.#session) this.#sessionEndReasons.set(this.#session, "skipped");
+    this.#session?.stop();
+    this.#session = undefined;
+    try {
+      this.#queue.add(this.#current);
+      this.#queue.moveToHead(this.#current.id);
+    } catch {
+      // Duplicate already queued: the seek acts like a skip.
+    }
+    this.#requestNext();
+  }
+
+  replayPrevious(): Track {
+    const previous = this.#history[this.#current ? 1 : 0];
+    if (!previous) {
+      throw new Error("No hay ninguna canción anterior para repetir.");
+    }
+    try {
+      this.#queue.add(previous);
+    } catch {
+      // Already queued: move it to the front instead.
+    }
+    this.#queue.moveToHead(previous.id);
+    this.#requestNext();
+    this.#persistState();
+    return previous;
   }
 
   pause(): void {
@@ -731,6 +772,7 @@ export class YoutubePlaybackService {
   clearQueued(): number {
     const count = this.#queue.length;
     this.#pendingSkips = 0;
+    this.#pendingSeek = undefined;
     this.#queue.clear();
     this.#loopMode = "off";
     this.#loopPool = [];
@@ -822,11 +864,14 @@ export class YoutubePlaybackService {
           stage: "audio-url",
           trackId: track.id,
         });
-        const session = this.#createPlayback(
-          resolved.url,
-          this.#encoder,
-          this.#output,
-        );
+        const seekSeconds = this.#pendingSeek;
+        this.#pendingSeek = undefined;
+        const session =
+          seekSeconds === undefined
+            ? this.#createPlayback(resolved.url, this.#encoder, this.#output)
+            : this.#createPlayback(resolved.url, this.#encoder, this.#output, {
+                seekSeconds,
+              });
         session.player.setVolume(volumeToGain(this.#volumePercent));
         this.#session = session;
         this.#tracksPlayed++;

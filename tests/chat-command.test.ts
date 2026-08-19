@@ -36,6 +36,12 @@ describe("parseChatCommand", () => {
       input: "duki rockstar",
       name: "playnext",
     });
+    expect(parseChatCommand("!seek 90")).toEqual({
+      name: "seek",
+      seconds: 90,
+    });
+    expect(parseChatCommand("!previous")).toEqual({ name: "previous" });
+    expect(parseChatCommand("!prev")).toEqual({ name: "previous" });
   });
 
   it("does not treat normal chat as a command", () => {
@@ -86,6 +92,10 @@ describe("parseChatCommand", () => {
     expect(() => parseChatCommand("!remove 5-2")).toThrow("ascending");
     expect(() => parseChatCommand("!move 2")).toThrow("Usage: !move");
     expect(() => parseChatCommand("!queue 0")).toThrow("at least 1");
+    expect(() => parseChatCommand("!seek abc")).toThrow("Usage: !seek");
+    expect(() => parseChatCommand("!previous 2")).toThrow(
+      "does not accept arguments",
+    );
     expect(() => parseChatCommand("!unknown")).toThrow("Unknown command");
   });
 });

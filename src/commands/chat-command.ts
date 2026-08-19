@@ -7,11 +7,13 @@ type ChatCommand =
   | { readonly name: "now-playing" }
   | { readonly input: string; readonly name: "play" }
   | { readonly name: "pause" }
+  | { readonly name: "previous" }
   | { readonly name: "queue"; readonly page?: number }
   | { readonly name: "remove"; readonly from: number; readonly to: number }
   | { readonly name: "history" }
   | { readonly name: "move"; readonly from: number; readonly to: number }
   | { readonly name: "resume" }
+  | { readonly name: "seek"; readonly seconds: number }
   | { readonly index?: number; readonly input: string; readonly name: "search" }
   | { readonly name: "shuffle" }
   | { readonly name: "skip" }
@@ -41,6 +43,8 @@ const COMMAND_ALIASES: Readonly<Record<string, ChatCommand["name"]>> = {
   playnext: "playnext",
   pn: "playnext",
   next: "playnext",
+  prev: "previous",
+  previous: "previous",
   q: "queue",
   queue: "queue",
   remove: "remove",
@@ -48,6 +52,7 @@ const COMMAND_ALIASES: Readonly<Record<string, ChatCommand["name"]>> = {
   search: "search",
   rm: "remove",
   s: "skip",
+  seek: "seek",
   shuffle: "shuffle",
   skip: "skip",
   st: "stats",
@@ -108,6 +113,9 @@ export function parseChatCommand(
         throw new Error("Usage: !loop [off|track|queue]");
       }
       return { mode: argument, name };
+    case "seek":
+      if (!/^\d+$/.test(argument)) throw new Error("Usage: !seek <segundos>");
+      return { name, seconds: Number(argument) };
     default:
       if (argument)
         throw new Error(`Command !${rawName} does not accept arguments`);
