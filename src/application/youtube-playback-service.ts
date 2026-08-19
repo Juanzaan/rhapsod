@@ -57,7 +57,10 @@ export interface YoutubePlaybackResolver {
   getAudioUrlFromUrl(url: string): Promise<string>;
   getTrack(resource: YoutubeResource): Promise<YoutubeTrackMetadata>;
   getTrackFromUrl(url: string): Promise<YoutubeTrackMetadata>;
-  search(query: string): Promise<YoutubeTrackMetadata>;
+  search(
+    query: string,
+    expectedDurationSeconds?: number,
+  ): Promise<YoutubeTrackMetadata>;
   expandPlaylist(
     resource: YoutubeResource,
     limit: number,
@@ -159,7 +162,10 @@ export class YoutubePlaybackService {
       if (!query) {
         throw new Error("No encontré los datos del track de Spotify.");
       }
-      const metadata = await this.#resolver.search(query);
+      const metadata = await this.#resolver.search(
+        query,
+        spotifyTrack.durationSeconds,
+      );
       this.#recordMetadataTiming(metadata, startedAt);
       return this.#enqueueMetadata(metadata, requestedBy, "spotify");
     }
@@ -463,7 +469,10 @@ export class YoutubePlaybackService {
     const query = `${metadata.artist} ${metadata.title}`.trim();
     if (!query) return undefined;
     try {
-      const candidate = await this.#resolver.search(query);
+      const candidate = await this.#resolver.search(
+        query,
+        metadata.durationSeconds,
+      );
       this.#recordMetadataTiming(candidate, startedAt);
       return candidate;
     } catch {

@@ -179,4 +179,72 @@ describe("rankYoutubeCandidates", () => {
 
     expect(selected?.id).toBe("channelMatch");
   });
+
+  it("prefers the studio version when the expected duration is known", () => {
+    const selected = rankYoutubeCandidates(
+      "duki rockstar",
+      [
+        {
+          durationSeconds: 320,
+          id: "live",
+          title: "Duki - Rockstar (Live en el Estadio)",
+          webpageUrl: "https://youtube.com/watch?v=live",
+        },
+        {
+          durationSeconds: 182,
+          id: "studio",
+          title: "DUKI - Rockstar (Official Video)",
+          webpageUrl: "https://youtube.com/watch?v=studio",
+        },
+      ],
+      180,
+    );
+
+    expect(selected?.id).toBe("studio");
+  });
+
+  it("drops far-away durations from the ranked list", () => {
+    const ranked = rankYoutubeCandidatesAll(
+      "the weeknd starboy",
+      [
+        {
+          durationSeconds: 600,
+          id: "live",
+          title: "The Weeknd - Starboy (Live)",
+          webpageUrl: "https://youtube.com/watch?v=live",
+        },
+        {
+          durationSeconds: 230,
+          id: "song",
+          title: "The Weeknd - Starboy",
+          webpageUrl: "https://youtube.com/watch?v=song",
+        },
+      ],
+      215,
+    );
+
+    expect(ranked.map((candidate) => candidate.id)).toEqual(["song"]);
+  });
+
+  it("does not penalize candidates without a known duration", () => {
+    const selected = rankYoutubeCandidates(
+      "duki rockstar",
+      [
+        {
+          id: "plain",
+          title: "Duki - Rockstar",
+          webpageUrl: "https://youtube.com/watch?v=plain",
+        },
+        {
+          durationSeconds: 700,
+          id: "live",
+          title: "Duki - Rockstar (Live)",
+          webpageUrl: "https://youtube.com/watch?v=live",
+        },
+      ],
+      180,
+    );
+
+    expect(selected?.id).toBe("plain");
+  });
 });

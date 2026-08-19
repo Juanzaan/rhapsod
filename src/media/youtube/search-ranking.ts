@@ -7,23 +7,35 @@ const POSITIVE_TERMS =
 const CHANNEL_MATCH_BONUS = 12;
 const MAX_CHANNEL_MATCH_BONUS = 24;
 const FUZZY_MIN_TERM_LENGTH = 4;
+const DURATION_TOLERANCE = 0.25;
+const DURATION_MISMATCH_PENALTY = 40;
 
 export function rankYoutubeCandidates(
   query: string,
   candidates: readonly YoutubeSearchCandidate[],
+  expectedDurationSeconds?: number,
 ): YoutubeSearchCandidate | undefined {
-  return rankYoutubeCandidatesAll(query, candidates)[0];
+  return rankYoutubeCandidatesAll(
+    query,
+    candidates,
+    expectedDurationSeconds,
+  )[0];
 }
 
 export function rankYoutubeCandidatesAll(
   query: string,
   candidates: readonly YoutubeSearchCandidate[],
+  expectedDurationSeconds?: number,
 ): YoutubeSearchCandidate[] {
   const normalizedQuery = normalize(query);
   return candidates
     .map((candidate) => ({
       candidate,
-      score: scoreCandidate(normalizedQuery, candidate),
+      score: scoreCandidate(
+        normalizedQuery,
+        candidate,
+        expectedDurationSeconds,
+      ),
     }))
     .filter((item) => item.score >= 35)
     .sort((left, right) => right.score - left.score)
@@ -33,6 +45,7 @@ export function rankYoutubeCandidatesAll(
 function scoreCandidate(
   normalizedQuery: string,
   candidate: YoutubeSearchCandidate,
+  expectedDurationSeconds?: number,
 ): number {
   const title = normalize(candidate.title);
   const queryTerms = normalizedQuery.split(" ").filter(Boolean);
@@ -72,6 +85,16 @@ function scoreCandidate(
     score -= 35;
   if (candidate.durationSeconds !== undefined && candidate.durationSeconds < 45)
     score -= 20;
+  if (
+    expectedDurationSeconds !== undefined &&
+    candidate.durationSeconds !== undefined &&
+    expectedDurationSeconds > 0
+  ) {
+    const deviation =
+      Math.abs(candidate.durationSeconds - expectedDurationSeconds) /
+      expectedDurationSeconds;
+    if (deviation > DURATION_TOLERANCE) score -= DURATION_MISMATCH_PENALTY;
+  }
   return score;
 }
 
