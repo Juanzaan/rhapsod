@@ -18,6 +18,12 @@ const configSchema = z.object({
     .min(0)
     .max(120)
     .default(15),
+  RHAPSOD_WATCHDOG_INTERVAL_MINUTES: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(1440)
+    .default(15),
   RHAPSOD_AUDIO_TEST_TONE_SECONDS: z.coerce.number().min(0).max(10).default(0),
   RHAPSOD_OPUS_BITRATE: z.coerce
     .number()

@@ -93,6 +93,7 @@ All settings are environment variables (see `.env.example`):
 | `RHAPSOD_LOG_LEVEL`                   | no       | pino log level (default `info`)                                                            |
 | `RHAPSOD_LOUDNESS_TARGET_LUFS`        | no       | EBU R128 loudness target for playback; `0` disables (default `-14`)                        |
 | `RHAPSOD_METRICS_INTERVAL_MINUTES`    | no       | Log RSS/heap every N minutes; `0` disables (default `15`)                                  |
+| `RHAPSOD_WATCHDOG_INTERVAL_MINUTES`   | no       | Restart the process if the event loop stalls; `0` disables (default `15`)                  |
 
 Secrets (cookies, Spotify credentials, TS3 passwords) live only in `.env` or the
 deployment secret store — never in Git. For production under systemd see

@@ -8,6 +8,11 @@ for [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- GitHub Actions CI: every push and pull request runs the full check pipeline
+  (format, lint, typecheck, tests, build).
+- Watchdog (`RHAPSOD_WATCHDOG_INTERVAL_MINUTES`, default 15, `0` disables):
+  if the event loop stalls past twice the interval, the process exits with
+  code 1 so systemd restarts it.
 - TeamSpeak reconnect protection: after a kick or runtime disconnect, the bot
   retries at most five times with a five-second delay, then shuts down instead
   of reconnecting forever.
