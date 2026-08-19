@@ -9,10 +9,12 @@ for [Semantic Versioning](https://semver.org/).
 ### Added
 
 - Spotify playlist support after Spotify's February 2026 API migration, which
-  dropped anonymous playlist reads (`/playlists/{id}/tracks` now returns 403).
-  Set `RHAPSOD_SPOTIFY_REFRESH_TOKEN` (obtained with
-  `node scripts/spotify-auth.mjs`) to restore playlist expansion via the new
-  `/playlists/{id}/items` endpoint.
+  dropped anonymous playlist reads (`/playlists/{id}/tracks` now returns 403,
+  `/items` requires extended quota mode that only organizations can request).
+  Playlist expansion now falls back to the public `open.spotify.com/embed`
+  page (title/artists/duration per track, no auth needed). The optional
+  `RHAPSOD_SPOTIFY_REFRESH_TOKEN` (obtained with `node scripts/spotify-auth.mjs`)
+  switches playlist reads to the Web API `/items` endpoint when available.
 - yt-dlp now requests the `web_embedded` YouTube player client, which is not
   blocked on datacenter IPs ("The page needs to be reloaded" / bot-check
   errors).
