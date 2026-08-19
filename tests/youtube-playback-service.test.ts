@@ -9,7 +9,9 @@ import type { FfmpegPlaybackSession } from "../src/audio/ffmpeg-player.js";
 import type { AudioPlayer } from "../src/audio/audio-player.js";
 import type { RhapsodOpusEncoder } from "../src/audio/opus-encoder.js";
 
-function setup(options: { soundcloudResolver?: boolean } = {}) {
+function setup(
+  options: { soundcloudResolver?: boolean; spotifyResolver?: boolean } = {},
+) {
   const stopSession = vi.fn();
   const playbackResolvers: Array<() => void> = [];
   const createPlayback = vi.fn((): FfmpegPlaybackSession => ({
@@ -74,6 +76,20 @@ function setup(options: { soundcloudResolver?: boolean } = {}) {
   const onPlaybackError = vi.fn();
   const onPlaybackFinished = vi.fn();
   const onPlaybackStarted = vi.fn();
+  const spotifyResolver = options.spotifyResolver
+    ? {
+        getTrack: vi.fn(() =>
+          Promise.resolve({
+            artist: "Duki",
+            durationSeconds: 180,
+            id: "abc123",
+            title: "Rockstar",
+          }),
+        ),
+        match: vi.fn(() => true),
+        name: "spotify",
+      }
+    : undefined;
   const service = new YoutubePlaybackService({
     createPlayback,
     encoder,
@@ -97,6 +113,7 @@ function setup(options: { soundcloudResolver?: boolean } = {}) {
           },
         }
       : {}),
+    ...(spotifyResolver ? { spotifyResolver } : {}),
   });
   return {
     alternativeResolver,
@@ -107,6 +124,7 @@ function setup(options: { soundcloudResolver?: boolean } = {}) {
     playbackResolvers,
     resolver,
     service,
+    spotifyResolver,
     stopSession,
   };
 }
@@ -332,7 +350,40 @@ describe("YoutubePlaybackService", () => {
 
     await expect(
       service.enqueue("https://open.spotify.com/track/abc123", "user-1"),
-    ).rejects.toThrow("Los links de Spotify todavía no están soportados");
+    ).rejects.toThrow("Spotify no está configurado en este bot");
+  });
+
+  it("resolves Spotify tracks through a YouTube search", async () => {
+    const { resolver, service, spotifyResolver } = setup({
+      spotifyResolver: true,
+    });
+
+    const track = await service.enqueue(
+      "https://open.spotify.com/track/abc123",
+      "user-1",
+    );
+
+    expect(spotifyResolver!.getTrack).toHaveBeenCalledWith({
+      id: "abc123",
+      type: "track",
+    });
+    expect(resolver.search).toHaveBeenCalledWith("Duki Rockstar");
+    expect(track).toMatchObject({
+      alternativeProvider: "spotify",
+      id: "search-result",
+      requestedBy: "user-1",
+    });
+  });
+
+  it("rejects Spotify playlists and albums", async () => {
+    const { service } = setup({ spotifyResolver: true });
+
+    await expect(
+      service.enqueue("https://open.spotify.com/playlist/abc123", "user-1"),
+    ).rejects.toThrow("solo soporto tracks sueltos");
+    await expect(
+      service.enqueue("https://open.spotify.com/album/abc123", "user-1"),
+    ).rejects.toThrow("solo soporto tracks sueltos");
   });
 
   it("falls back to a YouTube search when given plain text", async () => {

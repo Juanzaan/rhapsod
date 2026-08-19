@@ -19,12 +19,14 @@ import {
   type SoundCloudDrmMetadata,
   type SoundCloudResolver,
 } from "../media/soundcloud/public-api.js";
+import type { SpotifyResolver } from "../media/spotify/api.js";
 
 export interface PlaybackServiceOptions {
   readonly encoder: RhapsodOpusEncoder;
   readonly resolver: YoutubePlaybackResolver;
   readonly alternativeResolver?: AlternativeSourceResolver;
   readonly soundcloudResolver?: SoundCloudResolver;
+  readonly spotifyResolver?: SpotifyResolver;
   readonly output: VoiceFrameOutput;
   readonly playlistMaxTracks?: number;
   readonly createPlayback?: typeof playFfmpegUrl;
@@ -82,6 +84,7 @@ export class YoutubePlaybackService {
   readonly #resolver: YoutubePlaybackResolver;
   readonly #alternativeResolver: AlternativeSourceResolver | undefined;
   readonly #soundcloudResolver: SoundCloudResolver | undefined;
+  readonly #spotifyResolver: SpotifyResolver | undefined;
   readonly #output: VoiceFrameOutput;
   readonly #createPlayback: typeof playFfmpegUrl;
   readonly #onPlaybackError: (
@@ -110,6 +113,7 @@ export class YoutubePlaybackService {
     this.#resolver = options.resolver;
     this.#alternativeResolver = options.alternativeResolver;
     this.#soundcloudResolver = options.soundcloudResolver;
+    this.#spotifyResolver = options.spotifyResolver;
     this.#output = options.output;
     this.#createPlayback = options.createPlayback ?? playFfmpegUrl;
     this.#onPlaybackError = options.onPlaybackError ?? (() => undefined);
@@ -140,9 +144,26 @@ export class YoutubePlaybackService {
       return this.enqueueSearch(media.value, requestedBy);
     }
     if (media.kind === "spotify") {
-      throw new Error(
-        "Los links de Spotify todavía no están soportados: pegá un link de YouTube o SoundCloud, o buscá con !yt.",
+      if (!this.#spotifyResolver) {
+        throw new Error(
+          "Spotify no está configurado en este bot: pegá un link de YouTube o SoundCloud, o buscá con !yt.",
+        );
+      }
+      if (media.resource.type !== "track") {
+        throw new Error(
+          "Todavía solo soporto tracks sueltos de Spotify, no playlists ni álbumes.",
+        );
+      }
+      const spotifyTrack = await this.#spotifyResolver.getTrack(
+        media.resource,
       );
+      const query = `${spotifyTrack.artist} ${spotifyTrack.title}`.trim();
+      if (!query) {
+        throw new Error("No encontré los datos del track de Spotify.");
+      }
+      const metadata = await this.#resolver.search(query);
+      this.#recordMetadataTiming(metadata, startedAt);
+      return this.#enqueueMetadata(metadata, requestedBy, "spotify");
     }
     if (media.kind === "url") {
       throw new Error(

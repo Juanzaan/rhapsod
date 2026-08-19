@@ -19,6 +19,7 @@ import {
 } from "./media/youtube/yt-dlp.js";
 import { SongLinkClient } from "./media/song-link.js";
 import { SoundCloudPublicApi } from "./media/soundcloud/public-api.js";
+import { SpotifyApi } from "./media/spotify/api.js";
 import { parseMediaInput } from "./media/media-input.js";
 
 async function main(): Promise<void> {
@@ -45,6 +46,13 @@ async function main(): Promise<void> {
   const encoder = await createRhapsodOpusEncoder({
     bitrate: config.RHAPSOD_OPUS_BITRATE,
   });
+  const spotifyResolver =
+    config.RHAPSOD_SPOTIFY_CLIENT_ID && config.RHAPSOD_SPOTIFY_CLIENT_SECRET
+      ? new SpotifyApi({
+          clientId: config.RHAPSOD_SPOTIFY_CLIENT_ID,
+          clientSecret: config.RHAPSOD_SPOTIFY_CLIENT_SECRET,
+        })
+      : undefined;
   const playback = new YoutubePlaybackService({
     ...(config.RHAPSOD_FFMPEG_PATH === undefined
       ? {}
@@ -82,6 +90,7 @@ async function main(): Promise<void> {
     ),
     alternativeResolver: new SongLinkClient(),
     soundcloudResolver: new SoundCloudPublicApi(),
+    ...(spotifyResolver ? { spotifyResolver } : {}),
   });
   const commandRateLimiter = new CommandRateLimiter();
   const handleChatCommand = async (
