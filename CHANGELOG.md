@@ -17,6 +17,8 @@ for [Semantic Versioning](https://semver.org/).
   every listener; changes apply live to the current track.
 - `!loop [off|track|queue]`: repeat the current track (`track`) or the whole
   queue (`queue`); `!stop`/`!clear` disable looping.
+- `RHAPSOD_METRICS_INTERVAL_MINUTES`: periodic RSS/heap logging (default 15
+  minutes, `0` disables) for the 897MB-VM memory monitoring.
 - `RHAPSOD_TS3_CLIENT_DESCRIPTION` sets the bot's TeamSpeak client description
   (any client can set its own description; no server permissions needed).
 - `test:coverage` script.
