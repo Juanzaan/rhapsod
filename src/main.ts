@@ -24,6 +24,7 @@ import { LyricsClient } from "./media/lyrics.js";
 import { SoundCloudPublicApi } from "./media/soundcloud/public-api.js";
 import { SpotifyApi } from "./media/spotify/api.js";
 import { parseMediaInput } from "./media/media-input.js";
+import { startWatchdog } from "./watchdog.js";
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -60,6 +61,15 @@ async function main(): Promise<void> {
     };
     reportMetrics();
     setInterval(reportMetrics, metricsIntervalMinutes * 60_000).unref();
+  }
+  if (config.RHAPSOD_WATCHDOG_INTERVAL_MINUTES > 0) {
+    startWatchdog({
+      intervalMs: config.RHAPSOD_WATCHDOG_INTERVAL_MINUTES * 60_000,
+      onTimeout: (driftMs) => {
+        logger.error({ driftMs }, "Watchdog: event loop blocked; restarting");
+        process.exit(1);
+      },
+    });
   }
   const connection = createTs3Connection(config, identity);
   const maxReconnectAttempts = 5;
