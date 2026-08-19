@@ -36,6 +36,12 @@ for [Semantic Versioning](https://semver.org/).
   metadata jobs (up to two concurrent yt-dlp processes). A track starts as soon
   as its URL is resolved instead of stalling ~5-10 s behind every queued
   search, which made the start of a playlist sound laggy.
+- The next track's audio URL is prefetched only after the current track has
+  sent its first frame (instead of at session start), so the ffmpeg startup of
+  a new track does not fight the yt-dlp process for the CPU on single-core
+  machines. Track URLs are also resolved at most once: a prefetch and the
+  playback chain share the same in-flight resolution, and the queue head is
+  prefetched as soon as it is enqueued.
 - Spotify playlist support after Spotify's February 2026 API migration, which
   dropped anonymous playlist reads (`/playlists/{id}/tracks` now returns 403,
   `/items` requires extended quota mode that only organizations can request).
