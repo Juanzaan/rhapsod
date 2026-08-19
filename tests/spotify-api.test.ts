@@ -109,6 +109,82 @@ describe("SpotifyApi", () => {
     expect(fetch.mock.calls.length).toBe(4);
   });
 
+  it("uses the refresh-token flow and the /items endpoint for playlists", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>((input, init) => {
+      const url = request(input);
+      if (url === "https://accounts.spotify.com/api/token") {
+        expect(init?.body).toBeInstanceOf(URLSearchParams);
+        expect((init?.body as URLSearchParams).toString()).toBe(
+          "grant_type=refresh_token&refresh_token=refresh-1",
+        );
+        expect(init?.headers).toMatchObject({
+          Authorization: `Basic ${Buffer.from("id:secret").toString("base64")}`,
+        });
+        return Promise.resolve(
+          jsonResponse({ access_token: "token-user", expires_in: 3600 }),
+        );
+      }
+      if (url.startsWith("https://api.spotify.com/v1/playlists/p1/items")) {
+        expect(init?.headers).toMatchObject({
+          Authorization: "Bearer token-user",
+        });
+        return Promise.resolve(
+          jsonResponse({
+            items: [
+              {
+                track: {
+                  id: "t1",
+                  name: "Rockstar",
+                  artists: [{ name: "Duki" }],
+                  duration_ms: 180_000,
+                },
+              },
+            ],
+            next: null,
+            total: 1,
+          }),
+        );
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const api = new SpotifyApi({
+      clientId: "id",
+      clientSecret: "secret",
+      refreshToken: "refresh-1",
+      fetch,
+    });
+
+    const expansion = await api.expandPlaylist(
+      { id: "p1", type: "playlist" },
+      1,
+    );
+
+    expect(expansion.tracks).toEqual([
+      { artist: "Duki", durationSeconds: 180, id: "t1", title: "Rockstar" },
+    ]);
+    expect(expansion.total).toBe(1);
+  });
+
+  it("fails with a migration hint when playlists return 403 without a refresh token", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>((input) => {
+      if (request(input) === "https://accounts.spotify.com/api/token") {
+        return Promise.resolve(
+          jsonResponse({ access_token: "token-1", expires_in: 3600 }),
+        );
+      }
+      return Promise.resolve(jsonResponse({}, 403));
+    });
+    const api = new SpotifyApi({
+      clientId: "id",
+      clientSecret: "secret",
+      fetch,
+    });
+
+    await expect(
+      api.expandPlaylist({ id: "p1", type: "playlist" }, 1),
+    ).rejects.toThrow("RHAPSOD_SPOTIFY_REFRESH_TOKEN");
+  });
+
   it("fails with a clear error for HTTP failures", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>((input) => {
       if (request(input) === "https://accounts.spotify.com/api/token") {

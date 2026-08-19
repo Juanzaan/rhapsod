@@ -59,6 +59,7 @@ const configSchema = z.object({
   RHAPSOD_LOUDNESS_TARGET_LUFS: z.coerce.number().min(-30).max(0).default(-14),
   RHAPSOD_SPOTIFY_CLIENT_ID: optionalSecret,
   RHAPSOD_SPOTIFY_CLIENT_SECRET: optionalSecret,
+  RHAPSOD_SPOTIFY_REFRESH_TOKEN: optionalSecret,
   RHAPSOD_TS3_CHANNEL_PASSWORD: optionalSecret,
   RHAPSOD_TS3_CHANNEL_NAME: optionalSecret,
   RHAPSOD_TS3_CONNECT_TIMEOUT_SECONDS: z.coerce

@@ -90,6 +90,9 @@ async function main(): Promise<void> {
       ? new SpotifyApi({
           clientId: config.RHAPSOD_SPOTIFY_CLIENT_ID,
           clientSecret: config.RHAPSOD_SPOTIFY_CLIENT_SECRET,
+          ...(config.RHAPSOD_SPOTIFY_REFRESH_TOKEN === undefined
+            ? {}
+            : { refreshToken: config.RHAPSOD_SPOTIFY_REFRESH_TOKEN }),
         })
       : undefined;
   const ffmpegPath = config.RHAPSOD_FFMPEG_PATH;
