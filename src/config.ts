@@ -18,6 +18,8 @@ const configSchema = z.object({
     .min(64_000)
     .max(160_000)
     .default(128_000),
+  RHAPSOD_SPOTIFY_CLIENT_ID: optionalSecret,
+  RHAPSOD_SPOTIFY_CLIENT_SECRET: optionalSecret,
   RHAPSOD_TS3_CHANNEL_PASSWORD: optionalSecret,
   RHAPSOD_TS3_CHANNEL_NAME: optionalSecret,
   RHAPSOD_TS3_CONNECT_TIMEOUT_SECONDS: z.coerce
