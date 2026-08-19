@@ -9,6 +9,7 @@ export interface FfmpegPcmOptions {
   readonly binary?: string;
   readonly spawnProcess?: typeof spawn;
   readonly loudnessTargetLufs?: number;
+  readonly seekSeconds?: number;
   readonly userAgent?: string;
 }
 
@@ -46,6 +47,9 @@ export function buildFfmpegPcmArguments(
   ];
   if (options.userAgent !== undefined && options.userAgent.length > 0) {
     args.push("-user_agent", options.userAgent);
+  }
+  if (options.seekSeconds !== undefined && options.seekSeconds > 0) {
+    args.push("-ss", String(options.seekSeconds));
   }
   args.push(
     "-i",

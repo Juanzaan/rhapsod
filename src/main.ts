@@ -99,13 +99,16 @@ async function main(): Promise<void> {
   const ffmpegPath = config.RHAPSOD_FFMPEG_PATH;
   const ffmpegUserAgent = config.RHAPSOD_FFMPEG_USER_AGENT;
   const playback = new YoutubePlaybackService({
-    createPlayback: (url, playbackEncoder, output) =>
+    createPlayback: (url, playbackEncoder, output, options) =>
       playFfmpegUrl(url, playbackEncoder, output, {
         ...(ffmpegPath === undefined ? {} : { binary: ffmpegPath }),
         loudnessTargetLufs: config.RHAPSOD_LOUDNESS_TARGET_LUFS,
         ...(ffmpegUserAgent === undefined
           ? {}
           : { userAgent: ffmpegUserAgent }),
+        ...(options?.seekSeconds === undefined
+          ? {}
+          : { seekSeconds: options.seekSeconds }),
       }),
     encoder,
     onPlaybackStarted: async (track) => {
@@ -241,9 +244,22 @@ async function main(): Promise<void> {
           playback.pause();
           await connection.sendChannelMessage("Reproducción pausada.");
           break;
+        case "previous": {
+          const track = playback.replayPrevious();
+          await connection.sendChannelMessage(
+            `Reproduciendo de nuevo: ${track.title}`,
+          );
+          break;
+        }
         case "resume":
           playback.resume();
           await connection.sendChannelMessage("Reproducción reanudada.");
+          break;
+        case "seek":
+          playback.seek(command.seconds);
+          await connection.sendChannelMessage(
+            `Reproduciendo desde el segundo ${command.seconds}…`,
+          );
           break;
         case "queue": {
           const tracks = playback.queue();

@@ -48,7 +48,8 @@ OpenTSMusicBot, xDroni/TS3-Music-Bot):
 - **Named playlists**: `!playlist save|import|list|play <name> [url]` to persist
   and replay saved sets. See [issue #18](https://github.com/Juanzaan/rhapsod/issues/18).
 - **Seek and `!previous`**: `!seek <seconds>` within the current track and
-  `!previous` to replay the last one. See [issue #19](https://github.com/Juanzaan/rhapsod/issues/19).
+  `!previous` to replay the last one. Shipped. See
+  [issue #19](https://github.com/Juanzaan/rhapsod/issues/19).
 - **Radio streams and direct audio URLs**: let FFmpeg consume http(s) streams
   (icecast, m3u8) instead of resolving everything through yt-dlp. Shipped:
   `!play <audio-url>` accepts direct files, HLS and audio streams. See

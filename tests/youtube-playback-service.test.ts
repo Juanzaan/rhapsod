@@ -1551,4 +1551,104 @@ describe("YoutubePlaybackService", () => {
     );
     expect(createPlayback).toHaveBeenCalled();
   });
+
+  it("rejects seek when nothing is playing", () => {
+    const { service } = setup();
+
+    expect(() => service.seek(30)).toThrow("No hay nada reproduciéndose");
+  });
+
+  it("seeks within the current track and keeps it at the head", async () => {
+    const { createPlayback, playbackResolvers, resolver, service } = setup();
+    resolver.getTrack.mockResolvedValueOnce({
+      audioUrl: "https://media.example/audio",
+      durationSeconds: 100,
+      id: "a",
+      title: "Track a",
+      webpageUrl: "https://www.youtube.com/watch?v=a",
+    });
+
+    await service.enqueue("https://youtu.be/a", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(createPlayback).toHaveBeenCalledTimes(1);
+
+    service.seek(150);
+    playbackResolvers[0]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(createPlayback).toHaveBeenCalledTimes(2);
+    expect(createPlayback).toHaveBeenLastCalledWith(
+      "https://media.example/audio",
+      expect.anything(),
+      expect.anything(),
+      { seekSeconds: 99 },
+    );
+    expect(service.current?.id).toBe("a");
+    expect(service.queue()).toHaveLength(0);
+  });
+
+  it("seeks without a known duration passes the raw offset", async () => {
+    const { createPlayback, playbackResolvers, service } = setup();
+
+    await service.enqueue("https://youtu.be/a", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    service.seek(500);
+    playbackResolvers[0]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(createPlayback).toHaveBeenLastCalledWith(
+      "https://media.example/a",
+      expect.anything(),
+      expect.anything(),
+      { seekSeconds: 500 },
+    );
+  });
+
+  it("replays the previous track at the front while playing", async () => {
+    const { createPlayback, playbackResolvers, service } = setup();
+
+    await service.enqueue("https://youtu.be/a", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+    playbackResolvers[0]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+    await service.enqueue("https://youtu.be/b", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const replayed = service.replayPrevious();
+
+    expect(replayed.id).toBe("a");
+    expect(service.queue()[0]?.id).toBe("a");
+    expect(createPlayback).toHaveBeenCalledTimes(2);
+  });
+
+  it("replays the last finished track when idle", async () => {
+    const { createPlayback, playbackResolvers, service } = setup();
+
+    await service.enqueue("https://youtu.be/a", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+    playbackResolvers[0]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+    service.stop();
+    playbackResolvers[0]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const replayed = service.replayPrevious();
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(replayed.id).toBe("a");
+    expect(service.current?.id).toBe("a");
+    expect(createPlayback).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects replay when there is no history", () => {
+    const { service } = setup();
+
+    expect(() => service.replayPrevious()).toThrow(
+      "No hay ninguna canción anterior",
+    );
+  });
 });
