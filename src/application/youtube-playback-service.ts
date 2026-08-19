@@ -99,6 +99,8 @@ interface PlaylistEnqueueResult {
 
 const AUDIO_URL_FALLBACK_TTL_MS = 10 * 60_000;
 const AUDIO_URL_EXPIRY_MARGIN_MS = 60_000;
+const PREFETCH_STABILITY_TIMEOUT_MS = 8_000;
+const PREFETCH_STABILITY_POLL_MS = 100;
 const DEFAULT_PLAYLIST_MAX_TRACKS = 20;
 const DEFAULT_MAX_QUEUE_TRACKS = 200;
 const DEFAULT_MAX_TRACKS_PER_USER = 30;
@@ -480,7 +482,10 @@ export class YoutubePlaybackService {
       this.#loopPool = [...this.#queue.snapshot()];
     }
     if (restored > 0 && !this.#current) {
+      this.#prefetchNext();
       this.#requestNext();
+    } else if (restored > 0 && this.#isSessionStable()) {
+      this.#prefetchNext();
     }
     return restored;
   }
@@ -805,9 +810,10 @@ export class YoutubePlaybackService {
     }
     if (metadata.audioUrl) this.#cacheAudioUrl(track, metadata.audioUrl);
     this.#queue.add(track);
+    if (!this.#current) this.#prefetchNext();
     this.#requestNext();
     this.#persistState();
-    if (this.#current) this.#prefetchNext();
+    if (this.#current && this.#isSessionStable()) this.#prefetchNext();
     return track;
   }
 
@@ -1004,7 +1010,7 @@ export class YoutubePlaybackService {
         void Promise.resolve(this.#onPlaybackStarted(track)).catch(
           () => undefined,
         );
-        this.#prefetchNext();
+        this.#prefetchWhenStable();
         let playbackError: unknown;
         try {
           await session.done;
@@ -1104,6 +1110,10 @@ export class YoutubePlaybackService {
   }
 
   #resolveAudioUrl(track: Track): Promise<string> {
+    const existing = this.#prepared.get(track.source);
+    if (existing !== undefined) {
+      return existing.then((prepared) => prepared.url);
+    }
     const pending = this.#resolvePlayableAudio(track).then((url) => ({
       url,
       expiresAt: audioUrlExpiresAt(url),
@@ -1140,6 +1150,29 @@ export class YoutubePlaybackService {
     void this.#resolveAudioUrl(next).catch(() => {
       this.#prepared.delete(next.source);
     });
+  }
+
+  #isSessionStable(): boolean {
+    const session = this.#session;
+    return session !== undefined && session.player.metrics.framesSent > 0;
+  }
+
+  #prefetchWhenStable(): void {
+    const session = this.#session;
+    if (!session) return;
+    const startedAt = Date.now();
+    const check = (): void => {
+      if (this.#session !== session) return;
+      if (
+        session.player.metrics.framesSent > 0 ||
+        Date.now() - startedAt >= PREFETCH_STABILITY_TIMEOUT_MS
+      ) {
+        this.#prefetchNext();
+        return;
+      }
+      setTimeout(check, PREFETCH_STABILITY_POLL_MS);
+    };
+    check();
   }
 
   #recordMetadataTiming(
