@@ -487,6 +487,13 @@ async function main(): Promise<void> {
   await connection.connect();
   logger.info("Connected to TeamSpeak 3");
 
+  const restoredCount = playback.restoreQueuedTracks(
+    await connection.listConnectedClientUids(),
+  );
+  if (restoredCount > 0) {
+    logger.info({ restoredCount }, "Restored queued tracks after restart");
+  }
+
   let reconnecting = false;
   let shuttingDown = false;
   connection.onConnectionLost((reason) => {

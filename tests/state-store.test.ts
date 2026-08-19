@@ -54,6 +54,85 @@ describe("FilePlaybackStateStore", () => {
     expect(store.load()).toEqual({});
   });
 
+  it("round-trips a queue through the file", () => {
+    const filePath = join(directory, "queue.json");
+    const store = new FilePlaybackStateStore(filePath);
+    store.save({
+      loopMode: "off",
+      queue: [
+        {
+          durationSeconds: 180,
+          id: "a",
+          requestedBy: "user-1",
+          source: "https://www.youtube.com/watch?v=a",
+          title: "Track a",
+        },
+        {
+          id: "b",
+          requestedBy: "user-2",
+          source: "https://www.youtube.com/watch?v=b",
+          title: "Track b",
+        },
+      ],
+      volumePercent: 30,
+    });
+    expect(store.load()).toEqual({
+      loopMode: "off",
+      queue: [
+        {
+          durationSeconds: 180,
+          id: "a",
+          requestedBy: "user-1",
+          source: "https://www.youtube.com/watch?v=a",
+          title: "Track a",
+        },
+        {
+          id: "b",
+          requestedBy: "user-2",
+          source: "https://www.youtube.com/watch?v=b",
+          title: "Track b",
+        },
+      ],
+      volumePercent: 30,
+    });
+  });
+
+  it("drops invalid queue entries on load", () => {
+    const filePath = join(directory, "queue-invalid.json");
+    writeFileSync(
+      filePath,
+      JSON.stringify({
+        queue: [
+          { id: "ok", requestedBy: "user-1", source: "s", title: "T" },
+          { id: "", requestedBy: "user-1", source: "s", title: "T" },
+          { id: "no-requester", source: "s", title: "T" },
+          "garbage",
+          {
+            durationSeconds: -5,
+            id: "neg",
+            requestedBy: "u",
+            source: "s",
+            title: "T",
+          },
+        ],
+      }),
+    );
+    const store = new FilePlaybackStateStore(filePath);
+    expect(store.load()).toEqual({
+      queue: [
+        { id: "ok", requestedBy: "user-1", source: "s", title: "T" },
+        { id: "neg", requestedBy: "u", source: "s", title: "T" },
+      ],
+    });
+  });
+
+  it("ignores a queue that is not an array", () => {
+    const filePath = join(directory, "queue-not-array.json");
+    writeFileSync(filePath, JSON.stringify({ queue: "nope" }));
+    const store = new FilePlaybackStateStore(filePath);
+    expect(store.load()).toEqual({});
+  });
+
   it("creates the parent directory when saving", () => {
     const nested = join(directory, "nested", "deep", "state.json");
     const store = new FilePlaybackStateStore(nested);

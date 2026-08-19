@@ -22,6 +22,7 @@ import {
 import type { SpotifyResource } from "../media/media-input.js";
 import type { SpotifyResolver } from "../media/spotify/api.js";
 import type { PlaybackStateStore } from "../domain/state-store.js";
+import type { SerializedQueueTrack } from "../domain/state-store.js";
 import {
   parseArtistTitle,
   type LyricsResolver,
@@ -117,6 +118,7 @@ export class YoutubePlaybackService {
   readonly #spotifyResolver: SpotifyResolver | undefined;
   readonly #lyricsResolver: LyricsResolver | undefined;
   readonly #stateStore: PlaybackStateStore | undefined;
+  #persistedQueue: readonly SerializedQueueTrack[] = [];
   readonly #output: VoiceFrameOutput;
   readonly #createPlayback: typeof playFfmpegUrl;
   readonly #onPlaybackError: (
@@ -176,6 +178,7 @@ export class YoutubePlaybackService {
     if (restored?.loopMode !== undefined) {
       this.#loopMode = restored.loopMode;
     }
+    this.#persistedQueue = restored?.queue ?? [];
   }
 
   get current(): Track | undefined {
@@ -365,18 +368,52 @@ export class YoutubePlaybackService {
     const track = await this.enqueue(input, requestedBy);
     this.#queue.moveToHead(track.id);
     if (this.#current) this.#prefetchNext();
+    this.#persistState();
     return track;
+  }
+
+  restoreQueuedTracks(connectedUids: readonly string[]): number {
+    const connected = new Set(connectedUids);
+    let restored = 0;
+    for (const entry of this.#persistedQueue) {
+      if (!connected.has(entry.requestedBy)) continue;
+      if (this.#queue.length >= this.#maxQueueTracks) break;
+      try {
+        this.#queue.add({
+          ...(entry.durationSeconds === undefined
+            ? {}
+            : { durationSeconds: entry.durationSeconds }),
+          id: entry.id,
+          requestedBy: entry.requestedBy,
+          source: entry.source,
+          title: entry.title,
+        });
+        restored++;
+      } catch {
+        // Skip duplicate entries from a stale persisted queue.
+      }
+    }
+    this.#persistedQueue = [];
+    if (this.#loopMode === "queue") {
+      this.#loopPool = [...this.#queue.snapshot()];
+    }
+    if (restored > 0 && !this.#current) {
+      this.#requestNext();
+    }
+    return restored;
   }
 
   moveQueued(fromPosition: number, toPosition: number): Track | undefined {
     const moved = this.#queue.move(fromPosition, toPosition);
     if (moved && this.#current) this.#prefetchNext();
+    this.#persistState();
     return moved;
   }
 
   removeQueuedRange(fromPosition: number, toPosition: number): Track[] {
     const removed = this.#queue.removeRange(fromPosition, toPosition);
     for (const track of removed) this.#prepared.delete(track.source);
+    this.#persistState();
     return removed;
   }
 
@@ -634,6 +671,7 @@ export class YoutubePlaybackService {
     if (metadata.audioUrl) this.#cacheAudioUrl(track, metadata.audioUrl);
     this.#queue.add(track);
     this.#requestNext();
+    this.#persistState();
     if (this.#current) this.#prefetchNext();
     return track;
   }
@@ -674,6 +712,7 @@ export class YoutubePlaybackService {
     const track = this.#queue.snapshot()[position - 1];
     const removed = track ? this.#queue.remove(track.id) : undefined;
     if (removed) this.#prepared.delete(removed.source);
+    if (removed) this.#persistState();
     return removed;
   }
 
@@ -691,6 +730,7 @@ export class YoutubePlaybackService {
   shuffleQueued(): number {
     const count = this.#queue.length;
     this.#queue.shuffle();
+    this.#persistState();
     return count;
   }
 
@@ -703,8 +743,27 @@ export class YoutubePlaybackService {
   #persistState(): void {
     this.#stateStore?.save({
       loopMode: this.#loopMode,
+      queue: this.#serializedQueue(),
       volumePercent: this.#volumePercent,
     });
+  }
+
+  #serializedQueue(): readonly SerializedQueueTrack[] {
+    const entries: SerializedQueueTrack[] = [];
+    const include = (track: Track): void => {
+      entries.push({
+        ...(track.durationSeconds === undefined
+          ? {}
+          : { durationSeconds: track.durationSeconds }),
+        id: track.id,
+        requestedBy: track.requestedBy,
+        source: track.source,
+        title: track.title,
+      });
+    };
+    if (this.#current) include(this.#current);
+    for (const track of this.#queue.snapshot()) include(track);
+    return entries;
   }
 
   #requestNext(): void {
@@ -736,10 +795,12 @@ export class YoutubePlaybackService {
         const track = this.#queue.next();
         if (!track) {
           this.#current = undefined;
+          this.#persistState();
           return;
         }
         const generation = ++this.#generation;
         this.#current = track;
+        this.#persistState();
         const audioResolutionStartedAt = Date.now();
         const resolved = await this.#resolveOrSkip(track, generation);
         if (resolved === undefined) continue;
@@ -783,6 +844,7 @@ export class YoutubePlaybackService {
         this.#prepared.delete(track.source);
         this.#session = undefined;
         this.#current = undefined;
+        this.#persistState();
         if (this.#loopMode === "track") {
           try {
             this.#queue.add(track);
