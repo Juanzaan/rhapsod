@@ -28,6 +28,10 @@ for [Semantic Versioning](https://semver.org/).
   TeamSpeak 497-byte ceiling (no truncated frames on loud passages).
 - `!volume` now maps 0-100 to a perceptual gain curve (-40 dB to 0 dB),
   matching how real volume controls behave.
+- Opus encoder: complexity raised to 10 (best quality; measured +0.06 ms/frame
+  on the 1-vCPU VM) and in-band FEC enabled at 10% expected packet loss
+  (`RHAPSOD_OPUS_COMPLEXITY`, `RHAPSOD_OPUS_PACKET_LOSS_PERCENT`, `0` disables
+  FEC) so lost voice packets are recovered instead of dropping audio.
 - `!queue`/`!now-playing` show per-track durations when known.
 - `!volume <0-100>`: PCM gain applied to frames before Opus encoding, affecting
   every listener; changes apply live to the current track.

@@ -60,6 +60,8 @@ async function main(): Promise<void> {
   const connection = createTs3Connection(config, identity);
   const encoder = await createRhapsodOpusEncoder({
     bitrate: config.RHAPSOD_OPUS_BITRATE,
+    complexity: config.RHAPSOD_OPUS_COMPLEXITY,
+    packetLossPercent: config.RHAPSOD_OPUS_PACKET_LOSS_PERCENT,
   });
   const spotifyResolver =
     config.RHAPSOD_SPOTIFY_CLIENT_ID && config.RHAPSOD_SPOTIFY_CLIENT_SECRET

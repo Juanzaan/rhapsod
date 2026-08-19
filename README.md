@@ -79,6 +79,8 @@ All settings are environment variables (see `.env.example`):
 | `RHAPSOD_YTDLP_COOKIES_PATH`          | no       | Private cookies file for datacenter extraction                                             |
 | `RHAPSOD_FFMPEG_PATH`                 | no       | System FFmpeg binary path                                                                  |
 | `RHAPSOD_OPUS_BITRATE`                | no       | Opus bitrate in bits/s (default `96000`; keep under the TeamSpeak 497-byte packet ceiling) |
+| `RHAPSOD_OPUS_COMPLEXITY`             | no       | Opus encoder complexity 0-10 (default `10`; ~0.06 ms/frame extra on 1 vCPU)                |
+| `RHAPSOD_OPUS_PACKET_LOSS_PERCENT`    | no       | Expected network loss for in-band FEC; `0` disables FEC (default `10`)                     |
 | `RHAPSOD_SPOTIFY_CLIENT_ID`           | no       | Spotify app credentials (enables Spotify links)                                            |
 | `RHAPSOD_SPOTIFY_CLIENT_SECRET`       | no       | Same app's secret; used only for client credentials                                        |
 | `RHAPSOD_AUDIO_TEST_TONE_SECONDS`     | no       | Play a test tone for N seconds to validate voice setup                                     |
