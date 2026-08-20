@@ -696,6 +696,7 @@ async function main(): Promise<void> {
           await connection.connect();
           logger.info({ attempt }, "Reconnected to TeamSpeak 3");
           reconnecting = false;
+          await checkTalkPower("reconnect");
           playback.resume();
           return;
         } catch (error) {
