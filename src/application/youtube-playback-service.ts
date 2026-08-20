@@ -101,6 +101,8 @@ interface PlaylistEnqueueResult {
 
 const AUDIO_URL_FALLBACK_TTL_MS = 10 * 60_000;
 const AUDIO_URL_EXPIRY_MARGIN_MS = 60_000;
+const AUTH_REQUIRED_RE =
+  /sign in to confirm|cookies for the authentication|request you to sign in|login required/i;
 const PREFETCH_STABILITY_TIMEOUT_MS = 8_000;
 const PREFETCH_STABILITY_POLL_MS = 100;
 const DEFAULT_PLAYLIST_MAX_TRACKS = 20;
@@ -1149,7 +1151,14 @@ export class YoutubePlaybackService {
         lastError = error;
       }
     }
-    if (lastError instanceof Error) throw lastError;
+    if (lastError instanceof Error) {
+      if (AUTH_REQUIRED_RE.test(lastError.message)) {
+        throw new Error(
+          "YouTube pidió autenticación: probablemente las cookies del bot estén vencidas.",
+        );
+      }
+      throw lastError;
+    }
     throw new Error("No playable audio source");
   }
 

@@ -106,6 +106,10 @@ async function main(): Promise<void> {
       : undefined;
   const ffmpegPath = config.RHAPSOD_FFMPEG_PATH;
   const ffmpegUserAgent = config.RHAPSOD_FFMPEG_USER_AGENT;
+  const ytDlpExecutor = new SystemYtDlpExecutor(
+    config.RHAPSOD_YTDLP_PATH,
+    config.RHAPSOD_YTDLP_COOKIES_PATH,
+  );
   const playback = new YoutubePlaybackService({
     createPlayback: (url, playbackEncoder, output, options) =>
       playFfmpegUrl(url, playbackEncoder, output, {
@@ -164,12 +168,7 @@ async function main(): Promise<void> {
       );
     },
     output: connection,
-    resolver: new YoutubeResolver(
-      new SystemYtDlpExecutor(
-        config.RHAPSOD_YTDLP_PATH,
-        config.RHAPSOD_YTDLP_COOKIES_PATH,
-      ),
-    ),
+    resolver: new YoutubeResolver(ytDlpExecutor),
     stateStore: new FilePlaybackStateStore(
       join(config.RHAPSOD_DATA_DIR, "state.json"),
     ),
@@ -188,6 +187,35 @@ async function main(): Promise<void> {
     lyricsResolver: new LyricsClient(),
     ...(spotifyResolver ? { spotifyResolver } : {}),
   });
+  const youtubeAuthCheckUrl = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+  const youtubeAuthCheckIntervalMs = 24 * 60 * 60 * 1_000;
+  let youtubeAuthHealthy = true;
+  const checkYoutubeAuth = async (): Promise<void> => {
+    try {
+      await ytDlpExecutor.run(
+        ["--get-url", "--no-playlist", "--no-warnings", youtubeAuthCheckUrl],
+        25_000,
+        "metadata",
+      );
+      if (!youtubeAuthHealthy) {
+        logger.info("YouTube authentication recovered");
+        youtubeAuthHealthy = true;
+      }
+    } catch (error) {
+      if (youtubeAuthHealthy) {
+        logger.error(
+          { err: error },
+          "YouTube authentication health check FAILED: the cookies may be expired; re-export them to youtube-cookies.txt",
+        );
+      }
+      youtubeAuthHealthy = false;
+    }
+  };
+  setInterval(
+    () => void checkYoutubeAuth(),
+    youtubeAuthCheckIntervalMs,
+  ).unref();
+  void checkYoutubeAuth();
   const commandRateLimiter = new CommandRateLimiter();
   const maxConcurrentCommands = 3;
   let activeCommands = 0;
