@@ -958,7 +958,7 @@ describe("YoutubePlaybackService", () => {
     expect(track.durationSeconds).toBe(120);
   });
 
-  it("reports playback failures before advancing the queue", async () => {
+  it("reports playback failures without blocking the chain", async () => {
     const { onPlaybackError, resolver, service } = setup();
     resolver.getTrack.mockResolvedValueOnce({
       id: "failed",
@@ -1141,8 +1141,13 @@ describe("YoutubePlaybackService", () => {
   });
 
   it("skips Spotify tracks with no reliable YouTube match", async () => {
-    const { createPlayback, onPlaybackError, resolver, service, spotifyResolver } =
-      setup({ spotifyResolver: true });
+    const {
+      createPlayback,
+      onPlaybackError,
+      resolver,
+      service,
+      spotifyResolver,
+    } = setup({ spotifyResolver: true });
     resolver.search.mockRejectedValueOnce(new Error("no match"));
     spotifyResolver!.expandPlaylist.mockResolvedValueOnce({
       tracks: [

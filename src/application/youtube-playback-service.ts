@@ -1043,7 +1043,7 @@ export class YoutubePlaybackService {
                   { seekSeconds },
                 );
         } catch (error) {
-          await this.#reportPlaybackError(track, error);
+          this.#reportPlaybackError(track, error);
           this.#prepared.delete(track.source);
           continue;
         }
@@ -1068,7 +1068,7 @@ export class YoutubePlaybackService {
             (playbackError !== undefined ? "error" : "completed"),
         );
         if (playbackError !== undefined) {
-          await this.#reportPlaybackError(track, playbackError);
+          this.#reportPlaybackError(track, playbackError);
         }
         if (generation !== this.#generation || this.#current !== track) {
           continue;
@@ -1110,20 +1110,20 @@ export class YoutubePlaybackService {
       }
       const playbackError =
         error instanceof Error ? error : new Error(String(error));
-      await this.#reportPlaybackError(track, playbackError);
+      this.#reportPlaybackError(track, playbackError);
       this.#invalidatePrepared(track.source);
       return undefined;
     }
   }
 
-  async #reportPlaybackError(track: Track, error: unknown): Promise<void> {
+  #reportPlaybackError(track: Track, error: unknown): void {
     const playbackError =
       error instanceof Error ? error : new Error(String(error));
-    try {
-      await this.#onPlaybackError(track, playbackError);
-    } catch {
-      // Observability callbacks must never break the playback chain.
-    }
+    void Promise.resolve(this.#onPlaybackError(track, playbackError)).catch(
+      () => {
+        // Observability callbacks must never break the playback chain.
+      },
+    );
   }
 
   #cacheAudioUrl(track: Track, url: string): void {

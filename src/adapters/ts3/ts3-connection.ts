@@ -1,12 +1,31 @@
-import {
-  Client,
-  listClients,
-  type Identity,
-} from "@honeybbq/teamspeak-client";
+import { Client, listClients, type Identity } from "@honeybbq/teamspeak-client";
 
 import type { Logger } from "pino";
 
 import type { AppConfig } from "../../config.js";
+
+const MESSAGE_SEND_TIMEOUT_MS = 10_000;
+
+export function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  message: string,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    timer.unref();
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error instanceof Error ? error : new Error(String(error)));
+      },
+    );
+  });
+}
 
 interface Ts3Connection {
   connect(): Promise<void>;
@@ -167,8 +186,12 @@ export function createTs3Connection(
     },
     sendChannelMessage: async (message) => {
       try {
-        await client.execCommand(
-          `sendtextmessage targetmode=2 target=${client.channelID()} msg=${escapeClientParam(message)}`,
+        await withTimeout(
+          client.execCommand(
+            `sendtextmessage targetmode=2 target=${client.channelID()} msg=${escapeClientParam(message)}`,
+          ),
+          MESSAGE_SEND_TIMEOUT_MS,
+          "Sending the channel message timed out",
         );
       } catch (error) {
         logger.error(
