@@ -70,6 +70,7 @@ const configSchema = z.object({
   RHAPSOD_SPOTIFY_REFRESH_TOKEN: optionalSecret,
   RHAPSOD_TS3_CHANNEL_PASSWORD: optionalSecret,
   RHAPSOD_TS3_CHANNEL_NAME: optionalSecret,
+  RHAPSOD_TS3_CHANNEL_ID: z.coerce.number().int().positive().optional(),
   RHAPSOD_TS3_CONNECT_TIMEOUT_SECONDS: z.coerce
     .number()
     .int()
