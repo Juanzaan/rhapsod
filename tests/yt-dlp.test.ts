@@ -65,19 +65,6 @@ describe("YoutubeResolver", () => {
     ).toEqual({ file: "/usr/local/bin/yt-dlp", args: ["--version"] });
   });
 
-  it("matches YouTube links and exposes the provider name", () => {
-    const resolver = new YoutubeResolver(new FakeExecutor(""));
-
-    expect(resolver.name).toBe("youtube");
-    expect(resolver.match("https://www.youtube.com/watch?v=abc123")).toBe(true);
-    expect(resolver.match("https://youtu.be/abc123")).toBe(true);
-    expect(resolver.match("https://www.youtube.com/playlist?list=abc123")).toBe(
-      true,
-    );
-    expect(resolver.match("https://soundcloud.com/artist/track")).toBe(false);
-    expect(resolver.match("duki rockstar")).toBe(false);
-  });
-
   it("uses a generated YouTube URL for metadata", async () => {
     const executor = new FakeExecutor(
       '{"id":"abc_123","title":"Example","duration":120,"url":"https://media.example/audio"}',
@@ -218,23 +205,6 @@ describe("YoutubeResolver", () => {
     } finally {
       vi.useRealTimers();
     }
-  });
-
-  it("resolves only HTTPS audio endpoints", async () => {
-    const resolver = new YoutubeResolver(
-      new FakeExecutor("https://media.example/audio\n"),
-    );
-    await expect(
-      resolver.getAudioUrl({ id: "abc", type: "video" }),
-    ).resolves.toBe("https://media.example/audio");
-    await expect(
-      new YoutubeResolver(
-        new FakeExecutor("http://insecure.example/audio"),
-      ).getAudioUrl({
-        id: "abc",
-        type: "video",
-      }),
-    ).rejects.toThrow("HTTPS");
   });
 
   it("resolves metadata and audio from a provider URL", async () => {

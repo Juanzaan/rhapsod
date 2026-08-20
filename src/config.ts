@@ -14,7 +14,6 @@ const configSchema = z.object({
   RHAPSOD_LOG_LEVEL: z
     .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
     .default("info"),
-  RHAPSOD_LOG_DIR: optionalSecret,
   RHAPSOD_LOG_RETENTION_DAYS: z.coerce
     .number()
     .int()

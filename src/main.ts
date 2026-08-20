@@ -217,7 +217,7 @@ async function main(): Promise<void> {
   ).unref();
   void checkYoutubeAuth();
   const commandRateLimiter = new CommandRateLimiter();
-  const maxConcurrentCommands = 3;
+  const maxConcurrentCommands = config.RHAPSOD_MAX_CONCURRENT_COMMANDS;
   let activeCommands = 0;
   let busyFeedbackAt = 0;
   const handleChatCommand = async (

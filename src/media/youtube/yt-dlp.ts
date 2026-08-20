@@ -2,7 +2,6 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
 import type { YoutubeResource } from "../media-input.js";
-import { parseMediaInput } from "../media-input.js";
 import { rankYoutubeCandidatesAll } from "./search-ranking.js";
 
 const execFileAsync = promisify(execFile);
@@ -153,23 +152,6 @@ export class YoutubeResolver {
 
   constructor(private readonly executor: YtDlpExecutor) {}
 
-  match(input: string): boolean {
-    try {
-      return parseMediaInput(input).kind === "youtube";
-    } catch {
-      return false;
-    }
-  }
-
-  async isAvailable(): Promise<boolean> {
-    try {
-      await this.executor.run(["--version"], 5_000);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
   async getTrack(resource: YoutubeResource): Promise<YoutubeTrackMetadata> {
     if (resource.type !== "video")
       throw new Error("A playlist cannot be resolved as one track");
@@ -284,12 +266,6 @@ export class YoutubeResolver {
       if (oldest !== undefined) this.#searchCache.delete(oldest);
     }
     return ranked;
-  }
-
-  async getAudioUrl(resource: YoutubeResource): Promise<string> {
-    if (resource.type !== "video")
-      throw new Error("A playlist must be expanded before playback");
-    return this.getAudioUrlFromUrl(youtubeUrl(resource.id));
   }
 
   async expandPlaylist(

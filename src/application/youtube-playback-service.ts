@@ -75,7 +75,6 @@ interface PlaybackTiming {
 }
 
 export interface YoutubePlaybackResolver {
-  getAudioUrl(resource: YoutubeResource): Promise<string>;
   getAudioUrlFromUrl(url: string): Promise<string>;
   getTrack(resource: YoutubeResource): Promise<YoutubeTrackMetadata>;
   getTrackFromUrl(url: string): Promise<YoutubeTrackMetadata>;

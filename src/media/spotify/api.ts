@@ -15,7 +15,6 @@ export interface SpotifyPlaylistExpansion {
 
 export interface SpotifyResolver {
   readonly name: string;
-  match(input: string): boolean;
   getTrack(resource: SpotifyResource): Promise<SpotifyTrackMetadata>;
   expandPlaylist(
     resource: SpotifyResource,
