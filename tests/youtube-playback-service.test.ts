@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, type Mock } from "vitest";
 
 import {
+  audioUrlExpiresAt,
   volumeToGain,
   YoutubePlaybackService,
 } from "../src/application/youtube-playback-service.js";
@@ -235,6 +236,29 @@ function setup(
     stopSession,
   };
 }
+
+describe("audioUrlExpiresAt", () => {
+  it("parses the query-style expire parameter", () => {
+    const expiresAt = audioUrlExpiresAt(
+      "https://rr5.example/videoplayback?expire=2000000000&ei=x",
+    );
+    expect(expiresAt).toBe(2_000_000_000_000 - 60_000);
+  });
+
+  it("parses the path-style expire segment of manifest URLs", () => {
+    const expiresAt = audioUrlExpiresAt(
+      "https://manifest.example/api/manifest/hls_playlist/expire/2000000000/ei/x",
+    );
+    expect(expiresAt).toBe(2_000_000_000_000 - 60_000);
+  });
+
+  it("falls back to a conservative TTL without an expire value", () => {
+    const before = Date.now();
+    const expiresAt = audioUrlExpiresAt("https://media.example/audio");
+    expect(expiresAt).toBeGreaterThan(before);
+    expect(expiresAt).toBeLessThan(before + 11 * 60_000);
+  });
+});
 
 describe("YoutubePlaybackService", () => {
   it("queues the first resolved YouTube search result", async () => {
@@ -1824,7 +1848,7 @@ describe("YoutubePlaybackService", () => {
     cache.set(
       "https://www.youtube.com/watch?v=cached",
       "https://media.example/cached",
-      Date.now() + 60_000,
+      Date.now() + 10 * 60_000,
     );
     const { resolver, service } = setup({ audioUrlCache: cache });
     resolver.getTrack.mockImplementation((resource: { id: string }) =>

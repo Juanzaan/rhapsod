@@ -100,6 +100,7 @@ interface PlaylistEnqueueResult {
 
 const AUDIO_URL_FALLBACK_TTL_MS = 10 * 60_000;
 const AUDIO_URL_EXPIRY_MARGIN_MS = 60_000;
+const AUDIO_URL_REFRESH_AHEAD_MS = 3 * 60_000;
 const AUTH_REQUIRED_RE =
   /sign in to confirm|cookies for the authentication|request you to sign in|login required/i;
 const PREFETCH_STABILITY_TIMEOUT_MS = 8_000;
@@ -1231,7 +1232,9 @@ export class YoutubePlaybackService {
     for (const next of this.#queue.snapshot().slice(0, PREFETCH_DEPTH)) {
       const existing = this.#prepared.get(next.source);
       if (existing !== undefined) {
-        if (existing.expiresAt > Date.now()) continue;
+        if (existing.expiresAt > Date.now() + AUDIO_URL_REFRESH_AHEAD_MS) {
+          continue;
+        }
         this.#prepared.delete(next.source);
       }
       void this.#resolveAudioUrl(next).catch(() => {
@@ -1297,11 +1300,16 @@ function isDrmError(error: unknown): boolean {
   return error instanceof Error && /DRM protected/i.test(error.message);
 }
 
-function audioUrlExpiresAt(url: string): number {
+export function audioUrlExpiresAt(url: string): number {
   try {
-    const expiresSeconds = Number(new URL(url).searchParams.get("expire"));
-    if (Number.isFinite(expiresSeconds) && expiresSeconds > 0) {
-      return expiresSeconds * 1_000 - AUDIO_URL_EXPIRY_MARGIN_MS;
+    const parsed = new URL(url);
+    const queryExpire = Number(parsed.searchParams.get("expire"));
+    if (Number.isFinite(queryExpire) && queryExpire > 0) {
+      return queryExpire * 1_000 - AUDIO_URL_EXPIRY_MARGIN_MS;
+    }
+    const pathExpire = Number(/\/expire\/(\d+)/.exec(parsed.pathname)?.[1]);
+    if (Number.isFinite(pathExpire) && pathExpire > 0) {
+      return pathExpire * 1_000 - AUDIO_URL_EXPIRY_MARGIN_MS;
     }
   } catch {
     // The resolver already validates URLs; use a conservative TTL if parsing fails.
