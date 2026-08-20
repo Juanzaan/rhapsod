@@ -51,6 +51,7 @@ export function buildFfmpegPcmArguments(
   if (options.seekSeconds !== undefined && options.seekSeconds > 0) {
     args.push("-ss", String(options.seekSeconds));
   }
+  args.push("-analyzeduration", "1M", "-probesize", "1M");
   args.push(
     "-i",
     url,

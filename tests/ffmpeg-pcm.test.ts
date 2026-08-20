@@ -74,6 +74,17 @@ describe("FFmpeg PCM source", () => {
     expect(args).not.toContain("-ss");
   });
 
+  it("limits the input probe so playback starts sooner", () => {
+    const args = buildFfmpegPcmArguments("https://cdn.example.test/audio");
+
+    const inputIndex = args.indexOf("-i");
+    expect(inputIndex).toBeGreaterThan(-1);
+    expect(args.indexOf("-analyzeduration")).toBeLessThan(inputIndex);
+    expect(args.indexOf("-probesize")).toBeLessThan(inputIndex);
+    expect(args[args.indexOf("-analyzeduration") + 1]).toBe("1M");
+    expect(args[args.indexOf("-probesize") + 1]).toBe("1M");
+  });
+
   it("rejects non-HTTPS inputs", () => {
     expect(() => buildFfmpegPcmArguments("http://example.test/audio")).toThrow(
       "must use HTTPS",
