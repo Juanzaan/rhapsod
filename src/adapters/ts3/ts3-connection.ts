@@ -1,9 +1,10 @@
 import {
   Client,
   listClients,
-  sendTextMessage,
   type Identity,
 } from "@honeybbq/teamspeak-client";
+
+import type { Logger } from "pino";
 
 import type { AppConfig } from "../../config.js";
 
@@ -68,6 +69,7 @@ export function createHeartbeat(
 export function createTs3Connection(
   config: AppConfig,
   identity: Identity,
+  logger: Logger,
 ): Ts3Connection {
   const client = new Client(
     identity,
@@ -163,8 +165,18 @@ export function createTs3Connection(
       }
       return () => undefined;
     },
-    sendChannelMessage: (message) =>
-      sendTextMessage(client, 2, client.channelID(), message),
+    sendChannelMessage: async (message) => {
+      try {
+        await client.execCommand(
+          `sendtextmessage targetmode=2 target=${client.channelID()} msg=${escapeClientParam(message)}`,
+        );
+      } catch (error) {
+        logger.error(
+          { err: error, channelId: String(client.channelID()) },
+          "Failed to send channel message",
+        );
+      }
+    },
     sendVoiceFrame: (frame) => client.sendVoice(frame, 5),
     onTextMessage: (handler) => {
       client.on("textMessage", (message) =>
