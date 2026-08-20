@@ -8,6 +8,13 @@ for [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- FFmpeg now limits the input probe (`-analyzeduration 1M -probesize 1M`),
+  cutting the time-to-first-audio-frame roughly tenfold (measured 81ms vs
+  1102ms on a YouTube stream) so playback starts sooner on every track.
+- yt-dlp runs at reduced priority on Linux (`nice -n 10`): resolving a
+  track's URL while another song is playing no longer competes for the CPU
+  with ffmpeg and the Opus encoder, removing the stutter during lookups.
+
 - Search ranking prefers audio-length versions over the longer official video:
   noise words in the query (o, and, de, la, official, audio, lyrics, ...) no
   longer count as title terms (the letter "o" previously matched almost any

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildYtDlpArguments,
+  buildYtDlpCommand,
   YtDlpJobQueue,
   YoutubeResolver,
   type YtDlpExecutor,
@@ -47,6 +48,21 @@ describe("YoutubeResolver", () => {
       "youtube:player_client=web_embedded",
       "--version",
     ]);
+  });
+
+  it("lowers yt-dlp priority on Linux so playback wins the CPU", () => {
+    expect(
+      buildYtDlpCommand("/usr/local/bin/yt-dlp", ["--version"], "linux"),
+    ).toEqual({
+      file: "nice",
+      args: ["-n", "10", "/usr/local/bin/yt-dlp", "--version"],
+    });
+  });
+
+  it("runs yt-dlp directly on non-Linux platforms", () => {
+    expect(
+      buildYtDlpCommand("/usr/local/bin/yt-dlp", ["--version"], "win32"),
+    ).toEqual({ file: "/usr/local/bin/yt-dlp", args: ["--version"] });
   });
 
   it("matches YouTube links and exposes the provider name", () => {

@@ -119,7 +119,8 @@ export class SystemYtDlpExecutor implements YtDlpExecutor {
         argumentsList,
         this.cookiesPath,
       );
-      const { stdout } = await execFileAsync(this.binaryPath, ytDlpArguments, {
+      const { file, args } = buildYtDlpCommand(this.binaryPath, ytDlpArguments);
+      const { stdout } = await execFileAsync(file, [...args], {
         maxBuffer: MAX_BUFFER_BYTES,
         timeout: timeoutMs,
         windowsHide: true,
@@ -342,6 +343,18 @@ export function buildYtDlpArguments(
     "youtube:player_client=web_embedded",
     ...argumentsList,
   ];
+}
+
+export function buildYtDlpCommand(
+  binaryPath: string,
+  argumentsList: readonly string[],
+  platform: NodeJS.Platform = process.platform,
+): { readonly args: readonly string[]; readonly file: string } {
+  if (platform === "linux") {
+    // Let playback win the CPU when a resolution runs while music is playing.
+    return { file: "nice", args: ["-n", "10", binaryPath, ...argumentsList] };
+  }
+  return { file: binaryPath, args: argumentsList };
 }
 
 function parseResponse(raw: string): YtDlpJson {
