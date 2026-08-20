@@ -8,6 +8,12 @@ for [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- TeamSpeak liveness heartbeat: the bot asks the server for its client list
+  every `RHAPSOD_TS3_HEARTBEAT_SECONDS` (default 60, `0` disables). A silent
+  session loss — e.g. the server restarting while the UDP socket stays open —
+  is now detected within a minute and the existing reconnect loop kicks in,
+  instead of leaving the bot hanging "connected" forever.
+
 - Persisted audio URL cache (`{RHAPSOD_DATA_DIR}/audio-url-cache.json`, 500
   entries, pruned by expiry): once a track's stream URL has been resolved it is
   reused across bot restarts until it expires, so repeat plays start instantly

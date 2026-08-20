@@ -77,6 +77,12 @@ const configSchema = z.object({
     .min(15)
     .max(300)
     .default(180),
+  RHAPSOD_TS3_HEARTBEAT_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(3600)
+    .default(60),
   RHAPSOD_TS3_HOST: z.string().min(1),
   RHAPSOD_TS3_NICKNAME: z.string().min(1).max(30).default("Rhapsod"),
   RHAPSOD_TS3_PASSWORD: optionalSecret,
