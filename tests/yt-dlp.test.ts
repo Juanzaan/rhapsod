@@ -8,15 +8,25 @@ import {
   YtDlpJobQueue,
   YoutubeResolver,
   type YtDlpExecutor,
+  type YtDlpJobPriority,
+  type YoutubePlayerClient,
 } from "../src/media/youtube/yt-dlp.js";
 
 class FakeExecutor implements YtDlpExecutor {
   readonly calls: string[][] = [];
+  readonly players: Array<string | undefined> = [];
 
   constructor(private readonly output: string) {}
 
-  run(argumentsList: readonly string[]): Promise<string> {
+  run(
+    argumentsList: readonly string[],
+    _timeoutMs?: number,
+    _priority?: YtDlpJobPriority,
+    _signal?: AbortSignal,
+    playerClient?: YoutubePlayerClient,
+  ): Promise<string> {
     this.calls.push([...argumentsList]);
+    this.players.push(playerClient);
     return Promise.resolve(this.output);
   }
 }
@@ -50,6 +60,12 @@ describe("YoutubeResolver", () => {
       "youtube:player_client=web_safari",
       "--version",
     ]);
+  });
+
+  it("overrides the YouTube player client when requested", () => {
+    expect(
+      buildYtDlpArguments(["--version"], undefined, "web_embedded"),
+    ).toContain("youtube:player_client=web_embedded");
   });
 
   it("lowers yt-dlp priority on Linux so playback wins the CPU", () => {
@@ -227,6 +243,58 @@ describe("YoutubeResolver", () => {
         new FakeExecutor("https://media.example/soundcloud\n"),
       ).getAudioUrlFromUrl("https://soundcloud.com/artist/track"),
     ).resolves.toBe("https://media.example/soundcloud");
+  });
+
+  it("retries the audio URL with another player client when the first fails", async () => {
+    const players: Array<string | undefined> = [];
+    let calls = 0;
+    const executor: YtDlpExecutor = {
+      run: (
+        _argumentsList: readonly string[],
+        _timeoutMs?: number,
+        _priority?: YtDlpJobPriority,
+        _signal?: AbortSignal,
+        playerClient?: YoutubePlayerClient,
+      ) => {
+        calls++;
+        players.push(playerClient);
+        return calls === 1
+          ? Promise.reject(
+              new Error(
+                "yt-dlp exited with code 1: Requested format is not available",
+              ),
+            )
+          : Promise.resolve("https://media.example/audio\n");
+      },
+    };
+
+    await expect(
+      new YoutubeResolver(executor).getAudioUrlFromUrl(
+        "https://www.youtube.com/watch?v=abc",
+      ),
+    ).resolves.toBe("https://media.example/audio");
+    expect(players).toEqual(["web_safari", "web_embedded"]);
+  });
+
+  it("throws the last error when every player client fails", async () => {
+    const executor: YtDlpExecutor = {
+      run: (
+        _argumentsList: readonly string[],
+        _timeoutMs?: number,
+        _priority?: YtDlpJobPriority,
+        _signal?: AbortSignal,
+        playerClient?: YoutubePlayerClient,
+      ) =>
+        playerClient === "web_safari"
+          ? Promise.reject(new Error("yt-dlp exited with code 1: boom"))
+          : Promise.reject(new Error("yt-dlp exited with code 2: nope")),
+    };
+
+    await expect(
+      new YoutubeResolver(executor).getAudioUrlFromUrl(
+        "https://www.youtube.com/watch?v=abc",
+      ),
+    ).rejects.toThrow("yt-dlp exited with code 2: nope");
   });
 
   it("expands a YouTube playlist without resolving audio", async () => {

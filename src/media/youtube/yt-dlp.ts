@@ -12,16 +12,20 @@ const AUDIO_FORMAT_SELECTOR =
 
 export const YTDLP_ABORT_ERROR = "yt-dlp job aborted";
 
+export const YTDLP_PLAYER_CLIENTS = ["web_safari", "web_embedded"] as const;
+export type YoutubePlayerClient = (typeof YTDLP_PLAYER_CLIENTS)[number];
+
 export interface YtDlpExecutor {
   run(
     argumentsList: readonly string[],
     timeoutMs: number,
     priority?: YtDlpJobPriority,
     signal?: AbortSignal,
+    playerClient?: YoutubePlayerClient,
   ): Promise<string>;
 }
 
-type YtDlpJobPriority = "metadata" | "playback";
+export type YtDlpJobPriority = "metadata" | "playback";
 interface QueuedJob<Input, Output> {
   readonly input: Input;
   readonly reject: (error: unknown) => void;
@@ -132,7 +136,11 @@ export interface PlaylistExpansion {
 
 export class SystemYtDlpExecutor implements YtDlpExecutor {
   readonly #jobs: YtDlpJobQueue<
-    { argumentsList: readonly string[]; timeoutMs: number },
+    {
+      argumentsList: readonly string[];
+      playerClient?: YoutubePlayerClient;
+      timeoutMs: number;
+    },
     string
   >;
 
@@ -141,10 +149,11 @@ export class SystemYtDlpExecutor implements YtDlpExecutor {
     private readonly cookiesPath?: string,
   ) {
     this.#jobs = new YtDlpJobQueue(
-      async ({ argumentsList, timeoutMs }, signal) => {
+      async ({ argumentsList, playerClient, timeoutMs }, signal) => {
         const ytDlpArguments = buildYtDlpArguments(
           argumentsList,
           this.cookiesPath,
+          playerClient ?? "web_safari",
         );
         const { file, args } = buildYtDlpCommand(
           this.binaryPath,
@@ -164,8 +173,15 @@ export class SystemYtDlpExecutor implements YtDlpExecutor {
     timeoutMs: number,
     priority: YtDlpJobPriority = "metadata",
     signal?: AbortSignal,
+    playerClient?: YoutubePlayerClient,
   ): Promise<string> {
-    return this.#jobs.run({ argumentsList, timeoutMs }, priority, signal);
+    return this.#jobs.run(
+      playerClient === undefined
+        ? { argumentsList, timeoutMs }
+        : { argumentsList, playerClient, timeoutMs },
+      priority,
+      signal,
+    );
   }
 }
 
@@ -408,23 +424,32 @@ export class YoutubeResolver {
   }
 
   async getAudioUrlFromUrl(url: string, signal?: AbortSignal): Promise<string> {
-    const output = await this.executor.run(
-      [
-        "--get-url",
-        "--format",
-        AUDIO_FORMAT_SELECTOR,
-        "--no-playlist",
-        "--no-warnings",
-        url,
-      ],
-      45_000,
-      "playback",
-      signal,
-    );
-    const audioUrl = output.trim().split(/\r?\n/, 1)[0];
-    if (!audioUrl || !audioUrl.startsWith("https://"))
-      throw new Error("yt-dlp did not return an HTTPS audio URL");
-    return audioUrl;
+    let lastError: unknown;
+    for (const playerClient of YTDLP_PLAYER_CLIENTS) {
+      try {
+        const output = await this.executor.run(
+          [
+            "--get-url",
+            "--format",
+            AUDIO_FORMAT_SELECTOR,
+            "--no-playlist",
+            "--no-warnings",
+            url,
+          ],
+          45_000,
+          "playback",
+          signal,
+          playerClient,
+        );
+        const audioUrl = output.trim().split(/\r?\n/, 1)[0];
+        if (!audioUrl || !audioUrl.startsWith("https://"))
+          throw new Error("yt-dlp did not return an HTTPS audio URL");
+        return audioUrl;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error(String(lastError));
   }
 
   async #getTrackFromUrl(url: string): Promise<YoutubeTrackMetadata> {
@@ -447,6 +472,7 @@ export class YoutubeResolver {
 export function buildYtDlpArguments(
   argumentsList: readonly string[],
   cookiesPath?: string,
+  playerClient: YoutubePlayerClient = "web_safari",
 ): string[] {
   return [
     ...(cookiesPath ? ["--cookies", cookiesPath] : []),
@@ -457,7 +483,7 @@ export function buildYtDlpArguments(
     "--extractor-retries",
     "1",
     "--extractor-args",
-    "youtube:player_client=web_safari",
+    `youtube:player_client=${playerClient}`,
     ...argumentsList,
   ];
 }
