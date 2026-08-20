@@ -437,4 +437,60 @@ describe("rankYoutubeCandidates", () => {
 
     expect(selected?.id).toBe("festival");
   });
+
+  it("prefers the audio-length version over the longer official video", () => {
+    const selected = rankYoutubeCandidates("imitadora romeo santos", [
+      {
+        channel: "Romeo Santos",
+        durationSeconds: 236,
+        id: "lyric",
+        title: "Romeo Santos - Imitadora (Official Lyric Video)",
+        webpageUrl: "https://youtube.com/watch?v=lyric",
+      },
+      {
+        channel: "LatinHype",
+        durationSeconds: 236,
+        id: "audio",
+        title: "Romeo Santos - Imitadora",
+        webpageUrl: "https://youtube.com/watch?v=audio",
+      },
+      {
+        channel: "Romeo Santos",
+        durationSeconds: 298,
+        id: "video",
+        title: "Romeo Santos - Imitadora (Official Video)",
+        webpageUrl: "https://youtube.com/watch?v=video",
+      },
+    ]);
+
+    expect(selected?.id).toBe("lyric");
+  });
+
+  it("ignores noise words in the query like o or audio", () => {
+    const selected = rankYoutubeCandidates(
+      "imitadora lyrics official o audio",
+      [
+        {
+          durationSeconds: 236,
+          id: "lyric",
+          title: "Romeo Santos - Imitadora (Official Lyric Video)",
+          webpageUrl: "https://youtube.com/watch?v=lyric",
+        },
+        {
+          durationSeconds: 298,
+          id: "video",
+          title: "Romeo Santos - Imitadora (Official Video)",
+          webpageUrl: "https://youtube.com/watch?v=video",
+        },
+        {
+          durationSeconds: 480,
+          id: "unrelated",
+          title: "Como hacer audio oficial tutorial",
+          webpageUrl: "https://youtube.com/watch?v=unrelated",
+        },
+      ],
+    );
+
+    expect(selected?.id).toBe("lyric");
+  });
 });

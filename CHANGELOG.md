@@ -8,6 +8,15 @@ for [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Search ranking prefers audio-length versions over the longer official video:
+  noise words in the query (o, and, de, la, official, audio, lyrics, ...) no
+  longer count as title terms (the letter "o" previously matched almost any
+  title and pushed unrelated results to the top), "official video" titles stop
+  getting an automatic bonus, and when the track length is unknown the ranking
+  rewards candidates whose duration sits near the median of the results so a
+  song's audio/lyric version (e.g. 236s) beats the music video with a silent
+  intro/outro (e.g. 298s).
+
 - YouTube authentication health check: on startup and every 24h the bot
   resolves a known video's stream URL; if it fails, a clear log line reports
   that the cookies are probably expired and must be re-exported. Playback
