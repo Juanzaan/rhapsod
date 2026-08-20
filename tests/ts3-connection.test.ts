@@ -104,10 +104,35 @@ describe("canTalkInChannel", () => {
     ).toBe(true);
   });
 
-  it("treats missing power fields as zero", () => {
-    expect(canTalkInChannel({}, { channel_needed_talk_power: "5" })).toBe(
+  it("treats a missing needed power as zero", () => {
+    expect(canTalkInChannel({}, {})).toBe(true);
+    expect(canTalkInChannel({ client_talk_power: "0" }, {})).toBe(true);
+  });
+
+  it("assumes the bot can talk when the server hides its talk power", () => {
+    expect(canTalkInChannel({}, { channel_needed_talk_power: "500" })).toBe(
+      true,
+    );
+  });
+
+  it("still blocks hub-like channels when the server hides its talk power", () => {
+    expect(canTalkInChannel({}, { channel_needed_talk_power: "999999" })).toBe(
       false,
     );
-    expect(canTalkInChannel({}, {})).toBe(true);
+  });
+
+  it("prefers the real talk power when the server provides it", () => {
+    expect(
+      canTalkInChannel(
+        { client_talk_power: "400" },
+        { channel_needed_talk_power: "500" },
+      ),
+    ).toBe(false);
+    expect(
+      canTalkInChannel(
+        { client_talk_power: "500" },
+        { channel_needed_talk_power: "500" },
+      ),
+    ).toBe(true);
   });
 });
