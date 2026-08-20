@@ -44,6 +44,10 @@ export function buildFfmpegPcmArguments(
     "1",
     "-reconnect_on_http_error",
     "4xx,5xx",
+    "-max_redirects",
+    "0",
+    "-rw_timeout",
+    "10000000",
   ];
   if (options.userAgent !== undefined && options.userAgent.length > 0) {
     args.push("-user_agent", options.userAgent);

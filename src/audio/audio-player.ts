@@ -11,6 +11,7 @@ const PREBUFFER_FRAMES = 12;
 const BUFFER_HIGH_WATER_FRAMES = 250;
 const BUFFER_LOW_WATER_FRAMES = 150;
 const MAX_UNDERRUN_FRAMES = 250;
+const BUFFER_TIMEOUT_MS = 15_000;
 const POOL_MAX_FRAMES = 8;
 
 class FramePool {
@@ -85,6 +86,7 @@ export class AudioPlayer {
   #sourcePaused = false;
   #recovering = false;
   #recoveryTimer: NodeJS.Timeout | undefined;
+  #bufferTimeout: NodeJS.Timeout | undefined;
   #state: AudioPlayerState = "idle";
   #gain = 1;
   #completion: Promise<void> | undefined;
@@ -128,6 +130,7 @@ export class AudioPlayer {
     this.#source = source;
     this.#playStartedAt = Date.now();
     this.#state = "buffering";
+    this.#armBufferTimeout();
     this.#completion = new Promise<void>((resolve, reject) => {
       this.#resolveCompletion = resolve;
       this.#rejectCompletion = reject;
@@ -143,6 +146,7 @@ export class AudioPlayer {
     if (this.#state !== "playing" && this.#state !== "buffering") return;
     this.#state = "paused";
     this.#clock.stop();
+    this.#clearBufferTimeout();
     this.#pauseSource();
   }
 
@@ -153,12 +157,17 @@ export class AudioPlayer {
         ? "playing"
         : "buffering";
     this.#resumeSource();
-    if (this.#state === "playing") this.#clock.start(this.#sendNextFrame);
+    if (this.#state === "playing") {
+      this.#clock.start(this.#sendNextFrame);
+    } else {
+      this.#armBufferTimeout();
+    }
   }
 
   stop(): void {
     if (this.#state === "idle") return;
     this.#clearRecoveryTimer();
+    this.#clearBufferTimeout();
     this.#clock.stop();
     this.#detachSource(true);
     this.#state = "idle";
@@ -186,6 +195,7 @@ export class AudioPlayer {
       this.#state = "playing";
       this.#recovering = false;
       this.#clearRecoveryTimer();
+      this.#clearBufferTimeout();
       this.#clock.start(this.#sendNextFrame);
     }
     if (this.#bufferedBytes >= BUFFER_HIGH_WATER_FRAMES * PCM_FRAME_BYTES) {
@@ -199,6 +209,7 @@ export class AudioPlayer {
     if (this.#state === "buffering") {
       if (this.#bufferedBytes >= PCM_FRAME_BYTES) {
         this.#state = "playing";
+        this.#clearBufferTimeout();
         this.#clock.start(this.#sendNextFrame);
       } else {
         this.#finish();
@@ -304,6 +315,7 @@ export class AudioPlayer {
 
   #finish(): void {
     this.#clearRecoveryTimer();
+    this.#clearBufferTimeout();
     this.#clock.stop();
     this.#detachSource();
     this.#state = "idle";
@@ -314,6 +326,7 @@ export class AudioPlayer {
 
   #fail(error: Error): void {
     this.#clearRecoveryTimer();
+    this.#clearBufferTimeout();
     this.#clock.stop();
     this.#detachSource(true);
     this.#state = "idle";
@@ -359,6 +372,24 @@ export class AudioPlayer {
   #clearRecoveryTimer(): void {
     if (this.#recoveryTimer !== undefined) clearTimeout(this.#recoveryTimer);
     this.#recoveryTimer = undefined;
+  }
+
+  #armBufferTimeout(): void {
+    this.#clearBufferTimeout();
+    this.#bufferTimeout = setTimeout(() => {
+      if (this.#state !== "buffering" || this.#framesSent > 0) return;
+      this.#fail(
+        new Error(
+          `Audio source stalled while buffering for ${BUFFER_TIMEOUT_MS}ms`,
+        ),
+      );
+    }, BUFFER_TIMEOUT_MS);
+    this.#bufferTimeout.unref();
+  }
+
+  #clearBufferTimeout(): void {
+    if (this.#bufferTimeout !== undefined) clearTimeout(this.#bufferTimeout);
+    this.#bufferTimeout = undefined;
   }
 
   #requiredBufferBytes(): number {

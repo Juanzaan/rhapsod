@@ -125,6 +125,24 @@ describe("AudioPlayer", () => {
     }
   });
 
+  it("fails when the source buffers without delivering data for too long", async () => {
+    vi.useFakeTimers();
+    try {
+      const { player } = setup();
+      const source = new PassThrough();
+      const completion = player.play(source);
+
+      const failure = expect(completion).rejects.toThrow(
+        "Audio source stalled while buffering for 15000ms",
+      );
+      await vi.advanceTimersByTimeAsync(15_000);
+      await failure;
+      expect(player.state).toBe("idle");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("finishes after draining an ended source", async () => {
     const { clock, player } = setup();
     const source = new PassThrough();
