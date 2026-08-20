@@ -580,6 +580,56 @@ describe("YoutubePlaybackService", () => {
     );
   });
 
+  it("prefetches several tracks ahead so rapid skips stay responsive", async () => {
+    const metrics = {
+      bufferedBytes: 0,
+      framesSent: 0,
+      maxBufferedBytes: 0,
+      rebufferEvents: 0,
+      underruns: 0,
+    };
+    const { playbackResolvers, resolver, service } = setup({
+      createPlayback: () => {
+        const setVolume = vi.fn<(gain: number) => void>();
+        return {
+          done: new Promise<void>((resolve) => playbackResolvers.push(resolve)),
+          player: {
+            metrics,
+            setVolume,
+          } as unknown as AudioPlayer,
+          stop: vi.fn(),
+        };
+      },
+    });
+    resolver.getTrack.mockImplementation((resource: { id: string }) =>
+      Promise.resolve({
+        ...(resource.id === "first"
+          ? { audioUrl: "https://media.example/first" }
+          : {}),
+        id: resource.id,
+        title: `Track ${resource.id}`,
+        webpageUrl: `https://www.youtube.com/watch?v=${resource.id}`,
+      }),
+    );
+
+    await service.enqueue("https://youtu.be/first", "user-1");
+    await service.enqueue("https://youtu.be/second", "user-1");
+    await service.enqueue("https://youtu.be/third", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(service.current?.id).toBe("first");
+
+    metrics.framesSent = 1;
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    expect(resolver.getAudioUrlFromUrl).toHaveBeenCalledWith(
+      "https://www.youtube.com/watch?v=second",
+    );
+    expect(resolver.getAudioUrlFromUrl).toHaveBeenCalledWith(
+      "https://www.youtube.com/watch?v=third",
+    );
+  });
+
   it("does not start a new session when the queue empties from rapid skips", async () => {
     const { createPlayback, playbackResolvers, resolver, service } = setup();
     resolver.getTrack.mockImplementation((resource: { id: string }) =>
