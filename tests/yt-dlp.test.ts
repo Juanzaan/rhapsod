@@ -436,4 +436,14 @@ describe("runYtDlpCommand", () => {
 
     await expect(pending).rejects.toThrow("yt-dlp timed out after 200ms");
   });
+
+  it("does not kill a child that runs longer than the abort grace period", async () => {
+    await expect(
+      runYtDlpCommand(
+        process.execPath,
+        ["-e", "setTimeout(() => process.stdout.write('slow-ok'), 400)"],
+        { abortGraceMs: 100, timeoutMs: 5_000 },
+      ),
+    ).resolves.toBe("slow-ok");
+  });
 });
