@@ -149,7 +149,6 @@ function setup(
             title: "Rockstar",
           }),
         ),
-        match: vi.fn(() => true),
         name: "spotify",
       }
     : undefined;

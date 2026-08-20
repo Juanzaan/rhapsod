@@ -6,6 +6,19 @@ for [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Removed
+
+- Dead code cleanup: dropped the unused `RHAPSOD_LOG_DIR` config option, the
+  never-called `YoutubeResolver.match`/`isAvailable`/`getAudioUrl(resource)`
+  methods, and the unused `getAudioUrl(resource)`/`match` members of the
+  service-side resolver interfaces.
+
+### Fixed
+
+- `RHAPSOD_MAX_CONCURRENT_COMMANDS` was documented and validated but never
+  read; the bot now actually honors the configured value instead of always
+  using 3.
+
 ### Added
 
 - FFmpeg now limits the input probe (`-analyzeduration 1M -probesize 1M`),
