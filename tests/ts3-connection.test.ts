@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createHeartbeat } from "../src/adapters/ts3/ts3-connection.js";
+import {
+  canTalkInChannel,
+  createHeartbeat,
+} from "../src/adapters/ts3/ts3-connection.js";
 
 describe("createHeartbeat", () => {
   beforeEach(() => {
@@ -61,5 +64,50 @@ describe("createHeartbeat", () => {
     vi.advanceTimersByTime(5_000);
 
     expect(probe).not.toHaveBeenCalled();
+  });
+});
+
+describe("canTalkInChannel", () => {
+  it("allows talking when the talk power meets the channel requirement", () => {
+    expect(
+      canTalkInChannel(
+        { client_talk_power: "100" },
+        { channel_needed_talk_power: "50" },
+      ),
+    ).toBe(true);
+  });
+
+  it("blocks talking when the talk power is below the requirement", () => {
+    expect(
+      canTalkInChannel(
+        { client_talk_power: "0" },
+        { channel_needed_talk_power: "100" },
+      ),
+    ).toBe(false);
+  });
+
+  it("blocks talking in moderated channels without talker status", () => {
+    expect(
+      canTalkInChannel(
+        { client_talk_power: "100" },
+        { channel_flag_moderated: "1", channel_needed_talk_power: "0" },
+      ),
+    ).toBe(false);
+  });
+
+  it("allows talking in moderated channels with talker status", () => {
+    expect(
+      canTalkInChannel(
+        { client_is_talker: "1", client_talk_power: "100" },
+        { channel_flag_moderated: "1", channel_needed_talk_power: "0" },
+      ),
+    ).toBe(true);
+  });
+
+  it("treats missing power fields as zero", () => {
+    expect(canTalkInChannel({}, { channel_needed_talk_power: "5" })).toBe(
+      false,
+    );
+    expect(canTalkInChannel({}, {})).toBe(true);
   });
 });
