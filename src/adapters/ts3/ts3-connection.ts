@@ -27,9 +27,15 @@ export function canTalkInChannel(
   clientInfo: Record<string, string>,
   channelInfo: Record<string, string>,
 ): boolean {
-  const talkPower = Number(clientInfo.client_talk_power ?? 0);
   const neededPower = Number(channelInfo.channel_needed_talk_power ?? 0);
-  if (talkPower < neededPower) return false;
+  if (clientInfo.client_talk_power !== undefined) {
+    const talkPower = Number(clientInfo.client_talk_power);
+    if (talkPower < neededPower) return false;
+  } else if (neededPower >= 100_000) {
+    // The server hides our talk power and the channel demands an
+    // effectively impossible amount: nobody can talk there.
+    return false;
+  }
   if (channelInfo.channel_flag_moderated === "1") {
     return clientInfo.client_is_talker === "1";
   }
