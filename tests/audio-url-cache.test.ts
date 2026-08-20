@@ -17,11 +17,12 @@ describe("AudioUrlCache", () => {
     rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it("persists entries to disk and reloads them", () => {
+  it("persists entries to disk and reloads them", async () => {
     const filePath = join(tempDir, "cache.json");
     const cache = AudioUrlCache.load(filePath);
 
     cache.set("source-a", "https://media.example/a", Date.now() + 60_000);
+    await cache.flush();
 
     const reloaded = AudioUrlCache.load(filePath);
     const entry = reloaded.get("source-a");
@@ -77,10 +78,11 @@ describe("AudioUrlCache", () => {
     expect(cache.get("source-599")).toBeDefined();
   });
 
-  it("writes a valid JSON file after setting entries", () => {
+  it("writes a valid JSON file after setting entries", async () => {
     const filePath = join(tempDir, "cache.json");
     const cache = AudioUrlCache.load(filePath);
     cache.set("source-a", "https://media.example/a", Date.now() + 60_000);
+    await cache.flush();
 
     const raw = JSON.parse(readFileSync(filePath, "utf8")) as {
       entries: Record<string, unknown>;

@@ -1,4 +1,6 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { mkdir, rename, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 
 export interface AudioUrlCacheEntry {
   readonly url: string;
@@ -6,6 +8,7 @@ export interface AudioUrlCacheEntry {
 }
 
 const MAX_CACHE_ENTRIES = 500;
+const PERSIST_DEBOUNCE_MS = 1_000;
 
 interface SerializedAudioUrlCache {
   readonly entries?: Record<string, AudioUrlCacheEntry>;
@@ -14,6 +17,8 @@ interface SerializedAudioUrlCache {
 export class AudioUrlCache {
   readonly #entries = new Map<string, AudioUrlCacheEntry>();
   readonly #filePath: string | undefined;
+  #persistTimer: NodeJS.Timeout | undefined;
+  #writeChain: Promise<void> = Promise.resolve();
 
   private constructor(filePath: string | undefined) {
     this.#filePath = filePath;
@@ -68,7 +73,15 @@ export class AudioUrlCache {
   set(source: string, url: string, expiresAt: number): void {
     this.#entries.set(source, { url, expiresAt });
     this.#prune();
-    this.#persist();
+    this.#schedulePersist();
+  }
+
+  flush(): Promise<void> {
+    if (this.#persistTimer !== undefined) {
+      clearTimeout(this.#persistTimer);
+      this.#persistTimer = undefined;
+    }
+    return this.#persistNow();
   }
 
   #prune(): void {
@@ -85,16 +98,36 @@ export class AudioUrlCache {
     }
   }
 
-  #persist(): void {
-    if (this.#filePath === undefined) return;
-    try {
-      writeFileSync(
-        this.#filePath,
-        JSON.stringify({ entries: Object.fromEntries(this.#entries) }),
-        "utf8",
-      );
-    } catch {
-      // A failing cache file must never break playback.
+  #schedulePersist(): void {
+    if (this.#filePath === undefined || this.#persistTimer !== undefined) {
+      return;
     }
+    const timer = setTimeout(() => {
+      this.#persistTimer = undefined;
+      void this.#persistNow().catch(() => undefined);
+    }, PERSIST_DEBOUNCE_MS);
+    timer.unref();
+    this.#persistTimer = timer;
+  }
+
+  #persistNow(): Promise<void> {
+    const filePath = this.#filePath;
+    if (filePath === undefined) return Promise.resolve();
+    const write = this.#writeChain.then(async () => {
+      try {
+        await mkdir(dirname(filePath), { recursive: true });
+        const temporary = `${filePath}.tmp`;
+        await writeFile(
+          temporary,
+          JSON.stringify({ entries: Object.fromEntries(this.#entries) }),
+          "utf8",
+        );
+        await rename(temporary, filePath);
+      } catch {
+        // A failing cache file must never break playback.
+      }
+    });
+    this.#writeChain = write;
+    return write;
   }
 }

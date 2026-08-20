@@ -11,7 +11,9 @@ interface Ts3Connection {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
   listConnectedClientUids(): Promise<readonly string[]>;
-  onConnectionLost(handler: (reason: "kicked" | "disconnected") => void): void;
+  onConnectionLost(
+    handler: (reason: "kicked" | "disconnected") => void,
+  ): () => void;
   onTextMessage(
     handler: (message: string, senderUid: string, senderName: string) => void,
   ): void;
@@ -23,9 +25,21 @@ export function createHeartbeat(
   probe: () => Promise<void>,
   intervalMs: number,
   onLost: () => void,
+  requiredFailures = 2,
 ): () => void {
+  let consecutiveFailures = 0;
   const timer = setInterval(() => {
-    void probe().catch(onLost);
+    void probe()
+      .then(() => {
+        consecutiveFailures = 0;
+      })
+      .catch(() => {
+        consecutiveFailures++;
+        if (consecutiveFailures >= requiredFailures) {
+          consecutiveFailures = 0;
+          onLost();
+        }
+      });
   }, intervalMs);
   return () => clearInterval(timer);
 }
@@ -53,10 +67,17 @@ export function createTs3Connection(
 
   return {
     connect: async () => {
-      await client.connect();
-      await client.waitConnected(
-        AbortSignal.timeout(config.RHAPSOD_TS3_CONNECT_TIMEOUT_SECONDS * 1_000),
-      );
+      try {
+        await client.connect();
+        await client.waitConnected(
+          AbortSignal.timeout(
+            config.RHAPSOD_TS3_CONNECT_TIMEOUT_SECONDS * 1_000,
+          ),
+        );
+      } catch (error) {
+        await client.disconnect().catch(() => undefined);
+        throw error;
+      }
       if (config.RHAPSOD_TS3_CLIENT_DESCRIPTION !== undefined) {
         try {
           await client.execCommand(
@@ -83,12 +104,13 @@ export function createTs3Connection(
       client.on("disconnected", () => handler("disconnected"));
       const heartbeatSeconds = config.RHAPSOD_TS3_HEARTBEAT_SECONDS;
       if (heartbeatSeconds > 0) {
-        createHeartbeat(
+        return createHeartbeat(
           () => listClients(client).then(() => undefined),
           heartbeatSeconds * 1_000,
           () => handler("disconnected"),
         );
       }
+      return () => undefined;
     },
     sendChannelMessage: (message) =>
       sendTextMessage(client, 2, client.channelID(), message),
@@ -104,6 +126,13 @@ export function createTs3Connection(
 function escapeClientParam(value: string): string {
   return value
     .replace(/\\/g, "\\\\")
+    .replace(/\n/g, "\\n")
+    .replace(/\r/g, "\\r")
+    .replace(/\t/g, "\\t")
+    .replaceAll(String.fromCharCode(7), "\\a")
+    .replaceAll(String.fromCharCode(8), "\\b")
+    .replaceAll(String.fromCharCode(12), "\\f")
+    .replaceAll(String.fromCharCode(11), "\\v")
     .replace(/\s/g, "\\s")
     .replace(/\//g, "\\/")
     .replace(/\|/g, "\\p");

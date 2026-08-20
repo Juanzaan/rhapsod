@@ -25,14 +25,31 @@ describe("createHeartbeat", () => {
     expect(onLost).not.toHaveBeenCalled();
   });
 
-  it("reports a failed probe as a lost connection", async () => {
+  it("reports a failed probe as a lost connection only after consecutive failures", async () => {
     const probe = vi.fn(() => Promise.reject(new Error("no response")));
     const onLost = vi.fn();
 
     createHeartbeat(probe, 1_000, onLost);
     await vi.advanceTimersByTimeAsync(1_000);
 
+    expect(onLost).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1_000);
+
     expect(onLost).toHaveBeenCalledTimes(1);
+  });
+
+  it("recovers from a single failed probe", async () => {
+    const probe = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("no response"))
+      .mockResolvedValue(undefined);
+    const onLost = vi.fn();
+
+    createHeartbeat(probe, 1_000, onLost);
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    expect(onLost).not.toHaveBeenCalled();
+    expect(probe).toHaveBeenCalledTimes(2);
   });
 
   it("stops probing when cleared", () => {

@@ -190,6 +190,7 @@ function setup(
             },
         ),
         save: vi.fn(),
+        flush: vi.fn(() => Promise.resolve()),
       }
     : undefined;
   const service = new YoutubePlaybackService({
@@ -1038,6 +1039,72 @@ describe("YoutubePlaybackService", () => {
       alternativeProvider: "spotify",
       requestedBy: "user-1",
     });
+  });
+
+  it("aborts a running Spotify expansion when the queue is cleared", async () => {
+    const { createPlayback, resolver, service, spotifyResolver } = setup({
+      spotifyResolver: true,
+    });
+    let releaseSearch: (() => void) | undefined;
+    resolver.search.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          releaseSearch = () =>
+            resolve({
+              audioUrl: "https://media.example/one",
+              id: "yt-one",
+              title: "One",
+              webpageUrl: "https://www.youtube.com/watch?v=one",
+            });
+        }),
+    );
+    resolver.search.mockResolvedValue({
+      audioUrl: "https://media.example/two",
+      id: "yt-two",
+      title: "Two",
+      webpageUrl: "https://www.youtube.com/watch?v=two",
+    });
+    spotifyResolver!.expandPlaylist.mockResolvedValueOnce({
+      tracks: [
+        { artist: "A", durationSeconds: 100, id: "x1", title: "One" },
+        { artist: "B", durationSeconds: 200, id: "x2", title: "Two" },
+        { artist: "C", durationSeconds: 300, id: "x3", title: "Three" },
+      ],
+    });
+
+    const expansion = service.enqueueSpotifyCollection(
+      { id: "p1", type: "playlist" },
+      "user-1",
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(releaseSearch).toBeDefined();
+
+    service.clearQueued();
+    releaseSearch?.();
+
+    const result = await expansion;
+    expect(result.added).toHaveLength(0);
+    expect(resolver.search).toHaveBeenCalledTimes(1);
+    expect(createPlayback).not.toHaveBeenCalled();
+  });
+
+  it("reports a playback creation failure and drains the queue", async () => {
+    const { onPlaybackError, service } = setup({
+      createPlayback: () => {
+        throw new Error("ffmpeg binary missing");
+      },
+    });
+
+    await service.enqueue("https://youtu.be/first", "user-1");
+    await service.enqueue("https://youtu.be/second", "user-1");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(onPlaybackError).toHaveBeenCalledTimes(2);
+    expect(
+      onPlaybackError.mock.calls.map(([, error]) => (error as Error).message),
+    ).toEqual(["ffmpeg binary missing", "ffmpeg binary missing"]);
+    expect(service.current).toBeUndefined();
+    expect(service.queue()).toHaveLength(0);
   });
 
   it("skips Spotify tracks with no reliable YouTube match", async () => {

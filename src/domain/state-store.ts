@@ -1,4 +1,5 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
+import { mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
 import type { LoopMode } from "../application/youtube-playback-service.js";
@@ -21,9 +22,11 @@ export interface PlaybackState {
 export interface PlaybackStateStore {
   load(): PlaybackState;
   save(state: PlaybackState): void;
+  flush(): Promise<void>;
 }
 
 const MAX_QUEUE_ENTRIES = 1000;
+const SAVE_DEBOUNCE_MS = 1_000;
 
 function parseQueue(raw: unknown): readonly SerializedQueueTrack[] | undefined {
   if (!Array.isArray(raw)) return undefined;
@@ -68,6 +71,11 @@ function parseQueue(raw: unknown): readonly SerializedQueueTrack[] | undefined {
 }
 
 export class FilePlaybackStateStore implements PlaybackStateStore {
+  #pending: PlaybackState | undefined;
+  #flushTimer: NodeJS.Timeout | undefined;
+  #writeChain: Promise<void> = Promise.resolve();
+  #directoryChecked = false;
+
   constructor(private readonly filePath: string) {}
 
   load(): PlaybackState {
@@ -104,10 +112,42 @@ export class FilePlaybackStateStore implements PlaybackStateStore {
   }
 
   save(state: PlaybackState): void {
+    this.#pending = state;
+    if (this.#flushTimer === undefined) {
+      const timer = setTimeout(() => {
+        this.#flushTimer = undefined;
+        void this.#flushPending().catch(() => undefined);
+      }, SAVE_DEBOUNCE_MS);
+      timer.unref();
+      this.#flushTimer = timer;
+    }
+  }
+
+  flush(): Promise<void> {
+    if (this.#flushTimer !== undefined) {
+      clearTimeout(this.#flushTimer);
+      this.#flushTimer = undefined;
+    }
+    return this.#flushPending();
+  }
+
+  #flushPending(): Promise<void> {
+    const state = this.#pending;
+    this.#pending = undefined;
+    if (state === undefined) return Promise.resolve();
+    const write = this.#writeChain.then(() => this.#doWrite(state));
+    this.#writeChain = write.catch(() => undefined);
+    return write;
+  }
+
+  async #doWrite(state: PlaybackState): Promise<void> {
     const directory = dirname(this.filePath);
-    mkdirSync(directory, { recursive: true });
+    if (!this.#directoryChecked) {
+      await mkdir(directory, { recursive: true });
+      this.#directoryChecked = true;
+    }
     const temporary = `${this.filePath}.tmp`;
-    writeFileSync(temporary, JSON.stringify(state), "utf8");
-    renameSync(temporary, this.filePath);
+    await writeFile(temporary, JSON.stringify(state), "utf8");
+    await rename(temporary, this.filePath);
   }
 }

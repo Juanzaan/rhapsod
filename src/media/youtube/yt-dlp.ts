@@ -5,7 +5,7 @@ import type { YoutubeResource } from "../media-input.js";
 import { rankYoutubeCandidatesAll } from "./search-ranking.js";
 
 const execFileAsync = promisify(execFile);
-const MAX_BUFFER_BYTES = 2 * 1024 * 1024;
+const MAX_BUFFER_BYTES = 8 * 1024 * 1024;
 const SEARCH_CACHE_TTL_MS = 15 * 60 * 1000;
 const SEARCH_CACHE_MAX_ENTRIES = 100;
 const AUDIO_FORMAT_SELECTOR =

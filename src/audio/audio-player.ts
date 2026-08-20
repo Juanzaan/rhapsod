@@ -192,6 +192,14 @@ export class AudioPlayer {
   };
 
   readonly #sendNextFrame = (): void => {
+    try {
+      this.#sendNextFrameCore();
+    } catch (error) {
+      this.#fail(error instanceof Error ? error : new Error(String(error)));
+    }
+  };
+
+  readonly #sendNextFrameCore = (): void => {
     if (this.#state !== "playing") return;
     if (this.#bufferedBytes >= PCM_FRAME_BYTES) {
       const pcm = applyGain(this.#readFrame(), this.#gain);
