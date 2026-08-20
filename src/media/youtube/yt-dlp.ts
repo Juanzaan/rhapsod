@@ -170,6 +170,7 @@ export class SystemYtDlpExecutor implements YtDlpExecutor {
 }
 
 interface RunYtDlpOptions {
+  readonly abortGraceMs?: number;
   readonly maxBufferBytes?: number;
   readonly signal?: AbortSignal;
   readonly timeoutMs: number;
@@ -194,9 +195,14 @@ export function runYtDlpCommand(
       if (settled) return;
       settled = true;
       clearTimeout(timeoutTimer);
-      clearTimeout(killTimer);
       options.signal?.removeEventListener("abort", onAbort);
       child.kill("SIGTERM");
+      const killTimer = setTimeout(() => {
+        if (child.exitCode === null && child.signalCode === null) {
+          child.kill("SIGKILL");
+        }
+      }, options.abortGraceMs ?? ABORT_GRACE_MS);
+      killTimer.unref();
       reject(error);
     };
 
@@ -209,13 +215,6 @@ export function runYtDlpCommand(
       settleFailure(new Error(`yt-dlp timed out after ${options.timeoutMs}ms`));
     }, options.timeoutMs);
     timeoutTimer.unref();
-
-    const killTimer = setTimeout(() => {
-      if (child.exitCode === null && child.signalCode === null) {
-        child.kill("SIGKILL");
-      }
-    }, ABORT_GRACE_MS);
-    killTimer.unref();
 
     child.stdout.on("data", (chunk: Buffer) => {
       totalBytes += chunk.byteLength;
@@ -236,7 +235,6 @@ export function runYtDlpCommand(
       if (settled) return;
       settled = true;
       clearTimeout(timeoutTimer);
-      clearTimeout(killTimer);
       options.signal?.removeEventListener("abort", onAbort);
       if (code === 0) {
         resolve(Buffer.concat(chunks).toString("utf8"));
