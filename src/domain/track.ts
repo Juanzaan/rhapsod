@@ -7,6 +7,7 @@ export interface Track {
   readonly id: TrackId;
   readonly requestedBy: string;
   readonly requestedByUid?: string;
+  readonly searchQuery?: string;
   readonly source: string;
   readonly title: string;
 }

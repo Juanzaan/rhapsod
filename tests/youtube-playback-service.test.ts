@@ -1019,19 +1019,10 @@ describe("YoutubePlaybackService", () => {
     ).rejects.toThrow("se expanden con !play");
   });
 
-  it("expands Spotify playlists into the queue with deduplication", async () => {
-    const { resolver, service, spotifyResolver } = setup({
+  it("enqueues Spotify playlist tracks immediately and resolves them lazily", async () => {
+    const { createPlayback, resolver, service, spotifyResolver } = setup({
       spotifyResolver: true,
     });
-    resolver.search.mockImplementation(
-      (query: string): Promise<YoutubeTrackMetadata> =>
-        Promise.resolve({
-          audioUrl: `https://media.example/${query}`,
-          id: `yt-${query.replace(/\s+/g, "-")}`,
-          title: `YT ${query}`,
-          webpageUrl: `https://www.youtube.com/watch?v=yt-${query.replace(/\s+/g, "-")}`,
-        }),
-    );
     spotifyResolver!.expandPlaylist.mockResolvedValueOnce({
       tracks: [
         {
@@ -1057,19 +1048,31 @@ describe("YoutubePlaybackService", () => {
 
     expect(result.added).toHaveLength(2);
     expect(result.remaining).toBe(23);
-    expect(resolver.search).toHaveBeenNthCalledWith(1, "Duki Rockstar", 180);
-    expect(resolver.search).toHaveBeenNthCalledWith(
-      2,
-      "Kanye West Ghost Town",
-      271,
-    );
+    expect(resolver.search).toHaveBeenCalledTimes(1);
+    expect(resolver.search).toHaveBeenCalledWith("Duki Rockstar", 180);
     expect(result.added[0]).toMatchObject({
       alternativeProvider: "spotify",
+      id: "t1",
       requestedBy: "user-1",
+      searchQuery: "Duki Rockstar",
+      source: "https://open.spotify.com/track/t1",
+      title: "Rockstar",
     });
+    expect(result.added[1]).toMatchObject({
+      id: "t2",
+      searchQuery: "Kanye West Ghost Town",
+      title: "Ghost Town",
+    });
+    expect(service.queue()).toHaveLength(1);
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(resolver.search).toHaveBeenCalledWith("Duki Rockstar", 180);
+    expect(resolver.search).toHaveBeenCalledWith("Kanye West Ghost Town", 271);
+    expect(createPlayback).toHaveBeenCalledTimes(1);
   });
 
-  it("aborts a running Spotify expansion when the queue is cleared", async () => {
+  it("clears the queue after an instant Spotify expansion", async () => {
     const { createPlayback, resolver, service, spotifyResolver } = setup({
       spotifyResolver: true,
     });
@@ -1100,19 +1103,21 @@ describe("YoutubePlaybackService", () => {
       ],
     });
 
-    const expansion = service.enqueueSpotifyCollection(
+    const result = await service.enqueueSpotifyCollection(
       { id: "p1", type: "playlist" },
       "user-1",
     );
+
+    expect(result.added).toHaveLength(3);
     await new Promise((resolve) => setImmediate(resolve));
     expect(releaseSearch).toBeDefined();
 
     service.clearQueued();
     releaseSearch?.();
 
-    const result = await expansion;
-    expect(result.added).toHaveLength(0);
-    expect(resolver.search).toHaveBeenCalledTimes(1);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(service.queue()).toHaveLength(0);
+    expect(service.current).toBeUndefined();
     expect(createPlayback).not.toHaveBeenCalled();
   });
 
@@ -1136,9 +1141,8 @@ describe("YoutubePlaybackService", () => {
   });
 
   it("skips Spotify tracks with no reliable YouTube match", async () => {
-    const { resolver, service, spotifyResolver } = setup({
-      spotifyResolver: true,
-    });
+    const { createPlayback, onPlaybackError, resolver, service, spotifyResolver } =
+      setup({ spotifyResolver: true });
     resolver.search.mockRejectedValueOnce(new Error("no match"));
     spotifyResolver!.expandPlaylist.mockResolvedValueOnce({
       tracks: [
@@ -1152,8 +1156,14 @@ describe("YoutubePlaybackService", () => {
       "user-1",
     );
 
-    expect(result.added).toHaveLength(1);
-    expect(result.added[0]?.title).toBe("Search B Two");
+    expect(result.added).toHaveLength(2);
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(service.current?.title).toBe("Two");
+    expect(service.queue()).toHaveLength(0);
+    expect(createPlayback).toHaveBeenCalledTimes(1);
+    expect(onPlaybackError).toHaveBeenCalledTimes(1);
   });
 
   it("expands Spotify albums through the album endpoint", async () => {

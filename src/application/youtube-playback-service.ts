@@ -741,36 +741,22 @@ export class YoutubePlaybackService {
           break;
         }
         const query = `${spotifyTrack.artist} ${spotifyTrack.title}`.trim();
-        if (!query) {
-          duplicates++;
-          continue;
-        }
-        const startedAt = Date.now();
-        let metadata: YoutubeTrackMetadata;
-        try {
-          metadata = await this.#resolver.search(
-            query,
-            spotifyTrack.durationSeconds,
-          );
-        } catch {
-          duplicates++;
-          continue;
-        }
-        this.#recordMetadataTiming(metadata, startedAt);
-        if (this.#stopEpoch !== stopEpoch) {
-          halted = true;
-          break;
-        }
-        if (addedIds.has(metadata.id) || this.#current?.id === metadata.id) {
+        if (!query || addedIds.has(spotifyTrack.id)) {
           duplicates++;
           continue;
         }
         try {
           const track = this.#enqueueMetadata(
-            metadata,
+            {
+              durationSeconds: spotifyTrack.durationSeconds,
+              id: spotifyTrack.id,
+              title: spotifyTrack.title,
+              webpageUrl: `https://open.spotify.com/track/${spotifyTrack.id}`,
+            },
             requestedBy,
             "spotify",
             requestedByUid,
+            query,
           );
           addedIds.add(track.id);
           added.push(track);
@@ -807,6 +793,7 @@ export class YoutubePlaybackService {
     requestedBy: string,
     alternativeProvider?: string,
     requestedByUid?: string,
+    searchQuery?: string,
   ): Track {
     const track: Track = {
       id: metadata.id,
@@ -814,6 +801,7 @@ export class YoutubePlaybackService {
       ...(requestedByUid === undefined
         ? {}
         : { requestedByUid: requestedByUid }),
+      ...(searchQuery === undefined ? {} : { searchQuery }),
       source: metadata.webpageUrl,
       title: metadata.title,
       ...(metadata.durationSeconds === undefined
@@ -1199,6 +1187,33 @@ export class YoutubePlaybackService {
     track: Track,
     signal?: AbortSignal,
   ): Promise<string> {
+    if (track.searchQuery !== undefined) {
+      const startedAt = Date.now();
+      const metadata = await this.#resolver.search(
+        track.searchQuery,
+        track.durationSeconds,
+      );
+      this.#recordMetadataTiming(metadata, startedAt);
+      const resolvedTrack: Track = {
+        ...(track.alternativeProvider === undefined
+          ? {}
+          : { alternativeProvider: track.alternativeProvider }),
+        ...(track.durationSeconds === undefined
+          ? {}
+          : { durationSeconds: track.durationSeconds }),
+        ...(metadata.fallbackSources === undefined
+          ? {}
+          : { fallbackSources: metadata.fallbackSources }),
+        id: track.id,
+        requestedBy: track.requestedBy,
+        ...(track.requestedByUid === undefined
+          ? {}
+          : { requestedByUid: track.requestedByUid }),
+        source: metadata.webpageUrl,
+        title: track.title,
+      };
+      return this.#resolvePlayableAudio(resolvedTrack, signal);
+    }
     if (
       this.#directUrlResolver &&
       (await this.#directUrlResolver.match(track.source))
