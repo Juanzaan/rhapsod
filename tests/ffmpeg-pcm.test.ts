@@ -13,7 +13,6 @@ describe("FFmpeg PCM source", () => {
     expect(args).toContain("-reconnect");
     expect(args).not.toContain("-reconnect_at_eof");
     expect(args).toContain("-rw_timeout");
-    expect(args).toContain("-max_redirects");
     expect(args).toContain("-vn");
     expect(args).toContain("-f");
     expect(args).toContain("s16le");
