@@ -79,9 +79,8 @@ export class DirectUrlClient implements DirectUrlResolver {
     } catch {
       return false;
     }
-    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
-      return false;
-    }
+    if (parsed.protocol !== "https:") return false;
+    if (isPrivateHost(parsed.hostname)) return false;
     const lastSegment =
       parsed.pathname.split("/").filter(Boolean).pop()?.toLowerCase() ?? "";
     const dot = lastSegment.lastIndexOf(".");
@@ -183,4 +182,35 @@ export class DirectUrlClient implements DirectUrlResolver {
       return "Radio";
     }
   }
+}
+
+function isPrivateHost(hostname: string): boolean {
+  const normalized = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (normalized === "localhost") return true;
+  if (normalized.includes(":")) {
+    return (
+      normalized === "::" ||
+      normalized === "::1" ||
+      normalized === "0:0:0:0:0:0:0:1" ||
+      normalized.startsWith("fe80:") ||
+      normalized.startsWith("fc") ||
+      normalized.startsWith("fd")
+    );
+  }
+  const octets = normalized.split(".").map((part) => Number(part));
+  if (
+    octets.length !== 4 ||
+    octets.some((octet) => !Number.isInteger(octet) || octet < 0 || octet > 255)
+  ) {
+    return false;
+  }
+  const [a, b] = octets;
+  if (a === undefined || b === undefined) return false;
+  if (a === 10) return true;
+  if (a === 127) return true;
+  if (a === 169 && b === 254) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 192 && b === 168) return true;
+  if (a >= 224) return true;
+  return false;
 }

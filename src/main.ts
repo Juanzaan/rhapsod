@@ -38,6 +38,16 @@ async function main(): Promise<void> {
     string,
     { audioUrlMs?: number; cacheHit?: boolean; metadataMs?: number }
   >();
+  const setTrackTiming = (
+    trackId: string,
+    timing: { audioUrlMs?: number; cacheHit?: boolean; metadataMs?: number },
+  ): void => {
+    trackTimings.set(trackId, timing);
+    if (trackTimings.size > 200) {
+      const oldest = trackTimings.keys().next().value;
+      if (oldest !== undefined) trackTimings.delete(oldest);
+    }
+  };
   process.on("unhandledRejection", (reason: unknown) => {
     logger.error({ reason }, "Unhandled promise rejection");
   });
@@ -110,6 +120,9 @@ async function main(): Promise<void> {
     config.RHAPSOD_YTDLP_PATH,
     config.RHAPSOD_YTDLP_COOKIES_PATH,
   );
+  const audioUrlCache = AudioUrlCache.load(
+    join(config.RHAPSOD_DATA_DIR, "audio-url-cache.json"),
+  );
   const playback = new YoutubePlaybackService({
     createPlayback: (url, playbackEncoder, output, options) =>
       playFfmpegUrl(url, playbackEncoder, output, {
@@ -146,7 +159,7 @@ async function main(): Promise<void> {
       );
     },
     onTiming: (timing) => {
-      trackTimings.set(timing.trackId, {
+      setTrackTiming(timing.trackId, {
         ...(timing.stage === "metadata"
           ? { metadataMs: timing.durationMs }
           : {}),
@@ -172,9 +185,7 @@ async function main(): Promise<void> {
     stateStore: new FilePlaybackStateStore(
       join(config.RHAPSOD_DATA_DIR, "state.json"),
     ),
-    audioUrlCache: AudioUrlCache.load(
-      join(config.RHAPSOD_DATA_DIR, "audio-url-cache.json"),
-    ),
+    audioUrlCache,
     maxQueueTracks: config.RHAPSOD_MAX_QUEUE_TRACKS,
     maxTracksPerUser: config.RHAPSOD_MAX_TRACKS_PER_USER,
     alternativeResolver: new SongLinkClient(),
@@ -220,6 +231,7 @@ async function main(): Promise<void> {
   const maxConcurrentCommands = config.RHAPSOD_MAX_CONCURRENT_COMMANDS;
   let activeCommands = 0;
   let busyFeedbackAt = 0;
+  let rateLimitFeedbackAt = 0;
   const handleChatCommand = async (
     message: string,
     senderUid: string,
@@ -229,7 +241,14 @@ async function main(): Promise<void> {
       const command = parseChatCommand(message);
       if (!command) return;
       logger.info({ command: message, senderName, senderUid }, "Chat command");
-      if (!commandRateLimiter.acquire(`user:${senderUid}`, 1_500).allowed) {
+      const rateGate = commandRateLimiter.acquire(`user:${senderUid}`, 1_500);
+      if (!rateGate.allowed) {
+        if (Date.now() - rateLimitFeedbackAt > 5_000) {
+          rateLimitFeedbackAt = Date.now();
+          await connection.sendChannelMessage(
+            `Esperá un momento entre comandos (${Math.ceil(rateGate.retryAfterMs / 1_000)} s).`,
+          );
+        }
         return;
       }
       switch (command.name) {
@@ -398,6 +417,9 @@ async function main(): Promise<void> {
               !canRemoveTrack({
                 adminUids,
                 requesterName: track.requestedBy,
+                ...(track.requestedByUid === undefined
+                  ? {}
+                  : { requesterUid: track.requestedByUid }),
                 senderName,
                 senderUid,
               }),
@@ -471,6 +493,12 @@ async function main(): Promise<void> {
           break;
         case "test-tone":
           {
+            if (playback.current) {
+              await connection.sendChannelMessage(
+                "No puedo reproducir el tono mientras hay música. Probá con !stop o esperá a que termine la pista.",
+              );
+              break;
+            }
             const toneLimit = commandRateLimiter.acquire(
               "global:test-tone",
               30_000,
@@ -598,8 +626,19 @@ async function main(): Promise<void> {
   await connection.connect();
   logger.info("Connected to TeamSpeak 3");
 
+  const listConnectedClientUids = async (): Promise<readonly string[]> => {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const uids = await connection.listConnectedClientUids();
+      if (uids.length > 0) return uids;
+      if (attempt < 3) {
+        await new Promise((resolve) => setTimeout(resolve, attempt * 1_000));
+      }
+    }
+    return [];
+  };
+
   const restoredCount = playback.restoreQueuedTracks(
-    await connection.listConnectedClientUids(),
+    await listConnectedClientUids(),
   );
   if (restoredCount > 0) {
     logger.info({ restoredCount }, "Restored queued tracks after restart");
@@ -607,17 +646,23 @@ async function main(): Promise<void> {
 
   let reconnecting = false;
   let shuttingDown = false;
-  connection.onConnectionLost((reason) => {
+  const stopHeartbeat = connection.onConnectionLost((reason) => {
     if (reconnecting || shuttingDown) return;
     reconnecting = true;
     playback.pause();
     void (async () => {
       for (let attempt = 1; attempt <= maxReconnectAttempts; attempt++) {
+        const delayMs = Math.min(80, 5 * 2 ** (attempt - 1)) * 1_000;
         logger.warn(
-          { attempt, maxReconnectAttempts, reason },
+          {
+            attempt,
+            delaySeconds: delayMs / 1_000,
+            maxReconnectAttempts,
+            reason,
+          },
           "TeamSpeak connection lost; reconnecting",
         );
-        await new Promise((resolve) => setTimeout(resolve, 5_000));
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
         try {
           await connection.connect();
           logger.info({ attempt }, "Reconnected to TeamSpeak 3");
@@ -633,8 +678,9 @@ async function main(): Promise<void> {
         "Reconnect limit reached; stopping bot",
       );
       shuttingDown = true;
+      stopHeartbeat();
       await connection.disconnect().catch(() => undefined);
-      process.exitCode = 0;
+      process.exit(1);
     })();
   });
 
@@ -651,13 +697,16 @@ async function main(): Promise<void> {
   }
 
   const shutdown = (): void => {
-    playback.stop();
+    playback.stop(false);
     encoder.close();
+    stopHeartbeat();
     const disconnect = connection.disconnect();
-    void Promise.race([
-      disconnect,
+    void Promise.all([
+      disconnect.catch(() => undefined),
+      playback.flushState().catch(() => undefined),
+      audioUrlCache.flush().catch(() => undefined),
       new Promise((resolve) => setTimeout(resolve, 5_000)),
-    ]).finally(() => process.exit(0));
+    ]).then(() => process.exit(0));
   };
   process.once("SIGINT", shutdown);
   process.once("SIGTERM", shutdown);

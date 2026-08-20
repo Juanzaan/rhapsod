@@ -64,6 +64,29 @@ describe("DirectUrlResolver", () => {
     await expect(resolver.match("file:///tmp/song.mp3")).resolves.toBe(false);
   });
 
+  it("rejects insecure HTTP URLs even with an audio extension", async () => {
+    const resolver = new DirectUrlClient({ fetch: audioFetch });
+
+    await expect(
+      resolver.match("http://cdn.example.test/song.mp3"),
+    ).resolves.toBe(false);
+  });
+
+  it("rejects URLs pointing at private hosts", async () => {
+    const resolver = new DirectUrlClient({ fetch: audioFetch });
+
+    for (const url of [
+      "https://127.0.0.1/song.mp3",
+      "https://10.0.0.5/song.mp3",
+      "https://192.168.1.10/song.mp3",
+      "https://169.254.169.254/song.mp3",
+      "https://[::1]/song.mp3",
+      "https://localhost/song.mp3",
+    ]) {
+      await expect(resolver.match(url)).resolves.toBe(false);
+    }
+  });
+
   it("accepts extensionless URLs whose HEAD response is audio", async () => {
     audioFetch.mockResolvedValueOnce(fetchResponse("audio/mpeg"));
     const resolver = new DirectUrlClient({ fetch: audioFetch });

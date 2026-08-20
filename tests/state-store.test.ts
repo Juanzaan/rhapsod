@@ -32,10 +32,11 @@ describe("FilePlaybackStateStore", () => {
     expect(store.load()).toEqual({});
   });
 
-  it("round-trips a saved state through the file", () => {
+  it("round-trips a saved state through the file", async () => {
     const filePath = join(directory, "state.json");
     const store = new FilePlaybackStateStore(filePath);
     store.save({ loopMode: "track", volumePercent: 42 });
+    await store.flush();
     expect(store.load()).toEqual({ loopMode: "track", volumePercent: 42 });
     expect(existsSync(filePath)).toBe(true);
   });
@@ -54,7 +55,7 @@ describe("FilePlaybackStateStore", () => {
     expect(store.load()).toEqual({});
   });
 
-  it("round-trips a queue through the file", () => {
+  it("round-trips a queue through the file", async () => {
     const filePath = join(directory, "queue.json");
     const store = new FilePlaybackStateStore(filePath);
     store.save({
@@ -76,6 +77,7 @@ describe("FilePlaybackStateStore", () => {
       ],
       volumePercent: 30,
     });
+    await store.flush();
     expect(store.load()).toEqual({
       loopMode: "off",
       queue: [
@@ -133,20 +135,34 @@ describe("FilePlaybackStateStore", () => {
     expect(store.load()).toEqual({});
   });
 
-  it("creates the parent directory when saving", () => {
+  it("creates the parent directory when saving", async () => {
     const nested = join(directory, "nested", "deep", "state.json");
     const store = new FilePlaybackStateStore(nested);
     store.save({ volumePercent: 7 });
+    await store.flush();
     expect(store.load()).toEqual({ volumePercent: 7 });
     expect(readFileSync(nested, "utf8")).toBe(
       JSON.stringify({ volumePercent: 7 }),
     );
   });
 
-  it("throws when the file cannot be written", () => {
+  it("coalesces rapid saves into a single write", async () => {
+    const filePath = join(directory, "coalesced.json");
+    const store = new FilePlaybackStateStore(filePath);
+    for (let i = 0; i < 20; i++) {
+      store.save({ volumePercent: i });
+    }
+    await store.flush();
+    expect(JSON.parse(readFileSync(filePath, "utf8"))).toEqual({
+      volumePercent: 19,
+    });
+  });
+
+  it("surfaces write failures through flush", async () => {
     const filePath = join(directory, "atomic.json");
     mkdirSync(filePath, { recursive: true });
     const store = new FilePlaybackStateStore(filePath);
-    expect(() => store.save({ volumePercent: 3 })).toThrow();
+    store.save({ volumePercent: 3 });
+    await expect(store.flush()).rejects.toThrow();
   });
 });

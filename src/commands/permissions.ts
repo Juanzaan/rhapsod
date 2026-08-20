@@ -17,11 +17,13 @@ export function isAdminUid(
 export function canRemoveTrack(args: {
   readonly adminUids: ReadonlySet<string>;
   readonly requesterName: string;
+  readonly requesterUid?: string;
   readonly senderName: string;
   readonly senderUid: string;
 }): boolean {
-  return (
-    isAdminUid(args.senderUid, args.adminUids) ||
-    args.requesterName === args.senderName
-  );
+  if (isAdminUid(args.senderUid, args.adminUids)) return true;
+  if (args.requesterUid !== undefined && args.requesterUid.length > 0) {
+    return args.requesterUid === args.senderUid;
+  }
+  return args.requesterName === args.senderName;
 }

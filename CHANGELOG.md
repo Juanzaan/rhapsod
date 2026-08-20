@@ -6,6 +6,59 @@ for [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Reconnects no longer strand the bot: a failed connect attempt now resets the
+  client state before retrying (previously every retry threw
+  "already connected" instantly and the bot gave up after ~20s), the heartbeat
+  only declares the connection lost after two consecutive failed probes, and
+  reconnect attempts back off exponentially (5s to 80s) instead of every 5s.
+- After exhausting reconnect attempts the process now actually exits (was a
+  zombie that kept the event loop alive with the heartbeat timer, defeating
+  any supervisor restart policy) and stops the heartbeat first.
+- A `!play http://...` or a full disk no longer silently kills the playback
+  chain: `#createPlayback` failures are reported and the queue keeps playing,
+  and the state file write is now best-effort and debounced.
+- A running Spotify playlist/album expansion no longer restarts playback after
+  `!stop` or `!clear`: the expansion detects the stop and aborts, both before
+  and after each per-track search.
+- Graceful restarts (SIGTERM/SIGINT) no longer wipe the persisted queue: the
+  shutdown path stops without persisting the emptied queue, and pending state
+  and audio-URL-cache writes are flushed before exit.
+- Queue restore on startup now retries `listClients` a few times before giving
+  up, so a single transient command failure no longer discards the whole
+  persisted queue.
+- `!remove` authorization is now UID-based: a third party can no longer remove
+  someone else's tracks just by renaming to their nickname (nickname matching
+  is only used as a fallback for legacy tracks without a stored UID).
+- A rejected prefetched audio URL no longer poisons the shared `#prepared`
+  entry for that source; the failed promise is cleaned up so the next attempt
+  resolves fresh.
+- Prefetch now skips expired cached URLs, so long-queued tracks are re-resolved
+  during prefetch instead of stalling at play time.
+- A transient 5s command timeout on the heartbeat probe no longer triggers a
+  full disconnect/reconnect (requires two consecutive failures).
+- Errors inside the audio frame callback (e.g. an oversized Opus VBR packet)
+  are now routed through the player's failure path instead of crashing the
+  process.
+- `!test-tone` is rejected while music is playing instead of interleaving
+  garbled frames over the active session.
+- Direct audio URLs must now be `https:` (they could never play over `http:`
+  anyway) and hosts pointing at private/loopback networks are rejected,
+  removing an SSRF-ish probing primitive from `!play`.
+- The client description is now fully escaped (control characters included),
+  so a description with a newline no longer produces a malformed `clientset`.
+- SoundCloud client-id discovery now fetches the asset scripts in parallel
+  instead of sequentially, cutting the worst-case discovery time from ~144s to
+  a single batch.
+- Rate-limited commands now get a "wait a moment" reply instead of being
+  silently dropped.
+- The per-user rate-limiter map and the track-timing map in main are now
+  bounded, so long-running bots stop growing memory on every distinct user or
+  skipped track.
+- The yt-dlp metadata output cap was raised from 2MB to 8MB so large video
+  info JSONs can no longer fail track resolution with a buffer overflow.
+
 ### Removed
 
 - Dead code cleanup: dropped the unused `RHAPSOD_LOG_DIR` config option, the

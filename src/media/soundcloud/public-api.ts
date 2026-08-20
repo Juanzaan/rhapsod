@@ -153,12 +153,19 @@ export class SoundCloudPublicApi implements SoundCloudResolver {
       .map((match) => match[1])
       .filter((value): value is string => value !== undefined)
       .reverse();
-    for (const script of scripts.slice(0, 12)) {
-      const response = await this.#fetch(script, {
-        signal: AbortSignal.timeout(this.#timeoutMs),
-      });
-      if (!response.ok) continue;
-      const source = await response.text();
+    const scriptSources = await Promise.all(
+      scripts.slice(0, 12).map(async (script) => {
+        try {
+          const response = await this.#fetch(script, {
+            signal: AbortSignal.timeout(this.#timeoutMs),
+          });
+          return response.ok ? await response.text() : "";
+        } catch {
+          return "";
+        }
+      }),
+    );
+    for (const source of scriptSources) {
       const match = /client_id\s*[:=]\s*["']([A-Za-z0-9_-]{20,})["']/.exec(
         source,
       );

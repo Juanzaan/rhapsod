@@ -55,8 +55,32 @@ describe("canRemoveTrack", () => {
       canRemoveTrack({
         adminUids,
         requesterName: "juan",
+        requesterUid: "juan-uid",
         senderName: "juan",
-        senderUid: "someone-else",
+        senderUid: "juan-uid",
+      }),
+    ).toBe(true);
+  });
+
+  it("rejects a third party even when they rename to the requester's nickname", () => {
+    expect(
+      canRemoveTrack({
+        adminUids,
+        requesterName: "juan",
+        requesterUid: "juan-uid",
+        senderName: "juan",
+        senderUid: "impostor-uid",
+      }),
+    ).toBe(false);
+  });
+
+  it("falls back to the nickname check when the requester uid is unknown", () => {
+    expect(
+      canRemoveTrack({
+        adminUids,
+        requesterName: "juan",
+        senderName: "juan",
+        senderUid: "juan-uid",
       }),
     ).toBe(true);
   });
