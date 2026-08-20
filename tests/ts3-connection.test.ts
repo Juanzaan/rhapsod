@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   canTalkInChannel,
   createHeartbeat,
+  withTimeout,
 } from "../src/adapters/ts3/ts3-connection.js";
 
 describe("createHeartbeat", () => {
@@ -64,6 +65,55 @@ describe("createHeartbeat", () => {
     vi.advanceTimersByTime(5_000);
 
     expect(probe).not.toHaveBeenCalled();
+  });
+});
+
+describe("withTimeout", () => {
+  it("resolves with the command result when it settles in time", async () => {
+    await expect(
+      withTimeout(Promise.resolve("ok"), 10_000, "timed out"),
+    ).resolves.toBe("ok");
+  });
+
+  it("rejects with the timeout message when the command never settles", async () => {
+    vi.useFakeTimers();
+    try {
+      const never = new Promise<never>(() => {});
+      const result = withTimeout(never, 10_000, "timed out");
+
+      const failure = expect(result).rejects.toThrow("timed out");
+      vi.advanceTimersByTime(10_000);
+      await failure;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not report an unhandled rejection when the command settles after the timeout", async () => {
+    vi.useFakeTimers();
+    try {
+      const onUnhandled = vi.fn();
+      const handler = (reason: unknown): void => {
+        onUnhandled(reason);
+      };
+      process.on("unhandledRejection", handler);
+
+      let rejectLater!: (error: Error) => void;
+      const slow = new Promise<never>((_, reject) => {
+        rejectLater = reject;
+      });
+      const result = withTimeout(slow, 10_000, "timed out");
+      const failure = expect(result).rejects.toThrow("timed out");
+      vi.advanceTimersByTime(10_000);
+      await failure;
+
+      rejectLater(new Error("late failure"));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(onUnhandled).not.toHaveBeenCalled();
+      process.off("unhandledRejection", handler);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
