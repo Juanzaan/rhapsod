@@ -1,29 +1,32 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { spawn } from "node:child_process";
 
 import type { YoutubeResource } from "../media-input.js";
 import { rankYoutubeCandidatesAll } from "./search-ranking.js";
 
-const execFileAsync = promisify(execFile);
 const MAX_BUFFER_BYTES = 8 * 1024 * 1024;
 const SEARCH_CACHE_TTL_MS = 15 * 60 * 1000;
 const SEARCH_CACHE_MAX_ENTRIES = 100;
+const ABORT_GRACE_MS = 3_000;
 const AUDIO_FORMAT_SELECTOR =
   "bestaudio[acodec!=none]/bestaudio/best[acodec!=none]";
+
+export const YTDLP_ABORT_ERROR = "yt-dlp job aborted";
 
 export interface YtDlpExecutor {
   run(
     argumentsList: readonly string[],
     timeoutMs: number,
     priority?: YtDlpJobPriority,
+    signal?: AbortSignal,
   ): Promise<string>;
 }
 
 type YtDlpJobPriority = "metadata" | "playback";
 interface QueuedJob<Input, Output> {
   readonly input: Input;
-  readonly resolve: (output: Output) => void;
   readonly reject: (error: unknown) => void;
+  readonly resolve: (output: Output) => void;
+  readonly signal?: AbortSignal;
 }
 
 const MAX_QUEUED_JOBS = 8;
@@ -34,10 +37,23 @@ export class YtDlpJobQueue<Input, Output> {
   readonly #playback: Array<QueuedJob<Input, Output>> = [];
   #running = 0;
 
-  constructor(private readonly execute: (input: Input) => Promise<Output>) {}
+  constructor(
+    private readonly execute: (
+      input: Input,
+      signal?: AbortSignal,
+    ) => Promise<Output>,
+  ) {}
 
-  run(input: Input, priority: YtDlpJobPriority): Promise<Output> {
+  run(
+    input: Input,
+    priority: YtDlpJobPriority,
+    signal?: AbortSignal,
+  ): Promise<Output> {
     return new Promise<Output>((resolve, reject) => {
+      if (signal?.aborted) {
+        reject(new Error(YTDLP_ABORT_ERROR));
+        return;
+      }
       const jobs = priority === "playback" ? this.#playback : this.#metadata;
       if (jobs.length >= MAX_QUEUED_JOBS) {
         reject(
@@ -47,7 +63,11 @@ export class YtDlpJobQueue<Input, Output> {
         );
         return;
       }
-      jobs.push({ input, reject, resolve });
+      jobs.push(
+        signal === undefined
+          ? { input, reject, resolve }
+          : { input, reject, resolve, signal },
+      );
       void this.#drain();
     });
   }
@@ -59,9 +79,14 @@ export class YtDlpJobQueue<Input, Output> {
       this.#playback.shift() ??
       (this.#running === 0 ? this.#metadata.shift() : undefined);
     if (!job) return;
+    if (job.signal?.aborted) {
+      job.reject(new Error(YTDLP_ABORT_ERROR));
+      void this.#drain();
+      return;
+    }
     this.#running++;
     try {
-      job.resolve(await this.execute(job.input));
+      job.resolve(await this.execute(job.input, job.signal));
     } catch (error) {
       job.reject(error);
     } finally {
@@ -115,28 +140,116 @@ export class SystemYtDlpExecutor implements YtDlpExecutor {
     private readonly binaryPath: string,
     private readonly cookiesPath?: string,
   ) {
-    this.#jobs = new YtDlpJobQueue(async ({ argumentsList, timeoutMs }) => {
-      const ytDlpArguments = buildYtDlpArguments(
-        argumentsList,
-        this.cookiesPath,
-      );
-      const { file, args } = buildYtDlpCommand(this.binaryPath, ytDlpArguments);
-      const { stdout } = await execFileAsync(file, [...args], {
-        maxBuffer: MAX_BUFFER_BYTES,
-        timeout: timeoutMs,
-        windowsHide: true,
-      });
-      return stdout;
-    });
+    this.#jobs = new YtDlpJobQueue(
+      async ({ argumentsList, timeoutMs }, signal) => {
+        const ytDlpArguments = buildYtDlpArguments(
+          argumentsList,
+          this.cookiesPath,
+        );
+        const { file, args } = buildYtDlpCommand(
+          this.binaryPath,
+          ytDlpArguments,
+        );
+        return runYtDlpCommand(
+          file,
+          args,
+          signal === undefined ? { timeoutMs } : { signal, timeoutMs },
+        );
+      },
+    );
   }
 
   async run(
     argumentsList: readonly string[],
     timeoutMs: number,
     priority: YtDlpJobPriority = "metadata",
+    signal?: AbortSignal,
   ): Promise<string> {
-    return this.#jobs.run({ argumentsList, timeoutMs }, priority);
+    return this.#jobs.run({ argumentsList, timeoutMs }, priority, signal);
   }
+}
+
+interface RunYtDlpOptions {
+  readonly maxBufferBytes?: number;
+  readonly signal?: AbortSignal;
+  readonly timeoutMs: number;
+}
+
+export function runYtDlpCommand(
+  file: string,
+  args: readonly string[],
+  options: RunYtDlpOptions,
+): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    const child = spawn(file, [...args], {
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+    });
+    const chunks: Buffer[] = [];
+    let totalBytes = 0;
+    let stderr = "";
+    let settled = false;
+
+    const settleFailure = (error: Error): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutTimer);
+      clearTimeout(killTimer);
+      options.signal?.removeEventListener("abort", onAbort);
+      child.kill("SIGTERM");
+      reject(error);
+    };
+
+    const onAbort = (): void => {
+      settleFailure(new Error(YTDLP_ABORT_ERROR));
+    };
+    options.signal?.addEventListener("abort", onAbort, { once: true });
+
+    const timeoutTimer = setTimeout(() => {
+      settleFailure(new Error(`yt-dlp timed out after ${options.timeoutMs}ms`));
+    }, options.timeoutMs);
+    timeoutTimer.unref();
+
+    const killTimer = setTimeout(() => {
+      if (child.exitCode === null && child.signalCode === null) {
+        child.kill("SIGKILL");
+      }
+    }, ABORT_GRACE_MS);
+    killTimer.unref();
+
+    child.stdout.on("data", (chunk: Buffer) => {
+      totalBytes += chunk.byteLength;
+      if (totalBytes > (options.maxBufferBytes ?? MAX_BUFFER_BYTES)) {
+        settleFailure(
+          new Error("yt-dlp output exceeded the maximum buffer size"),
+        );
+        child.kill("SIGKILL");
+        return;
+      }
+      chunks.push(chunk);
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderr = `${stderr}${chunk.toString("utf8")}`.slice(-8_192);
+    });
+    child.on("error", (error) => settleFailure(error));
+    child.on("close", (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutTimer);
+      clearTimeout(killTimer);
+      options.signal?.removeEventListener("abort", onAbort);
+      if (code === 0) {
+        resolve(Buffer.concat(chunks).toString("utf8"));
+        return;
+      }
+      const detail = stderr.trim();
+      reject(
+        new Error(
+          `yt-dlp exited with code ${code ?? "unknown"}${detail ? `: ${detail}` : ""}`,
+        ),
+      );
+    });
+  });
 }
 
 export class YoutubeResolver {
@@ -296,7 +409,7 @@ export class YoutubeResolver {
     };
   }
 
-  async getAudioUrlFromUrl(url: string): Promise<string> {
+  async getAudioUrlFromUrl(url: string, signal?: AbortSignal): Promise<string> {
     const output = await this.executor.run(
       [
         "--get-url",
@@ -308,6 +421,7 @@ export class YoutubeResolver {
       ],
       45_000,
       "playback",
+      signal,
     );
     const audioUrl = output.trim().split(/\r?\n/, 1)[0];
     if (!audioUrl || !audioUrl.startsWith("https://"))

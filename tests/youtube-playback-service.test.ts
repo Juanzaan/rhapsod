@@ -439,6 +439,7 @@ describe("YoutubePlaybackService", () => {
 
     expect(resolver.getAudioUrlFromUrl).toHaveBeenCalledWith(
       "https://www.youtube.com/watch?v=second",
+      expect.any(AbortSignal),
     );
 
     playbackResolvers[0]?.();
@@ -601,6 +602,7 @@ describe("YoutubePlaybackService", () => {
 
     expect(resolver.getAudioUrlFromUrl).toHaveBeenCalledWith(
       "https://www.youtube.com/watch?v=second",
+      expect.any(AbortSignal),
     );
   });
 
@@ -648,9 +650,11 @@ describe("YoutubePlaybackService", () => {
 
     expect(resolver.getAudioUrlFromUrl).toHaveBeenCalledWith(
       "https://www.youtube.com/watch?v=second",
+      expect.any(AbortSignal),
     );
     expect(resolver.getAudioUrlFromUrl).toHaveBeenCalledWith(
       "https://www.youtube.com/watch?v=third",
+      expect.any(AbortSignal),
     );
   });
 
@@ -1215,10 +1219,12 @@ describe("YoutubePlaybackService", () => {
     expect(resolver.getAudioUrlFromUrl).toHaveBeenNthCalledWith(
       1,
       "https://www.youtube.com/watch?v=best",
+      expect.any(AbortSignal),
     );
     expect(resolver.getAudioUrlFromUrl).toHaveBeenNthCalledWith(
       2,
       "https://www.youtube.com/watch?v=second",
+      expect.any(AbortSignal),
     );
     expect(createPlayback).toHaveBeenCalledWith(
       "https://media.example/second-audio",
@@ -1249,12 +1255,15 @@ describe("YoutubePlaybackService", () => {
 
     expect(resolver.getAudioUrlFromUrl).toHaveBeenCalledWith(
       "https://www.youtube.com/watch?v=best",
+      expect.any(AbortSignal),
     );
     expect(resolver.getAudioUrlFromUrl).toHaveBeenCalledWith(
       "https://www.youtube.com/watch?v=second",
+      expect.any(AbortSignal),
     );
     expect(resolver.getAudioUrlFromUrl).toHaveBeenCalledWith(
       "https://www.youtube.com/watch?v=third",
+      expect.any(AbortSignal),
     );
     expect(createPlayback).toHaveBeenCalledWith(
       "https://media.example/second-audio",

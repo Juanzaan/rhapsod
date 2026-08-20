@@ -75,7 +75,7 @@ interface PlaybackTiming {
 }
 
 export interface YoutubePlaybackResolver {
-  getAudioUrlFromUrl(url: string): Promise<string>;
+  getAudioUrlFromUrl(url: string, signal?: AbortSignal): Promise<string>;
   getTrack(resource: YoutubeResource): Promise<YoutubeTrackMetadata>;
   getTrackFromUrl(url: string): Promise<YoutubeTrackMetadata>;
   search(
@@ -119,6 +119,7 @@ interface PreparedAudio {
 }
 
 interface PreparedAudioEntry {
+  readonly abort?: AbortController;
   readonly promise: Promise<PreparedAudio>;
   expiresAt: number;
 }
@@ -518,7 +519,7 @@ export class YoutubePlaybackService {
 
   removeQueuedRange(fromPosition: number, toPosition: number): Track[] {
     const removed = this.#queue.removeRange(fromPosition, toPosition);
-    for (const track of removed) this.#prepared.delete(track.source);
+    for (const track of removed) this.#invalidatePrepared(track.source);
     this.#persistState();
     return removed;
   }
@@ -845,11 +846,21 @@ export class YoutubePlaybackService {
     return track;
   }
 
+  #invalidatePrepared(source: string): void {
+    this.#prepared.get(source)?.abort?.abort();
+    this.#prepared.delete(source);
+  }
+
+  #abortAllPrepared(): void {
+    for (const entry of this.#prepared.values()) entry.abort?.abort();
+    this.#prepared.clear();
+  }
+
   skip(): void {
     this.#generation++;
     this.#pendingSkips++;
     this.#pendingSeek = undefined;
-    if (this.#current) this.#prepared.delete(this.#current.source);
+    if (this.#current) this.#invalidatePrepared(this.#current.source);
     if (this.#session) this.#sessionEndReasons.set(this.#session, "skipped");
     this.#session?.stop();
     this.#session = undefined;
@@ -868,7 +879,7 @@ export class YoutubePlaybackService {
     this.#queue.clear();
     this.#loopMode = "off";
     this.#loopPool = [];
-    this.#prepared.clear();
+    this.#abortAllPrepared();
     if (persistState) this.#persistState();
   }
 
@@ -921,7 +932,7 @@ export class YoutubePlaybackService {
   removeQueued(position: number): Track | undefined {
     const track = this.#queue.snapshot()[position - 1];
     const removed = track ? this.#queue.remove(track.id) : undefined;
-    if (removed) this.#prepared.delete(removed.source);
+    if (removed) this.#invalidatePrepared(removed.source);
     if (removed) this.#persistState();
     return removed;
   }
@@ -935,7 +946,7 @@ export class YoutubePlaybackService {
     this.#queue.clear();
     this.#loopMode = "off";
     this.#loopPool = [];
-    this.#prepared.clear();
+    this.#abortAllPrepared();
     this.#persistState();
     return count;
   }
@@ -1100,19 +1111,19 @@ export class YoutubePlaybackService {
     try {
       const resolved = await this.#getAudioUrl(track);
       if (generation !== this.#generation || this.#current !== track) {
-        this.#prepared.delete(track.source);
+        this.#invalidatePrepared(track.source);
         return undefined;
       }
       return resolved;
     } catch (error) {
       if (generation !== this.#generation || this.#current !== track) {
-        this.#prepared.delete(track.source);
+        this.#invalidatePrepared(track.source);
         return undefined;
       }
       const playbackError =
         error instanceof Error ? error : new Error(String(error));
       await this.#reportPlaybackError(track, playbackError);
-      this.#prepared.delete(track.source);
+      this.#invalidatePrepared(track.source);
       return undefined;
     }
   }
@@ -1144,7 +1155,7 @@ export class YoutubePlaybackService {
           url: prepared.url,
         }));
       }
-      this.#prepared.delete(track.source);
+      this.#invalidatePrepared(track.source);
       return this.#resolveAudioUrl(track).then((url) => ({
         cacheHit: false,
         url,
@@ -1161,13 +1172,17 @@ export class YoutubePlaybackService {
     if (existing !== undefined) {
       return existing.promise.then((prepared) => prepared.url);
     }
-    const pending = this.#resolvePlayableAudio(track).then((url) => {
-      const expiresAt = audioUrlExpiresAt(url);
-      const entry = this.#prepared.get(track.source);
-      if (entry) entry.expiresAt = expiresAt;
-      return { expiresAt, url };
-    });
+    const abort = new AbortController();
+    const pending = this.#resolvePlayableAudio(track, abort.signal).then(
+      (url) => {
+        const expiresAt = audioUrlExpiresAt(url);
+        const entry = this.#prepared.get(track.source);
+        if (entry) entry.expiresAt = expiresAt;
+        return { expiresAt, url };
+      },
+    );
     const entry: PreparedAudioEntry = {
+      abort,
       expiresAt: Number.POSITIVE_INFINITY,
       promise: pending,
     };
@@ -1180,7 +1195,10 @@ export class YoutubePlaybackService {
     return pending.then((prepared) => prepared.url);
   }
 
-  async #resolvePlayableAudio(track: Track): Promise<string> {
+  async #resolvePlayableAudio(
+    track: Track,
+    signal?: AbortSignal,
+  ): Promise<string> {
     if (
       this.#directUrlResolver &&
       (await this.#directUrlResolver.match(track.source))
@@ -1192,7 +1210,7 @@ export class YoutubePlaybackService {
     }
     let lastError: unknown;
     try {
-      const url = await this.#resolver.getAudioUrlFromUrl(track.source);
+      const url = await this.#resolver.getAudioUrlFromUrl(track.source, signal);
       this.#audioUrlCache?.set(track.source, url, audioUrlExpiresAt(url));
       return url;
     } catch (error) {
@@ -1202,7 +1220,7 @@ export class YoutubePlaybackService {
     if (fallbacks.length > 0) {
       const settled = await Promise.allSettled(
         fallbacks.map((source) =>
-          this.#resolver.getAudioUrlFromUrl(source).then((url) => ({
+          this.#resolver.getAudioUrlFromUrl(source, signal).then((url) => ({
             source,
             url,
           })),
@@ -1235,10 +1253,10 @@ export class YoutubePlaybackService {
         if (existing.expiresAt > Date.now() + AUDIO_URL_REFRESH_AHEAD_MS) {
           continue;
         }
-        this.#prepared.delete(next.source);
+        this.#invalidatePrepared(next.source);
       }
       void this.#resolveAudioUrl(next).catch(() => {
-        this.#prepared.delete(next.source);
+        this.#invalidatePrepared(next.source);
       });
     }
   }

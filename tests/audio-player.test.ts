@@ -179,6 +179,20 @@ describe("AudioPlayer", () => {
     expect(player.state).toBe("idle");
   });
 
+  it("reuses pooled frame buffers across ticks at full gain", () => {
+    const { clock, encodeMock, player } = setup();
+    const source = new PassThrough();
+    void player.play(source);
+    source.write(Buffer.alloc(PCM_FRAME_BYTES * 25, 9));
+    clock.tick();
+    clock.tick();
+
+    const first = encodeMock.mock.calls[0]?.[0];
+    const second = encodeMock.mock.calls[1]?.[0];
+    expect(first?.byteLength).toBe(PCM_FRAME_BYTES);
+    expect(second).toBe(first);
+  });
+
   it("applies the configured gain to encoded frames", () => {
     const { clock, encodeMock, player } = setup();
     const source = new PassThrough();
