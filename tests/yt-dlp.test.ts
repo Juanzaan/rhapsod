@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   buildYtDlpArguments,
@@ -183,6 +183,41 @@ describe("YoutubeResolver", () => {
     expect(executor.calls).toHaveLength(2);
     expect(executor.calls[0]).toContain("ytsearch12:duki rockstar");
     expect(executor.calls[1]).toContain("ytsearch12:duki");
+  });
+
+  it("caches search results so repeated queries skip yt-dlp", async () => {
+    const executor = new FakeExecutor(
+      JSON.stringify({
+        entries: [{ id: "a", title: "Duki Rockstar", duration: 180 }],
+      }),
+    );
+    const resolver = new YoutubeResolver(executor);
+
+    const first = await resolver.search("duki rockstar");
+    const second = await resolver.search("duki rockstar");
+
+    expect(second).toEqual(first);
+    expect(executor.calls).toHaveLength(1);
+  });
+
+  it("refreshes cached searches after the TTL expires", async () => {
+    vi.useFakeTimers();
+    try {
+      const executor = new FakeExecutor(
+        JSON.stringify({
+          entries: [{ id: "a", title: "Duki Rockstar", duration: 180 }],
+        }),
+      );
+      const resolver = new YoutubeResolver(executor);
+
+      await resolver.search("duki rockstar");
+      vi.advanceTimersByTime(15 * 60 * 1000 + 1);
+      await resolver.search("duki rockstar");
+
+      expect(executor.calls).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("resolves only HTTPS audio endpoints", async () => {

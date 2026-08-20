@@ -7,6 +7,8 @@ import { rankYoutubeCandidatesAll } from "./search-ranking.js";
 
 const execFileAsync = promisify(execFile);
 const MAX_BUFFER_BYTES = 2 * 1024 * 1024;
+const SEARCH_CACHE_TTL_MS = 15 * 60 * 1000;
+const SEARCH_CACHE_MAX_ENTRIES = 100;
 const AUDIO_FORMAT_SELECTOR =
   "bestaudio[acodec!=none]/bestaudio/best[acodec!=none]";
 
@@ -141,6 +143,14 @@ export class SystemYtDlpExecutor implements YtDlpExecutor {
 export class YoutubeResolver {
   readonly name = "youtube";
 
+  readonly #searchCache = new Map<
+    string,
+    {
+      readonly candidates: readonly YoutubeTrackMetadata[];
+      readonly expiresAt: number;
+    }
+  >();
+
   constructor(private readonly executor: YtDlpExecutor) {}
 
   match(input: string): boolean {
@@ -240,6 +250,12 @@ export class YoutubeResolver {
     query: string,
     expectedDurationSeconds?: number,
   ): Promise<readonly YoutubeTrackMetadata[]> {
+    const cacheKey = `${expectedDurationSeconds ?? 0}|${query}`;
+    const cached = this.#searchCache.get(cacheKey);
+    if (cached !== undefined) {
+      if (cached.expiresAt > Date.now()) return cached.candidates;
+      this.#searchCache.delete(cacheKey);
+    }
     const raw = await this.executor.run(
       [
         "--dump-single-json",
@@ -254,7 +270,20 @@ export class YoutubeResolver {
     const candidates = (parseResponse(raw).entries ?? [])
       .filter((entry) => entry.id && entry.title)
       .map((entry) => parseSearchCandidate(entry));
-    return rankYoutubeCandidatesAll(query, candidates, expectedDurationSeconds);
+    const ranked = rankYoutubeCandidatesAll(
+      query,
+      candidates,
+      expectedDurationSeconds,
+    );
+    this.#searchCache.set(cacheKey, {
+      candidates: ranked,
+      expiresAt: Date.now() + SEARCH_CACHE_TTL_MS,
+    });
+    if (this.#searchCache.size > SEARCH_CACHE_MAX_ENTRIES) {
+      const oldest = this.#searchCache.keys().next().value;
+      if (oldest !== undefined) this.#searchCache.delete(oldest);
+    }
+    return ranked;
   }
 
   async getAudioUrl(resource: YoutubeResource): Promise<string> {
