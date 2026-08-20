@@ -8,6 +8,12 @@ for [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- YouTube authentication health check: on startup and every 24h the bot
+  resolves a known video's stream URL; if it fails, a clear log line reports
+  that the cookies are probably expired and must be re-exported. Playback
+  errors caused by YouTube demanding sign-in now tell users the cookies may be
+  expired instead of dumping the raw extractor message.
+
 - TeamSpeak liveness heartbeat: the bot asks the server for its client list
   every `RHAPSOD_TS3_HEARTBEAT_SECONDS` (default 60, `0` disables). A silent
   session loss — e.g. the server restarting while the UDP socket stays open —

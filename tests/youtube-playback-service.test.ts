@@ -1088,6 +1088,33 @@ describe("YoutubePlaybackService", () => {
     expect(onPlaybackError).not.toHaveBeenCalled();
   });
 
+  it("reports a clear message when YouTube requires authentication", async () => {
+    const { onPlaybackError, resolver, service } = setup();
+    resolver.getTrack.mockImplementation((resource: { id: string }) =>
+      Promise.resolve({
+        id: resource.id,
+        title: `Track ${resource.id}`,
+        webpageUrl: `https://www.youtube.com/watch?v=${resource.id}`,
+      }),
+    );
+    resolver.getAudioUrlFromUrl.mockRejectedValue(
+      new Error(
+        "Sign in to confirm you're not a bot. Use --cookies-from-browser or --cookies for the authentication.",
+      ),
+    );
+
+    await service.enqueue("https://youtu.be/auth-fail", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(onPlaybackError).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "auth-fail" }),
+      expect.objectContaining({
+        message:
+          "YouTube pidió autenticación: probablemente las cookies del bot estén vencidas.",
+      }),
+    );
+  });
+
   it("reports the failure when every candidate has no playable audio", async () => {
     const { onPlaybackError, resolver, service } = setup();
     resolver.getTrack.mockResolvedValueOnce({
