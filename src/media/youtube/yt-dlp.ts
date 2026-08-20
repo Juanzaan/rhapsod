@@ -345,7 +345,7 @@ export function buildYtDlpArguments(
     "--extractor-retries",
     "1",
     "--extractor-args",
-    "youtube:player_client=web_embedded",
+    "youtube:player_client=web_safari",
     ...argumentsList,
   ];
 }
