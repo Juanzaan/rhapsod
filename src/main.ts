@@ -97,7 +97,7 @@ async function main(): Promise<void> {
       },
     });
   }
-  const connection = createTs3Connection(config, identity);
+  const connection = createTs3Connection(config, identity, logger);
   const maxReconnectAttempts = 5;
   const encoder = await createRhapsodOpusEncoder({
     bitrate: config.RHAPSOD_OPUS_BITRATE,
