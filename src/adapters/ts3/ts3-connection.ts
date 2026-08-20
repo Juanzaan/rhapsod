@@ -19,6 +19,17 @@ interface Ts3Connection {
   sendVoiceFrame(frame: Uint8Array): void;
 }
 
+export function createHeartbeat(
+  probe: () => Promise<void>,
+  intervalMs: number,
+  onLost: () => void,
+): () => void {
+  const timer = setInterval(() => {
+    void probe().catch(onLost);
+  }, intervalMs);
+  return () => clearInterval(timer);
+}
+
 export function createTs3Connection(
   config: AppConfig,
   identity: Identity,
@@ -70,6 +81,14 @@ export function createTs3Connection(
     onConnectionLost: (handler) => {
       client.on("kicked", () => handler("kicked"));
       client.on("disconnected", () => handler("disconnected"));
+      const heartbeatSeconds = config.RHAPSOD_TS3_HEARTBEAT_SECONDS;
+      if (heartbeatSeconds > 0) {
+        createHeartbeat(
+          () => listClients(client).then(() => undefined),
+          heartbeatSeconds * 1_000,
+          () => handler("disconnected"),
+        );
+      }
     },
     sendChannelMessage: (message) =>
       sendTextMessage(client, 2, client.channelID(), message),
