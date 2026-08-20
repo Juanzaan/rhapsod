@@ -102,6 +102,15 @@ export function createTs3Connection(
           // The description is cosmetic; keep the connection alive either way.
         }
       }
+      if (config.RHAPSOD_TS3_CHANNEL_ID !== undefined) {
+        try {
+          await client.execCommand(
+            `clientmove clid=${client.clientID()} cid=${config.RHAPSOD_TS3_CHANNEL_ID}`,
+          );
+        } catch {
+          // Some servers forbid self-moves; the user moves the bot manually.
+        }
+      }
     },
     disconnect: () => client.disconnect(),
     listConnectedClientUids: async () => {
