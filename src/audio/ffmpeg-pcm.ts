@@ -44,8 +44,6 @@ export function buildFfmpegPcmArguments(
     "1",
     "-reconnect_on_http_error",
     "4xx,5xx",
-    "-max_redirects",
-    "0",
     "-rw_timeout",
     "10000000",
   ];
