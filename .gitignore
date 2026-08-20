@@ -5,6 +5,7 @@ data/
 .env
 .env.*
 !.env.example
+youtube-cookies.txt
 *.log
 .DS_Store
 Thumbs.db
