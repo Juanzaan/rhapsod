@@ -30,8 +30,10 @@ export function withTimeout<T>(
 interface Ts3Connection {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
+  listChannels(): Promise<readonly { cid: number; name: string }[]>;
   listConnectedClientUids(): Promise<readonly string[]>;
   canTalkInCurrentChannel(): Promise<boolean>;
+  moveToChannel(cid: number): Promise<void>;
   onConnectionLost(
     handler: (reason: "kicked" | "disconnected") => void,
   ): () => void;
@@ -140,6 +142,21 @@ export function createTs3Connection(
       }
     },
     disconnect: () => client.disconnect(),
+    listChannels: async () => {
+      try {
+        const rows = await client.execCommandWithResponse("channellist");
+        return rows
+          .filter(
+            (
+              row,
+            ): row is Record<string, string> & { cid: string; name: string } =>
+              typeof row.cid === "string" && typeof row.name === "string",
+          )
+          .map((row) => ({ cid: Number(row.cid), name: row.name }));
+      } catch {
+        return [];
+      }
+    },
     listConnectedClientUids: async () => {
       try {
         const clients = await listClients(client);
@@ -165,6 +182,11 @@ export function createTs3Connection(
         // Be permissive if the check itself fails.
         return true;
       }
+    },
+    moveToChannel: async (cid: number) => {
+      await client.execCommand(
+        `clientmove clid=${client.clientID()} cid=${cid}`,
+      );
     },
     onClientMoved: (handler) => {
       client.on("clientMoved", (event) => {

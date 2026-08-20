@@ -42,6 +42,14 @@ describe("parseChatCommand", () => {
     });
     expect(parseChatCommand("!previous")).toEqual({ name: "previous" });
     expect(parseChatCommand("!prev")).toEqual({ name: "previous" });
+    expect(parseChatCommand("!channel-move General")).toEqual({
+      input: "General",
+      name: "channel-move",
+    });
+    expect(parseChatCommand("!ch gaming")).toEqual({
+      input: "gaming",
+      name: "channel-move",
+    });
   });
 
   it("does not treat normal chat as a command", () => {
@@ -97,5 +105,8 @@ describe("parseChatCommand", () => {
       "does not accept arguments",
     );
     expect(() => parseChatCommand("!unknown")).toThrow("Unknown command");
+    expect(() => parseChatCommand("!channel-move")).toThrow(
+      "Usage: !channel-move",
+    );
   });
 });
