@@ -200,6 +200,7 @@ async function main(): Promise<void> {
     try {
       const command = parseChatCommand(message);
       if (!command) return;
+      logger.info({ command: message, senderName, senderUid }, "Chat command");
       if (!commandRateLimiter.acquire(`user:${senderUid}`, 1_500).allowed) {
         return;
       }
@@ -538,7 +539,10 @@ async function main(): Promise<void> {
         }
       }
     } catch (error) {
-      logger.warn({ command: message, error }, "Command failed");
+      logger.warn(
+        { command: message, senderName, senderUid, err: error },
+        "Command failed",
+      );
       const messageText =
         error instanceof Error
           ? userFacingError(error)
