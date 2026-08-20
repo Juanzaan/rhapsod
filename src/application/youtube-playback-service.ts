@@ -105,6 +105,7 @@ const AUTH_REQUIRED_RE =
   /sign in to confirm|cookies for the authentication|request you to sign in|login required/i;
 const PREFETCH_STABILITY_TIMEOUT_MS = 8_000;
 const PREFETCH_STABILITY_POLL_MS = 100;
+const PREFETCH_DEPTH = 3;
 const DEFAULT_PLAYLIST_MAX_TRACKS = 20;
 const DEFAULT_MAX_QUEUE_TRACKS = 200;
 const DEFAULT_MAX_TRACKS_PER_USER = 30;
@@ -1163,11 +1164,12 @@ export class YoutubePlaybackService {
   }
 
   #prefetchNext(): void {
-    const next = this.#queue.snapshot()[0];
-    if (!next || this.#prepared.has(next.source)) return;
-    void this.#resolveAudioUrl(next).catch(() => {
-      this.#prepared.delete(next.source);
-    });
+    for (const next of this.#queue.snapshot().slice(0, PREFETCH_DEPTH)) {
+      if (this.#prepared.has(next.source)) continue;
+      void this.#resolveAudioUrl(next).catch(() => {
+        this.#prepared.delete(next.source);
+      });
+    }
   }
 
   #isSessionStable(): boolean {

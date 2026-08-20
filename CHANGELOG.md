@@ -14,6 +14,9 @@ for [Semantic Versioning](https://semver.org/).
 - yt-dlp runs at reduced priority on Linux (`nice -n 10`): resolving a
   track's URL while another song is playing no longer competes for the CPU
   with ffmpeg and the Opus encoder, removing the stutter during lookups.
+- The bot now prefetches the next three queued tracks instead of one, so
+  rapid `!skip` chains land on already-resolved URLs instead of stalling
+  playback while yt-dlp resolves each one.
 
 - Search ranking prefers audio-length versions over the longer official video:
   noise words in the query (o, and, de, la, official, audio, lyrics, ...) no
