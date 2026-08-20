@@ -9,6 +9,7 @@ export interface SerializedQueueTrack {
   readonly id: string;
   readonly requestedBy: string;
   readonly requestedByUid?: string;
+  readonly searchQuery?: string;
   readonly source: string;
   readonly title: string;
 }
@@ -57,11 +58,16 @@ function parseQueue(raw: unknown): readonly SerializedQueueTrack[] | undefined {
       record.requestedByUid.length > 0
         ? record.requestedByUid
         : undefined;
+    const searchQuery =
+      typeof record.searchQuery === "string" && record.searchQuery.length > 0
+        ? record.searchQuery
+        : undefined;
     entries.push({
       ...(durationSeconds === undefined ? {} : { durationSeconds }),
       id: record.id,
       requestedBy: record.requestedBy,
       ...(requestedByUid === undefined ? {} : { requestedByUid }),
+      ...(searchQuery === undefined ? {} : { searchQuery }),
       source: record.source,
       title: record.title,
     });
