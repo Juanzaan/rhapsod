@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { availableParallelism } from "node:os";
 
 import type { YoutubeResource } from "../media-input.js";
 import { rankYoutubeCandidatesAll } from "./search-ranking.js";
@@ -34,7 +35,10 @@ interface QueuedJob<Input, Output> {
 }
 
 const MAX_QUEUED_JOBS = 8;
-const MAX_CONCURRENT_JOBS = 2;
+const MAX_CONCURRENT_JOBS = Math.min(
+  2,
+  Math.max(1, availableParallelism() - 1),
+);
 
 export class YtDlpJobQueue<Input, Output> {
   readonly #metadata: Array<QueuedJob<Input, Output>> = [];
