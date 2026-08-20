@@ -11,14 +11,29 @@ interface Ts3Connection {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
   listConnectedClientUids(): Promise<readonly string[]>;
+  canTalkInCurrentChannel(): Promise<boolean>;
   onConnectionLost(
     handler: (reason: "kicked" | "disconnected") => void,
   ): () => void;
+  onClientMoved(handler: () => void): void;
   onTextMessage(
     handler: (message: string, senderUid: string, senderName: string) => void,
   ): void;
   sendChannelMessage(message: string): Promise<void>;
   sendVoiceFrame(frame: Uint8Array): void;
+}
+
+export function canTalkInChannel(
+  clientInfo: Record<string, string>,
+  channelInfo: Record<string, string>,
+): boolean {
+  const talkPower = Number(clientInfo.client_talk_power ?? 0);
+  const neededPower = Number(channelInfo.channel_needed_talk_power ?? 0);
+  if (talkPower < neededPower) return false;
+  if (channelInfo.channel_flag_moderated === "1") {
+    return clientInfo.client_is_talker === "1";
+  }
+  return true;
 }
 
 export function createHeartbeat(
@@ -98,6 +113,27 @@ export function createTs3Connection(
       } catch {
         return [];
       }
+    },
+    canTalkInCurrentChannel: async () => {
+      try {
+        const [clientInfo, channelInfo] = await Promise.all([
+          client.execCommandWithResponse(
+            `clientinfo clid=${client.clientID()}`,
+          ),
+          client.execCommandWithResponse(
+            `channelinfo cid=${client.channelID()}`,
+          ),
+        ]);
+        return canTalkInChannel(clientInfo[0] ?? {}, channelInfo[0] ?? {});
+      } catch {
+        // Be permissive if the check itself fails.
+        return true;
+      }
+    },
+    onClientMoved: (handler) => {
+      client.on("clientMoved", (event) => {
+        if (event.id === client.clientID()) handler();
+      });
     },
     onConnectionLost: (handler) => {
       client.on("kicked", () => handler("kicked"));

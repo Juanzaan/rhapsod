@@ -232,6 +232,8 @@ async function main(): Promise<void> {
   let activeCommands = 0;
   let busyFeedbackAt = 0;
   let rateLimitFeedbackAt = 0;
+  let mutedFeedbackAt = 0;
+  let canTalk = true;
   const handleChatCommand = async (
     message: string,
     senderUid: string,
@@ -240,6 +242,17 @@ async function main(): Promise<void> {
     try {
       const command = parseChatCommand(message);
       if (!command) return;
+      if (!canTalk) {
+        if (Date.now() - mutedFeedbackAt > 10_000) {
+          mutedFeedbackAt = Date.now();
+          await connection
+            .sendChannelMessage(
+              "El bot no puede hablar en este canal: no voy a procesar comandos hasta que me muevan a un canal donde se escuche.",
+            )
+            .catch(() => undefined);
+        }
+        return;
+      }
       logger.info({ command: message, senderName, senderUid }, "Chat command");
       const rateGate = commandRateLimiter.acquire(`user:${senderUid}`, 1_500);
       if (!rateGate.allowed) {
@@ -625,6 +638,22 @@ async function main(): Promise<void> {
   });
   await connection.connect();
   logger.info("Connected to TeamSpeak 3");
+
+  const checkTalkPower = async (reason: string): Promise<void> => {
+    const current = await connection.canTalkInCurrentChannel();
+    if (current === canTalk) return;
+    canTalk = current;
+    logger.info({ reason, canTalk }, "Talk power changed");
+  };
+  await checkTalkPower("startup");
+  if (!canTalk) {
+    logger.warn(
+      "The bot cannot talk in its current channel; commands will be ignored until it is moved",
+    );
+  }
+  connection.onClientMoved(() => {
+    void checkTalkPower("moved");
+  });
 
   const listConnectedClientUids = async (): Promise<readonly string[]> => {
     for (let attempt = 1; attempt <= 3; attempt++) {
