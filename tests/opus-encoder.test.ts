@@ -34,9 +34,8 @@ describe("Rhapsod Opus encoder", () => {
     expect(PCM_FRAME_BYTES).toBe(3_840);
   });
 
-  it("encodes with high complexity and FEC under the packet budget", async () => {
+  it("encodes with the default complexity and FEC under the packet budget", async () => {
     const encoder = await createRhapsodOpusEncoder({
-      complexity: 10,
       packetLossPercent: 10,
     });
     try {

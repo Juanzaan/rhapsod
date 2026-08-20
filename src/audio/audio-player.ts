@@ -11,20 +11,38 @@ const PREBUFFER_FRAMES = 12;
 const BUFFER_HIGH_WATER_FRAMES = 250;
 const BUFFER_LOW_WATER_FRAMES = 150;
 const MAX_UNDERRUN_FRAMES = 250;
+const POOL_MAX_FRAMES = 8;
 
-export function applyGain(pcm: Uint8Array, gain: number): Uint8Array {
+class FramePool {
+  readonly #frames: Uint8Array[] = [];
+
+  acquire(): Uint8Array {
+    return this.#frames.pop() ?? new Uint8Array(PCM_FRAME_BYTES);
+  }
+
+  release(frame: Uint8Array): void {
+    if (this.#frames.length >= POOL_MAX_FRAMES) return;
+    this.#frames.push(frame);
+  }
+}
+
+export function applyGain(
+  pcm: Uint8Array,
+  gain: number,
+  output?: Uint8Array,
+): Uint8Array {
   if (gain === 1) return pcm;
-  const output = new Uint8Array(pcm.byteLength);
+  const target = output ?? new Uint8Array(pcm.byteLength);
   for (let i = 0; i < pcm.byteLength; i += 2) {
     const low = pcm[i] ?? 0;
     const high = pcm[i + 1] ?? 0;
     let sample = low | (high << 8);
     if (sample & 0x8000) sample -= 0x10000;
     sample = Math.max(-32768, Math.min(32767, Math.round(sample * gain)));
-    output[i] = sample & 0xff;
-    output[i + 1] = (sample >> 8) & 0xff;
+    target[i] = sample & 0xff;
+    target[i + 1] = (sample >> 8) & 0xff;
   }
-  return output;
+  return target;
 }
 
 type AudioPlayerState = "idle" | "buffering" | "playing" | "paused";
@@ -52,6 +70,7 @@ export class AudioPlayer {
   readonly #output: VoiceFrameOutput;
   readonly #clock: AudioPlayerClock;
   readonly #silence = new Uint8Array(PCM_FRAME_BYTES);
+  readonly #framePool = new FramePool();
   #chunks: Uint8Array[] = [];
   #chunkOffset = 0;
   #bufferedBytes = 0;
@@ -202,8 +221,15 @@ export class AudioPlayer {
   readonly #sendNextFrameCore = (): void => {
     if (this.#state !== "playing") return;
     if (this.#bufferedBytes >= PCM_FRAME_BYTES) {
-      const pcm = applyGain(this.#readFrame(), this.#gain);
-      this.#output.sendVoiceFrame(this.#encoder.encode(pcm));
+      const frame = this.#framePool.acquire();
+      const gained = this.#gain === 1 ? undefined : this.#framePool.acquire();
+      try {
+        const pcm = applyGain(this.#readFrameInto(frame), this.#gain, gained);
+        this.#output.sendVoiceFrame(this.#encoder.encode(pcm));
+      } finally {
+        this.#framePool.release(frame);
+        if (gained !== undefined) this.#framePool.release(gained);
+      }
       this.#firstFrameDelayMs ??= Date.now() - this.#playStartedAt;
       this.#framesSent++;
       if (this.#recovering) {
@@ -241,8 +267,7 @@ export class AudioPlayer {
     }
   };
 
-  #readFrame(): Uint8Array {
-    const frame = new Uint8Array(PCM_FRAME_BYTES);
+  #readFrameInto(target: Uint8Array): Uint8Array {
     let written = 0;
     while (written < PCM_FRAME_BYTES) {
       const chunk = this.#chunks[0];
@@ -250,7 +275,7 @@ export class AudioPlayer {
         throw new Error("PCM buffer accounting mismatch");
       const available = chunk.byteLength - this.#chunkOffset;
       const length = Math.min(PCM_FRAME_BYTES - written, available);
-      frame.set(
+      target.set(
         chunk.subarray(this.#chunkOffset, this.#chunkOffset + length),
         written,
       );
@@ -262,7 +287,7 @@ export class AudioPlayer {
         this.#chunkOffset = 0;
       }
     }
-    return frame;
+    return target;
   }
 
   #pauseSource(): void {

@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildYtDlpArguments,
   buildYtDlpCommand,
+  runYtDlpCommand,
+  YTDLP_ABORT_ERROR,
   YtDlpJobQueue,
   YoutubeResolver,
   type YtDlpExecutor,
@@ -347,5 +349,91 @@ describe("YtDlpJobQueue", () => {
       await new Promise((resolve) => setImmediate(resolve));
     }
     await expect(Promise.all(accepted)).resolves.toHaveLength(9);
+  });
+
+  it("rejects an already-aborted job without running it", async () => {
+    const execute = vi.fn((label: string) => Promise.resolve(label));
+    const queue = new YtDlpJobQueue(execute);
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      queue.run("job", "metadata", controller.signal),
+    ).rejects.toThrow(YTDLP_ABORT_ERROR);
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it("drops queued jobs whose signal is aborted while waiting", async () => {
+    const order: string[] = [];
+    const releases: Array<() => void> = [];
+    const queue = new YtDlpJobQueue(async (label: string) => {
+      order.push(label);
+      await new Promise<void>((resolve) => releases.push(resolve));
+      return label;
+    });
+
+    const first = queue.run("first", "metadata");
+    const controller = new AbortController();
+    const doomed = queue.run("doomed", "metadata", controller.signal);
+    const third = queue.run("third", "metadata");
+    const doomedExpectation = expect(doomed).rejects.toThrow(YTDLP_ABORT_ERROR);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    controller.abort();
+    releases.shift()?.();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(order).toEqual(["first", "third"]);
+    await doomedExpectation;
+    releases.shift()?.();
+    await expect(Promise.all([first, third])).resolves.toEqual([
+      "first",
+      "third",
+    ]);
+  });
+});
+
+describe("runYtDlpCommand", () => {
+  it("resolves with the child stdout on a clean exit", async () => {
+    await expect(
+      runYtDlpCommand(
+        process.execPath,
+        ["-e", "process.stdout.write('hello')"],
+        { timeoutMs: 5_000 },
+      ),
+    ).resolves.toBe("hello");
+  });
+
+  it("rejects when the child exits with a non-zero code", async () => {
+    await expect(
+      runYtDlpCommand(
+        process.execPath,
+        ["-e", "process.stderr.write('boom'); process.exit(3)"],
+        { timeoutMs: 5_000 },
+      ),
+    ).rejects.toThrow("yt-dlp exited with code 3: boom");
+  });
+
+  it("kills a running child when the signal aborts", async () => {
+    const controller = new AbortController();
+    const pending = runYtDlpCommand(
+      process.execPath,
+      ["-e", "setInterval(() => {}, 25)"],
+      { signal: controller.signal, timeoutMs: 60_000 },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    controller.abort();
+
+    await expect(pending).rejects.toThrow(YTDLP_ABORT_ERROR);
+  });
+
+  it("rejects when the child exceeds the timeout", async () => {
+    const pending = runYtDlpCommand(
+      process.execPath,
+      ["-e", "setInterval(() => {}, 25)"],
+      { timeoutMs: 200 },
+    );
+
+    await expect(pending).rejects.toThrow("yt-dlp timed out after 200ms");
   });
 });

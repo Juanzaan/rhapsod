@@ -33,7 +33,7 @@ export async function createRhapsodOpusEncoder(
     application: Application.Audio,
     bitrate: config.bitrate ?? 128_000,
     channels: CHANNELS,
-    complexity: config.complexity ?? 10,
+    complexity: config.complexity ?? 8,
     frameSize: SAMPLES_PER_CHANNEL,
     sampleRate: SAMPLE_RATE,
     signal: Signal.Music,
