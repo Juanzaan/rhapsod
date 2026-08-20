@@ -37,6 +37,7 @@ const DIRECT_AUDIO_CONTENT_TYPES = new Set([
 
 const PROBE_TIMEOUT_MS = 20_000;
 const HEAD_TIMEOUT_MS = 8_000;
+const MATCH_CACHE_MAX_ENTRIES = 200;
 
 interface FfprobeFormat {
   readonly duration?: string;
@@ -65,6 +66,7 @@ export class DirectUrlClient implements DirectUrlResolver {
   readonly #fetch: typeof fetch;
   readonly #ffprobeBinary: string;
   readonly #timeoutMs: number;
+  readonly #matchCache = new Map<string, boolean>();
 
   constructor(options: DirectUrlResolverOptions = {}) {
     this.#fetch = options.fetch ?? fetch;
@@ -73,6 +75,18 @@ export class DirectUrlClient implements DirectUrlResolver {
   }
 
   async match(url: string): Promise<boolean> {
+    const cached = this.#matchCache.get(url);
+    if (cached !== undefined) return cached;
+    const result = await this.#matchImpl(url);
+    this.#matchCache.set(url, result);
+    if (this.#matchCache.size > MATCH_CACHE_MAX_ENTRIES) {
+      const oldest = this.#matchCache.keys().next().value;
+      if (oldest !== undefined) this.#matchCache.delete(oldest);
+    }
+    return result;
+  }
+
+  async #matchImpl(url: string): Promise<boolean> {
     let parsed: URL;
     try {
       parsed = new URL(url);

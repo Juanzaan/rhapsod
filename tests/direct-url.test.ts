@@ -96,6 +96,18 @@ describe("DirectUrlResolver", () => {
     ).resolves.toBe(true);
   });
 
+  it("caches match results so repeated checks skip the HEAD request", async () => {
+    audioFetch.mockReset();
+    audioFetch.mockResolvedValueOnce(fetchResponse("audio/mpeg"));
+    const resolver = new DirectUrlClient({ fetch: audioFetch });
+
+    await resolver.match("https://ice1.somafm.com/groovesalad-128-mp3");
+    await resolver.match("https://ice1.somafm.com/groovesalad-128-mp3");
+    await resolver.match("https://ice1.somafm.com/groovesalad-128-mp3");
+
+    expect(audioFetch).toHaveBeenCalledTimes(1);
+  });
+
   it("rejects extensionless URLs whose HEAD response is not audio", async () => {
     audioFetch.mockResolvedValueOnce(fetchResponse("text/html"));
     const resolver = new DirectUrlClient({ fetch: audioFetch });
