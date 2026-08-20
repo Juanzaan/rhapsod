@@ -489,6 +489,9 @@ export class YoutubePlaybackService {
           id: entry.id,
           requestedBy: entry.requestedBy,
           requestedByUid: entry.requestedByUid,
+          ...(entry.searchQuery === undefined
+            ? {}
+            : { searchQuery: entry.searchQuery }),
           source: entry.source,
           title: entry.title,
         });
@@ -976,6 +979,9 @@ export class YoutubePlaybackService {
         ...(track.requestedByUid === undefined
           ? {}
           : { requestedByUid: track.requestedByUid }),
+        ...(track.searchQuery === undefined
+          ? {}
+          : { searchQuery: track.searchQuery }),
         source: track.source,
         title: track.title,
       });
