@@ -1,4 +1,5 @@
 type ChatCommand =
+  | { readonly name: "channel-move"; readonly input: string }
   | { readonly name: "clear" }
   | { readonly name: "help" }
   | { readonly name: "loop"; readonly mode?: "off" | "queue" | "track" }
@@ -24,6 +25,8 @@ type ChatCommand =
 
 const COMMAND_ALIASES: Readonly<Record<string, ChatCommand["name"]>> = {
   c: "clear",
+  ch: "channel-move",
+  "channel-move": "channel-move",
   clear: "clear",
   h: "help",
   help: "help",
@@ -82,6 +85,9 @@ export function parseChatCommand(
 
   const argument = unwrapTeamSpeakUrl(argumentsList.join(" ").trim());
   switch (name) {
+    case "channel-move":
+      if (!argument) throw new Error("Usage: !channel-move <channel name>");
+      return { input: argument, name };
     case "play":
       if (!argument) throw new Error("Usage: !play <URL or search terms>");
       return { input: argument, name };

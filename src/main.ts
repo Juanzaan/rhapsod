@@ -463,6 +463,39 @@ async function main(): Promise<void> {
             );
           }
           break;
+        case "channel-move": {
+          const channels = await connection.listChannels();
+          const query = command.input.toLowerCase();
+          const matches = channels.filter((ch) =>
+            ch.name.toLowerCase().includes(query),
+          );
+          if (matches.length === 0) {
+            await connection.sendChannelMessage(
+              `No encontré ningún canal con "${command.input}".`,
+            );
+          } else if (matches.length > 1) {
+            const list = matches
+              .slice(0, 5)
+              .map((ch) => ch.name)
+              .join(", ");
+            await connection.sendChannelMessage(
+              `Encontré varios canales: ${list}. Sé más específico.`,
+            );
+          } else {
+            const target = matches[0]!;
+            try {
+              await connection.moveToChannel(target.cid);
+              await connection.sendChannelMessage(
+                `Movido al canal: ${target.name}`,
+              );
+            } catch {
+              await connection.sendChannelMessage(
+                "No pude moverme a ese canal (¿permisos?).",
+              );
+            }
+          }
+          break;
+        }
         case "shuffle":
           {
             const shuffled = playback.shuffleQueued();
