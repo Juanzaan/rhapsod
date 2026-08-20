@@ -1143,13 +1143,30 @@ export class YoutubePlaybackService {
       return this.#soundcloudResolver.getAudioUrl(track.source);
     }
     let lastError: unknown;
-    for (const source of [track.source, ...(track.fallbackSources ?? [])]) {
-      try {
-        const url = await this.#resolver.getAudioUrlFromUrl(source);
-        this.#audioUrlCache?.set(source, url, audioUrlExpiresAt(url));
-        return url;
-      } catch (error) {
-        lastError = error;
+    try {
+      const url = await this.#resolver.getAudioUrlFromUrl(track.source);
+      this.#audioUrlCache?.set(track.source, url, audioUrlExpiresAt(url));
+      return url;
+    } catch (error) {
+      lastError = error;
+    }
+    const fallbacks = track.fallbackSources ?? [];
+    if (fallbacks.length > 0) {
+      const settled = await Promise.allSettled(
+        fallbacks.map((source) =>
+          this.#resolver.getAudioUrlFromUrl(source).then((url) => ({
+            source,
+            url,
+          })),
+        ),
+      );
+      for (const result of settled) {
+        if (result.status === "fulfilled") {
+          const { source, url } = result.value;
+          this.#audioUrlCache?.set(source, url, audioUrlExpiresAt(url));
+          return url;
+        }
+        lastError = result.reason;
       }
     }
     if (lastError instanceof Error) {

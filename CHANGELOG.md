@@ -17,6 +17,12 @@ for [Semantic Versioning](https://semver.org/).
 - The bot now prefetches the next three queued tracks instead of one, so
   rapid `!skip` chains land on already-resolved URLs instead of stalling
   playback while yt-dlp resolves each one.
+- Search results are cached for 15 minutes: replaying the same song skips
+  the yt-dlp search round-trip entirely (measured 3.5s per search).
+- When the top-ranked candidate has no playable audio, the fallback
+  candidates are now resolved in parallel instead of one after another,
+  cutting the worst-case recovery time from several serial 4-6s lookups
+  down to a single parallel batch.
 
 - Search ranking prefers audio-length versions over the longer official video:
   noise words in the query (o, and, de, la, official, audio, lyrics, ...) no

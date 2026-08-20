@@ -1138,6 +1138,42 @@ describe("YoutubePlaybackService", () => {
     expect(onPlaybackError).not.toHaveBeenCalled();
   });
 
+  it("resolves fallback candidates in parallel when the winner has no audio", async () => {
+    const { createPlayback, onPlaybackError, resolver, service } = setup();
+    resolver.getTrack.mockResolvedValueOnce({
+      fallbackSources: [
+        "https://www.youtube.com/watch?v=second",
+        "https://www.youtube.com/watch?v=third",
+      ],
+      id: "best",
+      title: "Track best",
+      webpageUrl: "https://www.youtube.com/watch?v=best",
+    });
+    resolver.getAudioUrlFromUrl
+      .mockRejectedValueOnce(new Error("Requested format is not available"))
+      .mockResolvedValueOnce("https://media.example/second-audio")
+      .mockRejectedValueOnce(new Error("Requested format is not available"));
+
+    await service.enqueue("https://youtu.be/best", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(resolver.getAudioUrlFromUrl).toHaveBeenCalledWith(
+      "https://www.youtube.com/watch?v=best",
+    );
+    expect(resolver.getAudioUrlFromUrl).toHaveBeenCalledWith(
+      "https://www.youtube.com/watch?v=second",
+    );
+    expect(resolver.getAudioUrlFromUrl).toHaveBeenCalledWith(
+      "https://www.youtube.com/watch?v=third",
+    );
+    expect(createPlayback).toHaveBeenCalledWith(
+      "https://media.example/second-audio",
+      expect.anything(),
+      expect.anything(),
+    );
+    expect(onPlaybackError).not.toHaveBeenCalled();
+  });
+
   it("reports a clear message when YouTube requires authentication", async () => {
     const { onPlaybackError, resolver, service } = setup();
     resolver.getTrack.mockImplementation((resource: { id: string }) =>
