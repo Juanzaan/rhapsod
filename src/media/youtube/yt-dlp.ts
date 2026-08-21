@@ -4,7 +4,7 @@ import { availableParallelism } from "node:os";
 import type { MinimalLogger } from "../../observability/logger.js";
 import { noopLogger } from "../../observability/logger.js";
 import type { YoutubeResource } from "../media-input.js";
-import { rankYoutubeCandidatesAll } from "./search-ranking.js";
+import { rankYoutubeCandidatesScored } from "./search-ranking.js";
 
 const MAX_BUFFER_BYTES = 8 * 1024 * 1024;
 const SEARCH_CACHE_TTL_MS = 15 * 60 * 1000;
@@ -143,6 +143,8 @@ export interface YoutubeSearchCandidate extends YoutubeTrackMetadata {
   readonly channel?: string;
   readonly categories?: readonly string[];
   readonly liveStatus?: string;
+  readonly viewCount?: number;
+  readonly channelVerified?: boolean;
 }
 
 interface YtDlpJson {
@@ -153,6 +155,8 @@ interface YtDlpJson {
   channel?: string;
   categories?: string[];
   live_status?: string;
+  view_count?: number;
+  channel_is_verified?: boolean | null;
   playlist_count?: number;
   webpage_url?: string;
   url?: string;
@@ -328,7 +332,14 @@ export class YoutubeResolver {
     Promise<readonly YoutubeTrackMetadata[]>
   >();
 
-  constructor(private readonly executor: YtDlpExecutor) {}
+  readonly #logger: MinimalLogger;
+
+  constructor(
+    private readonly executor: YtDlpExecutor,
+    logger?: MinimalLogger,
+  ) {
+    this.#logger = logger ?? noopLogger;
+  }
 
   async getTrack(resource: YoutubeResource): Promise<YoutubeTrackMetadata> {
     if (resource.type !== "video")
@@ -442,20 +453,36 @@ export class YoutubeResolver {
         "--dump-single-json",
         "--flat-playlist",
         "--playlist-end",
-        "12",
+        "20",
         "--no-warnings",
-        `ytsearch12:${query}`,
+        `ytsearch20:${query}`,
       ],
       30_000,
     );
     const candidates = (parseResponse(raw).entries ?? [])
       .filter((entry) => entry.id && entry.title)
       .map((entry) => parseSearchCandidate(entry));
-    const ranked = rankYoutubeCandidatesAll(
+    const scored = rankYoutubeCandidatesScored(
       query,
       candidates,
       expectedDurationSeconds,
     );
+    if (scored.length > 0) {
+      const top = scored[0]!;
+      this.#logger.debug(
+        {
+          query,
+          selectedId: top.candidate.id,
+          selectedTitle: top.candidate.title,
+          score: top.score,
+          breakdown: top.breakdown,
+          candidatesCount: candidates.length,
+          rankedCount: scored.length,
+        },
+        "Search ranking: selected candidate",
+      );
+    }
+    const ranked = scored.map((item) => item.candidate);
     this.#searchCache.set(cacheKey, {
       candidates: ranked,
       expiresAt: Date.now() + SEARCH_CACHE_TTL_MS,
@@ -595,6 +622,10 @@ function parseTrackResponse(raw: string | YtDlpJson): YoutubeSearchCandidate {
     ...(response.channel ? { channel: response.channel } : {}),
     ...(response.categories ? { categories: response.categories } : {}),
     ...(response.live_status ? { liveStatus: response.live_status } : {}),
+    ...(typeof response.view_count === "number"
+      ? { viewCount: response.view_count }
+      : {}),
+    ...(response.channel_is_verified === true ? { channelVerified: true } : {}),
   };
 }
 
