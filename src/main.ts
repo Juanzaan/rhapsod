@@ -196,7 +196,7 @@ async function main(): Promise<void> {
       );
     },
     output: connection,
-    resolver: new YoutubeResolver(ytDlpExecutor),
+    resolver: new YoutubeResolver(ytDlpExecutor, logger),
     stateStore: new FilePlaybackStateStore(
       join(config.RHAPSOD_DATA_DIR, "state.json"),
       logger,
@@ -729,6 +729,20 @@ async function main(): Promise<void> {
   });
   await connection.connect();
   logger.info("Connected to TeamSpeak 3");
+  const logCurrentChannel = async (reason: string): Promise<void> => {
+    const currentChannel = await connection.getCurrentChannel();
+    logger.info(
+      {
+        reason,
+        channelId: currentChannel.cid,
+        ...(currentChannel.name === undefined
+          ? {}
+          : { channelName: currentChannel.name }),
+      },
+      "Bot current TeamSpeak channel",
+    );
+  };
+  await logCurrentChannel("startup");
 
   const checkTalkPower = async (reason: string): Promise<void> => {
     const current = await connection.canTalkInCurrentChannel();
@@ -786,6 +800,7 @@ async function main(): Promise<void> {
         try {
           await connection.connect();
           logger.info({ attempt }, "Reconnected to TeamSpeak 3");
+          await logCurrentChannel("reconnect");
           reconnecting = false;
           await checkTalkPower("reconnect");
           playback.resume();
