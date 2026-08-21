@@ -31,6 +31,10 @@ interface Ts3Connection {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
   listChannels(): Promise<readonly { cid: number; name: string }[]>;
+  getCurrentChannel(): Promise<{
+    readonly cid: number;
+    readonly name?: string;
+  }>;
   listConnectedClientUids(): Promise<readonly string[]>;
   canTalkInCurrentChannel(): Promise<boolean>;
   moveToChannel(cid: number): Promise<void>;
@@ -148,8 +152,15 @@ export function createTs3Connection(
           await client.execCommand(
             `clientmove clid=${client.clientID()} cid=${config.RHAPSOD_TS3_CHANNEL_ID}`,
           );
-        } catch {
-          // Some servers forbid self-moves; the user moves the bot manually.
+        } catch (error) {
+          logger.warn(
+            {
+              configuredChannelId: config.RHAPSOD_TS3_CHANNEL_ID,
+              errorMessage:
+                error instanceof Error ? error.message : String(error),
+            },
+            "Failed to move bot to configured TeamSpeak channel",
+          );
         }
       }
     },
@@ -167,6 +178,26 @@ export function createTs3Connection(
           .map((row) => ({ cid: Number(row.cid), name: row.name }));
       } catch {
         return [];
+      }
+    },
+    getCurrentChannel: async () => {
+      const cid = Number(client.channelID());
+      try {
+        const rows = await client.execCommandWithResponse(
+          `channelinfo cid=${cid}`,
+        );
+        const name = rows[0]?.channel_name;
+        return name === undefined ? { cid } : { cid, name };
+      } catch (error) {
+        logger.debug(
+          {
+            channelId: cid,
+            errorMessage:
+              error instanceof Error ? error.message : String(error),
+          },
+          "Failed to read current TeamSpeak channel",
+        );
+        return { cid };
       }
     },
     listConnectedClientUids: async () => {
