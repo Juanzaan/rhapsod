@@ -123,6 +123,11 @@ async function main(): Promise<void> {
   const ytDlpExecutor = new SystemYtDlpExecutor(
     config.RHAPSOD_YTDLP_PATH,
     config.RHAPSOD_YTDLP_COOKIES_PATH,
+    {
+      ...(config.RHAPSOD_MAX_CONCURRENT_YTDLP_JOBS === undefined
+        ? {}
+        : { maxConcurrentJobs: config.RHAPSOD_MAX_CONCURRENT_YTDLP_JOBS }),
+    },
   );
   const audioUrlCache = AudioUrlCache.load(
     join(config.RHAPSOD_DATA_DIR, "audio-url-cache.json"),
@@ -179,7 +184,10 @@ async function main(): Promise<void> {
       logger.info(timing, "Playback timing");
     },
     onPlaybackError: async (track, error) => {
-      logger.error({ error, trackId: track.id }, "YouTube playback failed");
+      logger.error(
+        { err: error, trackId: track.id },
+        "YouTube playback failed",
+      );
       await connection.sendChannelMessage(
         `Error reproduciendo ${track.title}: ${error.message}`,
       );

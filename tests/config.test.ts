@@ -23,6 +23,7 @@ describe("loadConfig", () => {
       RHAPSOD_MAX_TRACKS_PER_USER: 30,
     });
     expect(config.RHAPSOD_YTDLP_COOKIES_PATH).toBeUndefined();
+    expect(config.RHAPSOD_MAX_CONCURRENT_YTDLP_JOBS).toBeUndefined();
     expect(config.RHAPSOD_FFMPEG_PATH).toBeUndefined();
     expect(config.RHAPSOD_FFMPEG_USER_AGENT).toBeUndefined();
     expect(config.RHAPSOD_FFPROBE_PATH).toBeUndefined();
@@ -54,6 +55,15 @@ describe("loadConfig", () => {
       RHAPSOD_TS3_HOST: "ts.example.com",
     });
     expect(config.RHAPSOD_ADMIN_UIDS).toBe("UID1,UID2");
+  });
+
+  it("loads the optional yt-dlp concurrency limit", () => {
+    const config = loadConfig({
+      RHAPSOD_MAX_CONCURRENT_YTDLP_JOBS: "3",
+      RHAPSOD_TS3_HOST: "ts.example.com",
+    });
+
+    expect(config.RHAPSOD_MAX_CONCURRENT_YTDLP_JOBS).toBe(3);
   });
 
   it("rejects invalid voice ports", () => {

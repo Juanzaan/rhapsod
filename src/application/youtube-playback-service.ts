@@ -165,6 +165,7 @@ export class YoutubePlaybackService {
   readonly #history: Track[] = [];
   #loopMode: LoopMode = "off";
   #loopPool: Track[] = [];
+  #persistenceSuppressed = false;
   readonly #prepared = new Map<string, PreparedAudioEntry>();
   readonly #sessionEndReasons = new WeakMap<
     FfmpegPlaybackSession,
@@ -545,6 +546,7 @@ export class YoutubePlaybackService {
     if (resource.type !== "playlist")
       throw new Error("Only YouTube playlists can be expanded");
     return this.#withExpansionSlot(async () => {
+      const stopEpoch = this.#stopEpoch;
       const expansion = await this.#resolver.expandPlaylist(
         resource,
         this.#playlistMaxTracks,
@@ -553,6 +555,7 @@ export class YoutubePlaybackService {
         expansion,
         requestedBy,
         requestedByUid,
+        stopEpoch,
       );
     });
   }
@@ -563,6 +566,7 @@ export class YoutubePlaybackService {
     requestedByUid?: string,
   ): Promise<PlaylistEnqueueResult> {
     return this.#withExpansionSlot(async () => {
+      const stopEpoch = this.#stopEpoch;
       if (!this.#alternativeResolver) {
         throw new Error(
           "Este bot no tiene resolución de links de Apple Music o Amazon Music configurada.",
@@ -570,6 +574,9 @@ export class YoutubePlaybackService {
       }
       const alternative =
         await this.#alternativeResolver.findAlternative(input);
+      if (stopEpoch !== this.#stopEpoch) {
+        return { added: [] };
+      }
       if (!alternative) {
         throw new Error(
           "No pude encontrar ese link en YouTube o SoundCloud. Probá pegando el link directo de YouTube.",
@@ -606,6 +613,7 @@ export class YoutubePlaybackService {
           expansion,
           requestedBy,
           requestedByUid,
+          stopEpoch,
         );
       }
       if (parsed.kind === "youtube" && parsed.resource.type === "video") {
@@ -646,12 +654,17 @@ export class YoutubePlaybackService {
     expansion: PlaylistExpansion,
     requestedBy: string,
     requestedByUid?: string,
+    stopEpoch = this.#stopEpoch,
   ): PlaylistEnqueueResult {
     const added: Track[] = [];
     let duplicates = 0;
     let halted = false;
     const addedIds = new Set<string>();
     for (const metadata of expansion.tracks.slice(0, this.#playlistMaxTracks)) {
+      if (stopEpoch !== this.#stopEpoch) {
+        halted = true;
+        break;
+      }
       if (addedIds.has(metadata.id) || this.#current?.id === metadata.id) {
         duplicates++;
         continue;
@@ -712,6 +725,7 @@ export class YoutubePlaybackService {
     requestedByUid?: string,
   ): Promise<PlaylistEnqueueResult> {
     return this.#withExpansionSlot(async () => {
+      const stopEpoch = this.#stopEpoch;
       if (!this.#spotifyResolver) {
         throw new Error(
           "Spotify no está configurado en este bot: pegá un link de YouTube o SoundCloud, o buscá con !yt.",
@@ -730,11 +744,18 @@ export class YoutubePlaybackService {
               resource,
               this.#playlistMaxTracks,
             );
+      if (stopEpoch !== this.#stopEpoch) {
+        return {
+          added: [],
+          ...(expansion.total === undefined
+            ? {}
+            : { remaining: expansion.total }),
+        };
+      }
       const added: Track[] = [];
       let duplicates = 0;
       let halted = false;
       const addedIds = new Set<string>();
-      const stopEpoch = this.#stopEpoch;
       for (const spotifyTrack of expansion.tracks.slice(
         0,
         this.#playlistMaxTracks,
@@ -859,6 +880,7 @@ export class YoutubePlaybackService {
   }
 
   stop(persistState = true): void {
+    this.#persistenceSuppressed = !persistState;
     this.#generation++;
     this.#stopEpoch++;
     this.#pendingSkips = 0;
@@ -956,6 +978,7 @@ export class YoutubePlaybackService {
   }
 
   #persistState(): void {
+    if (this.#persistenceSuppressed) return;
     this.#stateStore?.save({
       loopMode: this.#loopMode,
       queue: this.#serializedQueue(),
@@ -1239,21 +1262,64 @@ export class YoutubePlaybackService {
     }
     const fallbacks = track.fallbackSources ?? [];
     if (fallbacks.length > 0) {
-      const settled = await Promise.allSettled(
-        fallbacks.map((source) =>
-          this.#resolver.getAudioUrlFromUrl(source, signal).then((url) => ({
-            source,
-            url,
-          })),
-        ),
+      const fallbackControllers = fallbacks.map(() => new AbortController());
+      const fallbackSignals = fallbackControllers.map((controller) =>
+        signal === undefined
+          ? controller.signal
+          : AbortSignal.any([signal, controller.signal]),
       );
-      for (const result of settled) {
-        if (result.status === "fulfilled") {
-          const { source, url } = result.value;
-          this.#audioUrlCache?.set(source, url, audioUrlExpiresAt(url));
-          return url;
+      let remaining = fallbacks.length;
+      const fallbackResult = await new Promise<{
+        readonly source: string;
+        readonly url: string;
+      }>((resolve, reject) => {
+        let settled = false;
+        const abortAll = (): void => {
+          for (const controller of fallbackControllers) controller.abort();
+        };
+        const rejectIfComplete = (error: unknown): void => {
+          if (settled) return;
+          remaining--;
+          lastError = error;
+          if (remaining === 0) {
+            settled = true;
+            reject(error instanceof Error ? error : new Error(String(error)));
+          }
+        };
+        for (const [index, source] of fallbacks.entries()) {
+          void this.#resolver
+            .getAudioUrlFromUrl(source, fallbackSignals[index])
+            .then(
+              (url) => {
+                if (settled) return;
+                settled = true;
+                abortAll();
+                resolve({ source, url });
+              },
+              (error: unknown) => rejectIfComplete(error),
+            );
         }
-        lastError = result.reason;
+        signal?.addEventListener(
+          "abort",
+          () => {
+            if (settled) return;
+            settled = true;
+            abortAll();
+            reject(new Error("Audio resolution aborted"));
+          },
+          { once: true },
+        );
+      }).catch((error: unknown) => {
+        lastError = error;
+        return undefined;
+      });
+      if (fallbackResult !== undefined) {
+        this.#audioUrlCache?.set(
+          fallbackResult.source,
+          fallbackResult.url,
+          audioUrlExpiresAt(fallbackResult.url),
+        );
+        return fallbackResult.url;
       }
     }
     if (lastError instanceof Error) {

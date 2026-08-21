@@ -99,12 +99,7 @@ describe("YoutubeResolver", () => {
       webpageUrl: "https://www.youtube.com/watch?v=abc_123",
     });
     expect(executor.calls[0]).toContain("--no-playlist");
-    expect(executor.calls[0]).toEqual(
-      expect.arrayContaining([
-        "--format",
-        "bestaudio[acodec!=none]/bestaudio/best[acodec!=none]",
-      ]),
-    );
+    expect(executor.calls[0]).not.toContain("--format");
   });
 
   it("selects a relevant result from multiple YouTube candidates", async () => {
@@ -203,6 +198,31 @@ describe("YoutubeResolver", () => {
 
     expect(second).toEqual(first);
     expect(executor.calls).toHaveLength(1);
+  });
+
+  it("shares an in-flight search between concurrent callers", async () => {
+    let resolveOutput!: (output: string) => void;
+    const runMock = vi.fn(
+      () =>
+        new Promise<string>((resolve) => {
+          resolveOutput = resolve;
+        }),
+    );
+    const executor: YtDlpExecutor = {
+      run: runMock,
+    };
+    const resolver = new YoutubeResolver(executor);
+
+    const first = resolver.search("duki rockstar");
+    const second = resolver.search("duki rockstar");
+    expect(runMock.mock.calls).toHaveLength(1);
+
+    resolveOutput(
+      JSON.stringify({
+        entries: [{ id: "a", title: "Duki Rockstar", duration: 180 }],
+      }),
+    );
+    await expect(Promise.all([first, second])).resolves.toHaveLength(2);
   });
 
   it("refreshes cached searches after the TTL expires", async () => {
@@ -342,7 +362,7 @@ describe("YoutubeResolver", () => {
 });
 
 describe("YtDlpJobQueue", () => {
-  it("runs metadata jobs one at a time and lets playback preempt an in-flight metadata job", async () => {
+  it("reserves a slot for playback while metadata jobs share the remaining capacity", async () => {
     const order: string[] = [];
     const releases: Array<() => void> = [];
     const queue = new YtDlpJobQueue(async (label: string) => {
@@ -359,7 +379,7 @@ describe("YtDlpJobQueue", () => {
     expect(order).toEqual(["metadata-1", "playback"]);
     releases.shift()?.();
     await new Promise((resolve) => setImmediate(resolve));
-    expect(order).toEqual(["metadata-1", "playback"]);
+    expect(order).toEqual(["metadata-1", "playback", "metadata-2"]);
     releases.shift()?.();
     await new Promise((resolve) => setImmediate(resolve));
     expect(order).toEqual(["metadata-1", "playback", "metadata-2"]);

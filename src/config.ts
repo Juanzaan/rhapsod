@@ -5,6 +5,11 @@ const optionalSecret = z.preprocess(
   z.string().min(1).optional(),
 );
 
+const optionalPositiveInteger = z.preprocess(
+  (value) => (value === "" ? undefined : value),
+  z.coerce.number().int().min(1).max(4).optional(),
+);
+
 const configSchema = z.object({
   RHAPSOD_ADMIN_UIDS: z.string().default(""),
   RHAPSOD_DATA_DIR: z.string().min(1).default("./data"),
@@ -38,6 +43,7 @@ const configSchema = z.object({
     .min(1)
     .max(20)
     .default(3),
+  RHAPSOD_MAX_CONCURRENT_YTDLP_JOBS: optionalPositiveInteger,
   RHAPSOD_MAX_QUEUE_TRACKS: z.coerce
     .number()
     .int()
