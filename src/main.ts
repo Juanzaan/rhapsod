@@ -555,6 +555,40 @@ async function main(): Promise<void> {
           await connection.sendChannelMessage(lines.join("\n"));
           break;
         }
+        case "debug-server": {
+          if (!isAdminUid(senderUid, adminUids)) {
+            await connection.sendChannelMessage(
+              "Solo los administradores pueden usar este comando.",
+            );
+            break;
+          }
+          const [serverInfo, clients, channels] = await Promise.all([
+            connection.getServerInfo(),
+            connection.listClients(),
+            connection.listChannels(),
+          ]);
+          const botClient = clients.find(
+            (c) => c.name === config.RHAPSOD_TS3_NICKNAME,
+          );
+          const botChannel = channels.find(
+            (ch) => ch.cid === (botClient?.cid ?? -1),
+          );
+          const lines = [
+            `=== Server: ${serverInfo.virtualserver_name ?? "?"} ===`,
+            `Version: ${serverInfo.virtualserver_version ?? "?"}`,
+            `Clients: ${clients.length}/${serverInfo.virtualserver_maxclients ?? "?"}`,
+            `Canal del bot: ${botChannel?.name ?? "?"} (cid ${botClient?.cid ?? "?"})`,
+            `Talk power del bot: ${botClient?.talkPower ?? "?"}`,
+            "",
+            `=== Canales (${channels.length}) ===`,
+            ...channels.map((ch) => {
+              const inChannel = clients.filter((c) => c.cid === ch.cid);
+              return `  ${ch.name} (cid ${ch.cid}) [${inChannel.length}]: ${inChannel.map((c) => c.name).join(", ") || "(vacío)"}`;
+            }),
+          ];
+          await connection.sendChannelMessage(lines.join("\n"));
+          break;
+        }
         case "stop":
           playback.stop();
           await connection.sendChannelMessage("Reproducción detenida.");
@@ -612,6 +646,7 @@ async function main(): Promise<void> {
               "!loop [off|track|queue] - Repetir la pista o la cola",
               "!lyrics (!ly) - Letra de la canción actual",
               "!stats (!st) - Estado del bot (solo lectura)",
+              "!debug-server (!ds) - Info del servidor TS3 (solo admins)",
               "!help - Mostrar esta ayuda",
             ].join("\n"),
           );

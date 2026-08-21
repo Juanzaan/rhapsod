@@ -34,6 +34,18 @@ interface Ts3Connection {
   listConnectedClientUids(): Promise<readonly string[]>;
   canTalkInCurrentChannel(): Promise<boolean>;
   moveToChannel(cid: number): Promise<void>;
+  getServerInfo(): Promise<Record<string, string>>;
+  getClientInfo(clid: number): Promise<Record<string, string>>;
+  getChannelInfo(cid: number): Promise<Record<string, string>>;
+  listClients(): Promise<
+    readonly {
+      clid: number;
+      name: string;
+      uid: string;
+      cid: number;
+      talkPower?: number;
+    }[]
+  >;
   onConnectionLost(
     handler: (reason: "kicked" | "disconnected") => void,
   ): () => void;
@@ -187,6 +199,66 @@ export function createTs3Connection(
       await client.execCommand(
         `clientmove clid=${client.clientID()} cid=${cid}`,
       );
+    },
+    getServerInfo: async () => {
+      try {
+        const rows = await client.execCommandWithResponse("serverinfo");
+        return rows[0] ?? {};
+      } catch {
+        return {};
+      }
+    },
+    getClientInfo: async (clid: number) => {
+      try {
+        const rows = await client.execCommandWithResponse(
+          `clientinfo clid=${clid}`,
+        );
+        return rows[0] ?? {};
+      } catch {
+        return {};
+      }
+    },
+    getChannelInfo: async (cid: number) => {
+      try {
+        const rows = await client.execCommandWithResponse(
+          `channelinfo cid=${cid}`,
+        );
+        return rows[0] ?? {};
+      } catch {
+        return {};
+      }
+    },
+    listClients: async () => {
+      try {
+        const rows = await client.execCommandWithResponse("clientlist");
+        return rows
+          .filter(
+            (
+              row,
+            ): row is Record<string, string> & {
+              clid: string;
+              name: string;
+              uid: string;
+              cid: string;
+            } =>
+              typeof row.clid === "string" &&
+              typeof row.name === "string" &&
+              typeof row.uid === "string" &&
+              typeof row.cid === "string" &&
+              row.client_type === "0",
+          )
+          .map((row) => ({
+            clid: Number(row.clid),
+            name: row.name,
+            uid: row.uid,
+            cid: Number(row.cid),
+            ...(row.client_talk_power === undefined
+              ? {}
+              : { talkPower: Number(row.client_talk_power) }),
+          }));
+      } catch {
+        return [];
+      }
     },
     onClientMoved: (handler) => {
       client.on("clientMoved", (event) => {
