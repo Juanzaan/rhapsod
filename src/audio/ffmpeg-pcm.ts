@@ -84,7 +84,7 @@ export function createFfmpegPcmStream(
   const spawnProcess = options.spawnProcess ?? spawn;
   const child = spawnProcess(
     options.binary ?? ffmpegStaticPath ?? "ffmpeg",
-    buildFfmpegPcmArguments(url),
+    buildFfmpegPcmArguments(url, options),
     {
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,

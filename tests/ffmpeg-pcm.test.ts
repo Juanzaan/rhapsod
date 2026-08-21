@@ -92,6 +92,39 @@ describe("FFmpeg PCM source", () => {
     );
   });
 
+  it("passes playback options to the spawned FFmpeg process", () => {
+    const child = {
+      exitCode: null,
+      signalCode: null,
+      kill: vi.fn(() => true),
+      on: vi.fn(),
+      once: vi.fn(),
+      stderr: { on: vi.fn() },
+      stdout: { pipe: vi.fn(), unpipe: vi.fn() },
+    };
+    const spawnProcess = vi.fn((...spawnArgs: [string, readonly string[]]) => {
+      void spawnArgs;
+      return child;
+    });
+
+    const ffmpeg = createFfmpegPcmStream("https://cdn.example.test/audio", {
+      binary: "ffmpeg",
+      loudnessTargetLufs: -14,
+      seekSeconds: 42,
+      spawnProcess: spawnProcess as never,
+      userAgent: "Rhapsod/1.0",
+    });
+
+    const args = spawnProcess.mock.calls[0]?.[1] as readonly string[];
+    expect(args).toContain("-af");
+    expect(args).toContain("loudnorm=I=-14:TP=-1.5:LRA=11");
+    expect(args).toContain("-ss");
+    expect(args).toContain("42");
+    expect(args).toContain("-user_agent");
+    expect(args).toContain("Rhapsod/1.0");
+    ffmpeg.stop();
+  });
+
   it("escalates to SIGKILL when SIGTERM does not stop the process", async () => {
     vi.useFakeTimers();
     try {
