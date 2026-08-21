@@ -588,6 +588,7 @@ async function main(): Promise<void> {
               "!history (!hist) - Historial reciente",
               "!now-playing (!np) - Canción actual",
               "!move (!mv) <origen> <destino> - Mover una pista",
+              "!channel-move (!ch) <canal> - Mover el bot (solo admins)",
               "!remove <n|a-b> - Quitar una posición o rango",
               "!clear - Vaciar la cola",
               "!shuffle - Mezclar la cola",
