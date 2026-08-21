@@ -215,7 +215,8 @@ export function createTs3Connection(
       }
     },
     getCurrentChannel: async () => {
-      const cid = Number(client.channelID());      try {
+      const cid = Number(client.channelID());
+      try {
         const rows = await client.execCommandWithResponse(
           `channelinfo cid=${cid}`,
         );
@@ -343,7 +344,8 @@ export function createTs3Connection(
           ): row is Record<string, string> & {
             permid: string;
             permvalue: string;
-          } => typeof row.permid === "string" && typeof row.permvalue === "string",
+          } =>
+            typeof row.permid === "string" && typeof row.permvalue === "string",
         );
       } catch {
         return [];

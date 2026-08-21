@@ -7,7 +7,9 @@ export function parseAdminUids(raw: string | undefined): ReadonlySet<string> {
   );
 }
 
-export function parseMoveGroupIds(raw: string | undefined): ReadonlySet<string> {
+export function parseMoveGroupIds(
+  raw: string | undefined,
+): ReadonlySet<string> {
   return new Set(
     (raw ?? "")
       .split(",")

@@ -529,25 +529,27 @@ export class YoutubeResolver {
         signal === undefined
           ? controller.signal
           : AbortSignal.any([signal, controller.signal]);
-      const promise = this.executor.run(
-        [
-          "--get-url",
-          "--format",
-          AUDIO_FORMAT_SELECTOR,
-          "--no-playlist",
-          "--no-warnings",
-          url,
-        ],
-        45_000,
-        "playback",
-        requestSignal,
-        playerClient,
-      ).then((output) => {
-        const audioUrl = output.trim().split(/\r?\n/, 1)[0];
-        if (!audioUrl || !audioUrl.startsWith("https://"))
-          throw new Error("yt-dlp did not return an HTTPS audio URL");
-        return audioUrl;
-      });
+      const promise = this.executor
+        .run(
+          [
+            "--get-url",
+            "--format",
+            AUDIO_FORMAT_SELECTOR,
+            "--no-playlist",
+            "--no-warnings",
+            url,
+          ],
+          45_000,
+          "playback",
+          requestSignal,
+          playerClient,
+        )
+        .then((output) => {
+          const audioUrl = output.trim().split(/\r?\n/, 1)[0];
+          if (!audioUrl || !audioUrl.startsWith("https://"))
+            throw new Error("yt-dlp did not return an HTTPS audio URL");
+          return audioUrl;
+        });
       return { controller, promise };
     });
 
