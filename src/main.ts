@@ -26,6 +26,9 @@ import {
   SystemYtDlpExecutor,
   YoutubeResolver,
 } from "./media/youtube/yt-dlp.js";
+import { createYoutubeiClient } from "./media/youtube/youtubei-client.js";
+import { YoutubeiResolver } from "./media/youtube/youtubei-resolver.js";
+import { YoutubeResolverWithFallback } from "./media/youtube/youtube-resolver-with-fallback.js";
 import { SongLinkClient } from "./media/song-link.js";
 import { DirectUrlClient } from "./media/direct-url.js";
 import { LyricsClient } from "./media/lyrics.js";
@@ -162,6 +165,31 @@ async function main(): Promise<void> {
     join(config.RHAPSOD_DATA_DIR, "audio-url-cache.json"),
     logger,
   );
+  const ytDlpResolver = new YoutubeResolver(ytDlpExecutor, logger);
+  let youtubeiResolver: YoutubeiResolver | undefined;
+  if (config.RHAPSOD_YOUTUBEI_ENABLED) {
+    try {
+      youtubeiResolver = new YoutubeiResolver(
+        await createYoutubeiClient({
+          cacheDirectory: join(config.RHAPSOD_DATA_DIR, "youtubei-cache"),
+          ...(config.RHAPSOD_YOUTUBEI_COOKIE === undefined
+            ? {}
+            : { cookie: config.RHAPSOD_YOUTUBEI_COOKIE }),
+        }),
+      );
+      logger.info("youtubei.js primary resolver enabled");
+    } catch (error) {
+      logger.warn(
+        { err: error },
+        "youtubei.js failed to initialize; using yt-dlp only",
+      );
+    }
+  }
+  const resolver = new YoutubeResolverWithFallback(
+    youtubeiResolver,
+    ytDlpResolver,
+    logger,
+  );
   const playback = new YoutubePlaybackService({
     createPlayback: (url, playbackEncoder, output, options) =>
       playFfmpegUrl(url, playbackEncoder, output, {
@@ -223,7 +251,7 @@ async function main(): Promise<void> {
       );
     },
     output: connection,
-    resolver: new YoutubeResolver(ytDlpExecutor, logger),
+    resolver,
     stateStore: new FilePlaybackStateStore(
       join(config.RHAPSOD_DATA_DIR, "state.json"),
       logger,
@@ -374,9 +402,7 @@ async function main(): Promise<void> {
             senderName,
             senderUid,
           );
-          await send(
-            `Próxima en cola: ${track.title}`,
-          );
+          await send(`Próxima en cola: ${track.title}`);
           break;
         }
         case "search": {
@@ -387,9 +413,7 @@ async function main(): Promise<void> {
               senderName,
               senderUid,
             );
-            await send(
-              `En cola (resultado ${command.index}): ${track.title}`,
-            );
+            await send(`En cola (resultado ${command.index}): ${track.title}`);
             break;
           }
           await send("Buscando en YouTube...");
@@ -407,9 +431,7 @@ async function main(): Promise<void> {
           break;
         case "previous": {
           const track = playback.replayPrevious();
-          await send(
-            `Reproduciendo de nuevo: ${track.title}`,
-          );
+          await send(`Reproduciendo de nuevo: ${track.title}`);
           break;
         }
         case "resume":
@@ -418,9 +440,7 @@ async function main(): Promise<void> {
           break;
         case "seek":
           playback.seek(command.seconds);
-          await send(
-            `Reproduciendo desde el segundo ${command.seconds}…`,
-          );
+          await send(`Reproduciendo desde el segundo ${command.seconds}…`);
           break;
         case "queue": {
           const tracks = playback.queue();
@@ -515,8 +535,7 @@ async function main(): Promise<void> {
             ? Number(command.input)
             : undefined;
           let target:
-            | { readonly cid: number; readonly name: string }
-            | undefined;
+            { readonly cid: number; readonly name: string } | undefined;
           if (numericCid !== undefined) {
             target = { cid: numericCid, name: String(numericCid) };
           } else {
@@ -526,9 +545,7 @@ async function main(): Promise<void> {
               ch.name.toLowerCase().includes(query),
             );
             if (matches.length === 0) {
-              await send(
-                `No encontré ningún canal con "${command.input}".`,
-              );
+              await send(`No encontré ningún canal con "${command.input}".`);
               break;
             }
             if (matches.length > 1) {
@@ -555,21 +572,15 @@ async function main(): Promise<void> {
             targetCid: target.cid,
           });
           if (decision === "deny-rank") {
-            await send(
-              "No tenés permisos para mover el bot de canal.",
-            );
+            await send("No tenés permisos para mover el bot de canal.");
             break;
           }
           if (decision === "deny-admin") {
-            await send(
-              "Ese canal requiere rango Admin o superior.",
-            );
+            await send("Ese canal requiere rango Admin o superior.");
             break;
           }
           if (decision === "deny-senior") {
-            await send(
-              "Ese canal requiere rango Senior Admin o superior.",
-            );
+            await send("Ese canal requiere rango Senior Admin o superior.");
             break;
           }
           try {
@@ -581,9 +592,7 @@ async function main(): Promise<void> {
                 : undefined;
             await send(`Movido al canal: ${resolvedName ?? target.name}`);
           } catch {
-            await send(
-              "No pude moverme a ese canal (¿permisos?).",
-            );
+            await send("No pude moverme a ese canal (¿permisos?).");
           }
           break;
         }
@@ -626,9 +635,7 @@ async function main(): Promise<void> {
         }
         case "debug-server": {
           if (!isAdminUid(senderUid, adminUids)) {
-            await send(
-              "Solo los administradores pueden usar este comando.",
-            );
+            await send("Solo los administradores pueden usar este comando.");
             break;
           }
           const [serverInfo, clients, channels] = await Promise.all([
@@ -660,16 +667,12 @@ async function main(): Promise<void> {
         }
         case "chart": {
           if (!isAdminUid(senderUid, adminUids)) {
-            await send(
-              "Solo los administradores pueden usar este comando.",
-            );
+            await send("Solo los administradores pueden usar este comando.");
             break;
           }
           const top = telemetry.snapshot().slice(0, 20);
           if (top.length === 0) {
-            await send(
-              "Todavía no hay datos de telemetría de usuarios.",
-            );
+            await send("Todavía no hay datos de telemetría de usuarios.");
             break;
           }
           const lines = [
@@ -710,9 +713,7 @@ async function main(): Promise<void> {
               break;
             }
           }
-          await send(
-            "Reproduciendo tono de prueba (3 s)...",
-          );
+          await send("Reproduciendo tono de prueba (3 s)...");
           await playTestTone(3, encoder, connection);
           await send("Tono de prueba terminado.");
           break;
@@ -762,9 +763,7 @@ async function main(): Promise<void> {
           break;
         case "volume":
           playback.setVolume(command.value);
-          await send(
-            `Volumen ajustado a ${playback.volume}%.`,
-          );
+          await send(`Volumen ajustado a ${playback.volume}%.`);
           break;
         case "lyrics": {
           if (!playback.current) {
@@ -774,9 +773,7 @@ async function main(): Promise<void> {
           await send("Buscando la letra...");
           const lyrics = await playback.getLyrics();
           if (!lyrics) {
-            await send(
-              `No encontré la letra de: ${playback.current.title}`,
-            );
+            await send(`No encontré la letra de: ${playback.current.title}`);
             break;
           }
           const title = lyrics.artist
@@ -804,16 +801,8 @@ async function main(): Promise<void> {
     }
   };
   connection.onTextMessage(
-    (
-      message,
-      senderUid,
-      senderName,
-      senderGroups,
-      isPrivate,
-      invokerClid,
-    ) => {
-      const privateAllowed =
-        isPrivate && privateCommandUids.has(senderUid);
+    (message, senderUid, senderName, senderGroups, isPrivate, invokerClid) => {
+      const privateAllowed = isPrivate && privateCommandUids.has(senderUid);
       const respond = privateAllowed
         ? (text: string) => connection.sendPrivateMessage(invokerClid, text)
         : (text: string) => connection.sendChannelMessage(text);
