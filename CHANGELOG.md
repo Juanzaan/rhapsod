@@ -10,6 +10,8 @@ for [Semantic Versioning](https://semver.org/).
 
 - Started the OCI development line targeting 4 vCPUs and 3 GB RAM.
 - Documented `!channel-move` and restricted it to configured admins.
+- Recommended `RHAPSOD_MAX_CONCURRENT_YTDLP_JOBS=4` for the OCI profile and
+  raised the queue prefetch depth from 3 to 5 to use the extra I/O headroom.
 
 ## [1.2.0] - 2026-08-20
 
