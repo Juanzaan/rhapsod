@@ -17,6 +17,15 @@ const DURATION_TOLERANCE = 0.25;
 const DURATION_MISMATCH_PENALTY = 40;
 const VERSION_PENALTY = 35;
 const MINOR_VERSION_PENALTY = 10;
+const VERIFIED_CHANNEL_BONUS = 12;
+const VIEW_COUNT_LOG_BONUS = 8;
+const MIN_DURATION_FOR_median = 60;
+
+export interface ScoredCandidate {
+  readonly candidate: YoutubeSearchCandidate;
+  readonly score: number;
+  readonly breakdown: Record<string, number>;
+}
 
 export function rankYoutubeCandidates(
   query: string,
@@ -35,22 +44,33 @@ export function rankYoutubeCandidatesAll(
   candidates: readonly YoutubeSearchCandidate[],
   expectedDurationSeconds?: number,
 ): YoutubeSearchCandidate[] {
+  return rankYoutubeCandidatesScored(
+    query,
+    candidates,
+    expectedDurationSeconds,
+  ).map((item) => item.candidate);
+}
+
+export function rankYoutubeCandidatesScored(
+  query: string,
+  candidates: readonly YoutubeSearchCandidate[],
+  expectedDurationSeconds?: number,
+): ScoredCandidate[] {
   const normalizedQuery = normalize(query);
   const medianDuration = expectedDurationSeconds ?? median(candidates);
   return candidates
-    .map((candidate) => ({
-      candidate,
-      score: scoreCandidate(
+    .map((candidate) => {
+      const { score, breakdown } = scoreCandidate(
         query,
         normalizedQuery,
         candidate,
         expectedDurationSeconds,
         medianDuration,
-      ),
-    }))
+      );
+      return { candidate, score, breakdown };
+    })
     .filter((item) => item.score >= 35)
-    .sort((left, right) => right.score - left.score)
-    .map((item) => item.candidate);
+    .sort((left, right) => right.score - left.score);
 }
 
 function scoreCandidate(
@@ -59,7 +79,7 @@ function scoreCandidate(
   candidate: YoutubeSearchCandidate,
   expectedDurationSeconds?: number,
   medianDurationSeconds?: number,
-): number {
+): { score: number; breakdown: Record<string, number> } {
   const title = normalize(candidate.title);
   const queryTerms = normalizedQuery
     .split(" ")
@@ -68,14 +88,28 @@ function scoreCandidate(
   const matchingTerms = queryTerms.filter((term) =>
     titleTerms.some((titleTerm) => termMatches(term, titleTerm)),
   ).length;
+  const breakdown: Record<string, number> = {};
   let score = queryTerms.length ? (matchingTerms / queryTerms.length) * 45 : 0;
-  if (title === normalizedQuery) score += 25;
-  if (AUDIO_TERMS.test(candidate.title)) score += 10;
+  breakdown.termMatch = score;
+  if (title === normalizedQuery) {
+    score += 25;
+    breakdown.exactTitle = 25;
+  }
+  if (AUDIO_TERMS.test(candidate.title)) {
+    score += 10;
+    breakdown.audioTerms = 10;
+  }
   if (
     candidate.channel &&
     /topic|official|records|music/i.test(candidate.channel)
-  )
+  ) {
     score += 8;
+    breakdown.officialChannel = 8;
+  }
+  if (candidate.channelVerified) {
+    score += VERIFIED_CHANNEL_BONUS;
+    breakdown.verifiedChannel = VERIFIED_CHANNEL_BONUS;
+  }
   if (candidate.channel) {
     const channelTerms = normalize(candidate.channel)
       .split(" ")
@@ -83,33 +117,61 @@ function scoreCandidate(
     const channelMatches = queryTerms.filter((term) =>
       channelTerms.some((channelTerm) => termMatches(term, channelTerm)),
     ).length;
-    score += Math.min(
+    const channelBonus = Math.min(
       channelMatches * CHANNEL_MATCH_BONUS,
       MAX_CHANNEL_MATCH_BONUS,
     );
+    if (channelBonus > 0) {
+      score += channelBonus;
+      breakdown.channelMatch = channelBonus;
+    }
+  }
+  if (candidate.viewCount !== undefined && candidate.viewCount > 0) {
+    const logViews = Math.log10(candidate.viewCount);
+    const viewBonus = Math.min(
+      Math.round((logViews / 10) * VIEW_COUNT_LOG_BONUS * 10) / 10,
+      VIEW_COUNT_LOG_BONUS,
+    );
+    if (viewBonus > 0) {
+      score += viewBonus;
+      breakdown.viewCount = viewBonus;
+    }
   }
   if (
     candidate.liveStatus === "is_live" ||
     candidate.liveStatus === "is_upcoming"
-  )
+  ) {
     score -= 30;
+    breakdown.livePenalty = -30;
+  }
   if (
     PENALIZED_TERMS.test(candidate.title) &&
     !PENALIZED_TERMS.test(normalizedQuery)
-  )
+  ) {
     score -= VERSION_PENALTY;
+    breakdown.versionPenalty = -VERSION_PENALTY;
+  }
   if (
     MINOR_PENALIZED_TERMS.test(candidate.title) &&
     !MINOR_PENALIZED_TERMS.test(normalizedQuery)
-  )
+  ) {
     score -= MINOR_VERSION_PENALTY;
+    breakdown.minorVersionPenalty = -MINOR_VERSION_PENALTY;
+  }
   if (
     LIVE_EVENT_CONTEXT.test(candidate.title) &&
     !LIVE_EVENT_CONTEXT.test(query)
-  )
+  ) {
     score -= VERSION_PENALTY;
-  if (candidate.durationSeconds !== undefined && candidate.durationSeconds < 45)
+    breakdown.liveEventPenalty = -VERSION_PENALTY;
+  }
+  if (
+    candidate.durationSeconds !== undefined &&
+    candidate.durationSeconds < 45
+  ) {
     score -= 20;
+    breakdown.shortPenalty = -20;
+  }
   if (
     expectedDurationSeconds !== undefined &&
     candidate.durationSeconds !== undefined &&
@@ -118,7 +180,10 @@ function scoreCandidate(
     const deviation =
       Math.abs(candidate.durationSeconds - expectedDurationSeconds) /
       expectedDurationSeconds;
-    if (deviation > DURATION_TOLERANCE) score -= DURATION_MISMATCH_PENALTY;
+    if (deviation > DURATION_TOLERANCE) {
+      score -= DURATION_MISMATCH_PENALTY;
+      breakdown.durationMismatch = -DURATION_MISMATCH_PENALTY;
+    }
   } else if (
     medianDurationSeconds !== undefined &&
     medianDurationSeconds > 0 &&
@@ -127,9 +192,12 @@ function scoreCandidate(
     const deviation =
       Math.abs(candidate.durationSeconds - medianDurationSeconds) /
       medianDurationSeconds;
-    if (deviation <= DURATION_TOLERANCE) score += MEDIAN_DURATION_BONUS;
+    if (deviation <= DURATION_TOLERANCE) {
+      score += MEDIAN_DURATION_BONUS;
+      breakdown.medianDurationBonus = MEDIAN_DURATION_BONUS;
+    }
   }
-  return score;
+  return { score, breakdown };
 }
 
 function median(
@@ -138,7 +206,8 @@ function median(
   const durations = candidates
     .map((candidate) => candidate.durationSeconds)
     .filter(
-      (duration): duration is number => duration !== undefined && duration > 0,
+      (duration): duration is number =>
+        duration !== undefined && duration >= MIN_DURATION_FOR_median,
     );
   if (durations.length === 0) return undefined;
   const sorted = [...durations].sort((left, right) => left - right);
