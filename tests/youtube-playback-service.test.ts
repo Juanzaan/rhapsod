@@ -6,7 +6,10 @@ import {
   YoutubePlaybackService,
 } from "../src/application/youtube-playback-service.js";
 import type { YoutubePlaybackResolver } from "../src/application/youtube-playback-service.js";
-import type { YoutubeTrackMetadata } from "../src/media/youtube/yt-dlp.js";
+import type {
+  PlaylistExpansion,
+  YoutubeTrackMetadata,
+} from "../src/media/youtube/yt-dlp.js";
 import { SoundCloudDrmError } from "../src/media/soundcloud/public-api.js";
 import type { AlternativeSourceResolver } from "../src/media/song-link.js";
 import type { FfmpegPlaybackSession } from "../src/audio/ffmpeg-player.js";
@@ -1288,6 +1291,41 @@ describe("YoutubePlaybackService", () => {
     expect(onPlaybackError).not.toHaveBeenCalled();
   });
 
+  it("uses the first successful fallback without waiting for slower candidates", async () => {
+    const { createPlayback, resolver, service } = setup();
+    resolver.getTrack.mockResolvedValueOnce({
+      fallbackSources: [
+        "https://www.youtube.com/watch?v=second",
+        "https://www.youtube.com/watch?v=third",
+      ],
+      id: "best",
+      title: "Track best",
+      webpageUrl: "https://www.youtube.com/watch?v=best",
+    });
+    let resolveWinner!: (url: string) => void;
+    const slow = new Promise<string>(() => undefined);
+    resolver.getAudioUrlFromUrl
+      .mockRejectedValueOnce(new Error("Requested format is not available"))
+      .mockImplementationOnce(
+        () =>
+          new Promise<string>((resolve) => {
+            resolveWinner = resolve;
+          }),
+      )
+      .mockImplementationOnce(() => slow);
+
+    await service.enqueue("https://youtu.be/best", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+    resolveWinner("https://media.example/second-audio");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(createPlayback).toHaveBeenCalledWith(
+      "https://media.example/second-audio",
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
   it("reports a clear message when YouTube requires authentication", async () => {
     const { onPlaybackError, resolver, service } = setup();
     resolver.getTrack.mockImplementation((resource: { id: string }) =>
@@ -1424,6 +1462,36 @@ describe("YoutubePlaybackService", () => {
     expect(service.queue()).toHaveLength(2);
   });
 
+  it("does not enqueue a playlist that finishes after stop", async () => {
+    const { resolver, service } = setup();
+    let resolveExpansion!: (expansion: PlaylistExpansion) => void;
+    resolver.expandPlaylist.mockImplementationOnce(
+      () =>
+        new Promise<PlaylistExpansion>((resolve) => {
+          resolveExpansion = resolve;
+        }),
+    );
+
+    const pending = service.enqueuePlaylist(
+      { id: "PL-cancelled", type: "playlist" },
+      "user-1",
+    );
+    service.stop();
+    resolveExpansion({
+      tracks: [
+        {
+          id: "late",
+          title: "Late track",
+          webpageUrl: "https://www.youtube.com/watch?v=late",
+        },
+      ],
+      total: 1,
+    });
+
+    await expect(pending).resolves.toEqual({ added: [], remaining: 1 });
+    expect(service.queue()).toHaveLength(0);
+  });
+
   it("truncates a playlist beyond the configured limit", async () => {
     const { resolver, service } = setup();
     resolver.expandPlaylist.mockResolvedValueOnce({
@@ -1524,6 +1592,14 @@ describe("YoutubePlaybackService", () => {
       queue: [],
       volumePercent: 30,
     });
+  });
+
+  it("suppresses persistence during graceful shutdown stop", () => {
+    const { service, stateStore } = setup({ stateStore: true });
+
+    service.stop(false);
+
+    expect(stateStore!.save).not.toHaveBeenCalled();
   });
 
   it("persists the queue with the current track at the head", async () => {

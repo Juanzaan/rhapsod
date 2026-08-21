@@ -52,6 +52,7 @@ export class SoundCloudPublicApi implements SoundCloudResolver {
   readonly #fetch: typeof fetch;
   readonly #timeoutMs: number;
   #clientId: { expiresAt: number; value: string } | undefined;
+  #clientIdRequest: Promise<string> | undefined;
 
   constructor(options: SoundCloudPublicApiOptions = {}) {
     this.#fetch = options.fetch ?? fetch;
@@ -139,6 +140,17 @@ export class SoundCloudPublicApi implements SoundCloudResolver {
   async #getClientId(): Promise<string> {
     if (this.#clientId && this.#clientId.expiresAt > Date.now())
       return this.#clientId.value;
+    if (this.#clientIdRequest !== undefined) return this.#clientIdRequest;
+    const request = this.#discoverClientId();
+    this.#clientIdRequest = request;
+    try {
+      return await request;
+    } finally {
+      if (this.#clientIdRequest === request) this.#clientIdRequest = undefined;
+    }
+  }
+
+  async #discoverClientId(): Promise<string> {
     const home = await this.#fetch(HOME_URL, {
       signal: AbortSignal.timeout(this.#timeoutMs),
     });

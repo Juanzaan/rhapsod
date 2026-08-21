@@ -34,6 +34,11 @@ interface QueuedJob<Input, Output> {
   readonly signal?: AbortSignal;
 }
 
+export interface YtDlpExecutorOptions {
+  readonly maxConcurrentJobs?: number;
+  readonly maxQueuedJobs?: number;
+}
+
 const MAX_QUEUED_JOBS = 8;
 const MAX_CONCURRENT_JOBS = Math.min(
   2,
@@ -44,13 +49,24 @@ export class YtDlpJobQueue<Input, Output> {
   readonly #metadata: Array<QueuedJob<Input, Output>> = [];
   readonly #playback: Array<QueuedJob<Input, Output>> = [];
   #running = 0;
+  #metadataRunning = 0;
+  #queued = 0;
+  readonly #maxConcurrentJobs: number;
+  readonly #maxQueuedJobs: number;
 
   constructor(
     private readonly execute: (
       input: Input,
       signal?: AbortSignal,
     ) => Promise<Output>,
-  ) {}
+    options: YtDlpExecutorOptions = {},
+  ) {
+    this.#maxConcurrentJobs = Math.max(
+      1,
+      options.maxConcurrentJobs ?? MAX_CONCURRENT_JOBS,
+    );
+    this.#maxQueuedJobs = Math.max(1, options.maxQueuedJobs ?? MAX_QUEUED_JOBS);
+  }
 
   run(
     input: Input,
@@ -63,7 +79,7 @@ export class YtDlpJobQueue<Input, Output> {
         return;
       }
       const jobs = priority === "playback" ? this.#playback : this.#metadata;
-      if (jobs.length >= MAX_QUEUED_JOBS) {
+      if (this.#queued >= this.#maxQueuedJobs) {
         reject(
           new Error(
             "El bot está saturado de búsquedas: probá de nuevo en unos segundos.",
@@ -76,28 +92,36 @@ export class YtDlpJobQueue<Input, Output> {
           ? { input, reject, resolve }
           : { input, reject, resolve, signal },
       );
+      this.#queued++;
       void this.#drain();
     });
   }
 
   async #drain(): Promise<void> {
-    if (this.#running >= MAX_CONCURRENT_JOBS) return;
-    if (this.#running > 0 && this.#playback.length === 0) return;
+    if (this.#running >= this.#maxConcurrentJobs) return;
+    const playbackJob = this.#playback.shift();
+    const isMetadata = playbackJob === undefined;
     const job =
-      this.#playback.shift() ??
-      (this.#running === 0 ? this.#metadata.shift() : undefined);
+      playbackJob ??
+      (this.#metadataRunning <
+      (this.#maxConcurrentJobs > 1 ? this.#maxConcurrentJobs - 1 : 1)
+        ? this.#metadata.shift()
+        : undefined);
     if (!job) return;
+    this.#queued--;
     if (job.signal?.aborted) {
       job.reject(new Error(YTDLP_ABORT_ERROR));
       void this.#drain();
       return;
     }
     this.#running++;
+    if (isMetadata) this.#metadataRunning++;
     try {
       job.resolve(await this.execute(job.input, job.signal));
     } catch (error) {
       job.reject(error);
     } finally {
+      if (isMetadata) this.#metadataRunning--;
       this.#running--;
       void this.#drain();
     }
@@ -151,6 +175,7 @@ export class SystemYtDlpExecutor implements YtDlpExecutor {
   constructor(
     private readonly binaryPath: string,
     private readonly cookiesPath?: string,
+    options: YtDlpExecutorOptions = {},
   ) {
     this.#jobs = new YtDlpJobQueue(
       async ({ argumentsList, playerClient, timeoutMs }, signal) => {
@@ -169,6 +194,7 @@ export class SystemYtDlpExecutor implements YtDlpExecutor {
           signal === undefined ? { timeoutMs } : { signal, timeoutMs },
         );
       },
+      options,
     );
   }
 
@@ -280,6 +306,10 @@ export class YoutubeResolver {
       readonly expiresAt: number;
     }
   >();
+  readonly #searchInFlight = new Map<
+    string,
+    Promise<readonly YoutubeTrackMetadata[]>
+  >();
 
   constructor(private readonly executor: YtDlpExecutor) {}
 
@@ -289,8 +319,6 @@ export class YoutubeResolver {
     const raw = await this.executor.run(
       [
         "--dump-single-json",
-        "--format",
-        AUDIO_FORMAT_SELECTOR,
         "--no-playlist",
         "--no-warnings",
         "--skip-download",
@@ -369,6 +397,28 @@ export class YoutubeResolver {
       if (cached.expiresAt > Date.now()) return cached.candidates;
       this.#searchCache.delete(cacheKey);
     }
+    const inFlight = this.#searchInFlight.get(cacheKey);
+    if (inFlight !== undefined) return inFlight;
+    const request = this.#fetchSearchCandidates(
+      query,
+      expectedDurationSeconds,
+      cacheKey,
+    );
+    this.#searchInFlight.set(cacheKey, request);
+    try {
+      return await request;
+    } finally {
+      if (this.#searchInFlight.get(cacheKey) === request) {
+        this.#searchInFlight.delete(cacheKey);
+      }
+    }
+  }
+
+  async #fetchSearchCandidates(
+    query: string,
+    expectedDurationSeconds: number | undefined,
+    cacheKey: string,
+  ): Promise<readonly YoutubeTrackMetadata[]> {
     const raw = await this.executor.run(
       [
         "--dump-single-json",
@@ -460,8 +510,6 @@ export class YoutubeResolver {
     const raw = await this.executor.run(
       [
         "--dump-single-json",
-        "--format",
-        AUDIO_FORMAT_SELECTOR,
         "--no-playlist",
         "--no-warnings",
         "--skip-download",

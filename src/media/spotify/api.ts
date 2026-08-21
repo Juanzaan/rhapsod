@@ -85,6 +85,7 @@ export class SpotifyApi implements SpotifyResolver {
   readonly #fetch: typeof fetch;
   readonly #timeoutMs: number;
   #token: SpotifyToken | undefined;
+  #tokenRequest: Promise<string> | undefined;
 
   constructor(options: SpotifyApiOptions) {
     this.#clientId = options.clientId;
@@ -266,6 +267,17 @@ export class SpotifyApi implements SpotifyResolver {
     if (this.#token && this.#token.expiresAt > Date.now()) {
       return this.#token.accessToken;
     }
+    if (this.#tokenRequest !== undefined) return this.#tokenRequest;
+    const request = this.#requestAccessToken();
+    this.#tokenRequest = request;
+    try {
+      return await request;
+    } finally {
+      if (this.#tokenRequest === request) this.#tokenRequest = undefined;
+    }
+  }
+
+  async #requestAccessToken(): Promise<string> {
     const body =
       this.#refreshToken === undefined
         ? new URLSearchParams({ grant_type: "client_credentials" })
