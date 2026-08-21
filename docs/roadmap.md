@@ -3,7 +3,25 @@
 Progress is tracked in [GitHub issues](https://github.com/Juanzaan/rhapsod/issues);
 this document summarizes the phases.
 
+## Release lines
+
+### 1.x — low-end stable
+
+The `v1.0.0` through `v1.2.1` releases are optimized for VPS deployments with
+1 vCPU and 1 GB RAM. `v1.2.1` is the latest stable release in this line.
+
+### 2.x — OCI development
+
+The `next/2.0.0` branch targets the OCI production profile with 4 vCPUs and
+3 GB RAM. It is the development line for higher-capacity features and is not
+stable until a 2.x release is published.
+
 ## Released
+
+### v1.2.1 (2026-08-20) — stable low-end release
+
+The latest 1.x release: fixed playback option propagation into FFmpeg, limited
+`!channel-move` to configured admins, and removed temporary server diagnostics.
 
 ### v1.1.0 (2026-08-19)
 
@@ -20,7 +38,11 @@ playlists), SoundCloud tracks, Spotify tracks, and free-text search with fuzzy
 ranking. systemd deployment documented, memory limits applied, and production
 logs clean (0 underruns / 0 zombies over multi-hour sessions).
 
-## v2.0 (next)
+## v2.0.0 (next)
+
+Target: 4 vCPUs and 3 GB RAM on OCI. This line can increase concurrency and
+add resource-aware features, but each change must preserve a low-end-safe
+fallback where practical.
 
 ### Known-bug checks from other bots
 

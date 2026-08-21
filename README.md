@@ -31,6 +31,14 @@ npm run dev            # or: npm run build && npm start
 
 Requirements: Node.js 22.12+, `yt-dlp` on PATH (or `RHAPSOD_YTDLP_PATH`), and a TeamSpeak 3 server with voice permission for the bot. A system FFmpeg is recommended in production (`RHAPSOD_FFMPEG_PATH`).
 
+## Release profiles
+
+- **1.x stable** (`v1.0.0` through `v1.2.1`): optimized and supported for
+  low-end VPS deployments with 1 vCPU and 1 GB RAM. `v1.2.1` is the latest
+  stable release in this line.
+- **2.x development**: targets the OCI profile with 4 vCPUs and 3 GB RAM and
+  is not considered stable until a 2.x release is published.
+
 ## Commands
 
 | Command                     | Alias                 | Description                                                                      |

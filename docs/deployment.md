@@ -4,6 +4,20 @@ Rhapsod is a persistent service. It needs a machine or container that stays
 online, has outbound UDP access to the TeamSpeak 3 voice port, and can run
 Node.js, `yt-dlp`, and FFmpeg.
 
+## Release profiles
+
+The 1.x line is the low-end stable profile. `v1.0.0` through `v1.2.1` are
+intended to run on a VPS with 1 vCPU and 1 GB RAM; `v1.2.1` is the latest
+stable release in that line.
+
+The 2.x line is under development for the OCI production profile with 4 vCPUs
+and 3 GB RAM. Do not treat the 2.x branch as stable until a 2.x release is
+published.
+
+The yt-dlp queue derives its baseline concurrency from the available CPUs, so
+the same 1.x build remains usable on smaller machines. Resource increases in
+2.x should be measured rather than assumed.
+
 ## Remote access over Tailscale
 
 The production VM (Azure `rhapsod-vm`) is reachable over SSH only through the
