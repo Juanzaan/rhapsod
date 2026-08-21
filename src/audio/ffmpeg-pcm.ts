@@ -53,7 +53,9 @@ export function buildFfmpegPcmArguments(
   if (options.seekSeconds !== undefined && options.seekSeconds > 0) {
     args.push("-ss", String(options.seekSeconds));
   }
-  args.push("-analyzeduration", "1M", "-probesize", "1M");
+  // Keep probe sizes small: throttled YouTube streams deliver the first frames
+  // sooner when FFmpeg does not wait for a full megabyte before emitting audio.
+  args.push("-analyzeduration", "500k", "-probesize", "500k");
   args.push(
     "-i",
     url,
