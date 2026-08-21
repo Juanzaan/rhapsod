@@ -33,7 +33,9 @@ export class UserTelemetry {
 
   load(): void {
     try {
-      const raw = JSON.parse(readFileSync(this.filePath, "utf8")) as Partial<TelemetryFile>;
+      const raw = JSON.parse(
+        readFileSync(this.filePath, "utf8"),
+      ) as Partial<TelemetryFile>;
       const users = raw.users ?? {};
       for (const entry of Object.values(users)) {
         if (entry?.uid) this.users.set(entry.uid, entry);
@@ -63,7 +65,13 @@ export class UserTelemetry {
     readonly channelId: number;
   }): void {
     this.clidToUid.set(args.clid, args.uid);
-    this.recordPresence(args.uid, args.name, args.groupIds, args.talkPower, args.channelId);
+    this.recordPresence(
+      args.uid,
+      args.name,
+      args.groupIds,
+      args.talkPower,
+      args.channelId,
+    );
   }
 
   clientLeft(clid: number): void {

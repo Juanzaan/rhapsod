@@ -34,8 +34,22 @@ function filePath(): string {
 describe("UserTelemetry", () => {
   it("records presence and aggregates group ids and talk power", () => {
     const t = new UserTelemetry(filePath(), logger);
-    t.clientEntered({ clid: 1, uid: "u1", name: "juan", groupIds: ["90437"], talkPower: 76, channelId: 88 });
-    t.clientEntered({ clid: 2, uid: "u1", name: "juan2", groupIds: ["90437", "90450"], talkPower: 90, channelId: 105 });
+    t.clientEntered({
+      clid: 1,
+      uid: "u1",
+      name: "juan",
+      groupIds: ["90437"],
+      talkPower: 76,
+      channelId: 88,
+    });
+    t.clientEntered({
+      clid: 2,
+      uid: "u1",
+      name: "juan2",
+      groupIds: ["90437", "90450"],
+      talkPower: 90,
+      channelId: 105,
+    });
     const snap = t.snapshot();
     expect(snap).toHaveLength(1);
     expect(snap[0]?.serverGroupIds).toEqual(["90437", "90450"]);
@@ -45,7 +59,14 @@ describe("UserTelemetry", () => {
 
   it("tracks command, bot move and bot channel entry counters", () => {
     const t = new UserTelemetry(filePath(), logger);
-    t.clientEntered({ clid: 1, uid: "u1", name: "juan", groupIds: [], talkPower: 10, channelId: 88 });
+    t.clientEntered({
+      clid: 1,
+      uid: "u1",
+      name: "juan",
+      groupIds: [],
+      talkPower: 10,
+      channelId: 88,
+    });
     t.recordCommand("u1");
     t.recordCommand("u1");
     t.recordBotMovedBy("u1");
@@ -63,14 +84,28 @@ describe("UserTelemetry", () => {
 
   it("removes clid mapping on leave but keeps the user record", () => {
     const t = new UserTelemetry(filePath(), logger);
-    t.clientEntered({ clid: 5, uid: "u1", name: "juan", groupIds: [], talkPower: 10, channelId: 88 });
+    t.clientEntered({
+      clid: 5,
+      uid: "u1",
+      name: "juan",
+      groupIds: [],
+      talkPower: 10,
+      channelId: 88,
+    });
     t.clientLeft(5);
     expect(t.snapshot()).toHaveLength(1);
   });
 
   it("persists and reloads", async () => {
     const t = new UserTelemetry(filePath(), logger);
-    t.clientEntered({ clid: 1, uid: "u1", name: "juan", groupIds: ["90437"], talkPower: 76, channelId: 88 });
+    t.clientEntered({
+      clid: 1,
+      uid: "u1",
+      name: "juan",
+      groupIds: ["90437"],
+      talkPower: 76,
+      channelId: 88,
+    });
     await t.save();
 
     const t2 = new UserTelemetry(filePath(), logger);
@@ -88,8 +123,22 @@ describe("UserTelemetry", () => {
 
   it("sorts snapshot by max talk power descending", () => {
     const t = new UserTelemetry(filePath(), logger);
-    t.clientEntered({ clid: 1, uid: "a", name: "low", groupIds: [], talkPower: 5, channelId: 1 });
-    t.clientEntered({ clid: 2, uid: "b", name: "high", groupIds: [], talkPower: 300, channelId: 1 });
+    t.clientEntered({
+      clid: 1,
+      uid: "a",
+      name: "low",
+      groupIds: [],
+      talkPower: 5,
+      channelId: 1,
+    });
+    t.clientEntered({
+      clid: 2,
+      uid: "b",
+      name: "high",
+      groupIds: [],
+      talkPower: 300,
+      channelId: 1,
+    });
     const names = t.snapshot().map((e) => e.names[0]);
     expect(names).toEqual(["high", "low"]);
   });

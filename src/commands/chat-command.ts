@@ -91,7 +91,8 @@ export function parseChatCommand(
   const argument = unwrapTeamSpeakUrl(argumentsList.join(" ").trim());
   switch (name) {
     case "channel-move":
-      if (!argument) throw new Error("Usage: !channel-move <name or channel id>");
+      if (!argument)
+        throw new Error("Usage: !channel-move <name or channel id>");
       return { input: argument, name };
     case "play":
       if (!argument) throw new Error("Usage: !play <URL or search terms>");

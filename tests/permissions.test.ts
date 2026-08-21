@@ -178,9 +178,7 @@ describe("canMoveBot", () => {
 
 describe("parseChannelIds", () => {
   it("parses a comma-separated list of positive integers", () => {
-    expect(parseChannelIds("63, 105 ,110")).toEqual(
-      new Set([63, 105, 110]),
-    );
+    expect(parseChannelIds("63, 105 ,110")).toEqual(new Set([63, 105, 110]));
   });
 
   it("drops invalid entries", () => {
@@ -210,7 +208,14 @@ describe("hasAnyGroup", () => {
 describe("canMoveBotToChannel", () => {
   const base = {
     adminUids: new Set(["admin-uid"]),
-    moveGroupIds: new Set(["90438", "90437", "90436", "90472", "90466", "90430"]),
+    moveGroupIds: new Set([
+      "90438",
+      "90437",
+      "90436",
+      "90472",
+      "90466",
+      "90430",
+    ]),
     adminGroupIds: new Set(["90472", "90466"]),
     seniorGroupIds: new Set(["90430"]),
     adminChannelIds: new Set([74, 99]),
@@ -219,49 +224,89 @@ describe("canMoveBotToChannel", () => {
 
   it("allows an admin uid into any channel", () => {
     expect(
-      canMoveBotToChannel({ ...base, senderUid: "admin-uid", senderGroups: [], targetCid: 75 }),
+      canMoveBotToChannel({
+        ...base,
+        senderUid: "admin-uid",
+        senderGroups: [],
+        targetCid: 75,
+      }),
     ).toBe("allow");
   });
 
   it("denies users outside the move groups entirely", () => {
     expect(
-      canMoveBotToChannel({ ...base, senderUid: "x", senderGroups: ["90475"], targetCid: 10 }),
+      canMoveBotToChannel({
+        ...base,
+        senderUid: "x",
+        senderGroups: ["90475"],
+        targetCid: 10,
+      }),
     ).toBe("deny-rank");
   });
 
   it("allows a trial-mod+ user into a public channel", () => {
     expect(
-      canMoveBotToChannel({ ...base, senderUid: "x", senderGroups: ["90437"], targetCid: 10 }),
+      canMoveBotToChannel({
+        ...base,
+        senderUid: "x",
+        senderGroups: ["90437"],
+        targetCid: 10,
+      }),
     ).toBe("allow");
   });
 
   it("denies a mod into an admin-only channel", () => {
     expect(
-      canMoveBotToChannel({ ...base, senderUid: "x", senderGroups: ["90437"], targetCid: 74 }),
+      canMoveBotToChannel({
+        ...base,
+        senderUid: "x",
+        senderGroups: ["90437"],
+        targetCid: 74,
+      }),
     ).toBe("deny-admin");
   });
 
   it("denies an admin-rank user into a senior-only channel", () => {
     expect(
-      canMoveBotToChannel({ ...base, senderUid: "x", senderGroups: ["90472"], targetCid: 75 }),
+      canMoveBotToChannel({
+        ...base,
+        senderUid: "x",
+        senderGroups: ["90472"],
+        targetCid: 75,
+      }),
     ).toBe("deny-senior");
   });
 
   it("allows a senior-rank user into a senior-only channel", () => {
     expect(
-      canMoveBotToChannel({ ...base, senderUid: "x", senderGroups: ["90430"], targetCid: 75 }),
+      canMoveBotToChannel({
+        ...base,
+        senderUid: "x",
+        senderGroups: ["90430"],
+        targetCid: 75,
+      }),
     ).toBe("allow");
   });
 
   it("allows an admin-rank user into an admin-only channel", () => {
     expect(
-      canMoveBotToChannel({ ...base, senderUid: "x", senderGroups: ["90466"], targetCid: 99 }),
+      canMoveBotToChannel({
+        ...base,
+        senderUid: "x",
+        senderGroups: ["90466"],
+        targetCid: 99,
+      }),
     ).toBe("allow");
   });
 
   it("allows a trial mod into an unrestricted staff room", () => {
     expect(
-      canMoveBotToChannel({ ...base, senderUid: "x", senderGroups: ["90438"], targetCid: 110 }),
+      canMoveBotToChannel({
+        ...base,
+        senderUid: "x",
+        senderGroups: ["90438"],
+        targetCid: 110,
+      }),
     ).toBe("allow");
   });
 });
