@@ -12,6 +12,7 @@ const optionalPositiveInteger = z.preprocess(
 
 const configSchema = z.object({
   RHAPSOD_ADMIN_UIDS: z.string().default(""),
+  RHAPSOD_PRIVATE_COMMAND_UIDS: z.string().default(""),
   RHAPSOD_DATA_DIR: z.string().min(1).default("./data"),
   RHAPSOD_FFMPEG_PATH: optionalSecret,
   RHAPSOD_FFMPEG_USER_AGENT: optionalSecret,
@@ -19,6 +20,11 @@ const configSchema = z.object({
   RHAPSOD_LOG_LEVEL: z
     .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
     .default("info"),
+  RHAPSOD_MOVE_GROUP_IDS: z.string().default(""),
+  RHAPSOD_MOVE_ADMIN_CHANNELS: z.string().default(""),
+  RHAPSOD_MOVE_SENIOR_CHANNELS: z.string().default(""),
+  RHAPSOD_MOVE_ADMIN_GROUP_IDS: z.string().default(""),
+  RHAPSOD_MOVE_SENIOR_GROUP_IDS: z.string().default(""),
   RHAPSOD_LOG_RETENTION_DAYS: z.coerce
     .number()
     .int()
