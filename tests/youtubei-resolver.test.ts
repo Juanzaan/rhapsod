@@ -19,6 +19,7 @@ function fakeInfo(options: {
       ...(options.id === undefined ? {} : { id: options.id }),
       ...(options.title === undefined ? {} : { title: options.title }),
     },
+    streaming_data: {},
     chooseFormat: vi.fn(() => options.chooseFormat),
   } as unknown as VideoInfo;
 }

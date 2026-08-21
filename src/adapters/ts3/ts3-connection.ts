@@ -296,7 +296,9 @@ export function createTs3Connection(
     },
     listClients: async () => {
       try {
-        const rows = await client.execCommandWithResponse("clientlist -groups");
+        const rows = await client.execCommandWithResponse(
+          "clientlist -uid -away -voice -groups",
+        );
         return rows
           .filter(
             (

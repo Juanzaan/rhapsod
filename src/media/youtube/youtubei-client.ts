@@ -1,5 +1,10 @@
 import { ClientType, Innertube, Platform, UniversalCache } from "youtubei.js";
 
+import {
+  HttpPoTokenProvider,
+  type PoTokenProvider,
+} from "./http-po-token-provider.js";
+
 let evaluatorConfigured = false;
 
 function configurePlayerEvaluator(): void {
@@ -19,29 +24,47 @@ export interface YoutubeiClientOptions {
   readonly cookie?: string;
   readonly fetch?: typeof fetch;
   readonly clientType?: ClientType;
+  readonly potProviderUrl?: string;
 }
 
-let pendingClient: Promise<Innertube> | undefined;
+export interface YoutubeiClientHandle {
+  readonly client: Innertube;
+  readonly poTokens?: PoTokenProvider;
+}
+
+let pendingClient: Promise<YoutubeiClientHandle> | undefined;
 
 export function createYoutubeiClient(
   options: YoutubeiClientOptions,
-): Promise<Innertube> {
+): Promise<YoutubeiClientHandle> {
   if (pendingClient !== undefined) return pendingClient;
 
   configurePlayerEvaluator();
+  const poTokens =
+    options.potProviderUrl === undefined
+      ? undefined
+      : new HttpPoTokenProvider(options.potProviderUrl);
 
   pendingClient = Innertube.create({
     cache: new UniversalCache(true, options.cacheDirectory),
-    client_type: options.clientType ?? ClientType.IOS,
+    client_type:
+      poTokens === undefined
+        ? (options.clientType ?? ClientType.IOS)
+        : ClientType.WEB,
     lang: "en",
     location: "AR",
     retrieve_player: true,
     ...(options.cookie === undefined ? {} : { cookie: options.cookie }),
     ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
-  }).catch((error: unknown) => {
-    pendingClient = undefined;
-    throw error;
-  });
+  })
+    .then((client) => ({
+      client,
+      ...(poTokens === undefined ? {} : { poTokens }),
+    }))
+    .catch((error: unknown) => {
+      pendingClient = undefined;
+      throw error;
+    });
 
   return pendingClient;
 }
