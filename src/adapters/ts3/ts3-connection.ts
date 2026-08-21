@@ -35,6 +35,7 @@ interface Ts3Connection {
     readonly cid: number;
     readonly name?: string;
   }>;
+  getCurrentChannelId(): number;
   listConnectedClientUids(): Promise<readonly string[]>;
   canTalkInCurrentChannel(): Promise<boolean>;
   moveToChannel(cid: number): Promise<void>;
@@ -48,16 +49,49 @@ interface Ts3Connection {
       uid: string;
       cid: number;
       talkPower?: number;
+      groups?: readonly string[];
     }[]
+  >;
+  getServerGroupPermissions(
+    sgid: number,
+  ): Promise<
+    readonly { permid: string; permvalue: string; permskip?: string }[]
   >;
   onConnectionLost(
     handler: (reason: "kicked" | "disconnected") => void,
   ): () => void;
-  onClientMoved(handler: () => void): void;
+  onClientMoved(
+    handler: (event: {
+      readonly movedClid: number;
+      readonly targetCid: number;
+      readonly invokerName: string;
+      readonly invokerUid: string;
+      readonly invokerClid: number;
+      readonly self: boolean;
+    }) => void,
+  ): void;
+  onClientEnter(
+    handler: (event: {
+      readonly clid: number;
+      readonly name: string;
+      readonly uid: string;
+      readonly groups: readonly string[];
+      readonly cid: number;
+    }) => void,
+  ): void;
+  onClientLeave(handler: (clid: number) => void): void;
   onTextMessage(
-    handler: (message: string, senderUid: string, senderName: string) => void,
+    handler: (
+      message: string,
+      senderUid: string,
+      senderName: string,
+      senderGroups: readonly string[],
+      isPrivate: boolean,
+      invokerClid: number,
+    ) => void,
   ): void;
   sendChannelMessage(message: string): Promise<void>;
+  sendPrivateMessage(clid: number, message: string): Promise<void>;
   sendVoiceFrame(frame: Uint8Array): void;
 }
 
@@ -181,8 +215,7 @@ export function createTs3Connection(
       }
     },
     getCurrentChannel: async () => {
-      const cid = Number(client.channelID());
-      try {
+      const cid = Number(client.channelID());      try {
         const rows = await client.execCommandWithResponse(
           `channelinfo cid=${cid}`,
         );
@@ -200,6 +233,7 @@ export function createTs3Connection(
         return { cid };
       }
     },
+    getCurrentChannelId: () => Number(client.channelID()),
     listConnectedClientUids: async () => {
       try {
         const clients = await listClients(client);
@@ -261,7 +295,7 @@ export function createTs3Connection(
     },
     listClients: async () => {
       try {
-        const rows = await client.execCommandWithResponse("clientlist");
+        const rows = await client.execCommandWithResponse("clientlist -groups");
         return rows
           .filter(
             (
@@ -286,14 +320,63 @@ export function createTs3Connection(
             ...(row.client_talk_power === undefined
               ? {}
               : { talkPower: Number(row.client_talk_power) }),
+            ...(row.client_servergroups === undefined
+              ? {}
+              : {
+                  groups: row.client_servergroups
+                    .split(",")
+                    .filter((g) => g.length > 0),
+                }),
           }));
+      } catch {
+        return [];
+      }
+    },
+    getServerGroupPermissions: async (sgid: number) => {
+      try {
+        const rows = await client.execCommandWithResponse(
+          `servergrouppermlist sgid=${sgid}`,
+        );
+        return rows.filter(
+          (
+            row,
+          ): row is Record<string, string> & {
+            permid: string;
+            permvalue: string;
+          } => typeof row.permid === "string" && typeof row.permvalue === "string",
+        );
       } catch {
         return [];
       }
     },
     onClientMoved: (handler) => {
       client.on("clientMoved", (event) => {
-        if (event.id === client.clientID()) handler();
+        handler({
+          movedClid: event.id,
+          targetCid: Number(event.targetChannelID),
+          invokerName: event.invokerName,
+          invokerUid: event.invokerUID,
+          invokerClid: event.invokerID,
+          self: event.id === client.clientID(),
+        });
+      });
+    },
+    onClientEnter: (handler) => {
+      client.on("clientEnter", (info) => {
+        if (info.type !== 0) return;
+        handler({
+          clid: info.id,
+          name: info.nickname,
+          uid: info.uid,
+          groups: info.serverGroups,
+          cid: Number(info.channelID),
+        });
+      });
+    },
+    onClientLeave: (handler) => {
+      client.on("clientLeave", (info) => {
+        if (info.id === client.clientID()) return;
+        handler(info.id);
       });
     },
     onConnectionLost: (handler) => {
@@ -325,10 +408,33 @@ export function createTs3Connection(
         );
       }
     },
+    sendPrivateMessage: async (clid, message) => {
+      try {
+        await withTimeout(
+          client.execCommand(
+            `sendtextmessage targetmode=1 target=${clid} msg=${escapeClientParam(message)}`,
+          ),
+          MESSAGE_SEND_TIMEOUT_MS,
+          "Sending the private message timed out",
+        );
+      } catch (error) {
+        logger.error(
+          { err: error, targetClid: clid },
+          "Failed to send private message",
+        );
+      }
+    },
     sendVoiceFrame: (frame) => client.sendVoice(frame, 5),
     onTextMessage: (handler) => {
       client.on("textMessage", (message) =>
-        handler(message.message, message.invokerUID, message.invokerName),
+        handler(
+          message.message,
+          message.invokerUID,
+          message.invokerName,
+          message.invokerGroups,
+          message.targetMode === 1,
+          message.invokerID,
+        ),
       );
     },
   };
