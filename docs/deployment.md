@@ -18,8 +18,7 @@ The yt-dlp queue derives its baseline concurrency from the available CPUs, so
 the same 1.x build remains usable on smaller machines. Resource increases in
 2.x should be measured rather than assumed.
 
-`RHAPSOD_MAX_CONCURRENT_YTDLP_JOBS` can override the adaptive default from 1 to 4. For the OCI canary, start with `2`; test `3` only after raising the service
-memory ceiling and measuring child-process RSS and audio health.
+`RHAPSOD_MAX_CONCURRENT_YTDLP_JOBS` can override the adaptive default from 1 to 4. For the OCI production profile (4 vCPU / 3 GB) set it to `4`: yt-dlp jobs are I/O-bound, so the extra workers reduce sequential wait without stressing the CPUs. Measure child-process RSS and audio health after any change; the schema caps the value at 4.
 
 ## Remote access
 
