@@ -4,6 +4,13 @@ All notable changes to Rhapsod are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims
 for [Semantic Versioning](https://semver.org/).
 
+## [2.0.0] - Unreleased
+
+### Changed
+
+- Started the OCI development line targeting 4 vCPUs and 3 GB RAM.
+- Documented `!channel-move` and restricted it to configured admins.
+
 ## [1.2.0] - 2026-08-20
 
 ### Fixed

@@ -55,6 +55,7 @@ Requirements: Node.js 22.12+, `yt-dlp` on PATH (or `RHAPSOD_YTDLP_PATH`), and a 
 | `!stats`                    | `!st`                 | Show uptime, tracks played, current track, queue and volume/loop state           |
 | `!volume <0-100>`           | `!vol`, `!v`          | Adjust the bot output volume (default `50`; persists across restarts)            |
 | `!move <from> <to>`         | `!mv`                 | Move a pending track to another position                                         |
+| `!channel-move <channel>`   | `!ch`                 | Move the bot to a matching TeamSpeak channel (admins only)                       |
 | `!remove <n\|from-to>`      | `!rm`                 | Remove a queue position or inclusive range (requester or admin)                  |
 | `!clear`                    | `!c`                  | Clear pending tracks                                                             |
 | `!shuffle`                  | -                     | Shuffle the pending queue                                                        |

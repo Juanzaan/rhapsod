@@ -329,6 +329,16 @@ describe("DirectUrlResolver", () => {
     ).resolves.toBe("https://cdn.example.test/song.mp3");
   });
 
+  it("revalidates the URL for each playback request instead of reusing a stale validation", async () => {
+    audioFetch.mockResolvedValue(fetchResponse({ contentType: "audio/mpeg" }));
+    const resolver = new DirectUrlClient({ fetch: audioFetch });
+
+    await resolver.getAudioUrl("https://cdn.example.test/song.mp3");
+    await resolver.getAudioUrl("https://cdn.example.test/song.mp3");
+
+    expect(audioFetch).toHaveBeenCalledTimes(2);
+  });
+
   it("returns the validated final URL after redirects", async () => {
     audioFetch
       .mockResolvedValueOnce(

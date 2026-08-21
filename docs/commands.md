@@ -18,6 +18,7 @@ chat once the TS3 adapter is connected.
 | `!stats`                    | `!st`                 | Show uptime, tracks played since start, current track, queue length and volume/loop state.          |
 | `!volume <0-100>`           | `!vol`, `!v`          | Adjust the bot output volume (default `50`; persists in `state.json`).                              |
 | `!move <from> <to>`         | `!mv`                 | Move a pending track between one-based positions.                                                   |
+| `!channel-move <channel>`   | `!ch`                 | Move the bot to a matching TeamSpeak channel (configured admins only).                              |
 | `!remove <n\|from-to>`      | `!rm`                 | Remove one position or an inclusive range (requesters may remove only their own tracks).            |
 | `!clear`                    | `!c`                  | Clear pending tracks.                                                                               |
 | `!shuffle`                  | -                     | Shuffle the pending queue (the current track keeps playing).                                        |
@@ -28,9 +29,10 @@ chat once the TS3 adapter is connected.
 
 ## Source behavior
 
-- **Permissions:** every command is open to everyone. `RHAPSOD_ADMIN_UIDS`
-  only grants admins the ability to remove tracks requested by other users
-  with `!remove`; requesters can always remove their own tracks.
+- **Permissions:** most commands are open to everyone. `RHAPSOD_ADMIN_UIDS`
+  grants admins the ability to remove tracks requested by other users with
+  `!remove` and to use `!channel-move`; requesters can always remove their own
+  tracks.
 - **Persistence:** `!volume` (default `50`) and `!loop` are saved to
   `data/state.json` (atomic write) and restored at startup; `!stop`/`!clear`
   reset looping and persist the change.

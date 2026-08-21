@@ -18,13 +18,25 @@ The yt-dlp queue derives its baseline concurrency from the available CPUs, so
 the same 1.x build remains usable on smaller machines. Resource increases in
 2.x should be measured rather than assumed.
 
-## Remote access over Tailscale
+## Remote access
 
-The production VM (Azure `rhapsod-vm`) is reachable over SSH only through the
-tailnet. The network security group rule `SSH` (priority 900) allows port 22
-solely from `100.64.0.0/10` (the CGNAT range Tailscale assigns), and the
-Defender for Cloud Just-In-Time VM access policy is disabled. The public IP
-`40.70.186.15` does not expose SSH.
+The current production VM runs on OCI. During initial setup, connect as
+`opc` using the SSH key selected at instance creation and the assigned public
+IP:
+
+```bash
+ssh -i ~/.ssh/rhapsod-vm-key.pem opc@<OCI_PUBLIC_IP>
+```
+
+The bootstrap script copies that key to the `rhapsod` service account, so
+subsequent administration can use:
+
+```bash
+ssh -i ~/.ssh/rhapsod-vm-key.pem rhapsod@<OCI_PUBLIC_IP>
+```
+
+The legacy Azure low-end VM is reachable through the Tailscale tailnet only.
+Its SSH rule allows port 22 solely from `100.64.0.0/10`.
 
 ```bash
 ssh -i ~/.ssh/rhapsod-vm-key.pem rhapsod@100.80.92.115

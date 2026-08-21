@@ -119,7 +119,7 @@ export class DirectUrlClient implements DirectUrlResolver {
   }
 
   async getTrack(url: string): Promise<YoutubeTrackMetadata> {
-    const validated = await this.#validateRedirectChain(url);
+    const validated = await this.#validateRedirectChain(url, false);
     if (validated === undefined) {
       throw new Error("No se pudo validar la URL de audio");
     }
@@ -139,16 +139,21 @@ export class DirectUrlClient implements DirectUrlResolver {
   }
 
   async getAudioUrl(url: string): Promise<string> {
-    const validated = await this.#validateRedirectChain(url);
+    const validated = await this.#validateRedirectChain(url, false);
     if (validated === undefined) {
       throw new Error("No se pudo validar la URL de audio");
     }
     return validated.finalUrl;
   }
 
-  async #validateRedirectChain(url: string): Promise<ValidatedUrl | undefined> {
-    const cached = this.#validatedUrls.get(url);
-    if (cached !== undefined) return cached;
+  async #validateRedirectChain(
+    url: string,
+    useCache = true,
+  ): Promise<ValidatedUrl | undefined> {
+    if (useCache) {
+      const cached = this.#validatedUrls.get(url);
+      if (cached !== undefined) return cached;
+    }
     let current = url;
     for (let hop = 0; hop <= MAX_REDIRECT_HOPS; hop++) {
       let parsed: URL;
