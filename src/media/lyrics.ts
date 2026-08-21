@@ -1,3 +1,6 @@
+import type { MinimalLogger } from "../observability/logger.js";
+import { noopLogger } from "../observability/logger.js";
+
 const LRCLIB_SEARCH_ENDPOINT = "https://lrclib.net/api/search";
 
 export interface TrackLyrics {
@@ -22,15 +25,18 @@ interface LrclibSearchHit {
 
 interface LyricsClientOptions {
   readonly fetch?: typeof fetch;
+  readonly logger?: MinimalLogger;
   readonly timeoutMs?: number;
 }
 
 export class LyricsClient implements LyricsResolver {
   readonly #fetch: typeof fetch;
+  readonly #logger: MinimalLogger;
   readonly #timeoutMs: number;
 
   constructor(options: LyricsClientOptions = {}) {
     this.#fetch = options.fetch ?? fetch;
+    this.#logger = options.logger ?? noopLogger;
     this.#timeoutMs = options.timeoutMs ?? 10_000;
   }
 
@@ -45,7 +51,13 @@ export class LyricsClient implements LyricsResolver {
       const response = await this.#fetch(endpoint.toString(), {
         signal: AbortSignal.timeout(this.#timeoutMs),
       });
-      if (!response.ok) return undefined;
+      if (!response.ok) {
+        this.#logger.debug(
+          { status: response.status, artist, title },
+          "Lyrics: non-OK response from lrclib",
+        );
+        return undefined;
+      }
       const hits = (await response.json()) as LrclibSearchHit[];
       const hit = hits.find(
         (candidate) => candidate.plainLyrics && !candidate.instrumental,
@@ -56,7 +68,11 @@ export class LyricsClient implements LyricsResolver {
         plainLyrics: hit.plainLyrics,
         title: hit.trackName,
       };
-    } catch {
+    } catch (error) {
+      this.#logger.debug(
+        { err: error, artist, title },
+        "Lyrics: search failed",
+      );
       // Lyrics are best-effort. Playback never depends on them.
       return undefined;
     }

@@ -116,6 +116,7 @@ async function main(): Promise<void> {
           ...(config.RHAPSOD_SPOTIFY_REFRESH_TOKEN === undefined
             ? {}
             : { refreshToken: config.RHAPSOD_SPOTIFY_REFRESH_TOKEN }),
+          logger,
         })
       : undefined;
   const ffmpegPath = config.RHAPSOD_FFMPEG_PATH;
@@ -128,9 +129,11 @@ async function main(): Promise<void> {
         ? {}
         : { maxConcurrentJobs: config.RHAPSOD_MAX_CONCURRENT_YTDLP_JOBS }),
     },
+    logger,
   );
   const audioUrlCache = AudioUrlCache.load(
     join(config.RHAPSOD_DATA_DIR, "audio-url-cache.json"),
+    logger,
   );
   const playback = new YoutubePlaybackService({
     createPlayback: (url, playbackEncoder, output, options) =>
@@ -196,18 +199,19 @@ async function main(): Promise<void> {
     resolver: new YoutubeResolver(ytDlpExecutor),
     stateStore: new FilePlaybackStateStore(
       join(config.RHAPSOD_DATA_DIR, "state.json"),
+      logger,
     ),
     audioUrlCache,
     maxQueueTracks: config.RHAPSOD_MAX_QUEUE_TRACKS,
     maxTracksPerUser: config.RHAPSOD_MAX_TRACKS_PER_USER,
-    alternativeResolver: new SongLinkClient(),
+    alternativeResolver: new SongLinkClient({ logger }),
     directUrlResolver: new DirectUrlClient({
       ...(config.RHAPSOD_FFPROBE_PATH === undefined
         ? {}
         : { ffprobeBinary: config.RHAPSOD_FFPROBE_PATH }),
     }),
-    soundcloudResolver: new SoundCloudPublicApi(),
-    lyricsResolver: new LyricsClient(),
+    soundcloudResolver: new SoundCloudPublicApi({ logger }),
+    lyricsResolver: new LyricsClient({ logger }),
     ...(spotifyResolver ? { spotifyResolver } : {}),
   });
   const youtubeAuthCheckUrl = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
@@ -778,7 +782,19 @@ async function main(): Promise<void> {
     );
   }
 
+  logger.info(
+    {
+      host: config.RHAPSOD_TS3_HOST,
+      nickname: config.RHAPSOD_TS3_NICKNAME,
+      port: config.RHAPSOD_TS3_PORT,
+      ytDlpPath: config.RHAPSOD_YTDLP_PATH,
+      ffmpegPath: config.RHAPSOD_FFMPEG_PATH,
+    },
+    "Rhapsod is ready",
+  );
+
   const shutdown = (): void => {
+    logger.info("Shutdown initiated; stopping playback and flushing state");
     playback.stop(false);
     encoder.close();
     stopHeartbeat();
@@ -788,7 +804,10 @@ async function main(): Promise<void> {
       playback.flushState().catch(() => undefined),
       audioUrlCache.flush().catch(() => undefined),
       new Promise((resolve) => setTimeout(resolve, 5_000)),
-    ]).then(() => process.exit(0));
+    ]).then(() => {
+      logger.info("Shutdown complete");
+      process.exit(0);
+    });
   };
   process.once("SIGINT", shutdown);
   process.once("SIGTERM", shutdown);

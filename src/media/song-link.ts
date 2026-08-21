@@ -1,3 +1,6 @@
+import type { MinimalLogger } from "../observability/logger.js";
+import { noopLogger } from "../observability/logger.js";
+
 const SONGLINK_ENDPOINT = "https://api.song.link/v1-alpha.1/links";
 
 interface AlternativeSource {
@@ -15,15 +18,18 @@ interface SongLinkResponse {
 
 interface SongLinkClientOptions {
   readonly fetch?: typeof fetch;
+  readonly logger?: MinimalLogger;
   readonly timeoutMs?: number;
 }
 
 export class SongLinkClient implements AlternativeSourceResolver {
   readonly #fetch: typeof fetch;
+  readonly #logger: MinimalLogger;
   readonly #timeoutMs: number;
 
   constructor(options: SongLinkClientOptions = {}) {
     this.#fetch = options.fetch ?? fetch;
+    this.#logger = options.logger ?? noopLogger;
     this.#timeoutMs = options.timeoutMs ?? 10_000;
   }
 
@@ -35,7 +41,13 @@ export class SongLinkClient implements AlternativeSourceResolver {
       const response = await this.#fetch(endpoint.toString(), {
         signal: AbortSignal.timeout(this.#timeoutMs),
       });
-      if (!response.ok) return undefined;
+      if (!response.ok) {
+        this.#logger.debug(
+          { status: response.status },
+          "SongLink: non-OK response",
+        );
+        return undefined;
+      }
       const data = (await response.json()) as SongLinkResponse;
       const candidates = data.linksByPlatform;
       const youtube = candidates?.youtube?.url;
@@ -47,7 +59,11 @@ export class SongLinkClient implements AlternativeSourceResolver {
         return { provider: "soundcloud", url: soundcloud };
       }
       return undefined;
-    } catch {
+    } catch (error) {
+      this.#logger.debug(
+        { err: error },
+        "SongLink: alternative resolution failed",
+      );
       // Alternatives are best-effort. Preserve the original provider error.
       return undefined;
     }

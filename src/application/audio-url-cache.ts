@@ -2,6 +2,9 @@ import { existsSync, readFileSync } from "node:fs";
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
+import type { MinimalLogger } from "../observability/logger.js";
+import { noopLogger } from "../observability/logger.js";
+
 export interface AudioUrlCacheEntry {
   readonly url: string;
   readonly expiresAt: number;
@@ -17,21 +20,24 @@ interface SerializedAudioUrlCache {
 export class AudioUrlCache {
   readonly #entries = new Map<string, AudioUrlCacheEntry>();
   readonly #filePath: string | undefined;
+  readonly #logger: MinimalLogger;
   #persistTimer: NodeJS.Timeout | undefined;
   #writeChain: Promise<void> = Promise.resolve();
 
-  private constructor(filePath: string | undefined) {
+  private constructor(filePath: string | undefined, logger?: MinimalLogger) {
     this.#filePath = filePath;
+    this.#logger = logger ?? noopLogger;
   }
 
-  static load(filePath: string): AudioUrlCache {
-    const cache = new AudioUrlCache(filePath);
+  static load(filePath: string, logger?: MinimalLogger): AudioUrlCache {
+    const cache = new AudioUrlCache(filePath, logger);
     if (existsSync(filePath)) {
       try {
         const parsed = JSON.parse(
           readFileSync(filePath, "utf8"),
         ) as SerializedAudioUrlCache;
         const now = Date.now();
+        let loaded = 0;
         for (const [source, entry] of Object.entries(parsed.entries ?? {})) {
           if (
             entry &&
@@ -43,17 +49,25 @@ export class AudioUrlCache {
               url: entry.url,
               expiresAt: entry.expiresAt,
             });
+            loaded++;
           }
         }
-      } catch {
-        // A corrupt cache file must never break startup.
+        cache.#logger.debug(
+          { loaded, filePath },
+          "AudioUrlCache: loaded from disk",
+        );
+      } catch (error) {
+        cache.#logger.warn(
+          { err: error, filePath },
+          "AudioUrlCache: corrupt cache file, starting fresh",
+        );
       }
     }
     return cache;
   }
 
-  static memoryOnly(): AudioUrlCache {
-    return new AudioUrlCache(undefined);
+  static memoryOnly(logger?: MinimalLogger): AudioUrlCache {
+    return new AudioUrlCache(undefined, logger);
   }
 
   entries(): ReadonlyMap<string, AudioUrlCacheEntry> {
@@ -123,8 +137,11 @@ export class AudioUrlCache {
           "utf8",
         );
         await rename(temporary, filePath);
-      } catch {
-        // A failing cache file must never break playback.
+      } catch (error) {
+        this.#logger.warn(
+          { err: error },
+          "AudioUrlCache: failed to persist cache to disk",
+        );
       }
     });
     this.#writeChain = write;

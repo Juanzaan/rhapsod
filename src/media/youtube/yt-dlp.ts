@@ -1,6 +1,8 @@
 import { spawn } from "node:child_process";
 import { availableParallelism } from "node:os";
 
+import type { MinimalLogger } from "../../observability/logger.js";
+import { noopLogger } from "../../observability/logger.js";
 import type { YoutubeResource } from "../media-input.js";
 import { rankYoutubeCandidatesAll } from "./search-ranking.js";
 
@@ -171,12 +173,15 @@ export class SystemYtDlpExecutor implements YtDlpExecutor {
     },
     string
   >;
+  readonly #logger: MinimalLogger;
 
   constructor(
     private readonly binaryPath: string,
     private readonly cookiesPath?: string,
     options: YtDlpExecutorOptions = {},
+    logger?: MinimalLogger,
   ) {
+    this.#logger = logger ?? noopLogger;
     this.#jobs = new YtDlpJobQueue(
       async ({ argumentsList, playerClient, timeoutMs }, signal) => {
         const ytDlpArguments = buildYtDlpArguments(
@@ -192,6 +197,7 @@ export class SystemYtDlpExecutor implements YtDlpExecutor {
           file,
           args,
           signal === undefined ? { timeoutMs } : { signal, timeoutMs },
+          this.#logger,
         );
       },
       options,
@@ -226,7 +232,10 @@ export function runYtDlpCommand(
   file: string,
   args: readonly string[],
   options: RunYtDlpOptions,
+  logger: MinimalLogger = noopLogger,
 ): Promise<string> {
+  const startedAt = Date.now();
+  logger.debug({ file, args }, "yt-dlp: spawning process");
   return new Promise<string>((resolve, reject) => {
     const child = spawn(file, [...args], {
       stdio: ["ignore", "pipe", "pipe"],
@@ -249,6 +258,10 @@ export function runYtDlpCommand(
         }
       }, options.abortGraceMs ?? ABORT_GRACE_MS);
       killTimer.unref();
+      logger.warn(
+        { err: error, durationMs: Date.now() - startedAt },
+        "yt-dlp: command failed",
+      );
       reject(error);
     };
 
@@ -283,6 +296,10 @@ export function runYtDlpCommand(
       clearTimeout(timeoutTimer);
       options.signal?.removeEventListener("abort", onAbort);
       if (code === 0) {
+        logger.debug(
+          { durationMs: Date.now() - startedAt },
+          "yt-dlp: command completed",
+        );
         resolve(Buffer.concat(chunks).toString("utf8"));
         return;
       }

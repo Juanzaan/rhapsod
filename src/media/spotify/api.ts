@@ -1,3 +1,5 @@
+import type { MinimalLogger } from "../../observability/logger.js";
+import { noopLogger } from "../../observability/logger.js";
 import { parseMediaInput } from "../media-input.js";
 import type { SpotifyResource } from "../media-input.js";
 
@@ -31,6 +33,7 @@ interface SpotifyApiOptions {
   readonly clientSecret: string;
   readonly refreshToken?: string;
   readonly fetch?: typeof fetch;
+  readonly logger?: MinimalLogger;
   readonly timeoutMs?: number;
 }
 
@@ -83,6 +86,7 @@ export class SpotifyApi implements SpotifyResolver {
   readonly #clientSecret: string;
   readonly #refreshToken: string | undefined;
   readonly #fetch: typeof fetch;
+  readonly #logger: MinimalLogger;
   readonly #timeoutMs: number;
   #token: SpotifyToken | undefined;
   #tokenRequest: Promise<string> | undefined;
@@ -92,6 +96,7 @@ export class SpotifyApi implements SpotifyResolver {
     this.#clientSecret = options.clientSecret;
     this.#refreshToken = options.refreshToken;
     this.#fetch = options.fetch ?? fetch;
+    this.#logger = options.logger ?? noopLogger;
     this.#timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   }
 
@@ -236,6 +241,10 @@ export class SpotifyApi implements SpotifyResolver {
         if (authorizationAttempts <= 0) {
           throw new Error(`Spotify API returned ${response.status}`);
         }
+        this.#logger.warn(
+          { status: response.status, retry: 1 - authorizationAttempts + 1 },
+          "Spotify: token expired, refreshing",
+        );
         this.#token = undefined;
         authorizationAttempts--;
         continue;
@@ -245,9 +254,17 @@ export class SpotifyApi implements SpotifyResolver {
           throw new Error(`Spotify API returned ${response.status}`);
         }
         const retryAfter = Number(response.headers.get("retry-after") ?? "1");
-        await sleep(
-          (Number.isFinite(retryAfter) ? Math.min(retryAfter, 10) : 1) * 1000,
+        const delayMs =
+          (Number.isFinite(retryAfter) ? Math.min(retryAfter, 10) : 1) * 1000;
+        this.#logger.warn(
+          {
+            status: response.status,
+            retryAfterMs: delayMs,
+            retry: 3 - rateLimitAttempts + 1,
+          },
+          "Spotify: rate limited, waiting",
         );
+        await sleep(delayMs);
         rateLimitAttempts--;
         continue;
       }

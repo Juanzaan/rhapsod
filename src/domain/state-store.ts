@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
+import type { MinimalLogger } from "../observability/logger.js";
+import { noopLogger } from "../observability/logger.js";
 import type { LoopMode } from "../application/youtube-playback-service.js";
 
 export interface SerializedQueueTrack {
@@ -77,12 +79,17 @@ function parseQueue(raw: unknown): readonly SerializedQueueTrack[] | undefined {
 }
 
 export class FilePlaybackStateStore implements PlaybackStateStore {
+  readonly filePath: string;
   #pending: PlaybackState | undefined;
   #flushTimer: NodeJS.Timeout | undefined;
   #writeChain: Promise<void> = Promise.resolve();
   #directoryChecked = false;
+  readonly #logger: MinimalLogger;
 
-  constructor(private readonly filePath: string) {}
+  constructor(filePath: string, logger?: MinimalLogger) {
+    this.filePath = filePath;
+    this.#logger = logger ?? noopLogger;
+  }
 
   load(): PlaybackState {
     let raw: string;
@@ -153,7 +160,15 @@ export class FilePlaybackStateStore implements PlaybackStateStore {
       this.#directoryChecked = true;
     }
     const temporary = `${this.filePath}.tmp`;
-    await writeFile(temporary, JSON.stringify(state), "utf8");
-    await rename(temporary, this.filePath);
+    try {
+      await writeFile(temporary, JSON.stringify(state), "utf8");
+      await rename(temporary, this.filePath);
+    } catch (error) {
+      this.#logger.warn(
+        { err: error },
+        "State: failed to persist playback state",
+      );
+      throw error;
+    }
   }
 }
