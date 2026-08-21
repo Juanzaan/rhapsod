@@ -1,3 +1,5 @@
+import type { MinimalLogger } from "../../observability/logger.js";
+import { noopLogger } from "../../observability/logger.js";
 import type { YoutubeTrackMetadata } from "../youtube/yt-dlp.js";
 
 const HOME_URL = "https://soundcloud.com/";
@@ -44,18 +46,21 @@ export interface SoundCloudResolver {
 
 interface SoundCloudPublicApiOptions {
   readonly fetch?: typeof fetch;
+  readonly logger?: MinimalLogger;
   readonly timeoutMs?: number;
 }
 
 export class SoundCloudPublicApi implements SoundCloudResolver {
   readonly name = "soundcloud";
   readonly #fetch: typeof fetch;
+  readonly #logger: MinimalLogger;
   readonly #timeoutMs: number;
   #clientId: { expiresAt: number; value: string } | undefined;
   #clientIdRequest: Promise<string> | undefined;
 
   constructor(options: SoundCloudPublicApiOptions = {}) {
     this.#fetch = options.fetch ?? fetch;
+    this.#logger = options.logger ?? noopLogger;
     this.#timeoutMs = options.timeoutMs ?? 12_000;
   }
 
@@ -151,6 +156,8 @@ export class SoundCloudPublicApi implements SoundCloudResolver {
   }
 
   async #discoverClientId(): Promise<string> {
+    this.#logger.debug("SoundCloud: discovering client_id from homepage");
+    const startedAt = Date.now();
     const home = await this.#fetch(HOME_URL, {
       signal: AbortSignal.timeout(this.#timeoutMs),
     });
@@ -186,6 +193,10 @@ export class SoundCloudPublicApi implements SoundCloudResolver {
         expiresAt: Date.now() + CLIENT_ID_TTL_MS,
         value: match[1],
       };
+      this.#logger.debug(
+        { durationMs: Date.now() - startedAt },
+        "SoundCloud: client_id discovered",
+      );
       return match[1];
     }
     throw new Error("Unable to discover SoundCloud client configuration");

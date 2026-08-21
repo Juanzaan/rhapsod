@@ -3,6 +3,20 @@ import { join } from "node:path";
 import pino, { type Logger } from "pino";
 import createRollingStream from "pino-roll";
 
+export interface MinimalLogger {
+  readonly error: (...args: unknown[]) => void;
+  readonly warn: (...args: unknown[]) => void;
+  readonly info: (...args: unknown[]) => void;
+  readonly debug: (...args: unknown[]) => void;
+}
+
+export const noopLogger: MinimalLogger = {
+  error: () => {},
+  warn: () => {},
+  info: () => {},
+  debug: () => {},
+};
+
 export interface RhapsodLoggerOptions {
   readonly level: string;
   readonly logDir?: string;
