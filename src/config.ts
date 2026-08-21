@@ -111,6 +111,10 @@ const configSchema = z.object({
     .default("false")
     .transform((value) => value === "true"),
   RHAPSOD_YOUTUBEI_COOKIE: optionalSecret,
+  RHAPSOD_YOUTUBEI_POT_URL: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.string().url().optional(),
+  ),
 });
 
 export type AppConfig = z.infer<typeof configSchema>;

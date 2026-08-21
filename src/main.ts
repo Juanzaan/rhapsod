@@ -169,13 +169,18 @@ async function main(): Promise<void> {
   let youtubeiResolver: YoutubeiResolver | undefined;
   if (config.RHAPSOD_YOUTUBEI_ENABLED) {
     try {
+      const youtubeiHandle = await createYoutubeiClient({
+        cacheDirectory: join(config.RHAPSOD_DATA_DIR, "youtubei-cache"),
+        ...(config.RHAPSOD_YOUTUBEI_POT_URL === undefined
+          ? {}
+          : { potProviderUrl: config.RHAPSOD_YOUTUBEI_POT_URL }),
+        ...(config.RHAPSOD_YOUTUBEI_COOKIE === undefined
+          ? {}
+          : { cookie: config.RHAPSOD_YOUTUBEI_COOKIE }),
+      });
       youtubeiResolver = new YoutubeiResolver(
-        await createYoutubeiClient({
-          cacheDirectory: join(config.RHAPSOD_DATA_DIR, "youtubei-cache"),
-          ...(config.RHAPSOD_YOUTUBEI_COOKIE === undefined
-            ? {}
-            : { cookie: config.RHAPSOD_YOUTUBEI_COOKIE }),
-        }),
+        youtubeiHandle.client,
+        youtubeiHandle.poTokens,
       );
       logger.info("youtubei.js primary resolver enabled");
     } catch (error) {

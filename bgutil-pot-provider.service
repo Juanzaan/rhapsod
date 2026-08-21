@@ -1,0 +1,19 @@
+[Unit]
+Description=BgUtils YouTube POT Provider
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=rhapsod
+WorkingDirectory=/home/rhapsod/bgutil-ytdlp-pot-provider/server
+ExecStart=/usr/bin/node /home/rhapsod/bgutil-ytdlp-pot-provider/server/build/main.js --port 4416
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target
