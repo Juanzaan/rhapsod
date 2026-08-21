@@ -13,7 +13,11 @@ import { parseChatCommand } from "./commands/chat-command.js";
 import { CommandRateLimiter } from "./commands/command-rate-limiter.js";
 import { loadConfig } from "./config.js";
 import { FilePlaybackStateStore } from "./domain/state-store.js";
-import { canRemoveTrack, parseAdminUids } from "./commands/permissions.js";
+import {
+  canRemoveTrack,
+  isAdminUid,
+  parseAdminUids,
+} from "./commands/permissions.js";
 import {
   SystemYtDlpExecutor,
   YoutubeResolver,
@@ -464,6 +468,12 @@ async function main(): Promise<void> {
           }
           break;
         case "channel-move": {
+          if (!isAdminUid(senderUid, adminUids)) {
+            await connection.sendChannelMessage(
+              "No tenés permisos para mover el bot de canal.",
+            );
+            break;
+          }
           const channels = await connection.listChannels();
           const query = command.input.toLowerCase();
           const matches = channels.filter((ch) =>
