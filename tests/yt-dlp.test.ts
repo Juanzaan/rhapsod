@@ -99,6 +99,7 @@ describe("YoutubeResolver", () => {
       webpageUrl: "https://www.youtube.com/watch?v=abc_123",
     });
     expect(executor.calls[0]).toContain("--no-playlist");
+    expect(executor.calls[0]).toContain("--ignore-no-formats");
     expect(executor.calls[0]).not.toContain("--format");
   });
 
