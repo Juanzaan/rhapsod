@@ -9,14 +9,18 @@ import { playFfmpegUrl } from "./audio/ffmpeg-player.js";
 import { playTestTone } from "./audio/test-tone-player.js";
 import { YoutubePlaybackService } from "./application/youtube-playback-service.js";
 import { AudioUrlCache } from "./application/audio-url-cache.js";
+import { UserTelemetry } from "./application/user-telemetry.js";
 import { parseChatCommand } from "./commands/chat-command.js";
 import { CommandRateLimiter } from "./commands/command-rate-limiter.js";
 import { loadConfig } from "./config.js";
 import { FilePlaybackStateStore } from "./domain/state-store.js";
 import {
+  canMoveBotToChannel,
   canRemoveTrack,
   isAdminUid,
   parseAdminUids,
+  parseChannelIds,
+  parseMoveGroupIds,
 } from "./commands/permissions.js";
 import {
   SystemYtDlpExecutor,
@@ -60,6 +64,20 @@ async function main(): Promise<void> {
     process.exit(1);
   });
   const adminUids = parseAdminUids(config.RHAPSOD_ADMIN_UIDS);
+  const privateCommandUids =
+    config.RHAPSOD_PRIVATE_COMMAND_UIDS === undefined ||
+    config.RHAPSOD_PRIVATE_COMMAND_UIDS === ""
+      ? adminUids
+      : parseAdminUids(config.RHAPSOD_PRIVATE_COMMAND_UIDS);
+  const moveGroupIds = parseMoveGroupIds(config.RHAPSOD_MOVE_GROUP_IDS);
+  const adminGroupIds = parseMoveGroupIds(config.RHAPSOD_MOVE_ADMIN_GROUP_IDS);
+  const seniorGroupIds =
+    config.RHAPSOD_MOVE_SENIOR_GROUP_IDS === undefined ||
+    config.RHAPSOD_MOVE_SENIOR_GROUP_IDS === ""
+      ? adminGroupIds
+      : parseMoveGroupIds(config.RHAPSOD_MOVE_SENIOR_GROUP_IDS);
+  const adminChannelIds = parseChannelIds(config.RHAPSOD_MOVE_ADMIN_CHANNELS);
+  const seniorChannelIds = parseChannelIds(config.RHAPSOD_MOVE_SENIOR_CHANNELS);
 
   logger.info(
     {
@@ -102,6 +120,15 @@ async function main(): Promise<void> {
     });
   }
   const connection = createTs3Connection(config, identity, logger);
+  const telemetry = new UserTelemetry(
+    join(config.RHAPSOD_DATA_DIR, "user-telemetry.json"),
+    logger,
+  );
+  telemetry.load();
+  setInterval(() => {
+    telemetry.logSummary("periodic");
+    void telemetry.save();
+  }, 15 * 60_000).unref();
   const maxReconnectAttempts = 5;
   const encoder = await createRhapsodOpusEncoder({
     bitrate: config.RHAPSOD_OPUS_BITRATE,
@@ -254,10 +281,14 @@ async function main(): Promise<void> {
     message: string,
     senderUid: string,
     senderName: string,
+    senderGroups: readonly string[],
+    respond: (message: string) => Promise<void>,
   ): Promise<void> => {
+    const send = respond;
     try {
       const command = parseChatCommand(message);
       if (!command) return;
+      telemetry.recordCommand(senderUid);
       if (!canTalk) {
         if (Date.now() - mutedFeedbackAt > 10_000) {
           mutedFeedbackAt = Date.now();
@@ -274,7 +305,7 @@ async function main(): Promise<void> {
       if (!rateGate.allowed) {
         if (Date.now() - rateLimitFeedbackAt > 5_000) {
           rateLimitFeedbackAt = Date.now();
-          await connection.sendChannelMessage(
+          await send(
             `Esperá un momento entre comandos (${Math.ceil(rateGate.retryAfterMs / 1_000)} s).`,
           );
         }
@@ -282,7 +313,7 @@ async function main(): Promise<void> {
       }
       switch (command.name) {
         case "play": {
-          await connection.sendChannelMessage("Preparando la reproducción...");
+          await send("Preparando la reproducción...");
           const media = parseMediaInput(command.input);
           if (media.kind === "youtube" && media.resource.type === "playlist") {
             const result = await playback.enqueuePlaylist(
@@ -294,7 +325,7 @@ async function main(): Promise<void> {
               result.added.length === 0
                 ? "La playlist no tiene canciones reproducibles."
                 : `Se agregaron ${result.added.length} canciones a la cola${result.remaining ? ` (quedan ${result.remaining} fuera del límite)` : ""}.`;
-            await connection.sendChannelMessage(message);
+            await send(message);
           } else if (
             media.kind === "spotify" &&
             media.resource.type !== "track"
@@ -308,7 +339,7 @@ async function main(): Promise<void> {
               result.added.length === 0
                 ? "La playlist o álbum no tiene canciones reproducibles."
                 : `Se agregaron ${result.added.length} canciones a la cola${result.remaining ? ` (quedan ${result.remaining} fuera del límite)` : ""}.`;
-            await connection.sendChannelMessage(message);
+            await send(message);
           } else if (
             media.kind === "apple-music" ||
             media.kind === "amazon-music"
@@ -322,7 +353,7 @@ async function main(): Promise<void> {
               result.added.length === 0
                 ? "No pude encontrar ese link en YouTube o SoundCloud."
                 : `Se agregaron ${result.added.length} canciones a la cola${result.remaining ? ` (quedan ${result.remaining} fuera del límite)` : ""}.`;
-            await connection.sendChannelMessage(message);
+            await send(message);
           } else {
             const track = await playback.enqueue(
               command.input,
@@ -330,20 +361,20 @@ async function main(): Promise<void> {
               senderUid,
             );
             const viaSearch = media.kind === "file";
-            await connection.sendChannelMessage(
+            await send(
               `En cola: ${track.title}${viaSearch ? " (búsqueda)" : ""}`,
             );
           }
           break;
         }
         case "playnext": {
-          await connection.sendChannelMessage("Preparando la próxima pista...");
+          await send("Preparando la próxima pista...");
           const track = await playback.enqueueNext(
             command.input,
             senderName,
             senderUid,
           );
-          await connection.sendChannelMessage(
+          await send(
             `Próxima en cola: ${track.title}`,
           );
           break;
@@ -356,38 +387,38 @@ async function main(): Promise<void> {
               senderName,
               senderUid,
             );
-            await connection.sendChannelMessage(
+            await send(
               `En cola (resultado ${command.index}): ${track.title}`,
             );
             break;
           }
-          await connection.sendChannelMessage("Buscando en YouTube...");
+          await send("Buscando en YouTube...");
           const track = await playback.enqueueSearch(
             command.input,
             senderName,
             senderUid,
           );
-          await connection.sendChannelMessage(`En cola: ${track.title}`);
+          await send(`En cola: ${track.title}`);
           break;
         }
         case "pause":
           playback.pause();
-          await connection.sendChannelMessage("Reproducción pausada.");
+          await send("Reproducción pausada.");
           break;
         case "previous": {
           const track = playback.replayPrevious();
-          await connection.sendChannelMessage(
+          await send(
             `Reproduciendo de nuevo: ${track.title}`,
           );
           break;
         }
         case "resume":
           playback.resume();
-          await connection.sendChannelMessage("Reproducción reanudada.");
+          await send("Reproducción reanudada.");
           break;
         case "seek":
           playback.seek(command.seconds);
-          await connection.sendChannelMessage(
+          await send(
             `Reproduciendo desde el segundo ${command.seconds}…`,
           );
           break;
@@ -396,7 +427,7 @@ async function main(): Promise<void> {
           const pageSize = 10;
           const pages = Math.max(1, Math.ceil(tracks.length / pageSize));
           const page = command.page ?? 1;
-          await connection.sendChannelMessage(
+          await send(
             tracks.length === 0
               ? "La cola está vacía."
               : page > pages
@@ -415,7 +446,7 @@ async function main(): Promise<void> {
         }
         case "history": {
           const history = playback.history().slice(0, 10);
-          await connection.sendChannelMessage(
+          await send(
             history.length === 0
               ? "Todavía no se reprodujo ninguna pista."
               : [
@@ -430,7 +461,7 @@ async function main(): Promise<void> {
         }
         case "move": {
           const moved = playback.moveQueued(command.from, command.to);
-          await connection.sendChannelMessage(
+          await send(
             moved
               ? `Movida a la posición ${command.to}: ${moved.title}`
               : command.from === command.to
@@ -454,13 +485,13 @@ async function main(): Promise<void> {
               }),
           );
           if (unauthorized) {
-            await connection.sendChannelMessage(
+            await send(
               "Solo el administrador del bot puede quitar rangos con pistas de otros usuarios.",
             );
             break;
           }
           const removed = playback.removeQueuedRange(command.from, command.to);
-          await connection.sendChannelMessage(
+          await send(
             removed.length === 0
               ? "No existe esa posición en la cola."
               : removed.length === 1
@@ -472,7 +503,7 @@ async function main(): Promise<void> {
         case "clear":
           {
             const cleared = playback.clearQueued();
-            await connection.sendChannelMessage(
+            await send(
               cleared === 0
                 ? "La cola ya estaba vacía."
                 : `Se quitaron ${cleared} pistas de la cola.`,
@@ -480,48 +511,86 @@ async function main(): Promise<void> {
           }
           break;
         case "channel-move": {
-          if (!isAdminUid(senderUid, adminUids)) {
-            await connection.sendChannelMessage(
+          const numericCid = /^\d+$/.test(command.input)
+            ? Number(command.input)
+            : undefined;
+          let target:
+            | { readonly cid: number; readonly name: string }
+            | undefined;
+          if (numericCid !== undefined) {
+            target = { cid: numericCid, name: String(numericCid) };
+          } else {
+            const channels = await connection.listChannels();
+            const query = command.input.toLowerCase();
+            const matches = channels.filter((ch) =>
+              ch.name.toLowerCase().includes(query),
+            );
+            if (matches.length === 0) {
+              await send(
+                `No encontré ningún canal con "${command.input}".`,
+              );
+              break;
+            }
+            if (matches.length > 1) {
+              const list = matches
+                .slice(0, 5)
+                .map((ch) => ch.name)
+                .join(", ");
+              await send(
+                `Encontré varios canales: ${list}. Sé más específico.`,
+              );
+              break;
+            }
+            target = matches[0]!;
+          }
+          const decision = canMoveBotToChannel({
+            senderUid,
+            senderGroups,
+            adminUids,
+            moveGroupIds,
+            adminGroupIds,
+            seniorGroupIds,
+            adminChannelIds,
+            seniorChannelIds,
+            targetCid: target.cid,
+          });
+          if (decision === "deny-rank") {
+            await send(
               "No tenés permisos para mover el bot de canal.",
             );
             break;
           }
-          const channels = await connection.listChannels();
-          const query = command.input.toLowerCase();
-          const matches = channels.filter((ch) =>
-            ch.name.toLowerCase().includes(query),
-          );
-          if (matches.length === 0) {
-            await connection.sendChannelMessage(
-              `No encontré ningún canal con "${command.input}".`,
+          if (decision === "deny-admin") {
+            await send(
+              "Ese canal requiere rango Admin o superior.",
             );
-          } else if (matches.length > 1) {
-            const list = matches
-              .slice(0, 5)
-              .map((ch) => ch.name)
-              .join(", ");
-            await connection.sendChannelMessage(
-              `Encontré varios canales: ${list}. Sé más específico.`,
+            break;
+          }
+          if (decision === "deny-senior") {
+            await send(
+              "Ese canal requiere rango Senior Admin o superior.",
             );
-          } else {
-            const target = matches[0]!;
-            try {
-              await connection.moveToChannel(target.cid);
-              await connection.sendChannelMessage(
-                `Movido al canal: ${target.name}`,
-              );
-            } catch {
-              await connection.sendChannelMessage(
-                "No pude moverme a ese canal (¿permisos?).",
-              );
-            }
+            break;
+          }
+          try {
+            await connection.moveToChannel(target.cid);
+            telemetry.recordBotMovedBy(senderUid);
+            const resolvedName =
+              numericCid !== undefined
+                ? (await connection.getChannelInfo(numericCid)).channel_name
+                : undefined;
+            await send(`Movido al canal: ${resolvedName ?? target.name}`);
+          } catch {
+            await send(
+              "No pude moverme a ese canal (¿permisos?).",
+            );
           }
           break;
         }
         case "shuffle":
           {
             const shuffled = playback.shuffleQueued();
-            await connection.sendChannelMessage(
+            await send(
               shuffled === 0
                 ? "No hay pistas en la cola para mezclar."
                 : `Cola mezclada (${shuffled} pistas).`,
@@ -529,7 +598,7 @@ async function main(): Promise<void> {
           }
           break;
         case "now-playing":
-          await connection.sendChannelMessage(
+          await send(
             playback.current
               ? `Reproduciendo: ${playback.current.title} (${formatDuration(playback.current.durationSeconds)} - por ${playback.current.requestedBy})`
               : "No hay nada reproduciéndose.",
@@ -537,7 +606,7 @@ async function main(): Promise<void> {
           break;
         case "skip":
           playback.skip();
-          await connection.sendChannelMessage("Pista saltada.");
+          await send("Pista saltada.");
           break;
         case "stats": {
           const uptimeSeconds = process.uptime();
@@ -552,12 +621,12 @@ async function main(): Promise<void> {
             `En cola: ${playback.queue().length} pista(s)`,
             `Volumen: ${playback.volume}% - Loop: ${playback.loopMode}`,
           ];
-          await connection.sendChannelMessage(lines.join("\n"));
+          await send(lines.join("\n"));
           break;
         }
         case "debug-server": {
           if (!isAdminUid(senderUid, adminUids)) {
-            await connection.sendChannelMessage(
+            await send(
               "Solo los administradores pueden usar este comando.",
             );
             break;
@@ -586,17 +655,41 @@ async function main(): Promise<void> {
               return `  ${ch.name} (cid ${ch.cid}) [${inChannel.length}]: ${inChannel.map((c) => c.name).join(", ") || "(vacío)"}`;
             }),
           ];
-          await connection.sendChannelMessage(lines.join("\n"));
+          await send(lines.join("\n"));
+          break;
+        }
+        case "chart": {
+          if (!isAdminUid(senderUid, adminUids)) {
+            await send(
+              "Solo los administradores pueden usar este comando.",
+            );
+            break;
+          }
+          const top = telemetry.snapshot().slice(0, 20);
+          if (top.length === 0) {
+            await send(
+              "Todavía no hay datos de telemetría de usuarios.",
+            );
+            break;
+          }
+          const lines = [
+            `=== Telemetría (${telemetry.snapshot().length} usuarios) ===`,
+            ...top.map(
+              (u, i) =>
+                `${i + 1}. ${u.names[u.names.length - 1] ?? "?"} | grupos [${u.serverGroupIds.join(",")}] | talk ${u.maxTalkPower} | cmds ${u.commandCount} | movió bot ${u.botMovedBy} | entró a canal bot ${u.botChannelEntries}`,
+            ),
+          ];
+          await send(lines.join("\n"));
           break;
         }
         case "stop":
           playback.stop();
-          await connection.sendChannelMessage("Reproducción detenida.");
+          await send("Reproducción detenida.");
           break;
         case "test-tone":
           {
             if (playback.current) {
-              await connection.sendChannelMessage(
+              await send(
                 "No puedo reproducir el tono mientras hay música. Probá con !stop o esperá a que termine la pista.",
               );
               break;
@@ -610,21 +703,21 @@ async function main(): Promise<void> {
                 commandRateLimiter.acquire("global:test-tone-feedback", 5_000)
                   .allowed
               ) {
-                await connection.sendChannelMessage(
+                await send(
                   `El tono estará disponible en ${Math.ceil(toneLimit.retryAfterMs / 1_000)} s.`,
                 );
               }
               break;
             }
           }
-          await connection.sendChannelMessage(
+          await send(
             "Reproduciendo tono de prueba (3 s)...",
           );
           await playTestTone(3, encoder, connection);
-          await connection.sendChannelMessage("Tono de prueba terminado.");
+          await send("Tono de prueba terminado.");
           break;
         case "help":
-          await connection.sendChannelMessage(
+          await send(
             [
               "Comandos disponibles:",
               "!play <URL o búsqueda> - Reproducir YouTube, SoundCloud, Spotify, playlists o buscar",
@@ -654,7 +747,7 @@ async function main(): Promise<void> {
         case "loop":
           if (command.mode) {
             playback.setLoopMode(command.mode);
-            await connection.sendChannelMessage(
+            await send(
               command.mode === "off"
                 ? "Modo loop desactivado."
                 : command.mode === "track"
@@ -662,26 +755,26 @@ async function main(): Promise<void> {
                   : "Modo loop: cola en repetición.",
             );
           } else {
-            await connection.sendChannelMessage(
+            await send(
               `Modo loop actual: ${playback.loopMode}. Usá !loop [off|track|queue].`,
             );
           }
           break;
         case "volume":
           playback.setVolume(command.value);
-          await connection.sendChannelMessage(
+          await send(
             `Volumen ajustado a ${playback.volume}%.`,
           );
           break;
         case "lyrics": {
           if (!playback.current) {
-            await connection.sendChannelMessage("No hay nada reproduciéndose.");
+            await send("No hay nada reproduciéndose.");
             break;
           }
-          await connection.sendChannelMessage("Buscando la letra...");
+          await send("Buscando la letra...");
           const lyrics = await playback.getLyrics();
           if (!lyrics) {
-            await connection.sendChannelMessage(
+            await send(
               `No encontré la letra de: ${playback.current.title}`,
             );
             break;
@@ -694,7 +787,7 @@ async function main(): Promise<void> {
             lyrics.plainLyrics.length > maxChars
               ? `${lyrics.plainLyrics.slice(0, maxChars)}…`
               : lyrics.plainLyrics;
-          await connection.sendChannelMessage(`${title}\n${body}`);
+          await send(`${title}\n${body}`);
           break;
         }
       }
@@ -707,28 +800,64 @@ async function main(): Promise<void> {
         error instanceof Error
           ? userFacingError(error)
           : "Error procesando comando";
-      await connection.sendChannelMessage(messageText).catch(() => undefined);
+      await send(messageText).catch(() => undefined);
     }
   };
-  connection.onTextMessage((message, senderUid, senderName) => {
-    if (activeCommands >= maxConcurrentCommands) {
-      if (Date.now() - busyFeedbackAt > 5_000) {
-        busyFeedbackAt = Date.now();
-        void connection
-          .sendChannelMessage(
+  connection.onTextMessage(
+    (
+      message,
+      senderUid,
+      senderName,
+      senderGroups,
+      isPrivate,
+      invokerClid,
+    ) => {
+      const privateAllowed =
+        isPrivate && privateCommandUids.has(senderUid);
+      const respond = privateAllowed
+        ? (text: string) => connection.sendPrivateMessage(invokerClid, text)
+        : (text: string) => connection.sendChannelMessage(text);
+      if (activeCommands >= maxConcurrentCommands) {
+        if (Date.now() - busyFeedbackAt > 5_000) {
+          busyFeedbackAt = Date.now();
+          void respond(
             "El bot está procesando varios pedidos a la vez; probá de nuevo en unos segundos.",
-          )
-          .catch(() => undefined);
+          ).catch(() => undefined);
+        }
+        return;
       }
-      return;
-    }
-    activeCommands++;
-    void handleChatCommand(message, senderUid, senderName).finally(() => {
-      activeCommands--;
-    });
-  });
+      activeCommands++;
+      void handleChatCommand(
+        message,
+        senderUid,
+        senderName,
+        senderGroups,
+        respond,
+      ).finally(() => {
+        activeCommands--;
+      });
+    },
+  );
   await connection.connect();
   logger.info("Connected to TeamSpeak 3");
+  telemetry.resetClients();
+  const seedTelemetry = async (): Promise<void> => {
+    try {
+      const clients = await connection.listClients();
+      for (const c of clients) {
+        telemetry.recordPresence(
+          c.uid,
+          c.name,
+          c.groups ?? [],
+          c.talkPower,
+          c.cid,
+        );
+      }
+    } catch {
+      // Seeding is best-effort; clientEnter events fill gaps.
+    }
+  };
+  await seedTelemetry();
   const logCurrentChannel = async (reason: string): Promise<void> => {
     const currentChannel = await connection.getCurrentChannel();
     logger.info(
@@ -756,8 +885,46 @@ async function main(): Promise<void> {
       "The bot cannot talk in its current channel; commands will be ignored until it is moved",
     );
   }
-  connection.onClientMoved(() => {
-    void checkTalkPower("moved");
+  connection.onClientEnter((event) => {
+    telemetry.clientEntered({
+      clid: event.clid,
+      uid: event.uid,
+      name: event.name,
+      groupIds: event.groups,
+      channelId: event.cid,
+    });
+  });
+  connection.onClientLeave((clid) => {
+    telemetry.clientLeft(clid);
+  });
+  connection.onClientMoved((event) => {
+    if (event.self) {
+      void checkTalkPower("moved");
+      if (event.invokerUid) {
+        telemetry.recordBotMovedBy(event.invokerUid);
+        logger.info(
+          {
+            movedBy: event.invokerName,
+            movedByUid: event.invokerUid,
+            toChannelId: event.targetCid,
+          },
+          "Bot moved to another channel",
+        );
+      }
+      return;
+    }
+    const botChannelId = connection.getCurrentChannelId();
+    if (event.targetCid === botChannelId && event.invokerUid) {
+      telemetry.recordBotChannelEntry(event.invokerUid);
+      logger.info(
+        {
+          user: event.invokerName,
+          userUid: event.invokerUid,
+          channelId: event.targetCid,
+        },
+        "User joined the bot's channel",
+      );
+    }
   });
 
   const listConnectedClientUids = async (): Promise<readonly string[]> => {
@@ -853,6 +1020,7 @@ async function main(): Promise<void> {
       disconnect.catch(() => undefined),
       playback.flushState().catch(() => undefined),
       audioUrlCache.flush().catch(() => undefined),
+      telemetry.save(),
       new Promise((resolve) => setTimeout(resolve, 5_000)),
     ]).then(() => {
       logger.info("Shutdown complete");
