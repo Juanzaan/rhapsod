@@ -568,6 +568,97 @@ describe("formatStats - límite de mensajes TS3", () => {
   });
 });
 
+describe("prefetch counters from PlaybackTiming", () => {
+  function applyTiming(
+    m: MetricsCollector,
+    prefetchStatus?: "hit" | "in-flight" | "miss" | "not-applicable",
+  ) {
+    const timing = {
+      durationMs: 100,
+      stage: "audio-url" as const,
+      trackId: "t",
+      ...(prefetchStatus === undefined ? {} : { prefetchStatus }),
+    };
+    if (timing.stage === "audio-url") {
+      const s = timing.prefetchStatus;
+      if (s === "hit") m.increment("prefetchHits");
+      else if (s === "in-flight") m.increment("prefetchInFlight");
+      else if (s === "miss") m.increment("prefetchMisses");
+    }
+    m.recordTiming(timing);
+  }
+
+  it("hit increments prefetchHits only", () => {
+    const m = new MetricsCollector();
+    applyTiming(m, "hit");
+    const c = m.counters();
+    expect(c.prefetchHits).toBe(1);
+    expect(c.prefetchInFlight).toBe(0);
+    expect(c.prefetchMisses).toBe(0);
+  });
+
+  it("in-flight increments prefetchInFlight only", () => {
+    const m = new MetricsCollector();
+    applyTiming(m, "in-flight");
+    const c = m.counters();
+    expect(c.prefetchHits).toBe(0);
+    expect(c.prefetchInFlight).toBe(1);
+    expect(c.prefetchMisses).toBe(0);
+  });
+
+  it("miss increments prefetchMisses only", () => {
+    const m = new MetricsCollector();
+    applyTiming(m, "miss");
+    const c = m.counters();
+    expect(c.prefetchHits).toBe(0);
+    expect(c.prefetchInFlight).toBe(0);
+    expect(c.prefetchMisses).toBe(1);
+  });
+
+  it("not-applicable does not increment any prefetch counter", () => {
+    const m = new MetricsCollector();
+    applyTiming(m, "not-applicable");
+    const c = m.counters();
+    expect(c.prefetchHits).toBe(0);
+    expect(c.prefetchInFlight).toBe(0);
+    expect(c.prefetchMisses).toBe(0);
+  });
+
+  it("undefined prefetchStatus does not increment any prefetch counter", () => {
+    const m = new MetricsCollector();
+    applyTiming(m, undefined);
+    const c = m.counters();
+    expect(c.prefetchHits).toBe(0);
+    expect(c.prefetchInFlight).toBe(0);
+    expect(c.prefetchMisses).toBe(0);
+  });
+
+  it("metadata stage does not increment any prefetch counter", () => {
+    const m = new MetricsCollector();
+    m.recordTiming({
+      durationMs: 50,
+      stage: "metadata",
+      trackId: "t",
+      prefetchStatus: "hit",
+    });
+    const c = m.counters();
+    expect(c.prefetchHits).toBe(0);
+  });
+
+  it("multiple timings accumulate correctly", () => {
+    const m = new MetricsCollector();
+    applyTiming(m, "hit");
+    applyTiming(m, "hit");
+    applyTiming(m, "miss");
+    applyTiming(m, "in-flight");
+    applyTiming(m, "not-applicable");
+    const c = m.counters();
+    expect(c.prefetchHits).toBe(2);
+    expect(c.prefetchInFlight).toBe(1);
+    expect(c.prefetchMisses).toBe(1);
+  });
+});
+
 describe("formatDiag - límite de mensajes TS3", () => {
   it("muestra máximo 3 errores recientes", () => {
     const m = new MetricsCollector();

@@ -263,6 +263,12 @@ async function main(): Promise<void> {
             }
           : {}),
       });
+      if (timing.stage === "audio-url") {
+        const s = timing.prefetchStatus;
+        if (s === "hit") metrics.increment("prefetchHits");
+        else if (s === "in-flight") metrics.increment("prefetchInFlight");
+        else if (s === "miss") metrics.increment("prefetchMisses");
+      }
       metrics.recordTiming(timing);
       logger.info(timing, "Playback timing");
     },

@@ -318,6 +318,41 @@ describe("YoutubeResolver", () => {
     ).rejects.toThrow("yt-dlp exited with code 2: nope");
   });
 
+  it("logs the race winner with durationMs and attemptCount", async () => {
+    const executor: YtDlpExecutor = {
+      run: (
+        _argumentsList: readonly string[],
+        _timeoutMs?: number,
+        _priority?: YtDlpJobPriority,
+        _signal?: AbortSignal,
+        playerClient?: YoutubePlayerClient,
+      ) =>
+        playerClient === "web_safari"
+          ? Promise.resolve("https://media.example/audio\n")
+          : Promise.reject(new Error("nope")),
+    };
+    const logger = {
+      error: vi.fn(),
+      warn: vi.fn(),
+      info: vi.fn(),
+      debug: vi.fn(),
+    };
+
+    await new YoutubeResolver(executor, logger).getAudioUrlFromUrl(
+      "https://www.youtube.com/watch?v=abc",
+    );
+
+    expect(logger.info).toHaveBeenCalledTimes(1);
+    const call = logger.info.mock.calls[0] as [
+      { winner: string; durationMs: number; attemptCount: number },
+      string,
+    ];
+    expect(call[1]).toBe("Audio URL race won");
+    expect(call[0].winner).toBe("web_safari");
+    expect(typeof call[0].durationMs).toBe("number");
+    expect(call[0].attemptCount).toBe(2);
+  });
+
   it("expands a YouTube playlist without resolving audio", async () => {
     const executor = new FakeExecutor(
       '{"playlist_count":3,"entries":[{"id":"p1","title":"Track One","url":"https://www.youtube.com/watch?v=p1"},{"id":"p2","title":"Track Two","url":"https://www.youtube.com/watch?v=p2"}]}',
@@ -543,6 +578,34 @@ describe("YtDlpJobQueue", () => {
     const m = queue.metrics();
     expect(m.active).toBeGreaterThanOrEqual(0);
     expect(m.queued).toBeGreaterThanOrEqual(0);
+  });
+
+  it("totalRuns increments on execution error", async () => {
+    const queue = new YtDlpJobQueue(() => {
+      throw new Error("boom");
+    });
+    await expect(queue.run("a", "metadata")).rejects.toThrow("boom");
+    expect(queue.metrics().totalRuns).toBe(1);
+  });
+
+  it("totalRuns does not increment for pre-execution abort", async () => {
+    const queue = new YtDlpJobQueue((x: string) => Promise.resolve(x));
+    const controller = new AbortController();
+    controller.abort();
+    await expect(queue.run("a", "metadata", controller.signal)).rejects.toThrow(
+      YTDLP_ABORT_ERROR,
+    );
+    expect(queue.metrics().totalRuns).toBe(0);
+  });
+
+  it("active and queued end at 0 after all jobs complete", async () => {
+    const queue = new YtDlpJobQueue((x: string) => Promise.resolve(x));
+    await queue.run("a", "metadata");
+    await queue.run("b", "playback");
+    await queue.run("c", "metadata");
+    const m = queue.metrics();
+    expect(m.active).toBe(0);
+    expect(m.queued).toBe(0);
   });
 });
 

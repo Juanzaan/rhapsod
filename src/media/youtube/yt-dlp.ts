@@ -537,6 +537,7 @@ export class YoutubeResolver {
   }
 
   async getAudioUrlFromUrl(url: string, signal?: AbortSignal): Promise<string> {
+    const raceStartedAt = Date.now();
     const attempts = YTDLP_PLAYER_CLIENTS.map((playerClient) => {
       const controller = new AbortController();
       const requestSignal =
@@ -564,7 +565,7 @@ export class YoutubeResolver {
             throw new Error("yt-dlp did not return an HTTPS audio URL");
           return audioUrl;
         });
-      return { controller, promise };
+      return { controller, playerClient, promise };
     });
 
     // First success wins; abort the losing clients as soon as one resolves.
@@ -578,6 +579,14 @@ export class YoutubeResolver {
             for (const other of attempts) {
               if (other !== attempt) other.controller.abort();
             }
+            this.#logger.info(
+              {
+                winner: attempt.playerClient,
+                durationMs: Date.now() - raceStartedAt,
+                attemptCount: total,
+              },
+              "Audio URL race won",
+            );
             resolve(audioUrl);
           },
           (error: unknown) => {
