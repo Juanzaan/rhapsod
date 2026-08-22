@@ -30,6 +30,10 @@ import {
   type LyricsResolver,
   type TrackLyrics,
 } from "../media/lyrics.js";
+import type {
+  AudioUrlSource,
+  PrefetchStatus,
+} from "../observability/metrics.js";
 
 export type LoopMode = "off" | "queue" | "track";
 
@@ -68,8 +72,10 @@ interface PlaybackServiceOptions {
 type PlaybackEndReason = "completed" | "error" | "skipped" | "stopped";
 
 interface PlaybackTiming {
+  readonly audioUrlSource?: AudioUrlSource;
   readonly cacheHit?: boolean;
   readonly durationMs: number;
+  readonly prefetchStatus?: PrefetchStatus;
   readonly stage: "metadata" | "audio-url";
   readonly trackId: string;
 }
@@ -122,6 +128,8 @@ interface PreparedAudioEntry {
   readonly abort?: AbortController;
   readonly promise: Promise<PreparedAudio>;
   expiresAt: number;
+  readonly origin: AudioUrlSource;
+  status: "pending" | "ready";
 }
 
 export class YoutubePlaybackService {
@@ -191,7 +199,9 @@ export class YoutubePlaybackService {
     for (const [source, entry] of this.#audioUrlCache?.entries() ?? []) {
       this.#prepared.set(source, {
         expiresAt: entry.expiresAt,
+        origin: "cache-load",
         promise: Promise.resolve(entry),
+        status: "ready",
       });
     }
     this.#playlistMaxTracks =
@@ -1053,8 +1063,10 @@ export class YoutubePlaybackService {
         const resolved = await this.#resolveOrSkip(track, generation);
         if (resolved === undefined) continue;
         this.#onTiming({
+          audioUrlSource: resolved.audioUrlSource,
           cacheHit: resolved.cacheHit,
           durationMs: Date.now() - audioResolutionStartedAt,
+          prefetchStatus: resolved.prefetchStatus,
           stage: "audio-url",
           trackId: track.id,
         });
@@ -1124,7 +1136,15 @@ export class YoutubePlaybackService {
   async #resolveOrSkip(
     track: Track,
     generation: number,
-  ): Promise<{ cacheHit: boolean; url: string } | undefined> {
+  ): Promise<
+    | {
+        audioUrlSource: AudioUrlSource;
+        cacheHit: boolean;
+        prefetchStatus: PrefetchStatus;
+        url: string;
+      }
+    | undefined
+  > {
     try {
       const resolved = await this.#getAudioUrl(track);
       if (generation !== this.#generation || this.#current !== track) {
@@ -1159,32 +1179,56 @@ export class YoutubePlaybackService {
     const expiresAt = audioUrlExpiresAt(url);
     this.#prepared.set(track.source, {
       expiresAt,
+      origin: "inline-resolve",
       promise: Promise.resolve({ expiresAt, url }),
+      status: "ready",
     });
   }
 
-  #getAudioUrl(track: Track): Promise<{ cacheHit: boolean; url: string }> {
+  #getAudioUrl(track: Track): Promise<{
+    audioUrlSource: AudioUrlSource;
+    cacheHit: boolean;
+    prefetchStatus: PrefetchStatus;
+    url: string;
+  }> {
     const cached = this.#prepared.get(track.source);
     if (cached) {
       if (cached.expiresAt > Date.now()) {
-        return cached.promise.then((prepared) => ({
-          cacheHit: true,
-          url: prepared.url,
-        }));
+        return cached.promise.then((prepared) => {
+          const prefetchStatus =
+            cached.origin === "prefetch"
+              ? cached.status === "pending"
+                ? ("in-flight" as const)
+                : ("hit" as const)
+              : ("not-applicable" as const);
+          return {
+            audioUrlSource: cached.origin,
+            cacheHit: true,
+            prefetchStatus,
+            url: prepared.url,
+          };
+        });
       }
       this.#invalidatePrepared(track.source);
       return this.#resolveAudioUrl(track).then((url) => ({
+        audioUrlSource: "inline-resolve" as const,
         cacheHit: false,
+        prefetchStatus: "miss" as const,
         url,
       }));
     }
     return this.#resolveAudioUrl(track).then((url) => ({
+      audioUrlSource: "inline-resolve" as const,
       cacheHit: false,
+      prefetchStatus: "miss" as const,
       url,
     }));
   }
 
-  #resolveAudioUrl(track: Track): Promise<string> {
+  #resolveAudioUrl(
+    track: Track,
+    origin: AudioUrlSource = "inline-resolve",
+  ): Promise<string> {
     const existing = this.#prepared.get(track.source);
     if (existing !== undefined) {
       return existing.promise.then((prepared) => prepared.url);
@@ -1201,7 +1245,9 @@ export class YoutubePlaybackService {
     const entry: PreparedAudioEntry = {
       abort,
       expiresAt: Number.POSITIVE_INFINITY,
+      origin,
       promise: pending,
+      status: "pending",
     };
     pending.catch(() => {
       if (this.#prepared.get(track.source) === entry) {
@@ -1209,7 +1255,10 @@ export class YoutubePlaybackService {
       }
     });
     this.#prepared.set(track.source, entry);
-    return pending.then((prepared) => prepared.url);
+    return pending.then((prepared) => {
+      entry.status = "ready";
+      return prepared.url;
+    });
   }
 
   async #resolvePlayableAudio(
@@ -1342,7 +1391,7 @@ export class YoutubePlaybackService {
         }
         this.#invalidatePrepared(next.source);
       }
-      void this.#resolveAudioUrl(next).catch(() => {
+      void this.#resolveAudioUrl(next, "prefetch").catch(() => {
         this.#invalidatePrepared(next.source);
       });
     }

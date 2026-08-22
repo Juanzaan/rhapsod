@@ -480,6 +480,70 @@ describe("YtDlpJobQueue", () => {
       "third",
     ]);
   });
+
+  it("metrics returns zeroed values at init", () => {
+    const queue = new YtDlpJobQueue((x: string) => Promise.resolve(x));
+    const m = queue.metrics();
+    expect(m.active).toBe(0);
+    expect(m.queued).toBe(0);
+    expect(m.totalRuns).toBe(0);
+  });
+
+  it("metrics reflects active and queued during execution", async () => {
+    let resolve!: () => void;
+    const queue = new YtDlpJobQueue(async () => {
+      await new Promise<void>((r) => {
+        resolve = r;
+      });
+      return "done";
+    });
+
+    const job = queue.run("a", "metadata");
+    await new Promise((r) => setImmediate(r));
+
+    const m1 = queue.metrics();
+    expect(m1.active).toBe(1);
+    expect(m1.queued).toBe(0);
+    expect(m1.totalRuns).toBe(1);
+
+    resolve();
+    await job;
+    await new Promise((r) => setImmediate(r));
+
+    const m2 = queue.metrics();
+    expect(m2.active).toBe(0);
+    expect(m2.totalRuns).toBe(1);
+  });
+
+  it("totalRuns increments for each executed job", async () => {
+    const releases: Array<() => void> = [];
+    const queue = new YtDlpJobQueue(async (label: string) => {
+      await new Promise<void>((r) => releases.push(r));
+      return label;
+    });
+
+    const job1 = queue.run("a", "metadata");
+    const job2 = queue.run("b", "metadata");
+
+    await new Promise((r) => setImmediate(r));
+    releases.shift()?.();
+    await new Promise((r) => setImmediate(r));
+    releases.shift()?.();
+    await new Promise((r) => setImmediate(r));
+
+    await Promise.all([job1, job2]);
+
+    expect(queue.metrics().totalRuns).toBe(2);
+  });
+
+  it("active and queued are never negative", async () => {
+    const queue = new YtDlpJobQueue((x: string) => Promise.resolve(x));
+    const job = queue.run("a", "metadata");
+    await job;
+    const m = queue.metrics();
+    expect(m.active).toBeGreaterThanOrEqual(0);
+    expect(m.queued).toBeGreaterThanOrEqual(0);
+  });
 });
 
 describe("runYtDlpCommand", () => {
