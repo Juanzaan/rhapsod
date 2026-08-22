@@ -31,6 +31,7 @@ describe("parseChatCommand", () => {
     });
     expect(parseChatCommand("!stats")).toEqual({ name: "stats" });
     expect(parseChatCommand("!st")).toEqual({ name: "stats" });
+    expect(parseChatCommand("!diag")).toEqual({ name: "diag" });
     expect(parseChatCommand("!hist")).toEqual({ name: "history" });
     expect(parseChatCommand("!pn duki rockstar")).toEqual({
       input: "duki rockstar",

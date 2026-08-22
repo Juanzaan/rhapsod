@@ -36,6 +36,7 @@ import { SoundCloudPublicApi } from "./media/soundcloud/public-api.js";
 import { SpotifyApi } from "./media/spotify/api.js";
 import { parseMediaInput } from "./media/media-input.js";
 import { createRhapsodLogger } from "./observability/logger.js";
+import { MetricsCollector } from "./observability/metrics.js";
 import { startWatchdog } from "./watchdog.js";
 
 async function main(): Promise<void> {
@@ -45,6 +46,7 @@ async function main(): Promise<void> {
     logDir: join(config.RHAPSOD_DATA_DIR, "logs"),
     retentionDays: config.RHAPSOD_LOG_RETENTION_DAYS,
   });
+  const metrics = new MetricsCollector();
   const trackTimings = new Map<
     string,
     { audioUrlMs?: number; cacheHit?: boolean; metadataMs?: number }
@@ -99,11 +101,23 @@ async function main(): Promise<void> {
     join(config.RHAPSOD_DATA_DIR, "ts3-identity.txt"),
   ).loadOrCreate();
   const metricsIntervalMinutes = config.RHAPSOD_METRICS_INTERVAL_MINUTES;
+  const ytDlpMetricsRef = {
+    getMetrics: (): {
+      active: number;
+      queued: number;
+      totalRuns: number;
+    } => ({ active: 0, queued: 0, totalRuns: 0 }),
+  };
   if (metricsIntervalMinutes > 0) {
     const reportMetrics = (): void => {
       const { heapUsed, rss } = process.memoryUsage();
+      const ytdlp = ytDlpMetricsRef.getMetrics();
+      metrics.setGauge("ytdlpActiveJobs", ytdlp.active);
+      metrics.setGauge("ytdlpQueuedJobs", ytdlp.queued);
+      metrics.setGauge("ytdlpTotalRuns", ytdlp.totalRuns);
       logger.info(
         {
+          ...metrics.counters(),
           heapUsedMb: Math.round(heapUsed / 1_048_576),
           rssMb: Math.round(rss / 1_048_576),
         },
@@ -161,9 +175,14 @@ async function main(): Promise<void> {
     },
     logger,
   );
+  ytDlpMetricsRef.getMetrics = () => ytDlpExecutor.metrics();
   const audioUrlCache = AudioUrlCache.load(
     join(config.RHAPSOD_DATA_DIR, "audio-url-cache.json"),
     logger,
+    {
+      onHit: () => metrics.increment("cacheHits"),
+      onMiss: () => metrics.increment("cacheMisses"),
+    },
   );
   const ytDlpResolver = new YoutubeResolver(ytDlpExecutor, logger);
   let youtubeiResolver: YoutubeiResolver | undefined;
@@ -244,15 +263,19 @@ async function main(): Promise<void> {
             }
           : {}),
       });
+      metrics.recordTiming(timing);
       logger.info(timing, "Playback timing");
     },
     onPlaybackError: async (track, error) => {
+      metrics.recordError(track.id, error);
       logger.error(
         { err: error, trackId: track.id },
         "YouTube playback failed",
       );
+      const truncatedTitle =
+        track.title.length > 40 ? `${track.title.slice(0, 39)}…` : track.title;
       await connection.sendChannelMessage(
-        `Error reproduciendo ${track.title}: ${error.message}`,
+        `No pude reproducir "${truncatedTitle}". Se intentará continuar con la siguiente canción.`,
       );
     },
     output: connection,
@@ -623,19 +646,36 @@ async function main(): Promise<void> {
           await send("Pista saltada.");
           break;
         case "stats": {
-          const uptimeSeconds = process.uptime();
-          const hours = Math.floor(uptimeSeconds / 3_600);
-          const minutes = Math.floor((uptimeSeconds % 3_600) / 60);
-          const lines = [
-            `Uptime: ${hours}h ${minutes}m`,
-            `Canciones reproducidas: ${playback.tracksPlayed}`,
-            playback.current
-              ? `Actual: ${playback.current.title} (${formatDuration(playback.current.durationSeconds)})`
-              : "Actual: nada reproduciéndose",
-            `En cola: ${playback.queue().length} pista(s)`,
-            `Volumen: ${playback.volume}% - Loop: ${playback.loopMode}`,
-          ];
-          await send(lines.join("\n"));
+          const ytdlp = ytDlpExecutor.metrics();
+          const current = playback.current;
+          const currentArg =
+            current !== undefined
+              ? {
+                  title: current.title,
+                  ...(current.durationSeconds === undefined
+                    ? {}
+                    : { durationSeconds: current.durationSeconds }),
+                }
+              : undefined;
+          const statsOutput = metrics.formatStats({
+            ...(currentArg !== undefined ? { current: currentArg } : {}),
+            loopMode: playback.loopMode,
+            queueLen: playback.queue().length,
+            tracksPlayed: playback.tracksPlayed,
+            uptimeSec: process.uptime(),
+            volume: playback.volume,
+            ytdlpActive: ytdlp.active,
+            ytdlpQueued: ytdlp.queued,
+          });
+          await send(statsOutput);
+          break;
+        }
+        case "diag": {
+          if (!isAdminUid(senderUid, adminUids)) {
+            await send("Solo los administradores pueden usar este comando.");
+            break;
+          }
+          await send(metrics.formatDiag());
           break;
         }
         case "debug-server": {

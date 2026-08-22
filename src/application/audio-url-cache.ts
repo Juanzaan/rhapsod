@@ -10,6 +10,11 @@ export interface AudioUrlCacheEntry {
   readonly expiresAt: number;
 }
 
+export interface AudioUrlCacheMetrics {
+  readonly onHit?: () => void;
+  readonly onMiss?: () => void;
+}
+
 const MAX_CACHE_ENTRIES = 500;
 const PERSIST_DEBOUNCE_MS = 1_000;
 
@@ -21,16 +26,26 @@ export class AudioUrlCache {
   readonly #entries = new Map<string, AudioUrlCacheEntry>();
   readonly #filePath: string | undefined;
   readonly #logger: MinimalLogger;
+  readonly #metrics: AudioUrlCacheMetrics | undefined;
   #persistTimer: NodeJS.Timeout | undefined;
   #writeChain: Promise<void> = Promise.resolve();
 
-  private constructor(filePath: string | undefined, logger?: MinimalLogger) {
+  private constructor(
+    filePath: string | undefined,
+    logger?: MinimalLogger,
+    metrics?: AudioUrlCacheMetrics,
+  ) {
     this.#filePath = filePath;
     this.#logger = logger ?? noopLogger;
+    this.#metrics = metrics;
   }
 
-  static load(filePath: string, logger?: MinimalLogger): AudioUrlCache {
-    const cache = new AudioUrlCache(filePath, logger);
+  static load(
+    filePath: string,
+    logger?: MinimalLogger,
+    metrics?: AudioUrlCacheMetrics,
+  ): AudioUrlCache {
+    const cache = new AudioUrlCache(filePath, logger, metrics);
     if (existsSync(filePath)) {
       try {
         const parsed = JSON.parse(
@@ -66,8 +81,11 @@ export class AudioUrlCache {
     return cache;
   }
 
-  static memoryOnly(logger?: MinimalLogger): AudioUrlCache {
-    return new AudioUrlCache(undefined, logger);
+  static memoryOnly(
+    logger?: MinimalLogger,
+    metrics?: AudioUrlCacheMetrics,
+  ): AudioUrlCache {
+    return new AudioUrlCache(undefined, logger, metrics);
   }
 
   entries(): ReadonlyMap<string, AudioUrlCacheEntry> {
@@ -76,11 +94,16 @@ export class AudioUrlCache {
 
   get(source: string): AudioUrlCacheEntry | undefined {
     const entry = this.#entries.get(source);
-    if (entry === undefined) return undefined;
-    if (entry.expiresAt <= Date.now()) {
-      this.#entries.delete(source);
+    if (entry === undefined) {
+      this.#metrics?.onMiss?.();
       return undefined;
     }
+    if (entry.expiresAt <= Date.now()) {
+      this.#entries.delete(source);
+      this.#metrics?.onMiss?.();
+      return undefined;
+    }
+    this.#metrics?.onHit?.();
     return entry;
   }
 

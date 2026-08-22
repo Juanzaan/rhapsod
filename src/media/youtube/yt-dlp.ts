@@ -53,6 +53,7 @@ export class YtDlpJobQueue<Input, Output> {
   #running = 0;
   #metadataRunning = 0;
   #queued = 0;
+  #totalRuns = 0;
   readonly #maxConcurrentJobs: number;
   readonly #maxQueuedJobs: number;
 
@@ -118,6 +119,7 @@ export class YtDlpJobQueue<Input, Output> {
     }
     this.#running++;
     if (isMetadata) this.#metadataRunning++;
+    this.#totalRuns++;
     try {
       job.resolve(await this.execute(job.input, job.signal));
     } catch (error) {
@@ -127,6 +129,14 @@ export class YtDlpJobQueue<Input, Output> {
       this.#running--;
       void this.#drain();
     }
+  }
+
+  metrics(): { active: number; queued: number; totalRuns: number } {
+    return {
+      active: Math.max(0, this.#running),
+      queued: Math.max(0, this.#queued),
+      totalRuns: this.#totalRuns,
+    };
   }
 }
 
@@ -222,6 +232,10 @@ export class SystemYtDlpExecutor implements YtDlpExecutor {
       priority,
       signal,
     );
+  }
+
+  metrics(): { active: number; queued: number; totalRuns: number } {
+    return this.#jobs.metrics();
   }
 }
 

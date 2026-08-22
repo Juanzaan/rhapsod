@@ -3,6 +3,7 @@ type ChatCommand =
   | { readonly name: "chart" }
   | { readonly name: "clear" }
   | { readonly name: "debug-server" }
+  | { readonly name: "diag" }
   | { readonly name: "help" }
   | { readonly name: "loop"; readonly mode?: "off" | "queue" | "track" }
   | { readonly name: "lyrics" }
@@ -31,6 +32,7 @@ const COMMAND_ALIASES: Readonly<Record<string, ChatCommand["name"]>> = {
   "channel-move": "channel-move",
   chart: "chart",
   clear: "clear",
+  diag: "diag",
   ds: "debug-server",
   "debug-server": "debug-server",
   h: "help",
