@@ -132,7 +132,9 @@ export class SpotifyApi implements SpotifyResolver {
     } catch (error) {
       if (
         !(error instanceof Error) ||
-        !/(No se pudo autenticar con Spotify|No se pudo conectar con Spotify|Spotify no tiene permisos)/i.test(error.message)
+        !/(No se pudo autenticar con Spotify|No se pudo conectar con Spotify|Spotify no tiene permisos)/i.test(
+          error.message,
+        )
       ) {
         throw error;
       }

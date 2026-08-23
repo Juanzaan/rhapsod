@@ -89,7 +89,9 @@ export function parseChatCommand(
     .split(/\s+/);
   const name = COMMAND_ALIASES[rawName.toLowerCase()];
   if (!name)
-    throw new Error("No reconozco ese comando. Escribí !help para ver los disponibles.");
+    throw new Error(
+      "No reconozco ese comando. Escribí !help para ver los disponibles.",
+    );
 
   const argument = unwrapTeamSpeakUrl(argumentsList.join(" ").trim());
   switch (name) {
@@ -112,7 +114,8 @@ export function parseChatCommand(
       return { input: argument, name };
     }
     case "playnext":
-      if (!argument) throw new Error("Usá: !playnext <link o término de búsqueda>");
+      if (!argument)
+        throw new Error("Usá: !playnext <link o término de búsqueda>");
       return { input: argument, name };
     case "queue":
       return argument ? { name, page: parsePage(argument) } : { name };
@@ -171,7 +174,8 @@ function parseRange(
     match[2] === undefined
       ? from
       : parsePosition(match[2], "!remove <posición|desde-hasta>");
-  if (to < from) throw new Error("El rango tiene que ser ascendente (ej: 2-5).");
+  if (to < from)
+    throw new Error("El rango tiene que ser ascendente (ej: 2-5).");
   return { from, to };
 }
 
@@ -180,7 +184,8 @@ function parseMove(argument: string): { from: number; to: number } {
   if (parts.length !== 2) throw new Error("Usá: !move <desde> <hasta>");
   const from = parsePosition(parts[0] ?? "", "!move <desde> <hasta>");
   const to = parsePosition(parts[1] ?? "", "!move <desde> <hasta>");
-  if (to < from) throw new Error("El rango tiene que ser ascendente (ej: 2-5).");
+  if (to < from)
+    throw new Error("El rango tiene que ser ascendente (ej: 2-5).");
   return { from, to };
 }
 

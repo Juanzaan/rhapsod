@@ -161,8 +161,7 @@ export class SoundCloudPublicApi implements SoundCloudResolver {
     const home = await this.#fetch(HOME_URL, {
       signal: AbortSignal.timeout(this.#timeoutMs),
     });
-    if (!home.ok)
-      throw new Error("No se pudo conectar con SoundCloud.");
+    if (!home.ok) throw new Error("No se pudo conectar con SoundCloud.");
     const html = await home.text();
     const scripts = [
       ...html.matchAll(

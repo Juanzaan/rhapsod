@@ -184,7 +184,9 @@ async function main(): Promise<void> {
       onMiss: () => metrics.increment("cacheMisses"),
     },
   );
-  const ytDlpResolver = new YoutubeResolver(ytDlpExecutor, logger);
+  const ytDlpResolver = new YoutubeResolver(ytDlpExecutor, logger, {
+    onSearchMetrics: (m) => metrics.recordSearchMetrics(m),
+  });
   let youtubeiResolver: YoutubeiResolver | undefined;
   if (config.RHAPSOD_YOUTUBEI_ENABLED) {
     try {
@@ -1080,7 +1082,11 @@ function formatDuration(durationSeconds: number | undefined): string {
 
 export function userFacingError(error: Error): string {
   const msg = error.message;
-  if (/^(No reconozco|Usá:|El comando !|La posición|El volumen|El rango|Usage: !)/.test(msg))
+  if (
+    /^(No reconozco|Usá:|El comando !|La posición|El volumen|El rango|Usage: !)/.test(
+      msg,
+    )
+  )
     return msg;
   if (/DRM protected/i.test(msg))
     return "SoundCloud no permite reproducir esta pista porque está protegida con DRM. Probá otra versión o una fuente distinta.";
@@ -1088,8 +1094,7 @@ export function userFacingError(error: Error): string {
     return "YouTube no ofrece un formato de audio reproducible para ese video (puede ser un directo o un video restringido). Probá otra versión.";
   if (/fetch failed/i.test(msg))
     return "Fallo momentáneo de red con el proveedor (Spotify/YouTube). Probá de nuevo en unos segundos.";
-  if (/ya está en la cola/i.test(msg))
-    return "Esa canción ya está en la cola.";
+  if (/ya está en la cola/i.test(msg)) return "Esa canción ya está en la cola.";
   return "Ocurrió un error. Probá de nuevo en unos segundos.";
 }
 

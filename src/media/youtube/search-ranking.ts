@@ -59,7 +59,9 @@ export function rankYoutubeCandidatesScored(
   expectedTitle?: string,
 ): ScoredCandidate[] {
   const normalizedQuery = normalize(query);
-  const normalizedExpectedTitle = expectedTitle ? normalize(expectedTitle) : undefined;
+  const normalizedExpectedTitle = expectedTitle
+    ? normalize(expectedTitle)
+    : undefined;
   const medianDuration = expectedDurationSeconds ?? median(candidates);
   return candidates
     .map((candidate) => {
