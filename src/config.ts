@@ -106,6 +106,10 @@ const configSchema = z.object({
   RHAPSOD_TS3_CLIENT_DESCRIPTION: z.string().optional(),
   RHAPSOD_YTDLP_PATH: z.string().min(1).default("yt-dlp"),
   RHAPSOD_YTDLP_COOKIES_PATH: optionalSecret,
+  RHAPSOD_YTDLP_EXTRACTOR_ARGS: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.string().optional(),
+  ),
   RHAPSOD_YOUTUBEI_ENABLED: z
     .enum(["true", "false"])
     .default("false")

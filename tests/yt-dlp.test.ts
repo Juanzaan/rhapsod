@@ -68,6 +68,33 @@ describe("YoutubeResolver", () => {
     ).toContain("youtube:player_client=web_embedded");
   });
 
+  it("appends extra extractor args when provided", () => {
+    expect(
+      buildYtDlpArguments(
+        ["--version"],
+        undefined,
+        "web_safari",
+        "youtube:po_token_uri=http://localhost:4416",
+      ),
+    ).toEqual([
+      "--js-runtimes",
+      "node",
+      "--remote-components",
+      "ejs:github",
+      "--extractor-retries",
+      "1",
+      "--extractor-args",
+      "youtube:player_client=web_safari youtube:po_token_uri=http://localhost:4416",
+      "--version",
+    ]);
+  });
+
+  it("does not add extra extractor args when not provided", () => {
+    const args = buildYtDlpArguments(["--version"]);
+    expect(args).toContain("youtube:player_client=web_safari");
+    expect(args.join(" ")).not.toContain("po_token_uri");
+  });
+
   it("lowers yt-dlp priority on Linux so playback wins the CPU", () => {
     expect(
       buildYtDlpCommand("/usr/local/bin/yt-dlp", ["--version"], "linux"),

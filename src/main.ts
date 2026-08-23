@@ -174,6 +174,7 @@ async function main(): Promise<void> {
         : { maxConcurrentJobs: config.RHAPSOD_MAX_CONCURRENT_YTDLP_JOBS }),
     },
     logger,
+    config.RHAPSOD_YTDLP_EXTRACTOR_ARGS,
   );
   ytDlpMetricsRef.getMetrics = () => ytDlpExecutor.metrics();
   const audioUrlCache = AudioUrlCache.load(
