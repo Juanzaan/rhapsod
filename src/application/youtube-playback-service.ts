@@ -34,6 +34,7 @@ import type {
   AudioUrlSource,
   PrefetchStatus,
 } from "../observability/metrics.js";
+import { parseMusicQuery } from "../lib/query-parser.js";
 
 export type LoopMode = "off" | "queue" | "track";
 
@@ -93,6 +94,7 @@ export interface YoutubePlaybackResolver {
     query: string,
     expectedDurationSeconds?: number,
     limit?: number,
+    expectedTitle?: string,
   ): Promise<readonly YoutubeTrackMetadata[]>;
   expandPlaylist(
     resource: YoutubeResource,
@@ -440,7 +442,12 @@ export class YoutubePlaybackService {
     requestedByUid?: string,
   ): Promise<Track> {
     const startedAt = Date.now();
-    const metadata = await this.#resolver.search(query);
+    const parsed = parseMusicQuery(query);
+    const metadata = await this.#resolver.search(
+      query,
+      undefined,
+      parsed.artist,
+    );
     this.#recordMetadataTiming(metadata, startedAt);
     return this.#enqueueMetadata(
       metadata,
@@ -457,7 +464,13 @@ export class YoutubePlaybackService {
     requestedByUid?: string,
   ): Promise<Track> {
     const startedAt = Date.now();
-    const candidates = await this.#resolver.searchMany(query, undefined, 5);
+    const parsed = parseMusicQuery(query);
+    const candidates = await this.#resolver.searchMany(
+      query,
+      undefined,
+      5,
+      parsed.artist,
+    );
     const selected = candidates[index - 1];
     if (!selected) {
       throw new Error(`No hay resultado ${index} para esa búsqueda.`);

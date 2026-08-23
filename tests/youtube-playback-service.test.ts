@@ -271,7 +271,11 @@ describe("YoutubePlaybackService", () => {
 
     const track = await service.enqueueSearch("duki rockstar", "user-1");
 
-    expect(resolver.search).toHaveBeenCalledWith("duki rockstar");
+    expect(resolver.search).toHaveBeenCalledWith(
+      "duki rockstar",
+      undefined,
+      "duki",
+    );
     expect(track).toMatchObject({
       id: "search-result",
       requestedBy: "user-1",
@@ -292,6 +296,7 @@ describe("YoutubePlaybackService", () => {
       "duki rockstar",
       undefined,
       5,
+      "duki",
     );
     expect(track).toMatchObject({
       id: "search-result-2",
@@ -1213,7 +1218,11 @@ describe("YoutubePlaybackService", () => {
 
     const track = await service.enqueue("duki rockstar", "user-1");
 
-    expect(resolver.search).toHaveBeenCalledWith("duki rockstar");
+    expect(resolver.search).toHaveBeenCalledWith(
+      "duki rockstar",
+      undefined,
+      "duki",
+    );
     expect(track).toMatchObject({
       id: "search-result",
       requestedBy: "user-1",

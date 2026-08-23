@@ -28,6 +28,7 @@ import {
 } from "./media/youtube/yt-dlp.js";
 import { createYoutubeiClient } from "./media/youtube/youtubei-client.js";
 import { YoutubeiResolver } from "./media/youtube/youtubei-resolver.js";
+import { getTimeoutConfig } from "./lib/timeout-config.js";
 import { YoutubeResolverWithFallback } from "./media/youtube/youtube-resolver-with-fallback.js";
 import { SongLinkClient } from "./media/song-link.js";
 import { DirectUrlClient } from "./media/direct-url.js";
@@ -187,6 +188,7 @@ async function main(): Promise<void> {
   );
   const ytDlpResolver = new YoutubeResolver(ytDlpExecutor, logger, {
     onSearchMetrics: (m) => metrics.recordSearchMetrics(m),
+    timeouts: getTimeoutConfig(),
   });
   let youtubeiResolver: YoutubeiResolver | undefined;
   if (config.RHAPSOD_YOUTUBEI_ENABLED) {
