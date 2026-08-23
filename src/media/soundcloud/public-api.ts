@@ -138,7 +138,7 @@ export class SoundCloudPublicApi implements SoundCloudResolver {
       return this.#apiRequest<T>(pathOrUrl, false);
     }
     if (!response.ok)
-      throw new Error(`SoundCloud API returned ${response.status}`);
+      throw new Error("No se pudo conectar con SoundCloud. Probá de nuevo.");
     return (await response.json()) as T;
   }
 
@@ -162,7 +162,7 @@ export class SoundCloudPublicApi implements SoundCloudResolver {
       signal: AbortSignal.timeout(this.#timeoutMs),
     });
     if (!home.ok)
-      throw new Error("Unable to load SoundCloud client configuration");
+      throw new Error("No se pudo conectar con SoundCloud.");
     const html = await home.text();
     const scripts = [
       ...html.matchAll(
@@ -199,7 +199,7 @@ export class SoundCloudPublicApi implements SoundCloudResolver {
       );
       return match[1];
     }
-    throw new Error("Unable to discover SoundCloud client configuration");
+    throw new Error("No se pudo conectar con SoundCloud.");
   }
 
   async #followShortLink(url: string): Promise<string> {
@@ -222,7 +222,7 @@ function assertPlayable(track: SoundCloudTrack): void {
     throw new SoundCloudDrmError(drmMetadata(track));
   }
   if (!track.id || !track.title)
-    throw new Error("SoundCloud returned incomplete track metadata");
+    throw new Error("No se obtuvieron los datos completos de SoundCloud.");
 }
 
 function drmMetadata(track: SoundCloudTrack): SoundCloudDrmMetadata {

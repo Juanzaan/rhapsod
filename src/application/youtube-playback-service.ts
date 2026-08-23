@@ -554,7 +554,7 @@ export class YoutubePlaybackService {
     requestedByUid?: string,
   ): Promise<PlaylistEnqueueResult> {
     if (resource.type !== "playlist")
-      throw new Error("Only YouTube playlists can be expanded");
+      throw new Error("Solo se pueden expandir playlists de YouTube con !play.");
     return this.#withExpansionSlot(async () => {
       const stopEpoch = this.#stopEpoch;
       const expansion = await this.#resolver.expandPlaylist(
@@ -742,7 +742,7 @@ export class YoutubePlaybackService {
         );
       }
       if (resource.type !== "playlist" && resource.type !== "album") {
-        throw new Error("Only Spotify collections can be expanded");
+        throw new Error("Solo se pueden expandir colecciones de Spotify con !play.");
       }
       const expansion =
         resource.type === "playlist"
@@ -1379,7 +1379,7 @@ export class YoutubePlaybackService {
       }
       throw lastError;
     }
-    throw new Error("No playable audio source");
+    throw new Error("No se encontró audio reproducible para esa pista.");
   }
 
   #prefetchNext(): void {

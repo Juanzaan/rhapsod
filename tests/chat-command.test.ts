@@ -89,25 +89,31 @@ describe("parseChatCommand", () => {
       name: "remove",
       to: 5,
     });
-    expect(parseChatCommand("!mv 5 2")).toEqual({
-      from: 5,
+    expect(parseChatCommand("!mv 2 5")).toEqual({
+      from: 2,
       name: "move",
-      to: 2,
+      to: 5,
     });
     expect(parseChatCommand("!queue 3")).toEqual({ name: "queue", page: 3 });
-    expect(() => parseChatCommand("!volume 101")).toThrow("between 0 and 100");
-    expect(() => parseChatCommand("!play")).toThrow("Usage: !play");
-    expect(() => parseChatCommand("!playnext")).toThrow("Usage: !playnext");
-    expect(() => parseChatCommand("!remove 5-2")).toThrow("ascending");
-    expect(() => parseChatCommand("!move 2")).toThrow("Usage: !move");
-    expect(() => parseChatCommand("!queue 0")).toThrow("at least 1");
-    expect(() => parseChatCommand("!seek abc")).toThrow("Usage: !seek");
-    expect(() => parseChatCommand("!previous 2")).toThrow(
-      "does not accept arguments",
+    expect(() => parseChatCommand("!volume 101")).toThrow(
+      "El volumen tiene que estar entre 0 y 100",
     );
-    expect(() => parseChatCommand("!unknown")).toThrow("Unknown command");
+    expect(() => parseChatCommand("!play")).toThrow("Usá: !play");
+    expect(() => parseChatCommand("!playnext")).toThrow("Usá: !playnext");
+    expect(() => parseChatCommand("!remove 5-2")).toThrow(
+      "El rango tiene que ser ascendente",
+    );
+    expect(() => parseChatCommand("!move 2")).toThrow("Usá: !move");
+    expect(() => parseChatCommand("!queue 0")).toThrow(
+      "La posición tiene que ser mayor a 0",
+    );
+    expect(() => parseChatCommand("!seek abc")).toThrow("Usá: !seek");
+    expect(() => parseChatCommand("!previous 2")).toThrow(
+      "no acepta argumentos",
+    );
+    expect(() => parseChatCommand("!unknown")).toThrow(/No reconozco/);
     expect(() => parseChatCommand("!channel-move")).toThrow(
-      "Usage: !channel-move",
+      "Usá: !channel-move",
     );
   });
 });

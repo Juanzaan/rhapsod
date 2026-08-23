@@ -88,30 +88,31 @@ export function parseChatCommand(
     .trim()
     .split(/\s+/);
   const name = COMMAND_ALIASES[rawName.toLowerCase()];
-  if (!name) throw new Error(`Unknown command: ${rawName || "(empty)"}`);
+  if (!name)
+    throw new Error("No reconozco ese comando. Escribí !help para ver los disponibles.");
 
   const argument = unwrapTeamSpeakUrl(argumentsList.join(" ").trim());
   switch (name) {
     case "channel-move":
       if (!argument)
-        throw new Error("Usage: !channel-move <name or channel id>");
+        throw new Error("Usá: !channel-move <nombre o id del canal>");
       return { input: argument, name };
     case "play":
-      if (!argument) throw new Error("Usage: !play <URL or search terms>");
+      if (!argument) throw new Error("Usá: !play <link o término de búsqueda>");
       return { input: argument, name };
     case "search": {
       const first = argument.split(/\s+/)[0] ?? "";
       if (/^\d+$/.test(first)) {
         const index = parsePosition(first, "!yt <n> <búsqueda>");
         const query = argument.split(/\s+/).slice(1).join(" ").trim();
-        if (!query) throw new Error("Usage: !yt <n> <búsqueda>");
+        if (!query) throw new Error("Usá: !yt <n> <búsqueda>");
         return { index, input: query, name };
       }
-      if (!argument) throw new Error("Usage: !yt <search terms>");
+      if (!argument) throw new Error("Usá: !yt <término de búsqueda>");
       return { input: argument, name };
     }
     case "playnext":
-      if (!argument) throw new Error("Usage: !playnext <URL or search terms>");
+      if (!argument) throw new Error("Usá: !playnext <link o término de búsqueda>");
       return { input: argument, name };
     case "queue":
       return argument ? { name, page: parsePage(argument) } : { name };
@@ -128,11 +129,11 @@ export function parseChatCommand(
       }
       return { mode: argument, name };
     case "seek":
-      if (!/^\d+$/.test(argument)) throw new Error("Usage: !seek <segundos>");
+      if (!/^\d+$/.test(argument)) throw new Error("Usá: !seek <segundos>");
       return { name, seconds: Number(argument) };
     default:
       if (argument)
-        throw new Error(`Command !${rawName} does not accept arguments`);
+        throw new Error(`El comando !${rawName} no acepta argumentos`);
       return { name };
   }
 }
@@ -151,10 +152,10 @@ function parsePosition(
   argument: string,
   usage = "!remove <queue position>",
 ): number {
-  if (!/^\d+$/.test(argument)) throw new Error(`Usage: ${usage}`);
+  if (!/^\d+$/.test(argument)) throw new Error(`Usá: ${usage}`);
   const position = Number(argument);
   if (!Number.isSafeInteger(position) || position < 1) {
-    throw new Error("Queue position must be at least 1");
+    throw new Error("La posición tiene que ser mayor a 0.");
   }
   return position;
 }
@@ -164,23 +165,23 @@ function parseRange(
   command: "remove",
 ): { from: number; to: number } {
   const match = argument.match(/^(\d+)(?:-(\d+))?$/);
-  if (!match) throw new Error(`Usage: !${command} <position|from-to>`);
-  const from = parsePosition(match[1] ?? "", "!remove <position|from-to>");
+  if (!match) throw new Error(`Usá: !${command} <posición|desde-hasta>`);
+  const from = parsePosition(match[1] ?? "", "!remove <posición|desde-hasta>");
   const to =
     match[2] === undefined
       ? from
-      : parsePosition(match[2], "!remove <position|from-to>");
-  if (to < from) throw new Error("The range must be ascending");
+      : parsePosition(match[2], "!remove <posición|desde-hasta>");
+  if (to < from) throw new Error("El rango tiene que ser ascendente (ej: 2-5).");
   return { from, to };
 }
 
 function parseMove(argument: string): { from: number; to: number } {
   const parts = argument.split(/\s+/);
-  if (parts.length !== 2) throw new Error("Usage: !move <from> <to>");
-  return {
-    from: parsePosition(parts[0] ?? "", "!move <from> <to>"),
-    to: parsePosition(parts[1] ?? "", "!move <from> <to>"),
-  };
+  if (parts.length !== 2) throw new Error("Usá: !move <desde> <hasta>");
+  const from = parsePosition(parts[0] ?? "", "!move <desde> <hasta>");
+  const to = parsePosition(parts[1] ?? "", "!move <desde> <hasta>");
+  if (to < from) throw new Error("El rango tiene que ser ascendente (ej: 2-5).");
+  return { from, to };
 }
 
 function parsePage(argument: string): number {
@@ -189,9 +190,9 @@ function parsePage(argument: string): number {
 }
 
 function parseVolume(argument: string): number {
-  if (!/^\d+$/.test(argument)) throw new Error("Usage: !volume <0-100>");
+  if (!/^\d+$/.test(argument)) throw new Error("Usá: !volume <0-100>");
   const value = Number(argument);
   if (value < 0 || value > 100)
-    throw new Error("Volume must be between 0 and 100");
+    throw new Error("El volumen tiene que estar entre 0 y 100.");
   return value;
 }

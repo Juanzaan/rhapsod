@@ -129,7 +129,7 @@ function setup(
       Promise.resolve("https://media.example/soundcloud-api"),
     ),
     getTrack: vi.fn<() => Promise<YoutubeTrackMetadata>>(() =>
-      Promise.reject(new Error("SoundCloud API returned 503")),
+      Promise.reject(new Error("No se pudo conectar con SoundCloud. Probá de nuevo.")),
     ),
     match: vi.fn((input: string) => input.includes("soundcloud.com")),
     name: "soundcloud",
@@ -1550,7 +1550,7 @@ describe("YoutubePlaybackService", () => {
 
     await expect(
       service.enqueuePlaylist({ id: "v1", type: "video" }, "user-1"),
-    ).rejects.toThrow("Only YouTube playlists can be expanded");
+    ).rejects.toThrow("Solo se pueden expandir playlists de YouTube con !play.");
   });
 
   it("restores volume and loop mode from the state store", () => {

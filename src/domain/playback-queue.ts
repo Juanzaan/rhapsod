@@ -9,7 +9,7 @@ export class PlaybackQueue {
 
   add(track: Track): void {
     if (this.#tracks.some((queuedTrack) => queuedTrack.id === track.id)) {
-      throw new Error(`Track ${track.id} is already queued`);
+      throw new Error("Esa canción ya está en la cola.");
     }
     this.#tracks.push(track);
   }

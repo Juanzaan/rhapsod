@@ -271,12 +271,12 @@ export class DirectUrlClient implements DirectUrlResolver {
     try {
       const parsed = JSON.parse(stdout) as FfprobeJson;
       if (parsed.format === undefined) {
-        throw new Error("ffprobe returned no format info");
+        throw new Error("No se pudo analizar el archivo de audio.");
       }
       return parsed.format;
     } catch (error) {
       if (error instanceof SyntaxError) {
-        throw new Error("ffprobe returned invalid JSON", { cause: error });
+        throw new Error("No se pudo analizar el archivo de audio.", { cause: error });
       }
       throw error;
     }

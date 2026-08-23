@@ -108,7 +108,7 @@ describe("SpotifyApi", () => {
     });
 
     await expect(api.getTrack({ id: "abc123", type: "track" })).rejects.toThrow(
-      "Spotify API returned 401",
+      "No se pudo autenticar con Spotify.",
     );
     expect(fetch.mock.calls.length).toBe(4);
   });
@@ -281,7 +281,7 @@ describe("SpotifyApi", () => {
     });
 
     await expect(api.getTrack({ id: "abc123", type: "track" })).rejects.toThrow(
-      "Spotify token request failed with 400",
+      "No se pudo autenticar con Spotify.",
     );
   });
 
