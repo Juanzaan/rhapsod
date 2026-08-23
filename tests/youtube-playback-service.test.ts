@@ -1003,7 +1003,7 @@ describe("YoutubePlaybackService", () => {
       id: "abc123",
       type: "track",
     });
-    expect(resolver.search).toHaveBeenCalledWith("Duki Rockstar", 180);
+    expect(resolver.search).toHaveBeenCalledWith("Duki Rockstar", 180, "Rockstar");
     expect(track).toMatchObject({
       alternativeProvider: "spotify",
       id: "search-result",
@@ -1052,7 +1052,7 @@ describe("YoutubePlaybackService", () => {
     expect(result.added).toHaveLength(2);
     expect(result.remaining).toBe(23);
     expect(resolver.search).toHaveBeenCalledTimes(1);
-    expect(resolver.search).toHaveBeenCalledWith("Duki Rockstar", 180);
+    expect(resolver.search).toHaveBeenCalledWith("Duki Rockstar", 180, "Rockstar");
     expect(result.added[0]).toMatchObject({
       alternativeProvider: "spotify",
       id: "t1",
@@ -1070,8 +1070,8 @@ describe("YoutubePlaybackService", () => {
 
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    expect(resolver.search).toHaveBeenCalledWith("Duki Rockstar", 180);
-    expect(resolver.search).toHaveBeenCalledWith("Kanye West Ghost Town", 271);
+    expect(resolver.search).toHaveBeenCalledWith("Duki Rockstar", 180, "Rockstar");
+    expect(resolver.search).toHaveBeenCalledWith("Kanye West Ghost Town", 271, "Ghost Town");
     expect(createPlayback).toHaveBeenCalledTimes(1);
   });
 
@@ -1400,6 +1400,7 @@ describe("YoutubePlaybackService", () => {
     expect(resolver.search).toHaveBeenCalledWith(
       "Kanye West OK (feat. Don Toliver)",
       224,
+      "OK (feat. Don Toliver)",
     );
     expect(track).toMatchObject({
       alternativeProvider: "youtube",

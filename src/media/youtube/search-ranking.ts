@@ -55,8 +55,10 @@ export function rankYoutubeCandidatesScored(
   query: string,
   candidates: readonly YoutubeSearchCandidate[],
   expectedDurationSeconds?: number,
+  expectedTitle?: string,
 ): ScoredCandidate[] {
   const normalizedQuery = normalize(query);
+  const normalizedExpectedTitle = expectedTitle ? normalize(expectedTitle) : undefined;
   const medianDuration = expectedDurationSeconds ?? median(candidates);
   return candidates
     .map((candidate) => {
@@ -66,6 +68,7 @@ export function rankYoutubeCandidatesScored(
         candidate,
         expectedDurationSeconds,
         medianDuration,
+        normalizedExpectedTitle,
       );
       return { candidate, score, breakdown };
     })
@@ -79,6 +82,7 @@ function scoreCandidate(
   candidate: YoutubeSearchCandidate,
   expectedDurationSeconds?: number,
   medianDurationSeconds?: number,
+  normalizedExpectedTitle?: string,
 ): { score: number; breakdown: Record<string, number> } {
   const title = normalize(candidate.title);
   const queryTerms = normalizedQuery
@@ -91,6 +95,10 @@ function scoreCandidate(
   const breakdown: Record<string, number> = {};
   let score = queryTerms.length ? (matchingTerms / queryTerms.length) * 45 : 0;
   breakdown.termMatch = score;
+  if (normalizedExpectedTitle && title.includes(normalizedExpectedTitle)) {
+    score += 30;
+    breakdown.expectedTitleMatch = 30;
+  }
   if (title === normalizedQuery) {
     score += 25;
     breakdown.exactTitle = 25;
