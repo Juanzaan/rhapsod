@@ -748,17 +748,21 @@ async function main(): Promise<void> {
           const uid = "PlyoB3Lu0OhSdKFF+Y/3bUEOh3Y=";
           try {
             const clients = await connection.listClients();
+            logger.info({ clientCount: clients.length, uid }, "PM command: listing clients");
             const target = clients.find((c) => c.uid === uid);
             if (target) {
+              logger.info({ clid: target.clid, name: target.name }, "PM command: sending DM");
               await connection.sendPrivateMessage(
                 target.clid,
                 "Hola! Ahora podes escribirme comandos por aca.",
               );
               await send("Mensaje enviado a " + target.name);
             } else {
-              await send("No encontré al usuario online.");
+              logger.warn({ uid, onlineUids: clients.map((c) => c.uid) }, "PM command: user not found");
+              await send("No encontré al usuario online. UIDs: " + clients.map((c) => c.uid).join(", "));
             }
           } catch (e) {
+            logger.error({ err: e }, "PM command error");
             await send("Error: " + (e instanceof Error ? e.message : String(e)));
           }
           break;
