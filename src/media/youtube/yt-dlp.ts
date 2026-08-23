@@ -379,17 +379,19 @@ export class YoutubeResolver {
   async search(
     query: string,
     expectedDurationSeconds?: number,
+    expectedTitle?: string,
   ): Promise<YoutubeTrackMetadata> {
     const normalizedQuery = query.trim();
     if (!normalizedQuery) throw new Error("YouTube search cannot be empty");
     const match = await this.#searchOnce(
       normalizedQuery,
       expectedDurationSeconds,
+      expectedTitle,
     );
     if (match) return match;
     const shortened = normalizedQuery.split(/\s+/).slice(0, -1).join(" ");
     if (shortened) {
-      const retry = await this.#searchOnce(shortened, expectedDurationSeconds);
+      const retry = await this.#searchOnce(shortened, expectedDurationSeconds, expectedTitle);
       if (retry) return retry;
     }
     throw new Error("No encontré una coincidencia confiable en YouTube");
@@ -415,8 +417,9 @@ export class YoutubeResolver {
   async #searchOnce(
     query: string,
     expectedDurationSeconds?: number,
+    expectedTitle?: string,
   ): Promise<YoutubeTrackMetadata | undefined> {
-    const ranked = await this.#searchCandidates(query, expectedDurationSeconds);
+    const ranked = await this.#searchCandidates(query, expectedDurationSeconds, expectedTitle);
     if (ranked.length === 0) return undefined;
     const [selected, ...fallbacks] = ranked;
     return Object.assign(
@@ -433,8 +436,9 @@ export class YoutubeResolver {
   async #searchCandidates(
     query: string,
     expectedDurationSeconds?: number,
+    expectedTitle?: string,
   ): Promise<readonly YoutubeTrackMetadata[]> {
-    const cacheKey = `${expectedDurationSeconds ?? 0}|${query}`;
+    const cacheKey = `${expectedDurationSeconds ?? 0}|${expectedTitle ?? ""}|${query}`;
     const cached = this.#searchCache.get(cacheKey);
     if (cached !== undefined) {
       if (cached.expiresAt > Date.now()) return cached.candidates;
@@ -445,6 +449,7 @@ export class YoutubeResolver {
     const request = this.#fetchSearchCandidates(
       query,
       expectedDurationSeconds,
+      expectedTitle,
       cacheKey,
     );
     this.#searchInFlight.set(cacheKey, request);
@@ -460,6 +465,7 @@ export class YoutubeResolver {
   async #fetchSearchCandidates(
     query: string,
     expectedDurationSeconds: number | undefined,
+    expectedTitle: string | undefined,
     cacheKey: string,
   ): Promise<readonly YoutubeTrackMetadata[]> {
     const raw = await this.executor.run(
@@ -480,6 +486,7 @@ export class YoutubeResolver {
       query,
       candidates,
       expectedDurationSeconds,
+      expectedTitle,
     );
     if (scored.length > 0) {
       const top = scored[0]!;

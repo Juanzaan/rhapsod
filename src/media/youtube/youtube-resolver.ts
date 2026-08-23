@@ -8,6 +8,7 @@ export interface YoutubePlaybackResolver {
   search(
     query: string,
     expectedDurationSeconds?: number,
+    expectedTitle?: string,
   ): Promise<YoutubeTrackMetadata>;
   searchMany(
     query: string,

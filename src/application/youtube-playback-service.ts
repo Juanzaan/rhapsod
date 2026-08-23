@@ -87,6 +87,7 @@ export interface YoutubePlaybackResolver {
   search(
     query: string,
     expectedDurationSeconds?: number,
+    expectedTitle?: string,
   ): Promise<YoutubeTrackMetadata>;
   searchMany(
     query: string,
@@ -285,6 +286,7 @@ export class YoutubePlaybackService {
       const metadata = await this.#resolver.search(
         query,
         spotifyTrack.durationSeconds,
+        spotifyTrack.title,
       );
       this.#recordMetadataTiming(metadata, startedAt);
       return this.#enqueueMetadata(
@@ -1270,6 +1272,7 @@ export class YoutubePlaybackService {
       const metadata = await this.#resolver.search(
         track.searchQuery,
         track.durationSeconds,
+        track.title,
       );
       this.#recordMetadataTiming(metadata, startedAt);
       const resolvedTrack: Track = {
@@ -1441,6 +1444,7 @@ export class YoutubePlaybackService {
       const candidate = await this.#resolver.search(
         query,
         metadata.durationSeconds,
+        metadata.title,
       );
       this.#recordMetadataTiming(candidate, startedAt);
       return candidate;

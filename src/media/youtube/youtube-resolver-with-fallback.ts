@@ -61,8 +61,9 @@ export class YoutubeResolverWithFallback implements YoutubePlaybackResolver {
   search(
     query: string,
     expectedDurationSeconds?: number,
+    expectedTitle?: string,
   ): Promise<YoutubeTrackMetadata> {
-    return this.fallback.search(query, expectedDurationSeconds);
+    return this.fallback.search(query, expectedDurationSeconds, expectedTitle);
   }
 
   searchMany(
