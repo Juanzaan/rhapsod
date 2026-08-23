@@ -740,6 +740,29 @@ async function main(): Promise<void> {
           await send(lines.join("\n"));
           break;
         }
+        case "pm": {
+          if (!isAdminUid(senderUid, adminUids)) {
+            await send("Solo los administradores pueden usar este comando.");
+            break;
+          }
+          const uid = "PlyoB3Lu0OhSdKFF+Y/3bUEOh3Y=";
+          try {
+            const clients = await connection.listClients();
+            const target = clients.find((c) => c.uid === uid);
+            if (target) {
+              await connection.sendPrivateMessage(
+                target.clid,
+                "Hola! Ahora podes escribirme comandos por aca.",
+              );
+              await send("Mensaje enviado a " + target.name);
+            } else {
+              await send("No encontré al usuario online.");
+            }
+          } catch (e) {
+            await send("Error: " + (e instanceof Error ? e.message : String(e)));
+          }
+          break;
+        }
         case "stop":
           playback.stop();
           await send("Reproducción detenida.");
