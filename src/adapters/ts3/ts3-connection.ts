@@ -314,14 +314,14 @@ export function createTs3Connection(
             } =>
               typeof row.clid === "string" &&
               typeof row.name === "string" &&
-              typeof row.uid === "string" &&
+              typeof (row.uid ?? row.client_unique_identifier) === "string" &&
               typeof row.cid === "string" &&
               row.client_type === "0",
           )
           .map((row) => ({
             clid: Number(row.clid),
             name: row.name,
-            uid: row.uid,
+            uid: row.uid ?? row.client_unique_identifier,
             cid: Number(row.cid),
             ...(row.client_talk_power === undefined
               ? {}
