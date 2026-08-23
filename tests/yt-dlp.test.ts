@@ -114,11 +114,11 @@ describe("YoutubeResolver", () => {
       title: "Duki Rockstar official video",
       webpageUrl: "https://www.youtube.com/watch?v=search_1",
     });
-    expect(executor.calls[0]).toContain("ytsearch20:duki rockstar");
+    expect(executor.calls[0]).toContain("ytsearch8:duki rockstar");
     expect(executor.calls[0]).toContain("--flat-playlist");
     expect(executor.calls[0]).not.toContain("--format");
     expect(executor.calls[0]).toEqual(
-      expect.arrayContaining(["--playlist-end", "20"]),
+      expect.arrayContaining(["--playlist-end", "8"]),
     );
   });
 
@@ -182,8 +182,8 @@ describe("YoutubeResolver", () => {
       webpageUrl: "https://www.youtube.com/watch?v=search_1",
     });
     expect(executor.calls).toHaveLength(2);
-    expect(executor.calls[0]).toContain("ytsearch20:duki rockstar");
-    expect(executor.calls[1]).toContain("ytsearch20:duki");
+    expect(executor.calls[0]).toContain("ytsearch8:duki rockstar");
+    expect(executor.calls[1]).toContain("ytsearch8:duki");
   });
 
   it("caches search results so repeated queries skip yt-dlp", async () => {
