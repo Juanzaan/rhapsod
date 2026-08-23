@@ -298,44 +298,18 @@ export function createTs3Connection(
     },
     listClients: async () => {
       try {
-        const rows = await client.execCommandWithResponse(
-          "clientlist -uid -away -voice -groups",
-        );
-        logger.warn({ rawRowCount: rows.length, sample: rows.slice(0, 2) }, "clientlist raw response (first 2 rows)");
-        return rows
-          .filter(
-            (
-              row,
-            ): row is Record<string, string> & {
-              clid: string;
-              name: string;
-              uid: string;
-              cid: string;
-            } =>
-              typeof row.clid === "string" &&
-              typeof row.name === "string" &&
-              typeof (row.uid ?? row.client_unique_identifier) === "string" &&
-              typeof row.cid === "string" &&
-              row.client_type === "0",
-          )
-          .map((row) => ({
-            clid: Number(row.clid),
-            name: row.name,
-            uid: row.uid ?? row.client_unique_identifier,
-            cid: Number(row.cid),
-            ...(row.client_talk_power === undefined
-              ? {}
-              : { talkPower: Number(row.client_talk_power) }),
-            ...(row.client_servergroups === undefined
-              ? {}
-              : {
-                  groups: row.client_servergroups
-                    .split(",")
-                    .filter((g) => g.length > 0),
-                }),
+        const entries = await listClients(client);
+        return entries
+          .filter((e) => e.type === 0)
+          .map((e) => ({
+            clid: e.id,
+            name: e.nickname,
+            uid: e.uid,
+            cid: Number(e.channelID),
+            ...(e.serverGroups.length > 0 ? { groups: e.serverGroups } : {}),
           }));
       } catch (error) {
-        logger.error({ err: error, command: "clientlist -uid -away -voice -groups" }, "Failed to list clients");
+        logger.error({ err: error }, "Failed to list clients via library");
         return [];
       }
     },
