@@ -114,11 +114,11 @@ describe("YoutubeResolver", () => {
       title: "Duki Rockstar official video",
       webpageUrl: "https://www.youtube.com/watch?v=search_1",
     });
-    expect(executor.calls[0]).toContain("ytsearch8:duki rockstar");
+    expect(executor.calls[0]).toContain("ytsearch5:duki rockstar");
     expect(executor.calls[0]).toContain("--flat-playlist");
     expect(executor.calls[0]).not.toContain("--format");
     expect(executor.calls[0]).toEqual(
-      expect.arrayContaining(["--playlist-end", "8"]),
+      expect.arrayContaining(["--playlist-end", "5"]),
     );
   });
 
@@ -182,8 +182,8 @@ describe("YoutubeResolver", () => {
       webpageUrl: "https://www.youtube.com/watch?v=search_1",
     });
     expect(executor.calls).toHaveLength(2);
-    expect(executor.calls[0]).toContain("ytsearch8:duki rockstar");
-    expect(executor.calls[1]).toContain("ytsearch8:duki");
+    expect(executor.calls[0]).toContain("ytsearch5:duki rockstar");
+    expect(executor.calls[1]).toContain("ytsearch5:duki");
   });
 
   it("caches search results so repeated queries skip yt-dlp", async () => {
@@ -394,6 +394,49 @@ describe("YoutubeResolver", () => {
         100,
       ),
     ).rejects.toThrow("video cannot be expanded");
+  });
+
+  it("calls onSearchMetrics with scores and candidate counts", async () => {
+    const executor = new FakeExecutor(
+      '{"entries":[{"id":"w1","title":"Song Official Video","webpage_url":"https://www.youtube.com/watch?v=w1"},{"id":"w2","title":"Song Live Cover","webpage_url":"https://www.youtube.com/watch?v=w2"}]}',
+    );
+    const onSearchMetrics = vi.fn();
+    const resolver = new YoutubeResolver(executor, undefined, {
+      onSearchMetrics,
+    });
+
+    await resolver.search("song");
+
+    expect(onSearchMetrics).toHaveBeenCalledTimes(1);
+    const m: {
+      query: string;
+      winnerScore: number;
+      topScores: number[];
+      candidatesCount: number;
+      rankedCount: number;
+      durationMs: number;
+    } = onSearchMetrics.mock.calls[0]![0] as never;
+    expect(m.query).toBe("song");
+    expect(typeof m.winnerScore).toBe("number");
+    expect(Array.isArray(m.topScores)).toBe(true);
+    expect(m.topScores.length).toBeLessThanOrEqual(3);
+    expect(typeof m.candidatesCount).toBe("number");
+    expect(typeof m.rankedCount).toBe("number");
+    expect(typeof m.durationMs).toBe("number");
+  });
+
+  it("does not call onSearchMetrics when no candidates rank above threshold", async () => {
+    const executor = new FakeExecutor(
+      '{"entries":[{"id":"junk","title":"completely unrelated garbage","webpage_url":"https://www.youtube.com/watch?v=junk"}]}',
+    );
+    const onSearchMetrics = vi.fn();
+    const resolver = new YoutubeResolver(executor, undefined, {
+      onSearchMetrics,
+    });
+
+    await expect(resolver.search("duki rockstar")).rejects.toThrow();
+
+    expect(onSearchMetrics).not.toHaveBeenCalled();
   });
 });
 

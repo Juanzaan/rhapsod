@@ -53,9 +53,10 @@ export function buildFfmpegPcmArguments(
   if (options.seekSeconds !== undefined && options.seekSeconds > 0) {
     args.push("-ss", String(options.seekSeconds));
   }
-  // Keep probe sizes small: throttled YouTube streams deliver the first frames
-  // sooner when FFmpeg does not wait for a full megabyte before emitting audio.
-  args.push("-analyzeduration", "500k", "-probesize", "500k");
+  // Low-latency flags: skip buffering and probe delays so the first audio
+  // frames reach the Opus encoder as soon as YouTube starts delivering them.
+  args.push("-fflags", "+nobuffer", "-flags", "+low_delay");
+  args.push("-analyzeduration", "0", "-probesize", "32");
   args.push(
     "-i",
     url,
