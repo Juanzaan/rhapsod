@@ -301,6 +301,7 @@ export function createTs3Connection(
         const rows = await client.execCommandWithResponse(
           "clientlist -uid -away -voice -groups",
         );
+        logger.warn({ rawRowCount: rows.length, sample: rows.slice(0, 2) }, "clientlist raw response (first 2 rows)");
         return rows
           .filter(
             (
