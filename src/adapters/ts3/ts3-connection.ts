@@ -210,7 +210,8 @@ export function createTs3Connection(
               typeof row.cid === "string" && typeof row.name === "string",
           )
           .map((row) => ({ cid: Number(row.cid), name: row.name }));
-      } catch {
+      } catch (error) {
+        logger.error({ err: error, command: "channellist" }, "Failed to list channels");
         return [];
       }
     },
@@ -270,7 +271,8 @@ export function createTs3Connection(
       try {
         const rows = await client.execCommandWithResponse("serverinfo");
         return rows[0] ?? {};
-      } catch {
+      } catch (error) {
+        logger.error({ err: error, command: "serverinfo" }, "Failed to get server info");
         return {};
       }
     },
@@ -331,7 +333,8 @@ export function createTs3Connection(
                     .filter((g) => g.length > 0),
                 }),
           }));
-      } catch {
+      } catch (error) {
+        logger.error({ err: error, command: "clientlist -uid -away -voice -groups" }, "Failed to list clients");
         return [];
       }
     },
