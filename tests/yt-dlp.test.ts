@@ -360,7 +360,7 @@ describe("YoutubeResolver", () => {
     const resolver = new YoutubeResolver(executor);
 
     await expect(
-      resolver.expandPlaylist({ id: "PL123", type: "playlist" }, 20),
+      resolver.expandPlaylist({ id: "PL123", type: "playlist" }, 100),
     ).resolves.toEqual({
       total: 3,
       tracks: [
@@ -381,7 +381,7 @@ describe("YoutubeResolver", () => {
     expect(executor.calls[0]).toEqual(
       expect.arrayContaining([
         "--playlist-end",
-        "20",
+        "100",
         "https://www.youtube.com/playlist?list=PL123",
       ]),
     );
@@ -391,7 +391,7 @@ describe("YoutubeResolver", () => {
     await expect(
       new YoutubeResolver(new FakeExecutor("{}")).expandPlaylist(
         { id: "v1", type: "video" },
-        20,
+        100,
       ),
     ).rejects.toThrow("video cannot be expanded");
   });

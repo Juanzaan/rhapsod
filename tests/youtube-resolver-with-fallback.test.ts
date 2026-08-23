@@ -199,7 +199,7 @@ describe("YoutubeResolverWithFallback delegation", () => {
 
     void wrapper.search("duki rockstar");
     void wrapper.searchMany("duki rockstar", undefined, 3);
-    void wrapper.expandPlaylist(playlistResource(), 20);
+    void wrapper.expandPlaylist(playlistResource(), 100);
     await wrapper.getTrackFromUrl(VIDEO_URL);
 
     expect(fallback.search).toHaveBeenCalledWith("duki rockstar", undefined, undefined);
@@ -210,7 +210,7 @@ describe("YoutubeResolverWithFallback delegation", () => {
     );
     expect(fallback.expandPlaylist).toHaveBeenCalledWith(
       playlistResource(),
-      20,
+      100,
     );
     expect(fallback.getTrackFromUrl).toHaveBeenCalledWith(VIDEO_URL);
   });
