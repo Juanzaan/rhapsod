@@ -80,10 +80,14 @@ describe("FFmpeg PCM source", () => {
 
     const inputIndex = args.indexOf("-i");
     expect(inputIndex).toBeGreaterThan(-1);
+    expect(args.indexOf("-fflags")).toBeLessThan(inputIndex);
+    expect(args[args.indexOf("-fflags") + 1]).toBe("+nobuffer");
+    expect(args.indexOf("-flags")).toBeLessThan(inputIndex);
+    expect(args[args.indexOf("-flags") + 1]).toBe("+low_delay");
     expect(args.indexOf("-analyzeduration")).toBeLessThan(inputIndex);
     expect(args.indexOf("-probesize")).toBeLessThan(inputIndex);
-    expect(args[args.indexOf("-analyzeduration") + 1]).toBe("500k");
-    expect(args[args.indexOf("-probesize") + 1]).toBe("500k");
+    expect(args[args.indexOf("-analyzeduration") + 1]).toBe("0");
+    expect(args[args.indexOf("-probesize") + 1]).toBe("32");
   });
 
   it("rejects non-HTTPS inputs", () => {

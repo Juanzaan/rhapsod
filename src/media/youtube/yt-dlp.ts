@@ -3,6 +3,7 @@ import { availableParallelism } from "node:os";
 
 import type { MinimalLogger } from "../../observability/logger.js";
 import { noopLogger } from "../../observability/logger.js";
+import type { SearchMetrics } from "../../observability/metrics.js";
 import type { YoutubeResource } from "../media-input.js";
 import { rankYoutubeCandidatesScored } from "./search-ranking.js";
 
@@ -10,8 +11,7 @@ const MAX_BUFFER_BYTES = 8 * 1024 * 1024;
 const SEARCH_CACHE_TTL_MS = 15 * 60 * 1000;
 const SEARCH_CACHE_MAX_ENTRIES = 100;
 const ABORT_GRACE_MS = 3_000;
-const AUDIO_FORMAT_SELECTOR =
-  "bestaudio[acodec!=none]/bestaudio/best[acodec!=none]";
+const AUDIO_FORMAT_SELECTOR = "251/bestaudio[acodec!=none]/bestaudio";
 
 export const YTDLP_ABORT_ERROR = "yt-dlp job aborted";
 
@@ -347,12 +347,15 @@ export class YoutubeResolver {
   >();
 
   readonly #logger: MinimalLogger;
+  readonly #onSearchMetrics: ((metrics: SearchMetrics) => void) | undefined;
 
   constructor(
     private readonly executor: YtDlpExecutor,
     logger?: MinimalLogger,
+    options?: { onSearchMetrics?: (metrics: SearchMetrics) => void },
   ) {
     this.#logger = logger ?? noopLogger;
+    this.#onSearchMetrics = options?.onSearchMetrics;
   }
 
   async getTrack(resource: YoutubeResource): Promise<YoutubeTrackMetadata> {
@@ -391,7 +394,11 @@ export class YoutubeResolver {
     if (match) return match;
     const shortened = normalizedQuery.split(/\s+/).slice(0, -1).join(" ");
     if (shortened) {
-      const retry = await this.#searchOnce(shortened, expectedDurationSeconds, expectedTitle);
+      const retry = await this.#searchOnce(
+        shortened,
+        expectedDurationSeconds,
+        expectedTitle,
+      );
       if (retry) return retry;
     }
     throw new Error("No encontré una coincidencia confiable en YouTube");
@@ -419,7 +426,11 @@ export class YoutubeResolver {
     expectedDurationSeconds?: number,
     expectedTitle?: string,
   ): Promise<YoutubeTrackMetadata | undefined> {
-    const ranked = await this.#searchCandidates(query, expectedDurationSeconds, expectedTitle);
+    const ranked = await this.#searchCandidates(
+      query,
+      expectedDurationSeconds,
+      expectedTitle,
+    );
     if (ranked.length === 0) return undefined;
     const [selected, ...fallbacks] = ranked;
     return Object.assign(
@@ -468,14 +479,15 @@ export class YoutubeResolver {
     expectedTitle: string | undefined,
     cacheKey: string,
   ): Promise<readonly YoutubeTrackMetadata[]> {
+    const searchStartedAt = Date.now();
     const raw = await this.executor.run(
       [
         "--dump-single-json",
         "--flat-playlist",
         "--playlist-end",
-        "8",
+        "5",
         "--no-warnings",
-        `ytsearch8:${query}`,
+        `ytsearch5:${query}`,
       ],
       30_000,
     );
@@ -502,6 +514,14 @@ export class YoutubeResolver {
         },
         "Search ranking: selected candidate",
       );
+      this.#onSearchMetrics?.({
+        query,
+        winnerScore: top.score,
+        topScores: scored.slice(0, 3).map((s) => s.score),
+        candidatesCount: candidates.length,
+        rankedCount: scored.length,
+        durationMs: Date.now() - searchStartedAt,
+      });
     }
     const ranked = scored.map((item) => item.candidate);
     this.#searchCache.set(cacheKey, {
