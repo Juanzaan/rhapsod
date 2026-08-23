@@ -201,6 +201,15 @@ async function main(): Promise<void> {
         ...(config.RHAPSOD_YOUTUBEI_COOKIE === undefined
           ? {}
           : { cookie: config.RHAPSOD_YOUTUBEI_COOKIE }),
+        ...(config.RHAPSOD_YOUTUBE_CLIENT_ID === undefined
+          ? {}
+          : { youtubeClientId: config.RHAPSOD_YOUTUBE_CLIENT_ID }),
+        ...(config.RHAPSOD_YOUTUBE_CLIENT_SECRET === undefined
+          ? {}
+          : { youtubeClientSecret: config.RHAPSOD_YOUTUBE_CLIENT_SECRET }),
+        ...(config.RHAPSOD_YOUTUBE_REFRESH_TOKEN === undefined
+          ? {}
+          : { youtubeRefreshToken: config.RHAPSOD_YOUTUBE_REFRESH_TOKEN }),
       });
       youtubeiResolver = new YoutubeiResolver(
         youtubeiHandle.client,
