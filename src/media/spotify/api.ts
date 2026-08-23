@@ -132,14 +132,14 @@ export class SpotifyApi implements SpotifyResolver {
     } catch (error) {
       if (
         !(error instanceof Error) ||
-        !/Spotify API returned (403|404)/.test(error.message)
+        !/(No se pudo autenticar con Spotify|No se pudo conectar con Spotify|Spotify no tiene permisos)/i.test(error.message)
       ) {
         throw error;
       }
       const embedded = await this.#expandPlaylistFromEmbed(resource.id, limit);
       if (embedded.tracks.length > 0) return embedded;
       throw new Error(
-        `Spotify API returned 404/403: la playlist no se puede leer por la API (Spotify solo da acceso a playlists a apps con extended quota) ni por el embed público`,
+        "No se pudo acceder a esa playlist de Spotify por la API ni por el embed.",
         { cause: error },
       );
     }
@@ -239,7 +239,7 @@ export class SpotifyApi implements SpotifyResolver {
       });
       if (response.status === 401) {
         if (authorizationAttempts <= 0) {
-          throw new Error(`Spotify API returned ${response.status}`);
+          throw new Error("No se pudo autenticar con Spotify.");
         }
         this.#logger.warn(
           { status: response.status, retry: 1 - authorizationAttempts + 1 },
@@ -251,7 +251,7 @@ export class SpotifyApi implements SpotifyResolver {
       }
       if (response.status === 429) {
         if (rateLimitAttempts <= 0) {
-          throw new Error(`Spotify API returned ${response.status}`);
+          throw new Error("No se pudo conectar con Spotify.");
         }
         const retryAfter = Number(response.headers.get("retry-after") ?? "1");
         const delayMs =
@@ -270,11 +270,11 @@ export class SpotifyApi implements SpotifyResolver {
       }
       if (response.status === 403 && this.#refreshToken === undefined) {
         throw new Error(
-          "Spotify API returned 403: reading playlists requires RHAPSOD_SPOTIFY_REFRESH_TOKEN (Spotify's 2026 API migration dropped the anonymous endpoint)",
+          "Spotify no tiene permisos para acceder a esa playlist.",
         );
       }
       if (!response.ok) {
-        throw new Error(`Spotify API returned ${response.status}`);
+        throw new Error("No se pudo conectar con Spotify.");
       }
       return (await response.json()) as T;
     }
@@ -314,9 +314,7 @@ export class SpotifyApi implements SpotifyResolver {
       },
     );
     if (!response.ok) {
-      throw new Error(
-        `Spotify ${this.#refreshToken === undefined ? "token" : "refresh token"} request failed with ${response.status}`,
-      );
+      throw new Error("No se pudo autenticar con Spotify.");
     }
     const json = (await response.json()) as {
       access_token?: string;
@@ -326,7 +324,7 @@ export class SpotifyApi implements SpotifyResolver {
       typeof json.access_token !== "string" ||
       json.access_token.length === 0
     ) {
-      throw new Error("Spotify token response is missing access_token");
+      throw new Error("No se pudo autenticar con Spotify.");
     }
     const expiresInSeconds = json.expires_in ?? 3600;
     this.#token = {

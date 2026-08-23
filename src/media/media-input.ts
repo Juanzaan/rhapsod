@@ -77,7 +77,7 @@ export function parseMediaInput(input: string): MediaInput {
   }
 
   if (url.protocol !== "http:" && url.protocol !== "https:") {
-    throw new Error(`Unsupported media URL protocol: ${url.protocol}`);
+    throw new Error("No reconozco ese tipo de link.");
   }
 
   return { kind: "url", value: url.toString() };
