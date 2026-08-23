@@ -6,6 +6,7 @@ import { noopLogger } from "../../observability/logger.js";
 import type { SearchMetrics } from "../../observability/metrics.js";
 import type { YoutubeResource } from "../media-input.js";
 import { rankYoutubeCandidatesScored } from "./search-ranking.js";
+import type { TimeoutConfig } from "../../lib/timeout-config.js";
 
 const MAX_BUFFER_BYTES = 8 * 1024 * 1024;
 const SEARCH_CACHE_TTL_MS = 15 * 60 * 1000;
@@ -350,14 +351,19 @@ export class YoutubeResolver {
 
   readonly #logger: MinimalLogger;
   readonly #onSearchMetrics: ((metrics: SearchMetrics) => void) | undefined;
+  readonly #timeouts: TimeoutConfig | undefined;
 
   constructor(
     private readonly executor: YtDlpExecutor,
     logger?: MinimalLogger,
-    options?: { onSearchMetrics?: (metrics: SearchMetrics) => void },
+    options?: {
+      onSearchMetrics?: (metrics: SearchMetrics) => void;
+      timeouts?: TimeoutConfig;
+    },
   ) {
     this.#logger = logger ?? noopLogger;
     this.#onSearchMetrics = options?.onSearchMetrics;
+    this.#timeouts = options?.timeouts;
   }
 
   async getTrack(resource: YoutubeResource): Promise<YoutubeTrackMetadata> {
@@ -372,7 +378,7 @@ export class YoutubeResolver {
         "--skip-download",
         youtubeUrl(resource.id),
       ],
-      30_000,
+      this.#timeouts?.metadata ?? 30_000,
     );
     return parseTrackResponse(raw);
   }
@@ -410,12 +416,14 @@ export class YoutubeResolver {
     query: string,
     expectedDurationSeconds?: number,
     limit = 5,
+    expectedTitle?: string,
   ): Promise<readonly YoutubeTrackMetadata[]> {
     const normalizedQuery = query.trim();
     if (!normalizedQuery) throw new Error("YouTube search cannot be empty");
     const ranked = await this.#searchCandidates(
       normalizedQuery,
       expectedDurationSeconds,
+      expectedTitle,
     );
     if (ranked.length === 0) {
       throw new Error("No encontré una coincidencia confiable en YouTube");
@@ -491,7 +499,7 @@ export class YoutubeResolver {
         "--no-warnings",
         `ytsearch5:${query}`,
       ],
-      30_000,
+      this.#timeouts?.search ?? 30_000,
     );
     const candidates = (parseResponse(raw).entries ?? [])
       .filter((entry) => entry.id && entry.title)
@@ -552,7 +560,7 @@ export class YoutubeResolver {
         "--no-warnings",
         youtubePlaylistUrl(resource.id),
       ],
-      45_000,
+      this.#timeouts?.playlist ?? 45_000,
     );
     const response = parseResponse(raw);
     return {
@@ -586,7 +594,7 @@ export class YoutubeResolver {
               "--no-warnings",
               url,
             ],
-            45_000,
+            this.#timeouts?.audioUrl ?? 45_000,
             "playback",
             signal,
             playerClient,
@@ -628,7 +636,7 @@ export class YoutubeResolver {
         "--skip-download",
         url,
       ],
-      30_000,
+      this.#timeouts?.metadata ?? 30_000,
     );
     return parseTrackResponse(raw);
   }

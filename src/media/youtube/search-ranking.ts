@@ -1,13 +1,14 @@
 import type { YoutubeSearchCandidate } from "./yt-dlp.js";
+import {
+  applyRankingRules,
+  TITLE_BONUSES,
+  TITLE_PENALTIES,
+  DURATION_RULES,
+} from "../../lib/ranking-boosts.js";
 
-const PENALIZED_TERMS =
-  /\b(8d|acoustic|arena|bass boost(ed)?|clean|concert|cover|demo|edited|extended|festival|instrumental|karaoke|live|mashup|nightcore|radio|reaction|rehearsal|remix|reverb|review|session|shorts?|slowed|sped up|stadium|tour)\b/i;
 const MINOR_PENALIZED_TERMS = /\blyrics?\b/i;
 const LIVE_EVENT_CONTEXT =
   /\([^)]*\b(at|live|festival|tour|concert|session|stadium|arena|radio|acoustic)\b[^)]*\)/i;
-const AUDIO_TERMS =
-  /\b(official audio|official video|topic|provided to youtube|visualizer)\b/i;
-const LYRIC_VIDEO = /\blyric video\b/i;
 const STOPWORD_TERMS =
   /\b(o|or|y|and|de|del|la|el|los|las|un|una|the|of|official|audio|lyrics?|letra|video|oficial|version|full)\b/i;
 const MEDIAN_DURATION_BONUS = 10;
@@ -106,13 +107,15 @@ function scoreCandidate(
     score += 25;
     breakdown.exactTitle = 25;
   }
-  if (AUDIO_TERMS.test(candidate.title)) {
-    score += 10;
-    breakdown.audioTerms = 10;
-  }
-  if (LYRIC_VIDEO.test(candidate.title) && /\blyrics?\b/i.test(query)) {
-    score += 10;
-    breakdown.lyricVideoBonus = 10;
+  const titleBonuses = applyRankingRules(
+    query,
+    candidate.title,
+    TITLE_BONUSES,
+    candidate.durationSeconds,
+  );
+  if (titleBonuses !== 0) {
+    score += titleBonuses;
+    breakdown.titleBonuses = titleBonuses;
   }
   if (
     candidate.channel &&
@@ -159,12 +162,15 @@ function scoreCandidate(
     score -= 30;
     breakdown.livePenalty = -30;
   }
-  if (
-    PENALIZED_TERMS.test(candidate.title) &&
-    !PENALIZED_TERMS.test(normalizedQuery)
-  ) {
-    score -= VERSION_PENALTY;
-    breakdown.versionPenalty = -VERSION_PENALTY;
+  const titlePenalties = applyRankingRules(
+    query,
+    candidate.title,
+    TITLE_PENALTIES,
+    candidate.durationSeconds,
+  );
+  if (titlePenalties !== 0) {
+    score += titlePenalties;
+    breakdown.titlePenalties = titlePenalties;
   }
   if (
     MINOR_PENALIZED_TERMS.test(candidate.title) &&
@@ -180,12 +186,15 @@ function scoreCandidate(
     score -= VERSION_PENALTY;
     breakdown.liveEventPenalty = -VERSION_PENALTY;
   }
-  if (
-    candidate.durationSeconds !== undefined &&
-    candidate.durationSeconds < 45
-  ) {
-    score -= 20;
-    breakdown.shortPenalty = -20;
+  const durationRules = applyRankingRules(
+    query,
+    candidate.title,
+    DURATION_RULES,
+    candidate.durationSeconds,
+  );
+  if (durationRules !== 0) {
+    score += durationRules;
+    breakdown.durationRules = durationRules;
   }
   if (
     expectedDurationSeconds !== undefined &&

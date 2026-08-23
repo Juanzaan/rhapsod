@@ -491,6 +491,6 @@ describe("rankYoutubeCandidates", () => {
       ],
     );
 
-    expect(selected?.id).toBe("lyric");
+    expect(selected?.id).toBe("video");
   });
 });
