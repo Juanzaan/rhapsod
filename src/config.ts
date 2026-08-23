@@ -119,6 +119,9 @@ const configSchema = z.object({
     (value) => (value === "" ? undefined : value),
     z.string().url().optional(),
   ),
+  RHAPSOD_YOUTUBE_CLIENT_ID: optionalSecret,
+  RHAPSOD_YOUTUBE_CLIENT_SECRET: optionalSecret,
+  RHAPSOD_YOUTUBE_REFRESH_TOKEN: optionalSecret,
 });
 
 export type AppConfig = z.infer<typeof configSchema>;

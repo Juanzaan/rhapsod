@@ -4,6 +4,7 @@ import {
   HttpPoTokenProvider,
   type PoTokenProvider,
 } from "./http-po-token-provider.js";
+import { YoutubeOAuth } from "../../lib/youtube-oauth.js";
 
 let evaluatorConfigured = false;
 
@@ -25,11 +26,15 @@ export interface YoutubeiClientOptions {
   readonly fetch?: typeof fetch;
   readonly clientType?: ClientType;
   readonly potProviderUrl?: string;
+  readonly youtubeClientId?: string;
+  readonly youtubeClientSecret?: string;
+  readonly youtubeRefreshToken?: string;
 }
 
 export interface YoutubeiClientHandle {
   readonly client: Innertube;
   readonly poTokens?: PoTokenProvider;
+  readonly oauth?: YoutubeOAuth;
 }
 
 let pendingClient: Promise<YoutubeiClientHandle> | undefined;
@@ -45,6 +50,17 @@ export function createYoutubeiClient(
       ? undefined
       : new HttpPoTokenProvider(options.potProviderUrl);
 
+  const oauth =
+    options.youtubeClientId !== undefined &&
+    options.youtubeClientSecret !== undefined &&
+    options.youtubeRefreshToken !== undefined
+      ? new YoutubeOAuth({
+          clientId: options.youtubeClientId,
+          clientSecret: options.youtubeClientSecret,
+          refreshToken: options.youtubeRefreshToken,
+        })
+      : undefined;
+
   pendingClient = Innertube.create({
     cache: new UniversalCache(true, options.cacheDirectory),
     client_type:
@@ -57,10 +73,28 @@ export function createYoutubeiClient(
     ...(options.cookie === undefined ? {} : { cookie: options.cookie }),
     ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
   })
-    .then((client) => ({
-      client,
-      ...(poTokens === undefined ? {} : { poTokens }),
-    }))
+    .then(async (client) => {
+      if (oauth !== undefined && options.youtubeRefreshToken !== undefined) {
+        try {
+          const accessToken = await oauth.getAccessToken();
+          await client.session.signIn({
+            access_token: accessToken,
+            refresh_token: options.youtubeRefreshToken,
+            token_type: "Bearer",
+            expires_in: 3600,
+            expiry_date: new Date(Date.now() + 3600 * 1000).toISOString(),
+          });
+        } catch {
+          // OAuth failed, continue without authentication
+          // This is expected if the tokens are invalid or expired
+        }
+      }
+      return {
+        client,
+        ...(poTokens === undefined ? {} : { poTokens }),
+        ...(oauth === undefined ? {} : { oauth }),
+      };
+    })
     .catch((error: unknown) => {
       pendingClient = undefined;
       throw error;
