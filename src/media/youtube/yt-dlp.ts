@@ -564,72 +564,56 @@ export class YoutubeResolver {
   }
 
   async getAudioUrlFromUrl(url: string, signal?: AbortSignal): Promise<string> {
-    const raceStartedAt = Date.now();
-    const attempts = YTDLP_PLAYER_CLIENTS.map((playerClient) => {
-      const controller = new AbortController();
-      const requestSignal =
-        signal === undefined
-          ? controller.signal
-          : AbortSignal.any([signal, controller.signal]);
-      const promise = this.executor
-        .run(
-          [
-            "--get-url",
-            "--format",
-            AUDIO_FORMAT_SELECTOR,
-            "--no-playlist",
-            "--no-warnings",
-            url,
-          ],
-          45_000,
-          "playback",
-          requestSignal,
-          playerClient,
-        )
-        .then((output) => {
-          const audioUrl = output.trim().split(/\r?\n/, 1)[0];
-          if (!audioUrl || !audioUrl.startsWith("https://"))
-            throw new Error("yt-dlp did not return an HTTPS audio URL");
-          return audioUrl;
-        });
-      return { controller, playerClient, promise };
-    });
+    const startedAt = Date.now();
 
-    // First success wins; abort the losing clients as soon as one resolves.
+    // Try web_safari first (fastest, no JS runtime needed).
+    // If it fails (e.g. 403), fall back to web_embedded (requires Deno).
+    const clients: YoutubePlayerClient[] = ["web_safari", "web_embedded"];
     let lastError: unknown;
-    let failures = 0;
-    const total = attempts.length;
-    return new Promise<string>((resolve, reject) => {
-      for (const attempt of attempts) {
-        void attempt.promise.then(
-          (audioUrl) => {
-            for (const other of attempts) {
-              if (other !== attempt) other.controller.abort();
-            }
-            this.#logger.info(
-              {
-                winner: attempt.playerClient,
-                durationMs: Date.now() - raceStartedAt,
-                attemptCount: total,
-              },
-              "Audio URL race won",
-            );
-            resolve(audioUrl);
+
+    for (const playerClient of clients) {
+      if (signal?.aborted) break;
+      try {
+        const audioUrl = await this.executor
+          .run(
+            [
+              "--get-url",
+              "--format",
+              AUDIO_FORMAT_SELECTOR,
+              "--no-playlist",
+              "--no-warnings",
+              url,
+            ],
+            45_000,
+            "playback",
+            signal,
+            playerClient,
+          )
+          .then((output) => {
+            const trimmed = output.trim().split(/\r?\n/, 1)[0];
+            if (!trimmed || !trimmed.startsWith("https://"))
+              throw new Error("yt-dlp did not return an HTTPS audio URL");
+            return trimmed;
+          });
+        this.#logger.info(
+          {
+            winner: playerClient,
+            durationMs: Date.now() - startedAt,
+            attemptCount: clients.indexOf(playerClient) + 1,
           },
-          (error: unknown) => {
-            lastError = error;
-            failures++;
-            if (failures === total) {
-              reject(
-                lastError instanceof Error
-                  ? lastError
-                  : new Error(String(lastError)),
-              );
-            }
-          },
+          "Audio URL resolved",
+        );
+        return audioUrl;
+      } catch (error) {
+        lastError = error;
+        this.#logger.debug(
+          { playerClient, err: error },
+          "Audio URL attempt failed, trying next client",
         );
       }
-    });
+    }
+
+    throw lastError instanceof Error ? lastError : new Error(String(lastError));
   }
 
   async #getTrackFromUrl(url: string): Promise<YoutubeTrackMetadata> {
