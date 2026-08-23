@@ -10,6 +10,7 @@ type ChatCommand =
   | { readonly input: string; readonly name: "playnext" }
   | { readonly name: "now-playing" }
   | { readonly input: string; readonly name: "play" }
+  | { readonly name: "pm" }
   | { readonly name: "pause" }
   | { readonly name: "previous" }
   | { readonly name: "queue"; readonly page?: number }
@@ -48,6 +49,7 @@ const COMMAND_ALIASES: Readonly<Record<string, ChatCommand["name"]>> = {
   now: "now-playing",
   "now-playing": "now-playing",
   p: "play",
+  pm: "pm",
   pause: "pause",
   play: "play",
   playnext: "playnext",
