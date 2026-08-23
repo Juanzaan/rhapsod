@@ -297,6 +297,29 @@ describe("YoutubeResolver", () => {
     expect(players).toEqual(["web_safari", "web_embedded"]);
   });
 
+  it("skips web_embedded when web_safari succeeds on first try", async () => {
+    const players: Array<string | undefined> = [];
+    const executor: YtDlpExecutor = {
+      run: (
+        _argumentsList: readonly string[],
+        _timeoutMs?: number,
+        _priority?: YtDlpJobPriority,
+        _signal?: AbortSignal,
+        playerClient?: YoutubePlayerClient,
+      ) => {
+        players.push(playerClient);
+        return Promise.resolve("https://media.example/audio\n");
+      },
+    };
+
+    await expect(
+      new YoutubeResolver(executor).getAudioUrlFromUrl(
+        "https://www.youtube.com/watch?v=abc",
+      ),
+    ).resolves.toBe("https://media.example/audio");
+    expect(players).toEqual(["web_safari"]);
+  });
+
   it("throws the last error when every player client fails", async () => {
     const executor: YtDlpExecutor = {
       run: (
@@ -318,7 +341,7 @@ describe("YoutubeResolver", () => {
     ).rejects.toThrow("yt-dlp exited with code 2: nope");
   });
 
-  it("logs the race winner with durationMs and attemptCount", async () => {
+  it("logs the resolved client with durationMs and attemptCount", async () => {
     const executor: YtDlpExecutor = {
       run: (
         _argumentsList: readonly string[],
@@ -347,10 +370,10 @@ describe("YoutubeResolver", () => {
       { winner: string; durationMs: number; attemptCount: number },
       string,
     ];
-    expect(call[1]).toBe("Audio URL race won");
+    expect(call[1]).toBe("Audio URL resolved");
     expect(call[0].winner).toBe("web_safari");
     expect(typeof call[0].durationMs).toBe("number");
-    expect(call[0].attemptCount).toBe(2);
+    expect(call[0].attemptCount).toBe(1);
   });
 
   it("expands a YouTube playlist without resolving audio", async () => {
