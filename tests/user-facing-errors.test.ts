@@ -50,7 +50,9 @@ describe("userFacingError", () => {
   });
 
   it("error de comando desconocido se pasa tal cual", () => {
-    const err = new Error("No reconozco ese comando. Escribí !help para ver los disponibles.");
+    const err = new Error(
+      "No reconozco ese comando. Escribí !help para ver los disponibles.",
+    );
     expect(userFacingError(err)).toBe(err.message);
   });
 

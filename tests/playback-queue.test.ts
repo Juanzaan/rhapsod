@@ -30,7 +30,9 @@ describe("PlaybackQueue", () => {
   it("rejects duplicate track identifiers", () => {
     const queue = new PlaybackQueue();
     queue.add(firstTrack);
-    expect(() => queue.add(firstTrack)).toThrow("Esa canción ya está en la cola.");
+    expect(() => queue.add(firstTrack)).toThrow(
+      "Esa canción ya está en la cola.",
+    );
   });
 
   it("promotes tracks to the head", () => {

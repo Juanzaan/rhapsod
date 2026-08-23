@@ -129,7 +129,9 @@ function setup(
       Promise.resolve("https://media.example/soundcloud-api"),
     ),
     getTrack: vi.fn<() => Promise<YoutubeTrackMetadata>>(() =>
-      Promise.reject(new Error("No se pudo conectar con SoundCloud. Probá de nuevo.")),
+      Promise.reject(
+        new Error("No se pudo conectar con SoundCloud. Probá de nuevo."),
+      ),
     ),
     match: vi.fn((input: string) => input.includes("soundcloud.com")),
     name: "soundcloud",
@@ -1003,7 +1005,11 @@ describe("YoutubePlaybackService", () => {
       id: "abc123",
       type: "track",
     });
-    expect(resolver.search).toHaveBeenCalledWith("Duki Rockstar", 180, "Rockstar");
+    expect(resolver.search).toHaveBeenCalledWith(
+      "Duki Rockstar",
+      180,
+      "Rockstar",
+    );
     expect(track).toMatchObject({
       alternativeProvider: "spotify",
       id: "search-result",
@@ -1052,7 +1058,11 @@ describe("YoutubePlaybackService", () => {
     expect(result.added).toHaveLength(2);
     expect(result.remaining).toBe(23);
     expect(resolver.search).toHaveBeenCalledTimes(1);
-    expect(resolver.search).toHaveBeenCalledWith("Duki Rockstar", 180, "Rockstar");
+    expect(resolver.search).toHaveBeenCalledWith(
+      "Duki Rockstar",
+      180,
+      "Rockstar",
+    );
     expect(result.added[0]).toMatchObject({
       alternativeProvider: "spotify",
       id: "t1",
@@ -1070,8 +1080,16 @@ describe("YoutubePlaybackService", () => {
 
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    expect(resolver.search).toHaveBeenCalledWith("Duki Rockstar", 180, "Rockstar");
-    expect(resolver.search).toHaveBeenCalledWith("Kanye West Ghost Town", 271, "Ghost Town");
+    expect(resolver.search).toHaveBeenCalledWith(
+      "Duki Rockstar",
+      180,
+      "Rockstar",
+    );
+    expect(resolver.search).toHaveBeenCalledWith(
+      "Kanye West Ghost Town",
+      271,
+      "Ghost Town",
+    );
     expect(createPlayback).toHaveBeenCalledTimes(1);
   });
 
@@ -1593,7 +1611,9 @@ describe("YoutubePlaybackService", () => {
 
     await expect(
       service.enqueuePlaylist({ id: "v1", type: "video" }, "user-1"),
-    ).rejects.toThrow("Solo se pueden expandir playlists de YouTube con !play.");
+    ).rejects.toThrow(
+      "Solo se pueden expandir playlists de YouTube con !play.",
+    );
   });
 
   it("restores volume and loop mode from the state store", () => {

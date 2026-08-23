@@ -556,7 +556,9 @@ export class YoutubePlaybackService {
     requestedByUid?: string,
   ): Promise<PlaylistEnqueueResult> {
     if (resource.type !== "playlist")
-      throw new Error("Solo se pueden expandir playlists de YouTube con !play.");
+      throw new Error(
+        "Solo se pueden expandir playlists de YouTube con !play.",
+      );
     return this.#withExpansionSlot(async () => {
       const stopEpoch = this.#stopEpoch;
       const expansion = await this.#resolver.expandPlaylist(
@@ -695,7 +697,10 @@ export class YoutubePlaybackService {
           halted = true;
           break;
         }
-        if (error instanceof Error && /ya está en la cola/i.test(error.message)) {
+        if (
+          error instanceof Error &&
+          /ya está en la cola/i.test(error.message)
+        ) {
           duplicates++;
           continue;
         }
@@ -744,7 +749,9 @@ export class YoutubePlaybackService {
         );
       }
       if (resource.type !== "playlist" && resource.type !== "album") {
-        throw new Error("Solo se pueden expandir colecciones de Spotify con !play.");
+        throw new Error(
+          "Solo se pueden expandir colecciones de Spotify con !play.",
+        );
       }
       const expansion =
         resource.type === "playlist"
@@ -801,7 +808,10 @@ export class YoutubePlaybackService {
             halted = true;
             break;
           }
-          if (error instanceof Error && /ya está en la cola/i.test(error.message)) {
+          if (
+            error instanceof Error &&
+            /ya está en la cola/i.test(error.message)
+          ) {
             duplicates++;
             continue;
           }

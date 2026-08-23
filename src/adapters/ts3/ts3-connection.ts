@@ -1,4 +1,9 @@
-import { Client, listClients, listChannels, type Identity } from "@honeybbq/teamspeak-client";
+import {
+  Client,
+  listClients,
+  listChannels,
+  type Identity,
+} from "@honeybbq/teamspeak-client";
 
 import type { Logger } from "pino";
 
@@ -208,8 +213,13 @@ export function createTs3Connection(
         try {
           const rows = await client.execCommandWithResponse("channellist");
           return rows
-            .filter((row): row is Record<string, string> & { cid: string; name: string } =>
-              typeof row.cid === "string" && typeof row.name === "string",
+            .filter(
+              (
+                row,
+              ): row is Record<string, string> & {
+                cid: string;
+                name: string;
+              } => typeof row.cid === "string" && typeof row.name === "string",
             )
             .map((row) => ({ cid: Number(row.cid), name: row.name }));
         } catch {
@@ -275,7 +285,11 @@ export function createTs3Connection(
         return rows[0] ?? {};
       } catch (error) {
         logger.debug({ err: error }, "serverinfo not supported by this server");
-        return { virtualserver_name: "(no disponible)", virtualserver_version: "?", virtualserver_maxclients: "?" };
+        return {
+          virtualserver_name: "(no disponible)",
+          virtualserver_version: "?",
+          virtualserver_maxclients: "?",
+        };
       }
     },
     getClientInfo: async (clid: number) => {

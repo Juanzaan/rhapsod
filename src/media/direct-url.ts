@@ -276,7 +276,9 @@ export class DirectUrlClient implements DirectUrlResolver {
       return parsed.format;
     } catch (error) {
       if (error instanceof SyntaxError) {
-        throw new Error("No se pudo analizar el archivo de audio.", { cause: error });
+        throw new Error("No se pudo analizar el archivo de audio.", {
+          cause: error,
+        });
       }
       throw error;
     }

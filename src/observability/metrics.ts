@@ -22,6 +22,27 @@ export interface NormalizedError {
 
 const MAX_ERROR_MESSAGE_LENGTH = 120;
 
+const MAX_SEARCH_METRICS = 200;
+
+export interface SearchMetrics {
+  readonly query: string;
+  readonly winnerScore: number;
+  readonly topScores: readonly number[];
+  readonly candidatesCount: number;
+  readonly rankedCount: number;
+  readonly durationMs: number;
+}
+
+function percentile(arr: readonly number[], p: number): number {
+  if (arr.length === 0) return 0;
+  const sorted = [...arr].sort((a, b) => a - b);
+  const idx = Math.min(
+    Math.max(0, Math.ceil((sorted.length * p) / 100) - 1),
+    sorted.length - 1,
+  );
+  return sorted[idx]!;
+}
+
 const ERROR_PATTERNS: ReadonlyArray<{
   readonly category: ErrorCategory;
   readonly pattern: RegExp;
@@ -101,6 +122,7 @@ export interface MetricsCounters {
   readonly prefetchHits: number;
   readonly prefetchInFlight: number;
   readonly prefetchMisses: number;
+  readonly searchQueriesTotal: number;
   readonly ytdlpActiveJobs: number;
   readonly ytdlpQueuedJobs: number;
   readonly ytdlpTotalRuns: number;
@@ -117,6 +139,8 @@ export class MetricsCollector {
   readonly #timings: TrackTiming[] = [];
   readonly #errors: MetricsError[] = [];
   readonly #counters = new Map<string, number>();
+  readonly #searchDurationsMs: number[] = [];
+  readonly #searchScores: number[] = [];
   readonly #maxTimings: number;
   readonly #maxErrors: number;
   readonly #clock: () => number;
@@ -153,6 +177,21 @@ export class MetricsCollector {
     );
   }
 
+  recordSearchMetrics(metrics: SearchMetrics): void {
+    this.#counters.set(
+      "searchQueriesTotal",
+      (this.#counters.get("searchQueriesTotal") ?? 0) + 1,
+    );
+    this.#searchDurationsMs.push(metrics.durationMs);
+    if (this.#searchDurationsMs.length > MAX_SEARCH_METRICS) {
+      this.#searchDurationsMs.shift();
+    }
+    this.#searchScores.push(metrics.winnerScore);
+    if (this.#searchScores.length > MAX_SEARCH_METRICS) {
+      this.#searchScores.shift();
+    }
+  }
+
   increment(name: string): void {
     this.#counters.set(name, (this.#counters.get(name) ?? 0) + 1);
   }
@@ -172,6 +211,7 @@ export class MetricsCollector {
       prefetchHits: this.#counters.get("prefetchHits") ?? 0,
       prefetchInFlight: this.#counters.get("prefetchInFlight") ?? 0,
       prefetchMisses: this.#counters.get("prefetchMisses") ?? 0,
+      searchQueriesTotal: this.#counters.get("searchQueriesTotal") ?? 0,
       totalErrors: this.#counters.get("totalErrors") ?? 0,
       ytdlpActiveJobs: this.#counters.get("ytdlpActiveJobs") ?? 0,
       ytdlpQueuedJobs: this.#counters.get("ytdlpQueuedJobs") ?? 0,
@@ -217,6 +257,23 @@ export class MetricsCollector {
         ? ` (${formatDuration(args.current.durationSeconds)})`
         : "";
 
+    const searchTotal = this.#counters.get("searchQueriesTotal") ?? 0;
+    const searchLines: string[] = [];
+    if (searchTotal > 0) {
+      const durP50 = percentile(this.#searchDurationsMs, 50);
+      const durP90 = percentile(this.#searchDurationsMs, 90);
+      const durP99 = percentile(this.#searchDurationsMs, 99);
+      const scoreP50 = percentile(this.#searchScores, 50);
+      const scoreP90 = percentile(this.#searchScores, 90);
+      const scoreP99 = percentile(this.#searchScores, 99);
+      searchLines.push(
+        ``,
+        `--- Búsquedas ---`,
+        `Total: ${searchTotal} | Duración: p50=${durP50}ms p90=${durP90}ms p99=${durP99}ms`,
+        `Score: p50=${scoreP50} p90=${scoreP90} p99=${scoreP99}`,
+      );
+    }
+
     const lines = [
       `=== Rhapsod Stats ===`,
       `Uptime: ${hours}h ${minutes}m | RSS: ${Math.round(rss / 1_048_576)} MB`,
@@ -231,6 +288,7 @@ export class MetricsCollector {
       ``,
       `--- yt-dlp ---`,
       `Activos: ${args.ytdlpActive} | En cola: ${args.ytdlpQueued} | Total: ${c.ytdlpTotalRuns}`,
+      ...searchLines,
     ];
 
     return lines.join("\n");
@@ -263,6 +321,8 @@ export class MetricsCollector {
   reset(): void {
     this.#timings.length = 0;
     this.#errors.length = 0;
+    this.#searchDurationsMs.length = 0;
+    this.#searchScores.length = 0;
     this.#counters.clear();
   }
 }
