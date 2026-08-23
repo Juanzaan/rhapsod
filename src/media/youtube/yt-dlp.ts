@@ -473,9 +473,9 @@ export class YoutubeResolver {
         "--dump-single-json",
         "--flat-playlist",
         "--playlist-end",
-        "20",
+        "8",
         "--no-warnings",
-        `ytsearch20:${query}`,
+        `ytsearch8:${query}`,
       ],
       30_000,
     );

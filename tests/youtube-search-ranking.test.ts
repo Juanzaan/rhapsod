@@ -438,7 +438,7 @@ describe("rankYoutubeCandidates", () => {
     expect(selected?.id).toBe("festival");
   });
 
-  it("prefers the audio-length version over the longer official video", () => {
+  it("prefers the official video over a lyric video when the query does not ask for lyrics", () => {
     const selected = rankYoutubeCandidates("imitadora romeo santos", [
       {
         channel: "Romeo Santos",
@@ -463,7 +463,7 @@ describe("rankYoutubeCandidates", () => {
       },
     ]);
 
-    expect(selected?.id).toBe("lyric");
+    expect(selected?.id).toBe("video");
   });
 
   it("ignores noise words in the query like o or audio", () => {

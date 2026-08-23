@@ -6,7 +6,8 @@ const MINOR_PENALIZED_TERMS = /\blyrics?\b/i;
 const LIVE_EVENT_CONTEXT =
   /\([^)]*\b(at|live|festival|tour|concert|session|stadium|arena|radio|acoustic)\b[^)]*\)/i;
 const AUDIO_TERMS =
-  /\b(official audio|topic|provided to youtube|lyric video|visualizer)\b/i;
+  /\b(official audio|official video|topic|provided to youtube|visualizer)\b/i;
+const LYRIC_VIDEO = /\blyric video\b/i;
 const STOPWORD_TERMS =
   /\b(o|or|y|and|de|del|la|el|los|las|un|una|the|of|official|audio|lyrics?|letra|video|oficial|version|full)\b/i;
 const MEDIAN_DURATION_BONUS = 10;
@@ -106,6 +107,10 @@ function scoreCandidate(
   if (AUDIO_TERMS.test(candidate.title)) {
     score += 10;
     breakdown.audioTerms = 10;
+  }
+  if (LYRIC_VIDEO.test(candidate.title) && /\blyrics?\b/i.test(query)) {
+    score += 10;
+    breakdown.lyricVideoBonus = 10;
   }
   if (
     candidate.channel &&
