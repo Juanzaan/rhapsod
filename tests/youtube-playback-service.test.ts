@@ -1184,7 +1184,7 @@ describe("YoutubePlaybackService", () => {
 
     expect(spotifyResolver!.expandAlbum).toHaveBeenCalledWith(
       { id: "a1", type: "album" },
-      20,
+      100,
     );
     expect(result.added).toEqual([]);
     expect(result.remaining).toBe(0);
@@ -1445,7 +1445,7 @@ describe("YoutubePlaybackService", () => {
 
     expect(resolver.expandPlaylist).toHaveBeenCalledWith(
       { id: "PL1", type: "playlist" },
-      20,
+      100,
     );
     expect(result).toMatchObject({
       added: [
@@ -1494,10 +1494,10 @@ describe("YoutubePlaybackService", () => {
   });
 
   it("truncates a playlist beyond the configured limit", async () => {
-    const { resolver, service } = setup();
+    const { resolver, service } = setup({ maxTracksPerUser: 200 });
     resolver.expandPlaylist.mockResolvedValueOnce({
-      total: 25,
-      tracks: Array.from({ length: 25 }, (_, index) => ({
+      total: 105,
+      tracks: Array.from({ length: 105 }, (_, index) => ({
         id: `p${index + 1}`,
         title: `Playlist Track ${index + 1}`,
         webpageUrl: `https://www.youtube.com/watch?v=p${index + 1}`,
@@ -1509,8 +1509,50 @@ describe("YoutubePlaybackService", () => {
       "user-1",
     );
 
-    expect(result.added).toHaveLength(20);
+    expect(result.added).toHaveLength(100);
     expect(result.remaining).toBe(5);
+  });
+
+  it("enqueues exactly 100 playlist tracks when the limit is met", async () => {
+    const { resolver, service } = setup({ maxTracksPerUser: 200 });
+    resolver.expandPlaylist.mockResolvedValueOnce({
+      total: 100,
+      tracks: Array.from({ length: 100 }, (_, index) => ({
+        id: `p${index + 1}`,
+        title: `Playlist Track ${index + 1}`,
+        webpageUrl: `https://www.youtube.com/watch?v=p${index + 1}`,
+      })),
+    });
+
+    const result = await service.enqueuePlaylist(
+      { id: "PL100", type: "playlist" },
+      "user-1",
+    );
+
+    expect(result.added).toHaveLength(100);
+    expect(result.remaining).toBe(0);
+    expect(service.queue()).toHaveLength(99);
+  });
+
+  it("truncates a playlist of 101 tracks to 100 with remaining 1", async () => {
+    const { resolver, service } = setup({ maxTracksPerUser: 200 });
+    resolver.expandPlaylist.mockResolvedValueOnce({
+      total: 101,
+      tracks: Array.from({ length: 101 }, (_, index) => ({
+        id: `p${index + 1}`,
+        title: `Playlist Track ${index + 1}`,
+        webpageUrl: `https://www.youtube.com/watch?v=p${index + 1}`,
+      })),
+    });
+
+    const result = await service.enqueuePlaylist(
+      { id: "PL101", type: "playlist" },
+      "user-1",
+    );
+
+    expect(result.added).toHaveLength(100);
+    expect(result.remaining).toBe(1);
+    expect(service.queue()).toHaveLength(99);
   });
 
   it("skips duplicate tracks while expanding a playlist", async () => {
