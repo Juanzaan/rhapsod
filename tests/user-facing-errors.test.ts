@@ -33,10 +33,10 @@ describe("userFacingError", () => {
     );
   });
 
-  it("already queued → mensaje en español", () => {
-    expect(userFacingError(new Error("already queued"))).toMatch(
-      /ya está en la cola/,
-    );
+  it("duplicado → mensaje en español", () => {
+    expect(
+      userFacingError(new Error("Esa canción ya está en la cola.")),
+    ).toMatch(/ya está en la cola/);
   });
 
   it("fallthrough nunca filtra error.message crudo", () => {

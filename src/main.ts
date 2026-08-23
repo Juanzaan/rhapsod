@@ -1088,7 +1088,7 @@ export function userFacingError(error: Error): string {
     return "YouTube no ofrece un formato de audio reproducible para ese video (puede ser un directo o un video restringido). Probá otra versión.";
   if (/fetch failed/i.test(msg))
     return "Fallo momentáneo de red con el proveedor (Spotify/YouTube). Probá de nuevo en unos segundos.";
-  if (/already queued/i.test(msg))
+  if (/ya está en la cola/i.test(msg))
     return "Esa canción ya está en la cola.";
   return "Ocurrió un error. Probá de nuevo en unos segundos.";
 }
