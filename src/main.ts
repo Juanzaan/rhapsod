@@ -1080,6 +1080,8 @@ function formatDuration(durationSeconds: number | undefined): string {
 
 export function userFacingError(error: Error): string {
   const msg = error.message;
+  if (/^(No reconozco|Usá:|El comando !|La posición|El volumen|El rango|Usage: !)/.test(msg))
+    return msg;
   if (/DRM protected/i.test(msg))
     return "SoundCloud no permite reproducir esta pista porque está protegida con DRM. Probá otra versión o una fuente distinta.";
   if (/Requested format is not available/i.test(msg))
