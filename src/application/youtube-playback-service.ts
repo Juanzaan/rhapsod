@@ -693,7 +693,7 @@ export class YoutubePlaybackService {
           halted = true;
           break;
         }
-        if (error instanceof Error && /already queued/i.test(error.message)) {
+        if (error instanceof Error && /ya está en la cola/i.test(error.message)) {
           duplicates++;
           continue;
         }
@@ -799,7 +799,7 @@ export class YoutubePlaybackService {
             halted = true;
             break;
           }
-          if (error instanceof Error && /already queued/i.test(error.message)) {
+          if (error instanceof Error && /ya está en la cola/i.test(error.message)) {
             duplicates++;
             continue;
           }
