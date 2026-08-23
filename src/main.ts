@@ -694,6 +694,10 @@ async function main(): Promise<void> {
             connection.listClients(),
             connection.listChannels(),
           ]);
+          logger.info(
+            { serverInfo, clientCount: clients.length, channelCount: channels.length },
+            "debug-server raw data",
+          );
           const botClient = clients.find(
             (c) => c.name === config.RHAPSOD_TS3_NICKNAME,
           );
