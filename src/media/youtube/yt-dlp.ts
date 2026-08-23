@@ -194,6 +194,7 @@ export class SystemYtDlpExecutor implements YtDlpExecutor {
     private readonly cookiesPath?: string,
     options: YtDlpExecutorOptions = {},
     logger?: MinimalLogger,
+    private readonly extraExtractorArgs?: string,
   ) {
     this.#logger = logger ?? noopLogger;
     this.#jobs = new YtDlpJobQueue(
@@ -202,6 +203,7 @@ export class SystemYtDlpExecutor implements YtDlpExecutor {
           argumentsList,
           this.cookiesPath,
           playerClient ?? "web_safari",
+          this.extraExtractorArgs,
         );
         const { file, args } = buildYtDlpCommand(
           this.binaryPath,
@@ -636,7 +638,13 @@ export function buildYtDlpArguments(
   argumentsList: readonly string[],
   cookiesPath?: string,
   playerClient: YoutubePlayerClient = "web_safari",
+  extraExtractorArgs?: string,
 ): string[] {
+  const extractorArgs = [
+    `youtube:player_client=${playerClient}`,
+    ...(extraExtractorArgs ? [extraExtractorArgs] : []),
+  ].join(" ");
+
   return [
     ...(cookiesPath ? ["--cookies", cookiesPath] : []),
     "--js-runtimes",
@@ -646,7 +654,7 @@ export function buildYtDlpArguments(
     "--extractor-retries",
     "1",
     "--extractor-args",
-    `youtube:player_client=${playerClient}`,
+    extractorArgs,
     ...argumentsList,
   ];
 }

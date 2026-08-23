@@ -82,4 +82,23 @@ describe("loadConfig", () => {
     });
     expect(config.RHAPSOD_TS3_PASSWORD).toBeUndefined();
   });
+
+  it("loads the optional yt-dlp extractor args", () => {
+    const config = loadConfig({
+      RHAPSOD_TS3_HOST: "ts.example.com",
+      RHAPSOD_YTDLP_EXTRACTOR_ARGS:
+        "youtube:po_token_uri=http://localhost:4416",
+    });
+    expect(config.RHAPSOD_YTDLP_EXTRACTOR_ARGS).toBe(
+      "youtube:po_token_uri=http://localhost:4416",
+    );
+  });
+
+  it("normalizes empty extractor args to undefined", () => {
+    const config = loadConfig({
+      RHAPSOD_TS3_HOST: "ts.example.com",
+      RHAPSOD_YTDLP_EXTRACTOR_ARGS: "",
+    });
+    expect(config.RHAPSOD_YTDLP_EXTRACTOR_ARGS).toBeUndefined();
+  });
 });
