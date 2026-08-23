@@ -568,6 +568,62 @@ describe("formatStats - límite de mensajes TS3", () => {
   });
 });
 
+describe("formatStats - audio health", () => {
+  it("muestra sección Audio cuando hay métricas", () => {
+    const m = new MetricsCollector();
+    const output = m.formatStats({
+      audioHealth: {
+        firstFrameDelayMs: 1234,
+        rebufferEvents: 2,
+        underruns: 5,
+      },
+      loopMode: "off",
+      queueLen: 0,
+      tracksPlayed: 0,
+      uptimeSec: 0,
+      volume: 50,
+      ytdlpActive: 0,
+      ytdlpQueued: 0,
+    });
+    expect(output).toContain("--- Audio ---");
+    expect(output).toContain("Inicio: 1234ms");
+    expect(output).toContain("Underruns: 5");
+    expect(output).toContain("Rebuffers: 2");
+  });
+
+  it("no muestra sección Audio cuando no hay métricas", () => {
+    const m = new MetricsCollector();
+    const output = m.formatStats({
+      loopMode: "off",
+      queueLen: 0,
+      tracksPlayed: 0,
+      uptimeSec: 0,
+      volume: 50,
+      ytdlpActive: 0,
+      ytdlpQueued: 0,
+    });
+    expect(output).not.toContain("--- Audio ---");
+  });
+
+  it("muestra Inicio: - cuando firstFrameDelayMs es undefined", () => {
+    const m = new MetricsCollector();
+    const output = m.formatStats({
+      audioHealth: {
+        rebufferEvents: 0,
+        underruns: 0,
+      },
+      loopMode: "off",
+      queueLen: 0,
+      tracksPlayed: 0,
+      uptimeSec: 0,
+      volume: 50,
+      ytdlpActive: 0,
+      ytdlpQueued: 0,
+    });
+    expect(output).toContain("Inicio: -");
+  });
+});
+
 describe("prefetch counters from PlaybackTiming", () => {
   function applyTiming(
     m: MetricsCollector,

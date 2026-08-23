@@ -228,6 +228,11 @@ export class MetricsCollector {
   }
 
   formatStats(args: {
+    readonly audioHealth?: {
+      readonly firstFrameDelayMs?: number;
+      readonly rebufferEvents: number;
+      readonly underruns: number;
+    };
     readonly current?: {
       readonly title: string;
       readonly durationSeconds?: number;
@@ -290,6 +295,17 @@ export class MetricsCollector {
       `Activos: ${args.ytdlpActive} | En cola: ${args.ytdlpQueued} | Total: ${c.ytdlpTotalRuns}`,
       ...searchLines,
     ];
+
+    if (args.audioHealth !== undefined) {
+      const ah = args.audioHealth;
+      const firstFrameStr =
+        ah.firstFrameDelayMs !== undefined ? `${ah.firstFrameDelayMs}ms` : "-";
+      lines.push(
+        ``,
+        `--- Audio ---`,
+        `Inicio: ${firstFrameStr} | Underruns: ${ah.underruns} | Rebuffers: ${ah.rebufferEvents}`,
+      );
+    }
 
     return lines.join("\n");
   }

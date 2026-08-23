@@ -678,6 +678,9 @@ async function main(): Promise<void> {
                 }
               : undefined;
           const statsOutput = metrics.formatStats({
+            ...(playback.audioHealth === undefined
+              ? {}
+              : { audioHealth: playback.audioHealth }),
             ...(currentArg !== undefined ? { current: currentArg } : {}),
             loopMode: playback.loopMode,
             queueLen: playback.queue().length,
