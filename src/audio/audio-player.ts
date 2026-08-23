@@ -145,6 +145,7 @@ export class AudioPlayer {
   pause(): void {
     if (this.#state !== "playing" && this.#state !== "buffering") return;
     this.#state = "paused";
+    this.#clearRecoveryTimer();
     this.#clock.stop();
     this.#clearBufferTimeout();
     this.#pauseSource();

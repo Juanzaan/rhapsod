@@ -125,6 +125,26 @@ describe("AudioPlayer", () => {
     }
   });
 
+  it("does not fail when pause clears the recovery timer during underrun", async () => {
+    vi.useFakeTimers();
+    try {
+      const { clock, player } = setup();
+      const source = new PassThrough();
+      void player.play(source);
+      source.write(Buffer.alloc(PCM_FRAME_BYTES * 25));
+      for (let frame = 0; frame <= 25; frame++) clock.tick();
+
+      player.pause();
+      expect(player.state).toBe("paused");
+
+      await vi.advanceTimersByTimeAsync(5_000);
+
+      expect(player.state).toBe("paused");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("fails when the source buffers without delivering data for too long", async () => {
     vi.useFakeTimers();
     try {
