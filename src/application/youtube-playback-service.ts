@@ -248,6 +248,10 @@ export class YoutubePlaybackService {
     return this.#loopMode;
   }
 
+  get audioHealth(): AudioPlayerMetrics | undefined {
+    return this.#session?.player.metrics;
+  }
+
   setLoopMode(mode: LoopMode): void {
     this.#loopMode = mode;
     this.#loopPool = mode === "queue" ? [...this.#queue.snapshot()] : [];
