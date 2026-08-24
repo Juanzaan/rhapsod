@@ -43,7 +43,7 @@ describe("YoutubeiResolver", () => {
       videoId: "abc123",
       chooseFormat: format,
     });
-    const resolver = new YoutubeiResolver(fakeYoutube(info));
+    const resolver = new YoutubeiResolver([fakeYoutube(info)]);
 
     await expect(resolver.getTrack("abc123")).resolves.toEqual({
       audioUrl: "https://media.example/audio",
@@ -59,7 +59,7 @@ describe("YoutubeiResolver", () => {
       decipher: vi.fn(() => "https://media.example/audio"),
     };
     const info = fakeInfo({ videoId: "abc123", chooseFormat: format });
-    const resolver = new YoutubeiResolver(fakeYoutube(info));
+    const resolver = new YoutubeiResolver([fakeYoutube(info)]);
 
     const track = await resolver.getTrack("abc123");
     expect(track.id).toBe("abc123");
@@ -69,7 +69,7 @@ describe("YoutubeiResolver", () => {
 
   it("throws when no playable audio format is available", async () => {
     const info = fakeInfo({ videoId: "abc123", chooseFormat: undefined });
-    const resolver = new YoutubeiResolver(fakeYoutube(info));
+    const resolver = new YoutubeiResolver([fakeYoutube(info)]);
 
     await expect(resolver.getTrack("abc123")).rejects.toThrow(
       "no playable audio format",
@@ -79,7 +79,7 @@ describe("YoutubeiResolver", () => {
   it("throws when the deciphered url is not https", async () => {
     const format = { decipher: vi.fn(() => "http://insecure.example/a") };
     const info = fakeInfo({ videoId: "abc123", chooseFormat: format });
-    const resolver = new YoutubeiResolver(fakeYoutube(info));
+    const resolver = new YoutubeiResolver([fakeYoutube(info)]);
 
     await expect(resolver.getTrack("abc123")).rejects.toThrow(
       "invalid audio URL",
@@ -91,7 +91,7 @@ describe("YoutubeiResolver", () => {
       decipher: vi.fn(() => "https://media.example/audio"),
     };
     const info = fakeInfo({ videoId: "abc123", chooseFormat: format });
-    const resolver = new YoutubeiResolver(fakeYoutube(info));
+    const resolver = new YoutubeiResolver([fakeYoutube(info)]);
 
     await expect(resolver.getAudioUrl("abc123")).resolves.toBe(
       "https://media.example/audio",

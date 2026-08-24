@@ -213,7 +213,7 @@ async function main(): Promise<void> {
         logger,
       });
       youtubeiResolver = new YoutubeiResolver(
-        youtubeiHandle.client,
+        youtubeiHandle.clients,
         youtubeiHandle.oauth !== undefined
           ? undefined
           : youtubeiHandle.poTokens,
