@@ -114,7 +114,9 @@ const AUTH_REQUIRED_RE =
   /sign in to confirm|cookies for the authentication|request you to sign in|login required/i;
 const PREFETCH_STABILITY_TIMEOUT_MS = 8_000;
 const PREFETCH_STABILITY_POLL_MS = 100;
-const PREFETCH_DEPTH = 5;
+const PREFETCH_DEPTH = 10;
+const PLAYLIST_PREFETCH_DEPTH = 20;
+const PLAYLIST_PREFETCH_BATCH = 5;
 const DEFAULT_PLAYLIST_MAX_TRACKS = 100;
 const DEFAULT_MAX_QUEUE_TRACKS = 200;
 const DEFAULT_MAX_TRACKS_PER_USER = 30;
@@ -1413,7 +1415,13 @@ export class YoutubePlaybackService {
   }
 
   #prefetchNext(): void {
-    for (const next of this.#queue.snapshot().slice(0, PREFETCH_DEPTH)) {
+    const queueSnapshot = this.#queue.snapshot();
+    const isPlaylist = queueSnapshot.length > 10;
+    const prefetchDepth = isPlaylist ? PLAYLIST_PREFETCH_DEPTH : PREFETCH_DEPTH;
+    const prefetchSlice = queueSnapshot.slice(0, prefetchDepth);
+
+    const toResolve: Array<{ track: Track; index: number }> = [];
+    for (const [index, next] of prefetchSlice.entries()) {
       const existing = this.#prepared.get(next.source);
       if (existing !== undefined) {
         if (existing.expiresAt > Date.now() + AUDIO_URL_REFRESH_AHEAD_MS) {
@@ -1421,9 +1429,36 @@ export class YoutubePlaybackService {
         }
         this.#invalidatePrepared(next.source);
       }
-      void this.#resolveAudioUrl(next, "prefetch").catch(() => {
-        this.#invalidatePrepared(next.source);
-      });
+      toResolve.push({ track: next, index });
+    }
+
+    if (isPlaylist && toResolve.length > PLAYLIST_PREFETCH_BATCH) {
+      const immediate = toResolve.slice(0, PLAYLIST_PREFETCH_BATCH);
+      const deferred = toResolve.slice(PLAYLIST_PREFETCH_BATCH);
+      for (const { track } of immediate) {
+        void this.#resolveAudioUrl(track, "prefetch").catch(() => {
+          this.#invalidatePrepared(track.source);
+        });
+      }
+      setTimeout(() => {
+        for (const { track } of deferred) {
+          const stillPrepared = this.#prepared.get(track.source);
+          if (
+            stillPrepared === undefined ||
+            stillPrepared.expiresAt <= Date.now() + AUDIO_URL_REFRESH_AHEAD_MS
+          ) {
+            void this.#resolveAudioUrl(track, "prefetch").catch(() => {
+              this.#invalidatePrepared(track.source);
+            });
+          }
+        }
+      }, 2_000);
+    } else {
+      for (const { track } of toResolve) {
+        void this.#resolveAudioUrl(track, "prefetch").catch(() => {
+          this.#invalidatePrepared(track.source);
+        });
+      }
     }
   }
 

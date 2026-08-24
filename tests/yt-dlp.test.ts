@@ -264,7 +264,7 @@ describe("YoutubeResolver", () => {
       const resolver = new YoutubeResolver(executor);
 
       await resolver.search("duki rockstar");
-      vi.advanceTimersByTime(15 * 60 * 1000 + 1);
+      vi.advanceTimersByTime(60 * 60 * 1000 + 1);
       await resolver.search("duki rockstar");
 
       expect(executor.calls).toHaveLength(2);
@@ -494,11 +494,14 @@ describe("YtDlpJobQueue", () => {
   it("reserves a slot for playback while metadata jobs share the remaining capacity", async () => {
     const order: string[] = [];
     const releases: Array<() => void> = [];
-    const queue = new YtDlpJobQueue(async (label: string) => {
-      order.push(label);
-      await new Promise<void>((resolve) => releases.push(resolve));
-      return label;
-    });
+    const queue = new YtDlpJobQueue(
+      async (label: string) => {
+        order.push(label);
+        await new Promise<void>((resolve) => releases.push(resolve));
+        return label;
+      },
+      { maxConcurrentJobs: 2 },
+    );
 
     const first = queue.run("metadata-1", "metadata");
     const second = queue.run("metadata-2", "metadata");
@@ -548,24 +551,29 @@ describe("YtDlpJobQueue", () => {
 
   it("rejects jobs beyond the saturation cap with a friendly error", async () => {
     const releases: Array<() => void> = [];
-    const queue = new YtDlpJobQueue(async (label: string) => {
-      await new Promise<void>((resolve) => releases.push(resolve));
-      return label;
-    });
-
-    const accepted = Array.from({ length: 9 }, (_, index) =>
-      queue.run(`job-${index}`, "metadata"),
+    const queue = new YtDlpJobQueue(
+      async (label: string) => {
+        await new Promise<void>((resolve) => releases.push(resolve));
+        return label;
+      },
+      { maxConcurrentJobs: 1, maxQueuedJobs: 2 },
     );
+
+    const accepted = [
+      queue.run("job-0", "metadata"),
+      queue.run("job-1", "metadata"),
+      queue.run("job-2", "metadata"),
+    ];
     const over = queue.run("overflow", "metadata");
 
     expect(releases).toHaveLength(1);
     await expect(over).rejects.toThrow("saturado");
 
-    for (let i = 0; i < 9; i++) {
+    for (let i = 0; i < 3; i++) {
       releases.shift()?.();
       await new Promise((resolve) => setImmediate(resolve));
     }
-    await expect(Promise.all(accepted)).resolves.toHaveLength(9);
+    await expect(Promise.all(accepted)).resolves.toHaveLength(3);
   });
 
   it("rejects an already-aborted job without running it", async () => {
@@ -583,11 +591,14 @@ describe("YtDlpJobQueue", () => {
   it("drops queued jobs whose signal is aborted while waiting", async () => {
     const order: string[] = [];
     const releases: Array<() => void> = [];
-    const queue = new YtDlpJobQueue(async (label: string) => {
-      order.push(label);
-      await new Promise<void>((resolve) => releases.push(resolve));
-      return label;
-    });
+    const queue = new YtDlpJobQueue(
+      async (label: string) => {
+        order.push(label);
+        await new Promise<void>((resolve) => releases.push(resolve));
+        return label;
+      },
+      { maxConcurrentJobs: 1 },
+    );
 
     const first = queue.run("first", "metadata");
     const controller = new AbortController();
