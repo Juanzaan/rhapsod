@@ -30,6 +30,9 @@ import { createYoutubeiClient } from "./media/youtube/youtubei-client.js";
 import { YoutubeiResolver } from "./media/youtube/youtubei-resolver.js";
 import { getTimeoutConfig } from "./lib/timeout-config.js";
 import { YoutubeResolverWithFallback } from "./media/youtube/youtube-resolver-with-fallback.js";
+import { PipedClient } from "./media/youtube/piped-client.js";
+import { PipedResolver } from "./media/youtube/piped-resolver.js";
+import type { YoutubePlaybackResolver } from "./media/youtube/youtube-resolver.js";
 import { SongLinkClient } from "./media/song-link.js";
 import { DirectUrlClient } from "./media/direct-url.js";
 import { LyricsClient } from "./media/lyrics.js";
@@ -226,11 +229,20 @@ async function main(): Promise<void> {
       );
     }
   }
-  const resolver = new YoutubeResolverWithFallback(
+  const baseResolver = new YoutubeResolverWithFallback(
     youtubeiResolver,
     ytDlpResolver,
     logger,
   );
+  let resolver: YoutubePlaybackResolver = baseResolver;
+  if (config.RHAPSOD_PIPED_ENABLED) {
+    const pipedClient = new PipedClient(config.RHAPSOD_PIPED_INSTANCES, {
+      timeoutMs: config.RHAPSOD_PIPED_TIMEOUT_MS,
+      logger,
+    });
+    resolver = new PipedResolver(pipedClient, baseResolver, logger);
+    logger.info("Piped primary resolver enabled");
+  }
   const playback = new YoutubePlaybackService({
     createPlayback: (url, playbackEncoder, output, options) =>
       playFfmpegUrl(url, playbackEncoder, output, {
