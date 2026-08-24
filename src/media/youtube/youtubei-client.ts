@@ -85,24 +85,12 @@ export function createYoutubeiClient(
     ...(options.cookie === undefined ? {} : { cookie: options.cookie }),
     ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
   })
-    .then(async (client) => {
+    .then((client) => {
       if (oauth !== undefined && options.youtubeRefreshToken !== undefined) {
-        try {
-          const accessToken = await oauth.getAccessToken();
-          await client.session.signIn({
-            access_token: accessToken,
-            refresh_token: options.youtubeRefreshToken,
-            token_type: "Bearer",
-            expires_in: 3600,
-            expiry_date: new Date(Date.now() + 3600 * 1000).toISOString(),
-          });
-          logger?.info({}, "youtubei.js: authenticated with OAuth");
-        } catch (error) {
-          logger?.warn(
-            { err: error },
-            "youtubei.js: OAuth signIn failed, continuing without auth",
-          );
-        }
+        logger?.info(
+          {},
+          "youtubei.js: OAuth configured (IOS client, no signIn needed)",
+        );
       }
       return {
         client,
