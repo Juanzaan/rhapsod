@@ -214,7 +214,9 @@ async function main(): Promise<void> {
       });
       youtubeiResolver = new YoutubeiResolver(
         youtubeiHandle.client,
-        youtubeiHandle.poTokens,
+        youtubeiHandle.oauth !== undefined
+          ? undefined
+          : youtubeiHandle.poTokens,
       );
       logger.info("youtubei.js primary resolver enabled");
     } catch (error) {
