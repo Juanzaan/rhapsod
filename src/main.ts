@@ -210,6 +210,7 @@ async function main(): Promise<void> {
         ...(config.RHAPSOD_YOUTUBE_REFRESH_TOKEN === undefined
           ? {}
           : { youtubeRefreshToken: config.RHAPSOD_YOUTUBE_REFRESH_TOKEN }),
+        logger,
       });
       youtubeiResolver = new YoutubeiResolver(
         youtubeiHandle.client,

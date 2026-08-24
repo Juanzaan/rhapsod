@@ -13,14 +13,32 @@ export interface YoutubeOAuthConfig {
   readonly refreshToken: string;
 }
 
+export interface YoutubeOAuthLogger {
+  info(obj: Record<string, unknown>, msg: string): void;
+  warn(obj: Record<string, unknown>, msg: string): void;
+  error(obj: Record<string, unknown>, msg: string): void;
+}
+
+const noopLogger: YoutubeOAuthLogger = {
+  info: () => {},
+  warn: () => {},
+  error: () => {},
+};
+
 export class YoutubeOAuth {
   #currentTokens: YoutubeOAuthTokens | undefined;
   readonly #config: YoutubeOAuthConfig;
   readonly #fetchImpl: typeof fetch;
+  readonly #logger: YoutubeOAuthLogger;
 
-  constructor(config: YoutubeOAuthConfig, fetchImpl: typeof fetch = fetch) {
+  constructor(
+    config: YoutubeOAuthConfig,
+    fetchImpl: typeof fetch = fetch,
+    logger?: YoutubeOAuthLogger,
+  ) {
     this.#config = config;
     this.#fetchImpl = fetchImpl;
+    this.#logger = logger ?? noopLogger;
   }
 
   async getAccessToken(): Promise<string> {
@@ -39,6 +57,8 @@ export class YoutubeOAuth {
       scope: YOUTUBE_OAUTH_SCOPE,
     });
 
+    this.#logger.info({}, "YouTube OAuth: refreshing access token");
+
     const response = await this.#fetchImpl(GOOGLE_TOKEN_URL, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -48,6 +68,10 @@ export class YoutubeOAuth {
 
     if (!response.ok) {
       const errorText = await response.text();
+      this.#logger.error(
+        { status: response.status, error: errorText },
+        "YouTube OAuth: token refresh failed",
+      );
       throw new Error(
         `YouTube OAuth token refresh failed (${response.status}): ${errorText}`,
       );
@@ -61,6 +85,7 @@ export class YoutubeOAuth {
     };
 
     if (!data.access_token) {
+      this.#logger.error({}, "YouTube OAuth: response missing access_token");
       throw new Error("YouTube OAuth response missing access_token");
     }
 
@@ -68,6 +93,11 @@ export class YoutubeOAuth {
       accessToken: data.access_token,
       expiresAt: Date.now() + data.expires_in * 1000 - 60_000,
     };
+
+    this.#logger.info(
+      { expiresIn: data.expires_in },
+      "YouTube OAuth: token refreshed successfully",
+    );
 
     return this.#currentTokens.accessToken;
   }

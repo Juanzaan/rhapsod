@@ -4,7 +4,10 @@ import {
   HttpPoTokenProvider,
   type PoTokenProvider,
 } from "./http-po-token-provider.js";
-import { YoutubeOAuth } from "../../lib/youtube-oauth.js";
+import {
+  YoutubeOAuth,
+  type YoutubeOAuthLogger,
+} from "../../lib/youtube-oauth.js";
 
 let evaluatorConfigured = false;
 
@@ -29,6 +32,7 @@ export interface YoutubeiClientOptions {
   readonly youtubeClientId?: string;
   readonly youtubeClientSecret?: string;
   readonly youtubeRefreshToken?: string;
+  readonly logger?: YoutubeOAuthLogger;
 }
 
 export interface YoutubeiClientHandle {
@@ -54,12 +58,18 @@ export function createYoutubeiClient(
     options.youtubeClientId !== undefined &&
     options.youtubeClientSecret !== undefined &&
     options.youtubeRefreshToken !== undefined
-      ? new YoutubeOAuth({
-          clientId: options.youtubeClientId,
-          clientSecret: options.youtubeClientSecret,
-          refreshToken: options.youtubeRefreshToken,
-        })
+      ? new YoutubeOAuth(
+          {
+            clientId: options.youtubeClientId,
+            clientSecret: options.youtubeClientSecret,
+            refreshToken: options.youtubeRefreshToken,
+          },
+          undefined,
+          options.logger,
+        )
       : undefined;
+
+  const logger = options.logger;
 
   pendingClient = Innertube.create({
     cache: new UniversalCache(true, options.cacheDirectory),
@@ -84,9 +94,12 @@ export function createYoutubeiClient(
             expires_in: 3600,
             expiry_date: new Date(Date.now() + 3600 * 1000).toISOString(),
           });
-        } catch {
-          // OAuth failed, continue without authentication
-          // This is expected if the tokens are invalid or expired
+          logger?.info({}, "youtubei.js: authenticated with OAuth");
+        } catch (error) {
+          logger?.warn(
+            { err: error },
+            "youtubei.js: OAuth signIn failed, continuing without auth",
+          );
         }
       }
       return {
