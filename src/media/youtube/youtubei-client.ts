@@ -14,9 +14,6 @@ let evaluatorConfigured = false;
 function configurePlayerEvaluator(): void {
   if (evaluatorConfigured) return;
   evaluatorConfigured = true;
-  // YouTube.js decrypts streaming URLs by executing YouTube's player JS. This
-  // is the equivalent of yt-dlp's JS runtime; it only runs code fetched from
-  // youtube.com to compute the deciphering steps.
   /* eslint-disable @typescript-eslint/no-implied-eval, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return */
   Platform.shim.eval = ({ output }: { output: string }) =>
     new Function(output)();
@@ -36,12 +33,40 @@ export interface YoutubeiClientOptions {
 }
 
 export interface YoutubeiClientHandle {
-  readonly client: Innertube;
+  readonly clients: readonly Innertube[];
   readonly poTokens?: PoTokenProvider;
   readonly oauth?: YoutubeOAuth;
 }
 
 let pendingClient: Promise<YoutubeiClientHandle> | undefined;
+
+const ROTATION_CLIENT_TYPES = [
+  ClientType.IOS,
+  ClientType.ANDROID,
+  ClientType.WEB,
+] as const;
+
+async function createRotatingClients(
+  options: YoutubeiClientOptions,
+  cacheDirectory: string,
+): Promise<readonly Innertube[]> {
+  const baseOpts = {
+    cache: new UniversalCache(true, cacheDirectory),
+    lang: "en",
+    location: "AR",
+    retrieve_player: true,
+    ...(options.cookie === undefined ? {} : { cookie: options.cookie }),
+    ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+  };
+
+  const clients: Innertube[] = [];
+  for (const clientType of ROTATION_CLIENT_TYPES) {
+    clients.push(
+      await Innertube.create({ ...baseOpts, client_type: clientType }),
+    );
+  }
+  return clients;
+}
 
 export function createYoutubeiClient(
   options: YoutubeiClientOptions,
@@ -71,29 +96,14 @@ export function createYoutubeiClient(
 
   const logger = options.logger;
 
-  pendingClient = Innertube.create({
-    cache: new UniversalCache(true, options.cacheDirectory),
-    client_type:
-      oauth !== undefined
-        ? ClientType.IOS
-        : poTokens === undefined
-          ? (options.clientType ?? ClientType.IOS)
-          : ClientType.WEB,
-    lang: "en",
-    location: "AR",
-    retrieve_player: true,
-    ...(options.cookie === undefined ? {} : { cookie: options.cookie }),
-    ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
-  })
-    .then((client) => {
-      if (oauth !== undefined && options.youtubeRefreshToken !== undefined) {
-        logger?.info(
-          {},
-          "youtubei.js: OAuth configured (IOS client, no signIn needed)",
-        );
-      }
+  pendingClient = createRotatingClients(options, options.cacheDirectory)
+    .then((clients) => {
+      logger?.info(
+        { count: clients.length },
+        "youtubei.js: rotating client pool created",
+      );
       return {
-        client,
+        clients,
         ...(poTokens === undefined ? {} : { poTokens }),
         ...(oauth === undefined ? {} : { oauth }),
       };

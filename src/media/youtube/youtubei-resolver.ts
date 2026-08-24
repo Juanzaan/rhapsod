@@ -7,15 +7,16 @@ type VideoInfo = Awaited<ReturnType<Innertube["getBasicInfo"]>>;
 
 export class YoutubeiResolver {
   readonly name = "youtubei";
+  #clientIndex = 0;
 
   constructor(
-    private readonly youtube: Innertube,
+    private readonly clients: readonly Innertube[],
     private readonly poTokens?: PoTokenProvider,
   ) {}
 
   async getTrack(videoId: string): Promise<YoutubeTrackMetadata> {
-    const info = await this.#getVideoInfo(videoId);
-    const audioUrl = await this.#resolveAudioUrl(info);
+    const { info, player } = await this.#getVideoInfo(videoId);
+    const audioUrl = await this.#resolveAudioUrl(info, player);
     const basic = info.basic_info;
 
     return {
@@ -30,45 +31,58 @@ export class YoutubeiResolver {
   }
 
   async getAudioUrl(videoId: string): Promise<string> {
-    const info = await this.#getVideoInfo(videoId);
-    return this.#resolveAudioUrl(info);
+    const { info, player } = await this.#getVideoInfo(videoId);
+    return this.#resolveAudioUrl(info, player);
   }
 
-  async #getVideoInfo(videoId: string): Promise<VideoInfo> {
+  async #getVideoInfo(
+    videoId: string,
+  ): Promise<{ info: VideoInfo; player: Innertube["session"]["player"] }> {
     for (let attempt = 0; attempt < 2; attempt++) {
       const token = this.poTokens
         ? await this.poTokens.get(videoId)
         : undefined;
-      try {
-        const info = await this.youtube.getBasicInfo(videoId, {
-          ...(token === undefined ? {} : { po_token: token }),
-        });
-        if (!info.streaming_data) {
-          throw new Error(
-            `youtubei.js returned no streaming data: ${info.playability_status?.status ?? "unknown"}`,
-          );
+      const lastError = new Error("All clients failed");
+      for (let i = 0; i < this.clients.length; i++) {
+        const idx = (this.#clientIndex + i) % this.clients.length;
+        const client = this.clients[idx]!;
+        try {
+          const info = await client.getBasicInfo(videoId, {
+            ...(token === undefined ? {} : { po_token: token }),
+          });
+          if (!info.streaming_data) {
+            throw new Error(
+              `youtubei.js returned no streaming data: ${info.playability_status?.status ?? "unknown"}`,
+            );
+          }
+          this.#clientIndex = (idx + 1) % this.clients.length;
+          return { info, player: client.session.player };
+        } catch (error) {
+          lastError.message =
+            error instanceof Error ? error.message : String(error);
         }
-        return info;
-      } catch (error) {
-        if (
-          this.poTokens === undefined ||
-          attempt > 0 ||
-          !isPotFailure(error)
-        ) {
-          throw error;
-        }
-        this.poTokens.invalidate(videoId);
       }
+      if (
+        this.poTokens === undefined ||
+        attempt > 0 ||
+        !isPotFailure(lastError)
+      ) {
+        throw lastError;
+      }
+      this.poTokens.invalidate(videoId);
     }
     throw new Error("youtubei.js failed after POT refresh");
   }
 
-  async #resolveAudioUrl(info: VideoInfo): Promise<string> {
+  async #resolveAudioUrl(
+    info: VideoInfo,
+    player: Innertube["session"]["player"],
+  ): Promise<string> {
     const format = info.chooseFormat({ type: "audio", quality: "best" });
     if (!format) {
       throw new Error("youtubei.js returned no playable audio format");
     }
-    const url = await format.decipher(this.youtube.session.player);
+    const url = await format.decipher(player);
     if (!url || !url.startsWith("https://")) {
       throw new Error("youtubei.js returned an invalid audio URL");
     }
