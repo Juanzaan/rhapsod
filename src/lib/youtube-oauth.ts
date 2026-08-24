@@ -1,6 +1,4 @@
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
-const YOUTUBE_OAUTH_SCOPE =
-  "https://www.googleapis.com/auth/youtube https://www.googleapis.com/auth/youtube.force-ssl";
 
 export interface YoutubeOAuthTokens {
   readonly accessToken: string;
@@ -54,7 +52,6 @@ export class YoutubeOAuth {
       client_secret: this.#config.clientSecret,
       refresh_token: this.#config.refreshToken,
       grant_type: "refresh_token",
-      scope: YOUTUBE_OAUTH_SCOPE,
     });
 
     this.#logger.info({}, "YouTube OAuth: refreshing access token");
