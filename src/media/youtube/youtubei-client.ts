@@ -74,9 +74,11 @@ export function createYoutubeiClient(
   pendingClient = Innertube.create({
     cache: new UniversalCache(true, options.cacheDirectory),
     client_type:
-      poTokens === undefined
-        ? (options.clientType ?? ClientType.IOS)
-        : ClientType.WEB,
+      oauth !== undefined
+        ? ClientType.IOS
+        : poTokens === undefined
+          ? (options.clientType ?? ClientType.IOS)
+          : ClientType.WEB,
     lang: "en",
     location: "AR",
     retrieve_player: true,
