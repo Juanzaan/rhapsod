@@ -11,6 +11,7 @@ import { YoutubePlaybackService } from "./application/youtube-playback-service.j
 import { AudioUrlCache } from "./application/audio-url-cache.js";
 import { UserTelemetry } from "./application/user-telemetry.js";
 import { parseChatCommand } from "./commands/chat-command.js";
+import { formatPlaybackError, formatPlaybackStarted } from "./lib/messages.js";
 import { CommandRateLimiter } from "./commands/command-rate-limiter.js";
 import { loadConfig } from "./config.js";
 import { FilePlaybackStateStore } from "./domain/state-store.js";
@@ -78,6 +79,7 @@ async function main(): Promise<void> {
     config.RHAPSOD_PRIVATE_COMMAND_UIDS === ""
       ? adminUids
       : parseAdminUids(config.RHAPSOD_PRIVATE_COMMAND_UIDS);
+  const verbose = config.RHAPSOD_VERBOSE;
   const moveGroupIds = parseMoveGroupIds(config.RHAPSOD_MOVE_GROUP_IDS);
   const adminGroupIds = parseMoveGroupIds(config.RHAPSOD_MOVE_ADMIN_GROUP_IDS);
   const seniorGroupIds =
@@ -262,7 +264,11 @@ async function main(): Promise<void> {
         { ...timings, trackId: track.id, title: track.title },
         "Playback started",
       );
-      await connection.sendChannelMessage(`Reproduciendo: ${track.title}`);
+      const isFirst = !hasStartedPlaying;
+      hasStartedPlaying = true;
+      await connection.sendChannelMessage(
+        formatPlaybackStarted(track.title, isFirst),
+      );
     },
     onPlaybackFinished: (track, metrics, reason) => {
       const timings = trackTimings.get(track.id);
@@ -307,11 +313,7 @@ async function main(): Promise<void> {
         { err: error, trackId: track.id },
         "YouTube playback failed",
       );
-      const truncatedTitle =
-        track.title.length > 40 ? `${track.title.slice(0, 39)}…` : track.title;
-      await connection.sendChannelMessage(
-        `No pude reproducir "${truncatedTitle}". Se intentará continuar con la siguiente canción.`,
-      );
+      await connection.sendChannelMessage(formatPlaybackError(track.title));
     },
     output: connection,
     resolver,
@@ -361,6 +363,7 @@ async function main(): Promise<void> {
     youtubeAuthCheckIntervalMs,
   ).unref();
   void checkYoutubeAuth();
+  let hasStartedPlaying = false;
   const commandRateLimiter = new CommandRateLimiter();
   const maxConcurrentCommands = config.RHAPSOD_MAX_CONCURRENT_COMMANDS;
   let activeCommands = 0;
@@ -404,7 +407,7 @@ async function main(): Promise<void> {
       }
       switch (command.name) {
         case "play": {
-          await send("Preparando la reproducción...");
+          if (verbose) await send("Preparando la reproducción...");
           const media = parseMediaInput(command.input);
           if (media.kind === "youtube" && media.resource.type === "playlist") {
             const result = await playback.enqueuePlaylist(
@@ -459,7 +462,7 @@ async function main(): Promise<void> {
           break;
         }
         case "playnext": {
-          await send("Preparando la próxima pista...");
+          if (verbose) await send("Preparando la próxima pista...");
           const track = await playback.enqueueNext(
             command.input,
             senderName,
@@ -479,7 +482,7 @@ async function main(): Promise<void> {
             await send(`En cola (resultado ${command.index}): ${track.title}`);
             break;
           }
-          await send("Buscando en YouTube...");
+          if (verbose) await send("Buscando en YouTube...");
           const track = await playback.enqueueSearch(
             command.input,
             senderName,
@@ -770,6 +773,7 @@ async function main(): Promise<void> {
         }
         case "stop":
           playback.stop();
+          hasStartedPlaying = false;
           await send("Reproducción detenida.");
           break;
         case "test-tone":
