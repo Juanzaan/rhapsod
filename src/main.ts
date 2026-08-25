@@ -12,6 +12,7 @@ import { AudioUrlCache } from "./application/audio-url-cache.js";
 import { UserTelemetry } from "./application/user-telemetry.js";
 import { parseChatCommand } from "./commands/chat-command.js";
 import { formatPlaybackError, formatPlaybackStarted } from "./lib/messages.js";
+import { classifyYoutubeAuthFailure } from "./lib/youtube-auth-health.js";
 import { CommandRateLimiter } from "./commands/command-rate-limiter.js";
 import { loadConfig } from "./config.js";
 import { FilePlaybackStateStore } from "./domain/state-store.js";
@@ -350,9 +351,10 @@ async function main(): Promise<void> {
       }
     } catch (error) {
       if (youtubeAuthHealthy) {
+        const category = classifyYoutubeAuthFailure(error);
         logger.error(
-          { err: error },
-          "YouTube authentication health check FAILED: the cookies may be expired; re-export them to youtube-cookies.txt",
+          { err: error, category },
+          "YouTube authentication health check FAILED",
         );
       }
       youtubeAuthHealthy = false;
