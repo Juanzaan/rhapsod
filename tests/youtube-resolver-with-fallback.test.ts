@@ -192,6 +192,71 @@ describe("YoutubeResolverWithFallback getAudioUrlFromUrl", () => {
   });
 });
 
+describe("YoutubeResolverWithFallback circuit breaker", () => {
+  it("opens after consecutive failures and stops calling youtubei.js", async () => {
+    const primary = fakePrimary();
+    const fallback = fakeFallback();
+    primary.getAudioUrl.mockRejectedValue(new Error("bot check"));
+    fallback.getAudioUrlFromUrl.mockResolvedValue("https://media.example/dl");
+    const wrapper = makeWrapper(primary.resolver, fallback);
+
+    for (let i = 0; i < 3; i++) {
+      await wrapper.getAudioUrlFromUrl(VIDEO_URL);
+    }
+    expect(primary.getAudioUrl).toHaveBeenCalledTimes(3);
+
+    await wrapper.getAudioUrlFromUrl(VIDEO_URL);
+    expect(primary.getAudioUrl).toHaveBeenCalledTimes(3);
+    expect(logger.warn).toHaveBeenCalledWith(
+      "youtubei.js circuit breaker opened; using yt-dlp only for a cooldown",
+    );
+  });
+
+  it("re-closes after the cooldown elapses", async () => {
+    vi.useFakeTimers();
+    try {
+      const primary = fakePrimary();
+      const fallback = fakeFallback();
+      primary.getAudioUrl.mockRejectedValue(new Error("bot check"));
+      fallback.getAudioUrlFromUrl.mockResolvedValue("https://media.example/dl");
+      const wrapper = makeWrapper(primary.resolver, fallback);
+
+      for (let i = 0; i < 3; i++) {
+        await wrapper.getAudioUrlFromUrl(VIDEO_URL);
+      }
+      expect(primary.getAudioUrl).toHaveBeenCalledTimes(3);
+
+      vi.advanceTimersByTime(5 * 60_000 + 1);
+      await wrapper.getAudioUrlFromUrl(VIDEO_URL);
+      expect(primary.getAudioUrl).toHaveBeenCalledTimes(4);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("resets the failure count when youtubei.js succeeds", async () => {
+    const primary = fakePrimary();
+    const fallback = fakeFallback();
+    fallback.getAudioUrlFromUrl.mockResolvedValue("https://media.example/dl");
+    const wrapper = makeWrapper(primary.resolver, fallback);
+
+    primary.getAudioUrl.mockRejectedValueOnce(new Error("bot check"));
+    primary.getAudioUrl.mockRejectedValueOnce(new Error("bot check"));
+    await wrapper.getAudioUrlFromUrl(VIDEO_URL);
+    await wrapper.getAudioUrlFromUrl(VIDEO_URL);
+
+    primary.getAudioUrl.mockResolvedValueOnce("https://media.example/audio");
+    await wrapper.getAudioUrlFromUrl(VIDEO_URL);
+
+    primary.getAudioUrl.mockRejectedValue(new Error("bot check"));
+    await wrapper.getAudioUrlFromUrl(VIDEO_URL);
+    await wrapper.getAudioUrlFromUrl(VIDEO_URL);
+    await wrapper.getAudioUrlFromUrl(VIDEO_URL);
+
+    expect(primary.getAudioUrl).toHaveBeenCalledTimes(6);
+  });
+});
+
 describe("YoutubeResolverWithFallback delegation", () => {
   it("delegates search, searchMany, expandPlaylist and getTrackFromUrl to yt-dlp", async () => {
     const fallback = fakeFallback();

@@ -46,17 +46,35 @@ const ROTATION_CLIENT_TYPES = [
   ClientType.WEB,
 ] as const;
 
+const YOUTUBEI_REQUEST_TIMEOUT_MS = 20_000;
+
+function fetchWithTimeout(
+  baseFetch: typeof fetch,
+  timeoutMs: number,
+): typeof fetch {
+  return (input, init) => {
+    const timeoutSignal = AbortSignal.timeout(timeoutMs);
+    const existing = init?.signal ?? undefined;
+    const signal =
+      existing === undefined
+        ? timeoutSignal
+        : AbortSignal.any([existing, timeoutSignal]);
+    return baseFetch(input, { ...init, signal });
+  };
+}
+
 async function createRotatingClients(
   options: YoutubeiClientOptions,
   cacheDirectory: string,
 ): Promise<readonly Innertube[]> {
+  const baseFetch = options.fetch ?? fetch;
   const baseOpts = {
     cache: new UniversalCache(true, cacheDirectory),
     lang: "en",
     location: "AR",
     retrieve_player: true,
     ...(options.cookie === undefined ? {} : { cookie: options.cookie }),
-    ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+    fetch: fetchWithTimeout(baseFetch, YOUTUBEI_REQUEST_TIMEOUT_MS),
   };
 
   const clients: Innertube[] = [];
