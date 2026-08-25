@@ -101,4 +101,25 @@ describe("loadConfig", () => {
     });
     expect(config.RHAPSOD_YTDLP_EXTRACTOR_ARGS).toBeUndefined();
   });
+
+  it("defaults RHAPSOD_VERBOSE to false", () => {
+    const config = loadConfig({ RHAPSOD_TS3_HOST: "ts.example.com" });
+    expect(config.RHAPSOD_VERBOSE).toBe(false);
+  });
+
+  it("parses RHAPSOD_VERBOSE=true", () => {
+    const config = loadConfig({
+      RHAPSOD_TS3_HOST: "ts.example.com",
+      RHAPSOD_VERBOSE: "true",
+    });
+    expect(config.RHAPSOD_VERBOSE).toBe(true);
+  });
+
+  it("parses RHAPSOD_VERBOSE=false", () => {
+    const config = loadConfig({
+      RHAPSOD_TS3_HOST: "ts.example.com",
+      RHAPSOD_VERBOSE: "false",
+    });
+    expect(config.RHAPSOD_VERBOSE).toBe(false);
+  });
 });

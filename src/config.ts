@@ -141,6 +141,10 @@ const configSchema = z.object({
     .min(1000)
     .max(10000)
     .default(3000),
+  RHAPSOD_VERBOSE: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
 });
 
 export type AppConfig = z.infer<typeof configSchema>;

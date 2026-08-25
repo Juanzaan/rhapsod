@@ -7,6 +7,7 @@ are backported to the latest release tag when a patch release is required.
 
 | Version | Supported         |
 | ------- | ----------------- |
+| 2.x     | Yes (latest only) |
 | 1.x     | Yes (latest only) |
 | < 1.0   | No                |
 

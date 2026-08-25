@@ -4,14 +4,111 @@ All notable changes to Rhapsod are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims
 for [Semantic Versioning](https://semver.org/).
 
-## [2.0.0] - Unreleased
+## [2.0.0] - 2026-08-24
+
+Production release for the OCI profile (4 vCPUs, 3 GB RAM). This is a
+major version bump: the bot now targets higher-capacity deployments while
+preserving low-end fallbacks where practical.
+
+### Added
+
+- **Multi-source playback**: YouTube (video, Shorts, playlists), SoundCloud
+  tracks and sets, Spotify tracks/albums/playlists (metadata only, playback
+  via YouTube), Apple Music and Amazon Music links (resolved via SongLink),
+  and direct HTTP(S) audio URLs / HLS streams.
+- **Smart search ranking**: fuzzy term matching, channel-name credits,
+  duration-based candidate selection, shortened-query retry, and penalty
+  rules for altered audio (bass boosted, 8d, instrumental, mashup, etc.).
+- **Playlist expansion**: YouTube, Spotify, and Apple Music / Amazon Music
+  playlists expand up to 100 tracks per `!play` with duplicate detection
+  and a friendly progress report.
+- **Queue persistence**: the pending queue and current track survive bot
+  restarts through `data/state.json`; tracks are restored only for users
+  still connected to the TeamSpeak server, matched by UID.
+- **Loop modes**: `!loop off|track|queue` repeats the current track or the
+  whole queue; persists across restarts.
+- **Seek and previous**: `!seek <seconds>` jumps within the current track;
+  `!previous` replays the last finished track.
+- **Direct audio URLs**: `!play <url>` accepts HTTP(S) audio files, HLS
+  playlists, and extensionless streams; probed with ffprobe for metadata;
+  private/loopback hosts are rejected (SSRF protection).
+- **Audio pipeline upgrades**: Opus Music codec (correct TS3 wire format),
+  EBU R128 loudness normalization (`RHAPSOD_LOUDNESS_TARGET_LUFS`, default
+  -14 LUFS) with a -1.5 dBTP true-peak limiter, configurable Opus bitrate
+  and complexity, and optional in-band FEC.
+- **yt-dlp optimizations**: sequential fallback from `web_safari` to
+  `web_embedded` player clients, reduced metadata timeout (3.5s baseline),
+  single extractor retry, and `nice -n 10` priority on Linux.
+- **Aggressive caching**: search results cached for 60 minutes (500
+  entries), audio URLs persisted across restarts with 12-hour TTL, and
+  a shared in-flight resolution for prefetch and playback.
+- **Smart playlist prefetch**: depth 20 for playlists (>10 tracks), batch
+  of 5 immediate + 5 deferred resolutions, parallel batch URL resolution
+  (batch size 10), and max 4 concurrent yt-dlp jobs on the OCI profile.
+- **Minimalist messages**: "Reproduciendo: {title}" on first play, "Ahora:
+  {title}" on subsequent tracks; intermediate messages hidden by default
+  (`RHAPSOD_VERBOSE=true` enables them).
+- **OAuth 2.0 for youtubei.js**: automatic token refresh with structured
+  logging; PO token provider (bgutil-ytdlp-pot-provider) as fallback.
+- **Health checks**: YouTube authentication check on startup and every 24h,
+  TeamSpeak liveness heartbeat (`RHAPSOD_TS3_HEARTBEAT_SECONDS`), and an
+  event-loop watchdog that restarts the process on stalls.
+- **Structured logging**: JSON logs to stdout and rotating files under
+  `{RHAPSOD_DATA_DIR}/logs` with configurable retention; per-track playback
+  session summaries joining metadata, timing, and audio metrics.
+- **Audio health in `!stats`**: surfaces underruns, rebuffer events, and
+  first-frame delay per track.
+- **20+ commands with aliases**: `!play` (`!p`), `!playnext` (`!pn`),
+  `!yt` (`!search`), `!queue` (`!q`), `!history` (`!hist`),
+  `!now-playing` (`!np`), `!stats` (`!st`), `!volume` (`!vol`),
+  `!move` (`!mv`), `!channel-move` (`!ch`), `!remove` (`!rm`),
+  `!clear` (`!c`), `!shuffle`, `!loop`, `!lyrics` (`!ly`),
+  `!test-tone` (`!tone`), `!help` (`!h`), and more.
+- **Overload protection**: command concurrency gate
+  (`RHAPSOD_MAX_CONCURRENT_COMMANDS`, default 3), queue cap (200 tracks),
+  per-user limit (30 tracks), single-flight playlist expansion, and rate
+  limiting on commands.
+- **Search ranking improvements**: noise-word filtering, title-penalty
+  rules for lyric videos and "official video", duration-proximity bonus,
+  and channel-name credits.
+- **FFmpeg low-latency flags**: `-fflags +nobuffer -flags +low_delay
+-analyzeduration 0 -probesize 32` for reduced time-to-first-audio.
+- **Persistent audio URL cache**: `{RHAPSOD_DATA_DIR}/audio-url-cache.json`
+  (500 entries, pruned by expiry) so repeat plays start instantly.
+- **YouTube client rotation**: rotating pool of 3 Innertube instances
+  (IOS, ANDROID, WEB) with round-robin selection and correct player for
+  stream decipher.
+- **Custom libraries**: `src/lib/query-parser.ts` (music query parsing),
+  `src/lib/timeout-config.ts` (timeout configuration),
+  `src/lib/ranking-boosts.ts` (search ranking rules).
+- **CI pipeline**: GitHub Actions runs format, lint, typecheck, tests, and
+  build on every push and pull request.
 
 ### Changed
 
-- Started the OCI development line targeting 4 vCPUs and 3 GB RAM.
-- Documented `!channel-move` and restricted it to configured admins.
-- Recommended `RHAPSOD_MAX_CONCURRENT_YTDLP_JOBS=4` for the OCI profile and
-  raised the queue prefetch depth from 3 to 5 to use the extra I/O headroom.
+- Target OCI production profile with 4 vCPUs and 3 GB RAM.
+- `!channel-move` restricted to configured admins.
+- `RHAPSOD_MAX_CONCURRENT_YTDLP_JOBS=4` recommended for OCI profile.
+- Queue prefetch depth raised from 3 to 10 (normal) / 20 (playlists).
+- Search cache TTL raised from 15 minutes to 60 minutes.
+- Audio URL timeout reduced from 45s to 30s for faster failure detection.
+- Max concurrent yt-dlp jobs raised from 2 to 4 (with min 2 floor).
+- Default volume remains 50%; Opus complexity raised to 10.
+
+### Fixed
+
+- Voice packets use codec 5 (Opus Music) as defined by the TS3 wire
+  protocol; codec 6 was out of range.
+- yt-dlp now requests the `web_embedded` YouTube player client, which is
+  not blocked on datacenter IPs.
+- Prefetch skips expired cached URLs so long-queued tracks are re-resolved
+  during prefetch instead of stalling at play time.
+- SoundCloud client-id discovery fetches asset scripts in parallel, cutting
+  worst-case discovery time from ~144s to a single batch.
+- Rate-limited commands now get a "wait a moment" reply instead of being
+  silently dropped.
+- The yt-dlp metadata output cap was raised from 2MB to 8MB so large video
+  info JSONs can no longer fail track resolution.
 
 ## [1.2.0] - 2026-08-20
 
