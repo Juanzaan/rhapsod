@@ -2,8 +2,6 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
-const MAX_SAMPLES = 20_000;
-
 function percentile(sorted, p) {
   if (sorted.length === 0) return undefined;
   const idx = Math.min(
@@ -28,6 +26,8 @@ function summarize(values) {
   };
 }
 
+const LOW_SAMPLE_THRESHOLD = 20;
+
 export function parseLogLine(line) {
   try {
     const parsed = JSON.parse(line);
@@ -38,6 +38,116 @@ export function parseLogLine(line) {
   }
 }
 
+export function parseIsoTime(value) {
+  const time = new Date(value).getTime();
+  return Number.isNaN(time) ? undefined : time;
+}
+
+export function parseCliArgs(argv) {
+  const args = [...argv];
+  const result = { help: false, files: [] };
+  if (args.includes("--help")) {
+    result.help = true;
+    return result;
+  }
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === "--since" || arg === "--until") {
+      const value = args[i + 1];
+      if (value === undefined) {
+        return {
+          ...result,
+          error: `Missing value for ${arg}. Usage: --${arg.slice(2)} <ISO-8601>`,
+        };
+      }
+      const ms = parseIsoTime(value);
+      if (ms === undefined) {
+        return {
+          ...result,
+          error: `Invalid ISO-8601 date for ${arg}: "${value}"`,
+        };
+      }
+      if (arg === "--since") result.sinceMs = ms;
+      else result.untilMs = ms;
+      i++;
+      continue;
+    }
+    if (arg.startsWith("--")) {
+      return { ...result, error: `Unknown option: ${arg}` };
+    }
+    result.files.push(arg);
+  }
+  if (result.sinceMs !== undefined && result.untilMs !== undefined) {
+    if (result.sinceMs > result.untilMs) {
+      return { ...result, error: "--since must not be later than --until" };
+    }
+  }
+  return result;
+}
+
+export function filterLinesByTime(lines, sinceMs, untilMs) {
+  if (sinceMs === undefined && untilMs === undefined) {
+    return { lines, discarded: 0 };
+  }
+  const filtered = [];
+  let discarded = 0;
+  for (const line of lines) {
+    const record = parseLogLine(line);
+    if (record === undefined) {
+      filtered.push(line);
+      continue;
+    }
+    if (typeof record.time !== "number") {
+      filtered.push(line);
+      continue;
+    }
+    if (sinceMs !== undefined && record.time < sinceMs) {
+      discarded++;
+      continue;
+    }
+    if (untilMs !== undefined && record.time > untilMs) {
+      discarded++;
+      continue;
+    }
+    filtered.push(line);
+  }
+  return { lines: filtered, discarded };
+}
+
+const PREFETCH_GROUP_MAP = {
+  hit: "ready",
+  "in-flight": "in-flight",
+  miss: "miss",
+  "not-applicable": "not-applicable",
+  unknown: "unknown",
+};
+
+export function classifyPrefetchStatus(value) {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "string") return `other:${String(value)}`;
+  const mapped = PREFETCH_GROUP_MAP[value];
+  return mapped ?? `other:${sanitizeOtherValue(value)}`;
+}
+
+function sanitizeOtherValue(value) {
+  const cleaned = value
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (cleaned.length === 0) return "(vacío)";
+  return cleaned.length > 40 ? `${cleaned.slice(0, 40)}…` : cleaned;
+}
+
+function sanitizeErrorKey(message) {
+  return String(message)
+    .replace(/https?:\/\/[^\s"'<>]+/gi, "[url]")
+    .replace(/cookie[s]?[:=]\s*\S+/gi, "cookie=[redacted]")
+    .replace(/po_token[s]?[:=]\s*\S+/gi, "po_token=[redacted]")
+    .replace(/token[s]?[:=]\s*\S+/gi, "token=[redacted]")
+    .replace(/authorization[s]?[:=]\s*\S+/gi, "authorization=[redacted]")
+    .replace(/refresh_token[:=]\s*\S+/gi, "refresh_token=[redacted]");
+}
+
 export function analyzeLogs(lines) {
   const audioUrlMs = [];
   const metadataMs = [];
@@ -46,11 +156,14 @@ export function analyzeLogs(lines) {
   const winners = new Map();
   const providerFails = new Map();
   const errorLevel50 = new Map();
+  const prefetchGroups = new Map();
   let skipped = 0;
   let parsedCount = 0;
   let retries = 0;
   let playbackSessions = 0;
   let playbackTimings = 0;
+  let audioUrlTimings = 0;
+  let audioUrlTimingsWithPrefetch = 0;
   let start = Infinity;
   let end = -Infinity;
 
@@ -78,6 +191,19 @@ export function analyzeLogs(lines) {
       else if (record.cacheHit === false) cacheHits.miss++;
     } else if (record.msg === "Playback timing") {
       playbackTimings++;
+      if (record.stage === "audio-url") {
+        audioUrlTimings++;
+        const group = classifyPrefetchStatus(record.prefetchStatus);
+        if (group === undefined) {
+          // Missing prefetchStatus: tolerated, no group assigned.
+        } else {
+          audioUrlTimingsWithPrefetch++;
+          if (!prefetchGroups.has(group)) prefetchGroups.set(group, []);
+          if (typeof record.durationMs === "number") {
+            prefetchGroups.get(group).push(record.durationMs);
+          }
+        }
+      }
     } else if (record.msg === "Audio URL resolved") {
       if (typeof record.winner === "string") {
         winners.set(record.winner, (winners.get(record.winner) ?? 0) + 1);
@@ -100,7 +226,8 @@ export function analyzeLogs(lines) {
     }
 
     if (record.level === 50 && typeof record.msg === "string") {
-      errorLevel50.set(record.msg, (errorLevel50.get(record.msg) ?? 0) + 1);
+      const key = sanitizeErrorKey(record.msg);
+      errorLevel50.set(key, (errorLevel50.get(key) ?? 0) + 1);
     }
   }
 
@@ -111,6 +238,17 @@ export function analyzeLogs(lines) {
           to: new Date(end).toISOString(),
         }
       : undefined;
+
+  const prefetch = {
+    audioUrlTimings,
+    withStatus: audioUrlTimingsWithPrefetch,
+    missingStatus: audioUrlTimings - audioUrlTimingsWithPrefetch,
+    groups: Object.fromEntries(
+      [...prefetchGroups.entries()]
+        .map(([key, values]) => [key, summarize(values)])
+        .sort(([a], [b]) => a.localeCompare(b)),
+    ),
+  };
 
   return {
     parsedCount,
@@ -124,7 +262,9 @@ export function analyzeLogs(lines) {
     cacheHitRate:
       cacheHits.hit + cacheHits.miss > 0
         ? Number(
-            ((cacheHits.hit / (cacheHits.hit + cacheHits.miss)) * 100).toFixed(1),
+            ((cacheHits.hit / (cacheHits.hit + cacheHits.miss)) * 100).toFixed(
+              1,
+            ),
           )
         : 0,
     cacheHits,
@@ -132,13 +272,79 @@ export function analyzeLogs(lines) {
     providerFails: Object.fromEntries(providerFails),
     errorLevel50: Object.fromEntries(errorLevel50),
     retries,
+    prefetch,
   };
+}
+
+function fmtSummary(s) {
+  if (s.count === 0) return "n/a";
+  const low = s.count < LOW_SAMPLE_THRESHOLD ? " (baja confianza)" : "";
+  return `n=${s.count} avg=${s.avg} p50=${s.p50} p90=${s.p90} p95=${s.p95} p99=${s.p99} max=${s.max}${low}`;
+}
+
+export function formatStats(stats, options = {}) {
+  const { sinceMs, untilMs, discardedByTime } = options;
+  const lines = [];
+  lines.push("=== Rhapsod log-stats ===");
+  if (stats.period) {
+    lines.push(`Período: ${stats.period.from} -> ${stats.period.to}`);
+  }
+  if (sinceMs !== undefined || untilMs !== undefined) {
+    const since = sinceMs === undefined ? "(inicio)" : new Date(sinceMs).toISOString();
+    const until = untilMs === undefined ? "(fin)" : new Date(untilMs).toISOString();
+    lines.push(
+      `Filtro temporal (inclusivo): since=${since} until=${until} (${discardedByTime ?? 0} líneas descartadas)`,
+    );
+  }
+  lines.push(
+    `Líneas: ${stats.parsedCount} parseadas, ${stats.skipped} inválidas`,
+  );
+  lines.push(`Sesiones de playback: ${stats.playbackSessions}`);
+  lines.push(`Timings de playback: ${stats.playbackTimings}`);
+  lines.push(`audioUrlMs (sesión): ${fmtSummary(stats.audioUrlMs)}`);
+  lines.push(`firstFrameDelay: ${fmtSummary(stats.firstFrameDelayMs)}`);
+  lines.push(`metadataMs: ${fmtSummary(stats.metadataMs)}`);
+  lines.push(
+    `Cache: ${stats.cacheHits.hit} hit / ${stats.cacheHits.miss} miss (${stats.cacheHitRate}%)`,
+  );
+  lines.push(`Winners: ${JSON.stringify(stats.winners)}`);
+  lines.push(`Falls por provider: ${JSON.stringify(stats.providerFails)}`);
+  lines.push(`Reintentos (yt-dlp client fallback): ${stats.retries}`);
+  lines.push(`Errores level:50: ${JSON.stringify(stats.errorLevel50)}`);
+  lines.push("");
+  lines.push("--- Prefetch (por prefetchStatus, latencia de resolución) ---");
+  lines.push(
+    `Timings audio-url: ${stats.prefetch.audioUrlTimings} | con status: ${stats.prefetch.withStatus} | sin status: ${stats.prefetch.missingStatus}`,
+  );
+  const groupNames = Object.keys(stats.prefetch.groups);
+  if (groupNames.length === 0) {
+    lines.push("  (sin grupos con prefetchStatus)");
+  }
+  for (const name of groupNames) {
+    lines.push(`  ${name}: ${fmtSummary(stats.prefetch.groups[name])}`);
+  }
+  return lines.join("\n");
 }
 
 export function readLogFiles(filePaths) {
   const lines = [];
   for (const filePath of filePaths) {
-    lines.push(...readFileSync(filePath, "utf8").split(/\r?\n/));
+    let content;
+    try {
+      content = readFileSync(filePath, "utf8");
+    } catch (error) {
+      const code =
+        typeof error?.code === "string" ? error.code : "UNKNOWN";
+      const name = filePath.split(/[\\/]/).pop() ?? filePath;
+      const wrapped = new Error(
+        code === "ENOENT"
+          ? `Archivo de log no encontrado: ${name}`
+          : `No se pudo leer el archivo de log: ${name}`,
+      );
+      wrapped.code = code;
+      throw wrapped;
+    }
+    lines.push(...content.split(/\r?\n/));
   }
   return lines;
 }
@@ -150,40 +356,60 @@ export function collectLogFiles(directory) {
     .sort();
 }
 
+const USAGE = `Usage: log-stats.mjs [--since <ISO-8601>] [--until <ISO-8601>] [<log-file> ...]
+
+Options:
+  --since <ISO-8601>   Analyze lines with time >= since (inclusive).
+  --until <ISO-8601>   Analyze lines with time <= until (inclusive).
+  --help               Show this help.
+
+With no file arguments, collects *.log from ./data/logs.
+Timestamps are compared as absolute epoch values (UTC); Z and numeric
+offsets are both accepted. If --since is later than --until the script
+fails before reading any file.`;
+
 function main() {
-  const args = process.argv.slice(2);
-  const files =
-    args.length > 0
-      ? args.filter((arg) => !arg.startsWith("--"))
-      : collectLogFiles(join(process.cwd(), "data", "logs"));
-  if (files.length === 0) {
-    process.stderr.write("No log files found. Pass paths as arguments.\n");
+  const parsed = parseCliArgs(process.argv.slice(2));
+  if (parsed.help) {
+    process.stdout.write(`${USAGE}\n`);
+    process.exit(0);
+  }
+  if (parsed.error !== undefined) {
+    process.stderr.write(`${parsed.error}\n\n${USAGE}\n`);
     process.exit(1);
   }
-  const stats = analyzeLogs(readLogFiles(files));
-  const { audioUrlMs, metadataMs, firstFrameDelayMs } = stats;
-  const fmt = (s) =>
-    s.count === 0
-      ? "n/a"
-      : `n=${s.count} avg=${s.avg}ms p50=${s.p50} p90=${s.p90} p95=${s.p95} p99=${s.p99} max=${s.max}`;
-  console.log(`=== Rhapsod log-stats ===`);
-  if (stats.period) {
-    console.log(`Período: ${stats.period.from} → ${stats.period.to}`);
+  const files =
+    parsed.files.length > 0
+      ? parsed.files
+      : collectLogFiles(join(process.cwd(), "data", "logs"));
+  if (files.length === 0) {
+    process.stderr.write(
+      "No log files found. Pass paths as arguments.\n\n" + USAGE + "\n",
+    );
+    process.exit(1);
   }
-  console.log(
-    `Líneas: ${stats.parsedCount} parseadas, ${stats.skipped} descartadas`,
+  let raw;
+  try {
+    raw = readLogFiles(files);
+  } catch (error) {
+    process.stderr.write(
+      `Error: ${error instanceof Error ? error.message : "Error de lectura de logs"}\n`,
+    );
+    process.exit(1);
+  }
+  const { lines, discarded } = filterLinesByTime(
+    raw,
+    parsed.sinceMs,
+    parsed.untilMs,
   );
-  console.log(`Sesiones de playback: ${stats.playbackSessions}`);
-  console.log(`audioUrlMs: ${fmt(audioUrlMs)}`);
-  console.log(`metadataMs: ${fmt(metadataMs)}`);
-  console.log(`firstFrameDelayMs: ${fmt(firstFrameDelayMs)}`);
-  console.log(
-    `Cache hit: ${stats.cacheHits.hit}/${stats.cacheHits.hit + stats.cacheHits.miss} (${stats.cacheHitRate}%)`,
+  const stats = analyzeLogs(lines);
+  process.stdout.write(
+    formatStats(stats, {
+      sinceMs: parsed.sinceMs,
+      untilMs: parsed.untilMs,
+      discardedByTime: discarded,
+    }) + "\n",
   );
-  console.log(`Winners: ${JSON.stringify(stats.winners)}`);
-  console.log(`Falls por provider: ${JSON.stringify(stats.providerFails)}`);
-  console.log(`Reintentos (yt-dlp client fallback): ${stats.retries}`);
-  console.log(`Errores level:50: ${JSON.stringify(stats.errorLevel50)}`);
 }
 
 const isMain =
