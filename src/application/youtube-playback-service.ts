@@ -1225,20 +1225,18 @@ export class YoutubePlaybackService {
     const cached = this.#prepared.get(track.source);
     if (cached) {
       if (cached.expiresAt > Date.now()) {
-        return cached.promise.then((prepared) => {
-          const prefetchStatus =
-            cached.origin === "prefetch"
-              ? cached.status === "pending"
-                ? ("in-flight" as const)
-                : ("hit" as const)
-              : ("not-applicable" as const);
-          return {
-            audioUrlSource: cached.origin,
-            cacheHit: true,
-            prefetchStatus,
-            url: prepared.url,
-          };
-        });
+        const prefetchStatus =
+          cached.origin === "prefetch"
+            ? cached.status === "pending"
+              ? ("in-flight" as const)
+              : ("hit" as const)
+            : ("not-applicable" as const);
+        return cached.promise.then((prepared) => ({
+          audioUrlSource: cached.origin,
+          cacheHit: true,
+          prefetchStatus,
+          url: prepared.url,
+        }));
       }
       this.#invalidatePrepared(track.source);
       return this.#resolveAudioUrl(track).then((url) => ({
