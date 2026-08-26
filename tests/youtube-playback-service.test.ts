@@ -21,6 +21,12 @@ import type { DirectUrlResolver } from "../src/media/direct-url.js";
 import type { SerializedQueueTrack } from "../src/domain/state-store.js";
 import { AudioUrlCache } from "../src/application/audio-url-cache.js";
 
+interface TimingCall {
+  readonly stage: string;
+  readonly cacheHit?: boolean;
+  readonly prefetchStatus?: string;
+}
+
 function setup(
   options: {
     createPlayback?: () => FfmpegPlaybackSession;
@@ -139,6 +145,7 @@ function setup(
   const onPlaybackError = vi.fn();
   const onPlaybackFinished = vi.fn();
   const onPlaybackStarted = vi.fn();
+  const onTiming = vi.fn<(timing: TimingCall) => void>();
   const spotifyResolver = options.spotifyResolver
     ? {
         expandAlbum: vi.fn<SpotifyResolver["expandAlbum"]>(() =>
@@ -205,6 +212,7 @@ function setup(
     onPlaybackError,
     onPlaybackFinished,
     onPlaybackStarted,
+    onTiming,
     output: { sendVoiceFrame: vi.fn() },
     resolver,
     alternativeResolver,
@@ -231,6 +239,7 @@ function setup(
     onPlaybackError,
     onPlaybackFinished,
     onPlaybackStarted,
+    onTiming,
     playbackResolvers,
     resolver,
     service,
@@ -371,6 +380,80 @@ describe("YoutubePlaybackService", () => {
       expect.anything(),
     );
     expect(onPlaybackStarted).toHaveBeenCalledWith(track);
+  });
+
+  it("reports prefetchStatus in-flight while the prefetch promise is pending", async () => {
+    const { createPlayback, onTiming, resolver, service } = setup();
+    resolver.getTrack.mockResolvedValueOnce({
+      id: "abc123",
+      title: "Track abc123",
+      webpageUrl: "https://www.youtube.com/watch?v=abc123",
+    });
+    let resolveAudio!: (url: string) => void;
+    const pending = new Promise<string>((resolve) => {
+      resolveAudio = resolve;
+    });
+    resolver.getAudioUrlFromUrl.mockReturnValue(pending);
+
+    await service.enqueue("https://youtu.be/abc123", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const audioUrlCalls = () =>
+      onTiming.mock.calls
+        .map((call) => call[0])
+        .filter((timing) => timing.stage === "audio-url");
+    expect(resolver.getAudioUrlFromUrl).toHaveBeenCalled();
+    expect(audioUrlCalls()).toHaveLength(0);
+
+    resolveAudio("https://media.example/audio");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(createPlayback).toHaveBeenCalled();
+    const timing = audioUrlCalls().at(-1);
+    expect(timing?.cacheHit).toBe(true);
+    expect(timing?.prefetchStatus).toBe("in-flight");
+  });
+
+  it("reports prefetchStatus hit when the prefetch resolves before playback", async () => {
+    const { onTiming, playbackResolvers, resolver, service } = setup();
+    resolver.getTrack.mockResolvedValueOnce({
+      id: "abc123",
+      title: "Track abc123",
+      webpageUrl: "https://www.youtube.com/watch?v=abc123",
+    });
+    let resolveAudio!: (url: string) => void;
+    resolver.getAudioUrlFromUrl.mockReturnValueOnce(
+      new Promise<string>((resolve) => {
+        resolveAudio = resolve;
+      }),
+    );
+
+    await service.enqueue("https://youtu.be/abc123", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+    resolveAudio("https://media.example/audio");
+    await new Promise((resolve) => setImmediate(resolve));
+    playbackResolvers.shift()?.();
+
+    service.seek(0);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const audioUrlTimings = onTiming.mock.calls
+      .map((call) => call[0])
+      .filter((timing) => timing.stage === "audio-url");
+    expect(audioUrlTimings.at(-1)?.cacheHit).toBe(true);
+    expect(audioUrlTimings.at(-1)?.prefetchStatus).toBe("hit");
+  });
+
+  it("reports prefetchStatus not-applicable for inline-cached audio URLs", async () => {
+    const { onTiming, service } = setup();
+
+    await service.enqueue("https://youtu.be/abc123", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const timing = onTiming.mock.calls.at(-1)?.[0] as {
+      prefetchStatus?: string;
+    };
+    expect(timing.prefetchStatus).toBe("not-applicable");
   });
 
   it("queues and plays a SoundCloud track through the shared resolver", async () => {
