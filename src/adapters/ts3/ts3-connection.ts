@@ -32,7 +32,7 @@ export function withTimeout<T>(
   });
 }
 
-interface Ts3Connection {
+export interface Ts3Connection {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
   listChannels(): Promise<readonly { cid: number; name: string }[]>;

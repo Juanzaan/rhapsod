@@ -1,4 +1,4 @@
-type ChatCommand =
+export type ChatCommand =
   | { readonly name: "channel-move"; readonly input: string }
   | { readonly name: "chart" }
   | { readonly name: "clear" }
