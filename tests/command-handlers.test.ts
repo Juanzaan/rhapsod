@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, type Mock } from "vitest";
 
 import { parseChatCommand } from "../src/commands/chat-command.js";
 import {
@@ -63,6 +63,11 @@ function makeHarness(
     setVolume: vi.fn(),
     setFilter: vi.fn(() => undefined),
     getLyrics: vi.fn(() => undefined),
+    savePlaylist: vi.fn(() => 0),
+    loadPlaylist: vi.fn(() => 0),
+    listPlaylists: vi.fn(() => []),
+    showPlaylist: vi.fn(() => undefined),
+    deletePlaylist: vi.fn(() => false),
     audioHealth: undefined,
     current: overrides.current,
     filter: "off",
@@ -159,6 +164,7 @@ describe("dispatchCommand", () => {
       ["vaporwave", "!vaporwave 0.9"],
       ["8d", "!8d"],
       ["filter", "!filter"],
+      ["playlist", "!playlist"],
     ];
     const { ctx, send, sender } = makeHarness({ current: { title: "X" } });
     for (const [name, input] of cases) {
@@ -262,6 +268,100 @@ describe("dispatchCommand", () => {
     await dispatchCommand(ctx, command, sender, send);
     expect(playback.setFilter).toHaveBeenCalledWith("off");
     expect(send).toHaveBeenCalledWith("Filtro desactivado.");
+  });
+
+  it("shows playlist help when !playlist has no arguments", async () => {
+    const { ctx, send, sender } = makeHarness();
+    const command = parseChatCommand("!playlist")!;
+    await dispatchCommand(ctx, command, sender, send);
+    expect(send).toHaveBeenCalledWith(
+      "Usá: !playlist save|load|list|show|delete <nombre>",
+    );
+  });
+
+  it("saves the queue with !playlist save", async () => {
+    const { ctx, playback, send, sender } = makeHarness();
+    (playback.savePlaylist as Mock).mockReturnValueOnce(15);
+    const command = parseChatCommand("!playlist save fiesta")!;
+    await dispatchCommand(ctx, command, sender, send);
+    expect(playback.savePlaylist).toHaveBeenCalledWith("fiesta", "uid-1");
+    expect(send).toHaveBeenCalledWith('Playlist "fiesta" guardada (15 pistas).');
+  });
+
+  it("loads a playlist with !playlist load", async () => {
+    const { ctx, playback, send, sender } = makeHarness();
+    (playback.loadPlaylist as Mock).mockReturnValueOnce(10);
+    const command = parseChatCommand("!pl load fiesta")!;
+    await dispatchCommand(ctx, command, sender, send);
+    expect(playback.loadPlaylist).toHaveBeenCalledWith(
+      "fiesta",
+      "user",
+      "uid-1",
+    );
+    expect(send).toHaveBeenCalledWith('Cargando "fiesta" (10 pistas).');
+  });
+
+  it("reports an empty playlist list", async () => {
+    const { ctx, send, sender } = makeHarness();
+    const command = parseChatCommand("!playlist list")!;
+    await dispatchCommand(ctx, command, sender, send);
+    expect(send).toHaveBeenCalledWith("No tenés playlists guardadas.");
+  });
+
+  it("paginates !playlist list", async () => {
+    const { ctx, playback, send, sender } = makeHarness();
+    (playback.listPlaylists as Mock).mockReturnValueOnce(
+      Array.from({ length: 12 }, (_, i) => ({
+        createdAt: i,
+        name: `pl${i}`,
+        trackCount: i + 1,
+      })),
+    );
+    const command = parseChatCommand("!playlist list 2")!;
+    await dispatchCommand(ctx, command, sender, send);
+    expect(send).toHaveBeenCalledWith(expect.stringContaining("página 2/2"));
+    expect(send).toHaveBeenCalledWith(expect.stringContaining("11. pl10"));
+    expect(send).toHaveBeenCalledWith(expect.stringContaining("12. pl11"));
+  });
+
+  it("shows a playlist with !playlist show", async () => {
+    const { ctx, playback, send, sender } = makeHarness();
+    (playback.showPlaylist as Mock).mockReturnValueOnce({
+      createdAt: 1,
+      name: "fiesta",
+      tracks: [{ id: "a", source: "u", title: "Track a" }],
+    });
+    const command = parseChatCommand("!playlist show fiesta")!;
+    await dispatchCommand(ctx, command, sender, send);
+    expect(send).toHaveBeenCalledWith(
+      'Playlist "fiesta" (página 1/1):\n1. Track a',
+    );
+  });
+
+  it("reports a missing playlist on !playlist show", async () => {
+    const { ctx, send, sender } = makeHarness();
+    const command = parseChatCommand("!playlist show nada")!;
+    await dispatchCommand(ctx, command, sender, send);
+    expect(send).toHaveBeenCalledWith('No encontré la playlist "nada".');
+  });
+
+  it("deletes a playlist as its owner", async () => {
+    const { ctx, playback, send, sender } = makeHarness();
+    (playback.deletePlaylist as Mock).mockReturnValueOnce(true);
+    const command = parseChatCommand("!playlist delete fiesta")!;
+    await dispatchCommand(ctx, command, sender, send);
+    expect(playback.deletePlaylist).toHaveBeenCalledWith("fiesta", "uid-1", false);
+    expect(send).toHaveBeenCalledWith('Playlist "fiesta" eliminada.');
+  });
+
+  it("lets admins delete any playlist", async () => {
+    const { ctx, playback, send, sender } = makeHarness({
+      adminUids: new Set(["uid-1"]),
+    });
+    (playback.deletePlaylist as Mock).mockReturnValueOnce(true);
+    const command = parseChatCommand("!playlist delete fiesta")!;
+    await dispatchCommand(ctx, command, sender, send);
+    expect(playback.deletePlaylist).toHaveBeenCalledWith("fiesta", "uid-1", true);
   });
 });
 

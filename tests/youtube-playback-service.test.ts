@@ -1,4 +1,7 @@
-import { describe, expect, it, vi, type Mock } from "vitest";
+import { afterAll, describe, expect, it, vi, type Mock } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import {
   audioUrlExpiresAt,
@@ -22,6 +25,7 @@ import type { SerializedQueueTrack } from "../src/domain/state-store.js";
 import type { PlaybackState } from "../src/domain/state-store.js";
 import { AudioUrlCache } from "../src/application/audio-url-cache.js";
 import type { AudioFilter } from "../src/audio/filter-chain.js";
+import { PlaylistStore } from "../src/application/playlist-store.js";
 
 interface TimingCall {
   readonly stage: string;
@@ -46,6 +50,7 @@ function setup(
     soundcloudResolver?: boolean;
     spotifyResolver?: boolean;
     stateStore?: boolean;
+    playlistStore?: PlaylistStore;
     audioUrlCache?: AudioUrlCache;
   } = {},
 ) {
@@ -227,6 +232,7 @@ function setup(
     ...(spotifyResolver ? { spotifyResolver } : {}),
     ...(lyricsResolver ? { lyricsResolver } : {}),
     ...(stateStore ? { stateStore } : {}),
+    ...(options.playlistStore ? { playlistStore: options.playlistStore } : {}),
     ...(options.audioUrlCache ? { audioUrlCache: options.audioUrlCache } : {}),
     ...(options.maxQueueTracks
       ? { maxQueueTracks: options.maxQueueTracks }
@@ -2292,6 +2298,88 @@ describe("YoutubePlaybackService", () => {
     await new Promise((resolve) => setImmediate(resolve));
 
     expect(onPlaybackFinished.mock.calls[0]?.[2]).toBe("filter-change");
+  });
+
+  describe("YoutubePlaybackService playlists", () => {
+    const directory = mkdtempSync(join(tmpdir(), "rhapsod-pl-svc-"));
+    afterAll(() => {
+      rmSync(directory, { force: true, recursive: true });
+    });
+    let counter = 0;
+    function freshStore(): PlaylistStore {
+      return new PlaylistStore(join(directory, `pl-${counter++}.json`));
+    }
+    function track(id: string) {
+      return {
+        id,
+        source: `https://www.youtube.com/watch?v=${id}`,
+        title: `Track ${id}`,
+      };
+    }
+
+    it("throws when saving an empty queue", () => {
+      const { service } = setup({ playlistStore: freshStore() });
+      expect(() => service.savePlaylist("fiesta", "uid-1")).toThrow(
+        /cola está vacía/,
+      );
+    });
+
+    it("saves the pending queue as a playlist", async () => {
+      const store = freshStore();
+      const { service } = setup({ playlistStore: store });
+      await service.enqueue("https://youtu.be/a", "user-1");
+      await service.enqueue("https://youtu.be/b", "user-1");
+      await service.enqueue("https://youtu.be/c", "user-1");
+      await new Promise((resolve) => setImmediate(resolve));
+
+      const count = service.savePlaylist("Fiesta", "uid-1");
+      expect(count).toBe(2); // b and c pending; a is playing
+      expect(store.load("uid-1", "fiesta")?.tracks).toHaveLength(2);
+    });
+
+    it("loads a playlist into the queue", () => {
+      const store = freshStore();
+      store.save("uid-1", "fiesta", [track("b"), track("c")]);
+      const { service } = setup({ playlistStore: store });
+
+      const count = service.loadPlaylist("fiesta", "user-1", "uid-1");
+      expect(count).toBe(2);
+      expect(service.current?.id).toBe("b");
+      expect(service.queue()).toHaveLength(1);
+    });
+
+    it("lists and shows only the caller's playlists", () => {
+      const store = freshStore();
+      store.save("uid-1", "fiesta", [track("a")]);
+      store.save("uid-2", "otra", [track("a")]);
+      const { service } = setup({ playlistStore: store });
+
+      expect(service.listPlaylists("uid-1").map((p) => p.name)).toEqual([
+        "fiesta",
+      ]);
+      expect(service.showPlaylist("fiesta", "uid-1")).toBeDefined();
+      expect(service.showPlaylist("otra", "uid-1")).toBeUndefined();
+    });
+
+    it("deletes own playlists and allows admin cross-user deletion", () => {
+      const store = freshStore();
+      store.save("uid-2", "fiesta", [track("a")]);
+      const { service } = setup({ playlistStore: store });
+
+      expect(service.deletePlaylist("fiesta", "uid-1", false)).toBe(false);
+      expect(service.deletePlaylist("fiesta", "uid-1", true)).toBe(true);
+      expect(store.load("uid-2", "fiesta")).toBeUndefined();
+    });
+
+    it("stops loading when the queue limit is reached", () => {
+      const store = freshStore();
+      store.save("uid-1", "fiesta", [track("a"), track("b"), track("c")]);
+      const { service } = setup({ playlistStore: store, maxQueueTracks: 1 });
+
+      const count = service.loadPlaylist("fiesta", "user-1", "uid-1");
+      expect(count).toBe(2); // one playing, one queued; the third is rejected
+      expect(service.queue()).toHaveLength(1);
+    });
   });
 
   it("replays the previous track at the front while playing", async () => {

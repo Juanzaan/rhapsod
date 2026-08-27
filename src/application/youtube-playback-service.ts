@@ -41,6 +41,12 @@ import type {
   PrefetchStatus,
 } from "../observability/metrics.js";
 import { parseMusicQuery } from "../lib/query-parser.js";
+import type {
+  PlaylistStore,
+  PlaylistSummary,
+  SavedPlaylist,
+  StoredPlaylistTrack,
+} from "./playlist-store.js";
 
 export type LoopMode = "off" | "queue" | "track";
 
@@ -58,6 +64,7 @@ interface PlaybackServiceOptions {
   readonly lyricsResolver?: LyricsResolver;
   readonly stateStore?: PlaybackStateStore;
   readonly audioUrlCache?: AudioUrlCache;
+  readonly playlistStore?: PlaylistStore;
   readonly output: VoiceFrameOutput;
   readonly playlistMaxTracks?: number;
   readonly maxQueueTracks?: number;
@@ -173,6 +180,7 @@ export class YoutubePlaybackService {
   ) => void;
   readonly #onTiming: (timing: PlaybackTiming) => void;
   readonly #audioUrlCache: AudioUrlCache | undefined;
+  readonly #playlistStore: PlaylistStore | undefined;
   readonly #playlistMaxTracks: number;
   readonly #maxQueueTracks: number;
   readonly #maxTracksPerUser: number;
@@ -214,6 +222,7 @@ export class YoutubePlaybackService {
     this.#onPlaybackFinished = options.onPlaybackFinished ?? (() => undefined);
     this.#onTiming = options.onTiming ?? (() => undefined);
     this.#audioUrlCache = options.audioUrlCache;
+    this.#playlistStore = options.playlistStore;
     for (const [source, entry] of this.#audioUrlCache?.entries() ?? []) {
       this.#prepared.set(source, {
         expiresAt: entry.expiresAt,
@@ -615,6 +624,97 @@ export class YoutubePlaybackService {
 
   history(): readonly Track[] {
     return [...this.#history];
+  }
+
+  savePlaylist(rawName: string, requestedByUid: string): number {
+    const store = this.#requirePlaylistStore();
+    const tracks: StoredPlaylistTrack[] = this.#queue.snapshot().map(
+      (track) => ({
+        ...(track.durationSeconds === undefined
+          ? {}
+          : { durationSeconds: track.durationSeconds }),
+        id: track.id,
+        source: track.source,
+        title: track.title,
+      }),
+    );
+    if (tracks.length === 0) {
+      throw new Error(
+        "La cola está vacía: no hay nada para guardar en la playlist.",
+      );
+    }
+    return store.save(requestedByUid, rawName, tracks);
+  }
+
+  loadPlaylist(
+    rawName: string,
+    requestedBy: string,
+    requestedByUid: string,
+  ): number {
+    const store = this.#requirePlaylistStore();
+    const playlist = store.load(requestedByUid, rawName);
+    if (playlist === undefined) {
+      throw new Error(`No encontré la playlist "${rawName}".`);
+    }
+    if (playlist.tracks.length === 0) {
+      throw new Error(`La playlist "${rawName}" está vacía.`);
+    }
+    let added = 0;
+    for (const track of playlist.tracks) {
+      try {
+        this.#enqueueMetadata(
+          {
+            ...(track.durationSeconds === undefined
+              ? {}
+              : { durationSeconds: track.durationSeconds }),
+            id: track.id,
+            title: track.title,
+            webpageUrl: track.source,
+          },
+          requestedBy,
+          undefined,
+          requestedByUid,
+        );
+        added++;
+      } catch (error) {
+        if (error instanceof QueueLimitError) break;
+        if (error instanceof Error && /ya está en la cola/i.test(error.message)) {
+          continue;
+        }
+        throw error;
+      }
+    }
+    return added;
+  }
+
+  listPlaylists(requestedByUid: string): readonly PlaylistSummary[] {
+    return this.#requirePlaylistStore().list(requestedByUid);
+  }
+
+  showPlaylist(
+    rawName: string,
+    requestedByUid: string,
+  ): SavedPlaylist | undefined {
+    return this.#requirePlaylistStore().show(requestedByUid, rawName);
+  }
+
+  deletePlaylist(
+    rawName: string,
+    requestedByUid: string,
+    allowAnyUser: boolean,
+  ): boolean {
+    return this.#requirePlaylistStore().delete(
+      requestedByUid,
+      rawName,
+      allowAnyUser,
+    );
+  }
+
+  #requirePlaylistStore(): PlaylistStore {
+    if (this.#playlistStore === undefined) {
+      throw new Error("Las playlists no están configuradas en este bot.");
+    }
+    return this.#playlistStore;
   }
 
   async getLyrics(): Promise<TrackLyrics | undefined> {

@@ -9,6 +9,7 @@ import { playFfmpegUrl } from "./audio/ffmpeg-player.js";
 import { playTestTone } from "./audio/test-tone-player.js";
 import { YoutubePlaybackService } from "./application/youtube-playback-service.js";
 import { AudioUrlCache } from "./application/audio-url-cache.js";
+import { PlaylistStore } from "./application/playlist-store.js";
 import { UserTelemetry } from "./application/user-telemetry.js";
 import { parseChatCommand } from "./commands/chat-command.js";
 import {
@@ -326,6 +327,10 @@ async function main(): Promise<void> {
       logger,
     ),
     audioUrlCache,
+    playlistStore: new PlaylistStore(
+      join(config.RHAPSOD_DATA_DIR, "playlists.json"),
+      logger,
+    ),
     maxQueueTracks: config.RHAPSOD_MAX_QUEUE_TRACKS,
     maxTracksPerUser: config.RHAPSOD_MAX_TRACKS_PER_USER,
     alternativeResolver: new SongLinkClient({ logger }),
@@ -669,6 +674,12 @@ export function userFacingError(error: Error): string {
   const msg = error.message;
   if (
     /^(No reconozco|Usá:|El comando !|La posición|El volumen|El rango|Usage: !)/.test(
+      msg,
+    )
+  )
+    return msg;
+  if (
+    /^(La cola está vacía: no hay nada para guardar en la playlist|No encontré la playlist|Límite de \d+ playlists por usuario|Una playlist no puede tener más de \d+ pistas|Las playlists no están configuradas|No hay pistas válidas para guardar en la playlist)/.test(
       msg,
     )
   )
