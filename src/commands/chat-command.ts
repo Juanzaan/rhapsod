@@ -44,7 +44,26 @@ export type ChatCommand =
       readonly name: "playlist";
       readonly nameArg: string;
       readonly page?: number;
-    };
+    }
+  | {
+      readonly action: "add";
+      readonly name: "playlist";
+      readonly nameArg: string;
+      readonly urlArg: string;
+    }
+  | {
+      readonly action: "remove";
+      readonly index: number;
+      readonly name: "playlist";
+      readonly nameArg: string;
+    }
+  | {
+      readonly action: "rename";
+      readonly name: "playlist";
+      readonly newName: string;
+      readonly oldName: string;
+    }
+  | { readonly action: "info"; readonly name: "playlist"; readonly nameArg: string };
 
 const COMMAND_ALIASES: Readonly<Record<string, ChatCommand["name"]>> = {
   "8d": "8d",
@@ -193,7 +212,8 @@ export function parseChatCommand(
         action === "save" ||
         action === "load" ||
         action === "delete" ||
-        action === "show"
+        action === "show" ||
+        action === "info"
       ) {
         const nameArg = parts[1];
         if (!nameArg) {
@@ -206,7 +226,38 @@ export function parseChatCommand(
         }
         return { name, action, nameArg };
       }
-      throw new Error("Usá: !playlist save|load|list|show|delete <nombre>");
+      if (action === "add") {
+        const nameArg = parts[1];
+        const urlArg = unwrapTeamSpeakUrl(parts.slice(2).join(" ").trim());
+        if (!nameArg || !urlArg) {
+          throw new Error("Usá: !playlist add <nombre> <url>");
+        }
+        return { name, action: "add", nameArg, urlArg };
+      }
+      if (action === "remove") {
+        const nameArg = parts[1];
+        const rawIndex = parts[2];
+        if (!nameArg || rawIndex === undefined) {
+          throw new Error("Usá: !playlist remove <nombre> <índice>");
+        }
+        return {
+          name,
+          action: "remove",
+          nameArg,
+          index: parsePosition(rawIndex, "!playlist remove <nombre> <índice>"),
+        };
+      }
+      if (action === "rename") {
+        const oldName = parts[1];
+        const newName = parts[2];
+        if (!oldName || !newName) {
+          throw new Error("Usá: !playlist rename <viejo> <nuevo>");
+        }
+        return { name, action: "rename", oldName, newName };
+      }
+      throw new Error(
+        "Usá: !playlist save|load|list|show|delete|add|remove|rename|info <nombre>",
+      );
     }
     default:
       if (argument)

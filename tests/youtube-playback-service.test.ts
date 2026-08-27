@@ -2380,6 +2380,101 @@ describe("YoutubePlaybackService", () => {
       expect(count).toBe(2); // one playing, one queued; the third is rejected
       expect(service.queue()).toHaveLength(1);
     });
+
+    it("resolves a YouTube playlist URL into tracks", async () => {
+      const { resolver, service } = setup();
+      (resolver.expandPlaylist as Mock).mockResolvedValueOnce({
+        total: 2,
+        tracks: [
+          {
+            durationSeconds: 210,
+            id: "a",
+            title: "Track a",
+            webpageUrl: "https://www.youtube.com/watch?v=a",
+          },
+          {
+            id: "b",
+            title: "Track b",
+            webpageUrl: "https://www.youtube.com/watch?v=b",
+          },
+        ],
+      });
+      const result = await service.resolvePlaylistTracks(
+        "https://www.youtube.com/playlist?list=PL123",
+      );
+      expect(resolver.expandPlaylist).toHaveBeenCalledWith(
+        { id: "PL123", type: "playlist" },
+        200,
+      );
+      expect(result.source).toBe("playlist");
+      expect(result.tracks).toHaveLength(2);
+      expect(result.tracks[0]).toMatchObject({
+        durationSeconds: 210,
+        id: "a",
+        source: "https://www.youtube.com/watch?v=a",
+        title: "Track a",
+      });
+      expect(result.tracks[1]?.durationSeconds).toBeUndefined();
+    });
+
+    it("resolves a single YouTube video URL into one track", async () => {
+      const { resolver, service } = setup();
+      (resolver.getTrackFromUrl as Mock).mockResolvedValueOnce({
+        id: "abc",
+        title: "Single",
+        webpageUrl: "https://www.youtube.com/watch?v=abc",
+      });
+      const result = await service.resolvePlaylistTracks(
+        "https://www.youtube.com/watch?v=abc",
+      );
+      expect(result.source).toBe("video");
+      expect(result.tracks).toHaveLength(1);
+      expect(result.tracks[0]).toMatchObject({
+        id: "abc",
+        source: "https://www.youtube.com/watch?v=abc",
+        title: "Single",
+      });
+    });
+
+    it("rejects non-YouTube URLs when adding tracks", async () => {
+      const { service } = setup();
+      await expect(
+        service.resolvePlaylistTracks("https://open.spotify.com/track/abc"),
+      ).rejects.toThrow(/Solo se soportan URLs de YouTube/);
+      await expect(service.resolvePlaylistTracks("duki rockstar")).rejects.toThrow(
+        /Solo se soportan URLs de YouTube/,
+      );
+    });
+
+    it("adds resolved tracks through the playlist store", () => {
+      const store = freshStore();
+      const { service } = setup({ playlistStore: store });
+      const result = service.addPlaylistTracks(
+        "fiesta",
+        [track("a"), track("b")],
+        "uid-1",
+      );
+      expect(result).toMatchObject({ added: 2, created: true, total: 2 });
+      expect(store.load("uid-1", "fiesta")?.tracks).toHaveLength(2);
+    });
+
+    it("removes, renames and inspects playlists through the store", () => {
+      const store = freshStore();
+      store.save("uid-1", "fiesta", [track("a"), track("b")]);
+      const { service } = setup({ playlistStore: store });
+
+      expect(
+        service.removePlaylistTrack("fiesta", 2, "uid-1", false),
+      ).toEqual({ status: "removed", total: 1 });
+      expect(
+        service.renamePlaylist("fiesta", "partido", "uid-1", false),
+      ).toEqual({ status: "renamed" });
+      const info = service.getPlaylistInfo("partido", "uid-1");
+      expect(info?.trackCount).toBe(1);
+      expect(
+        service.getPlaylistInfo("partido", "other"),
+      ).toBeUndefined();
+    });
   });
 
   it("replays the previous track at the front while playing", async () => {

@@ -68,6 +68,19 @@ function makeHarness(
     listPlaylists: vi.fn(() => []),
     showPlaylist: vi.fn(() => undefined),
     deletePlaylist: vi.fn(() => false),
+    resolvePlaylistTracks: vi.fn(() =>
+      Promise.resolve({ source: "video", tracks: [] }),
+    ),
+    addPlaylistTracks: vi.fn(() => ({
+      added: 0,
+      created: true,
+      skipped: 0,
+      total: 0,
+      truncated: false,
+    })),
+    removePlaylistTrack: vi.fn(() => ({ status: "removed", total: 0 })),
+    renamePlaylist: vi.fn(() => ({ status: "renamed" })),
+    getPlaylistInfo: vi.fn(() => undefined),
     audioHealth: undefined,
     current: overrides.current,
     filter: "off",
@@ -275,7 +288,7 @@ describe("dispatchCommand", () => {
     const command = parseChatCommand("!playlist")!;
     await dispatchCommand(ctx, command, sender, send);
     expect(send).toHaveBeenCalledWith(
-      "Usá: !playlist save|load|list|show|delete <nombre>",
+      "Usá: !playlist save|load|list|show|delete|add|remove|rename|info <nombre>",
     );
   });
 
@@ -362,6 +375,156 @@ describe("dispatchCommand", () => {
     const command = parseChatCommand("!playlist delete fiesta")!;
     await dispatchCommand(ctx, command, sender, send);
     expect(playback.deletePlaylist).toHaveBeenCalledWith("fiesta", "uid-1", true);
+  });
+
+  it("adds tracks to an existing playlist with !playlist add", async () => {
+    const { ctx, playback, send, sender } = makeHarness();
+    (playback.showPlaylist as Mock).mockReturnValueOnce({
+      createdAt: 1,
+      name: "fiesta",
+      tracks: [],
+    });
+    (playback.resolvePlaylistTracks as Mock).mockResolvedValueOnce({
+      source: "playlist",
+      tracks: [
+        { id: "a", source: "u", title: "A" },
+        { id: "b", source: "u", title: "B" },
+      ],
+    });
+    (playback.addPlaylistTracks as Mock).mockReturnValueOnce({
+      added: 2,
+      created: false,
+      skipped: 0,
+      total: 2,
+      truncated: false,
+    });
+    const command = parseChatCommand(
+      "!playlist add fiesta https://www.youtube.com/playlist?list=PL1",
+    )!;
+    await dispatchCommand(ctx, command, sender, send);
+    expect(send).toHaveBeenCalledWith(
+      'Agregando 2 pistas de la playlist a "fiesta"...',
+    );
+    expect(send).toHaveBeenCalledWith('Playlist "fiesta" actualizada. Tiene 2 pistas.');
+    expect(playback.addPlaylistTracks).toHaveBeenCalledWith(
+      "fiesta",
+      [
+        { id: "a", source: "u", title: "A" },
+        { id: "b", source: "u", title: "B" },
+      ],
+      "uid-1",
+    );
+  });
+
+  it("reports duplicates and the limit in !playlist add", async () => {
+    const { ctx, playback, send, sender } = makeHarness();
+    (playback.showPlaylist as Mock).mockReturnValueOnce(undefined);
+    (playback.resolvePlaylistTracks as Mock).mockResolvedValueOnce({
+      source: "video",
+      tracks: [{ id: "a", source: "u", title: "A" }],
+    });
+    (playback.addPlaylistTracks as Mock).mockReturnValueOnce({
+      added: 0,
+      created: true,
+      skipped: 1,
+      total: 1,
+      truncated: false,
+    });
+    const command = parseChatCommand(
+      "!playlist add fiesta https://www.youtube.com/watch?v=a",
+    )!;
+    await dispatchCommand(ctx, command, sender, send);
+    expect(send).toHaveBeenCalledWith('Playlist "fiesta" creada. Agregando 1 pistas...');
+    expect(send).toHaveBeenCalledWith(
+      'Playlist "fiesta" creada. Tiene 1 pistas (1 duplicada(s) saltada(s)).',
+    );
+  });
+
+  it("reports an empty URL resolution in !playlist add", async () => {
+    const { ctx, playback, send, sender } = makeHarness();
+    (playback.resolvePlaylistTracks as Mock).mockResolvedValueOnce({
+      source: "playlist",
+      tracks: [],
+    });
+    const command = parseChatCommand(
+      "!playlist add fiesta https://www.youtube.com/playlist?list=PL1",
+    )!;
+    await dispatchCommand(ctx, command, sender, send);
+    expect(send).toHaveBeenCalledWith("No encontré pistas en esa URL.");
+  });
+
+  it("removes a track with !playlist remove", async () => {
+    const { ctx, playback, send, sender } = makeHarness();
+    (playback.removePlaylistTrack as Mock).mockReturnValueOnce({
+      status: "removed",
+      total: 2,
+    });
+    const command = parseChatCommand("!playlist remove fiesta 1")!;
+    await dispatchCommand(ctx, command, sender, send);
+    expect(playback.removePlaylistTrack).toHaveBeenCalledWith(
+      "fiesta",
+      1,
+      "uid-1",
+      false,
+    );
+    expect(send).toHaveBeenCalledWith('Track eliminado de "fiesta". Tiene 2 pistas.');
+  });
+
+  it("reports an invalid index in !playlist remove", async () => {
+    const { ctx, playback, send, sender } = makeHarness();
+    (playback.removePlaylistTrack as Mock).mockReturnValueOnce({
+      status: "invalid-index",
+      total: 1,
+    });
+    const command = parseChatCommand("!playlist remove fiesta 9")!;
+    await dispatchCommand(ctx, command, sender, send);
+    expect(send).toHaveBeenCalledWith(
+      'Índice inválido. La playlist "fiesta" tiene 1 pistas.',
+    );
+  });
+
+  it("renames a playlist with !playlist rename", async () => {
+    const { ctx, playback, send, sender } = makeHarness();
+    (playback.renamePlaylist as Mock).mockReturnValueOnce({
+      status: "renamed",
+    });
+    const command = parseChatCommand("!playlist rename fiesta partido")!;
+    await dispatchCommand(ctx, command, sender, send);
+    expect(playback.renamePlaylist).toHaveBeenCalledWith(
+      "fiesta",
+      "partido",
+      "uid-1",
+      false,
+    );
+    expect(send).toHaveBeenCalledWith('Playlist "fiesta" renombrada a "partido".');
+  });
+
+  it("reports an existing name in !playlist rename", async () => {
+    const { ctx, playback, send, sender } = makeHarness();
+    (playback.renamePlaylist as Mock).mockReturnValueOnce({
+      status: "name-exists",
+      name: "partido",
+    });
+    const command = parseChatCommand("!playlist rename fiesta partido")!;
+    await dispatchCommand(ctx, command, sender, send);
+    expect(send).toHaveBeenCalledWith(
+      'Ya existe una playlist llamada "partido".',
+    );
+  });
+
+  it("shows playlist info with !playlist info", async () => {
+    const { ctx, playback, send, sender } = makeHarness();
+    (playback.getPlaylistInfo as Mock).mockReturnValueOnce({
+      createdAt: new Date(2024, 0, 15).getTime(),
+      name: "fiesta",
+      totalDurationSeconds: 5610,
+      trackCount: 3,
+    });
+    const command = parseChatCommand("!playlist info fiesta")!;
+    await dispatchCommand(ctx, command, sender, send);
+    expect(send).toHaveBeenCalledWith(
+      'Playlist "fiesta": 3 pistas, duración total ~1h 34m. Creada el 15/01/2024.',
+    );
   });
 });
 

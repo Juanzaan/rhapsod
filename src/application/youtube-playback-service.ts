@@ -41,11 +41,16 @@ import type {
   PrefetchStatus,
 } from "../observability/metrics.js";
 import { parseMusicQuery } from "../lib/query-parser.js";
-import type {
-  PlaylistStore,
-  PlaylistSummary,
-  SavedPlaylist,
-  StoredPlaylistTrack,
+import {
+  MAX_TRACKS_PER_PLAYLIST,
+  type PlaylistAddResult,
+  type PlaylistInfo,
+  type PlaylistRemoveResult,
+  type PlaylistRenameResult,
+  type PlaylistStore,
+  type PlaylistSummary,
+  type SavedPlaylist,
+  type StoredPlaylistTrack,
 } from "./playlist-store.js";
 
 export type LoopMode = "off" | "queue" | "track";
@@ -707,6 +712,101 @@ export class YoutubePlaybackService {
       requestedByUid,
       rawName,
       allowAnyUser,
+    );
+  }
+
+  async resolvePlaylistTracks(
+    url: string,
+  ): Promise<{
+    readonly source: "playlist" | "video";
+    readonly tracks: readonly StoredPlaylistTrack[];
+  }> {
+    const media = parseMediaInput(url);
+    if (media.kind !== "youtube") {
+      throw new Error(
+        "Solo se soportan URLs de YouTube (video o playlist) para agregar.",
+      );
+    }
+    if (media.resource.type === "playlist") {
+      const expansion = await this.#resolver.expandPlaylist(
+        media.resource,
+        MAX_TRACKS_PER_PLAYLIST,
+      );
+      return {
+        source: "playlist",
+        tracks: expansion.tracks.map((track) => ({
+          ...(track.durationSeconds === undefined
+            ? {}
+            : { durationSeconds: track.durationSeconds }),
+          id: track.id,
+          source: `https://www.youtube.com/watch?v=${track.id}`,
+          title: track.title,
+        })),
+      };
+    }
+    const metadata = await this.#resolver.getTrackFromUrl(url);
+    return {
+      source: "video",
+      tracks: [
+        {
+          ...(metadata.durationSeconds === undefined
+            ? {}
+            : { durationSeconds: metadata.durationSeconds }),
+          id: metadata.id,
+          source: `https://www.youtube.com/watch?v=${metadata.id}`,
+          title: metadata.title,
+        },
+      ],
+    };
+  }
+
+  addPlaylistTracks(
+    rawName: string,
+    tracks: readonly StoredPlaylistTrack[],
+    requestedByUid: string,
+  ): PlaylistAddResult {
+    return this.#requirePlaylistStore().addTracksToPlaylist(
+      requestedByUid,
+      rawName,
+      tracks,
+    );
+  }
+
+  removePlaylistTrack(
+    rawName: string,
+    trackIndex: number,
+    requestedByUid: string,
+    allowAnyUser: boolean,
+  ): PlaylistRemoveResult {
+    return this.#requirePlaylistStore().removeTrackFromPlaylist(
+      requestedByUid,
+      rawName,
+      trackIndex,
+      allowAnyUser,
+    );
+  }
+
+  renamePlaylist(
+    oldName: string,
+    newName: string,
+    requestedByUid: string,
+    allowAnyUser: boolean,
+  ): PlaylistRenameResult {
+    return this.#requirePlaylistStore().renamePlaylist(
+      requestedByUid,
+      oldName,
+      newName,
+      allowAnyUser,
+    );
+  }
+
+  getPlaylistInfo(
+    rawName: string,
+    requestedByUid: string,
+  ): PlaylistInfo | undefined {
+    return this.#requirePlaylistStore().getPlaylistInfo(
+      requestedByUid,
+      rawName,
     );
   }
 
