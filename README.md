@@ -108,6 +108,37 @@ Secrets (cookies, Spotify credentials, TS3 passwords) live only in `.env` or the
 deployment secret store — never in Git. For production under systemd see
 [docs/deployment.md](docs/deployment.md).
 
+## Troubleshooting
+
+### El bot no se conecta a TeamSpeak
+
+- Verificar que `TS3_HOST`, `TS3_IDENTITY` estén configurados en `.env`
+- Verificar que el bot tenga permisos en el servidor (Server Groups)
+- Revisar logs con `systemctl status rhapsod`
+
+### Los videos de YouTube no reproducen
+
+- Verificar que `yt-dlp` esté instalado y actualizado (`yt-dlp -U`)
+- Verificar que `PO_TOKEN_URI` esté configurado (si se usa)
+- Revisar logs con `!diag`
+
+### Errores de permisos en data/
+
+- Ejecutar `chmod -R 700 data/`
+- Verificar que el usuario del servicio sea dueño de los archivos
+
+### El bot no responde a comandos
+
+- Verificar que el canal de voz sea el correcto (`TS3_CHANNEL_NAME`)
+- Verificar que el bot tenga permisos para hablar en el canal
+- Revisar que `ADMIN_UIDS` incluya tu UID si usás comandos de admin
+
+### Cómo reportar un bug
+
+- Usar el [issue template de bug report](https://github.com/Juanzaan/rhapsod/issues/new?template=bug_report.yml)
+- Incluir logs relevantes (`systemctl status rhapsod`, `journalctl -u rhapsod`)
+- Incluir versión de Rhapsod (`git describe --tags` o `package.json`)
+
 ## Architecture
 
 ```
