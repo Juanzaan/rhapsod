@@ -55,6 +55,28 @@ describe("FilePlaybackStateStore", () => {
     expect(store.load()).toEqual({});
   });
 
+  it("round-trips a persisted filter name", async () => {
+    const filePath = join(directory, "filter-state.json");
+    const store = new FilePlaybackStateStore(filePath);
+    store.save({ filter: "bassboost" });
+    await store.flush();
+    expect(store.load()).toEqual({ filter: "bassboost" });
+  });
+
+  it("drops unknown filter values on load", () => {
+    const filePath = join(directory, "filter-unknown.json");
+    writeFileSync(filePath, JSON.stringify({ filter: "drop-everything" }));
+    const store = new FilePlaybackStateStore(filePath);
+    expect(store.load()).toEqual({});
+  });
+
+  it("loads state without a filter as empty filter", () => {
+    const filePath = join(directory, "filter-absent.json");
+    writeFileSync(filePath, JSON.stringify({ loopMode: "track" }));
+    const store = new FilePlaybackStateStore(filePath);
+    expect(store.load()).toEqual({ loopMode: "track" });
+  });
+
   it("round-trips a queue through the file", async () => {
     const filePath = join(directory, "queue.json");
     const store = new FilePlaybackStateStore(filePath);

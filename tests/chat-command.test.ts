@@ -116,4 +116,48 @@ describe("parseChatCommand", () => {
       "Usá: !channel-move",
     );
   });
+
+  it("parses audio filter commands and aliases", () => {
+    expect(parseChatCommand("!bassboost")).toEqual({ name: "bassboost" });
+    expect(parseChatCommand("!bassboost 4")).toEqual({
+      name: "bassboost",
+      level: 4,
+    });
+    expect(parseChatCommand("!bb")).toEqual({ name: "bassboost" });
+    expect(parseChatCommand("!nightcore")).toEqual({ name: "nightcore" });
+    expect(parseChatCommand("!nightcore 1.25")).toEqual({
+      name: "nightcore",
+      rate: 1.25,
+    });
+    expect(parseChatCommand("!nc")).toEqual({ name: "nightcore" });
+    expect(parseChatCommand("!vaporwave")).toEqual({ name: "vaporwave" });
+    expect(parseChatCommand("!vaporwave 0.9")).toEqual({
+      name: "vaporwave",
+      rate: 0.9,
+    });
+    expect(parseChatCommand("!vw")).toEqual({ name: "vaporwave" });
+    expect(parseChatCommand("!8d")).toEqual({ name: "8d" });
+    expect(parseChatCommand("!filter")).toEqual({ name: "filter" });
+    expect(parseChatCommand("!filter off")).toEqual({
+      name: "filter",
+      off: true,
+    });
+  });
+
+  it("rejects invalid audio filter parameters", () => {
+    expect(() => parseChatCommand("!bassboost 9")).toThrow("Usá: !bassboost");
+    expect(() => parseChatCommand("!bassboost abc")).toThrow(
+      "Usá: !bassboost",
+    );
+    expect(() => parseChatCommand("!nightcore 3")).toThrow(
+      "Usá: !nightcore",
+    );
+    expect(() => parseChatCommand("!vaporwave 0.5")).toThrow(
+      "Usá: !vaporwave",
+    );
+    expect(() => parseChatCommand("!8d 5")).toThrow("no acepta argumentos");
+    expect(() => parseChatCommand("!filter custom")).toThrow(
+      "Usá: !filter",
+    );
+  });
 });

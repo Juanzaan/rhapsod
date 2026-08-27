@@ -4,6 +4,11 @@ import { PassThrough, type Readable } from "node:stream";
 import ffmpegStaticPath from "ffmpeg-static";
 
 import { CHANNELS, SAMPLE_RATE } from "./opus-encoder.js";
+import {
+  buildFilterChain,
+  type AudioFilter,
+  type FilterParam,
+} from "./filter-chain.js";
 
 export interface FfmpegPcmOptions {
   readonly binary?: string;
@@ -11,6 +16,7 @@ export interface FfmpegPcmOptions {
   readonly loudnessTargetLufs?: number;
   readonly seekSeconds?: number;
   readonly userAgent?: string;
+  readonly audioFilter?: { readonly name: AudioFilter; readonly param?: FilterParam };
 }
 
 export interface FfmpegPcmStream {
@@ -70,11 +76,23 @@ export function buildFfmpegPcmArguments(
     "-acodec",
     "pcm_s16le",
   );
-  if (
-    options.loudnessTargetLufs !== undefined &&
-    options.loudnessTargetLufs < 0
-  ) {
-    args.push("-af", `loudnorm=I=${options.loudnessTargetLufs}:TP=-1.5:LRA=11`);
+  const loudnessFilter =
+    options.loudnessTargetLufs !== undefined && options.loudnessTargetLufs < 0
+      ? `loudnorm=I=${options.loudnessTargetLufs}:TP=-1.5:LRA=11`
+      : undefined;
+  const filterChain = buildFilterChain(
+    options.audioFilter?.name ?? "off",
+    options.audioFilter?.param,
+  );
+  if (filterChain !== undefined) {
+    const parts = [
+      ...(loudnessFilter === undefined ? [] : [loudnessFilter]),
+      filterChain,
+      "alimiter=limit=0.95",
+    ];
+    args.push("-af", parts.join(","));
+  } else if (loudnessFilter !== undefined) {
+    args.push("-af", loudnessFilter);
   }
   args.push("pipe:1");
   return args;

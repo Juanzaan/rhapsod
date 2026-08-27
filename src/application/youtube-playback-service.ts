@@ -11,7 +11,13 @@ import {
   type FfmpegPlaybackSession,
 } from "../audio/ffmpeg-player.js";
 import type { RhapsodOpusEncoder } from "../audio/opus-encoder.js";
+import { FRAME_DURATION_MS } from "../audio/opus-encoder.js";
 import type { VoiceFrameOutput } from "../audio/audio-player.js";
+import {
+  isAudioFilter,
+  type AudioFilter,
+  type FilterParam,
+} from "../audio/filter-chain.js";
 import type { AudioPlayerMetrics } from "../audio/audio-player.js";
 import type { AlternativeSourceResolver } from "../media/song-link.js";
 import type { DirectUrlResolver } from "../media/direct-url.js";
@@ -70,7 +76,12 @@ interface PlaybackServiceOptions {
   readonly onTiming?: (timing: PlaybackTiming) => void;
 }
 
-type PlaybackEndReason = "completed" | "error" | "skipped" | "stopped";
+type PlaybackEndReason =
+  | "completed"
+  | "error"
+  | "skipped"
+  | "stopped"
+  | "filter-change";
 
 interface PlaybackTiming {
   readonly audioUrlSource?: AudioUrlSource;
@@ -184,6 +195,8 @@ export class YoutubePlaybackService {
     FfmpegPlaybackSession,
     PlaybackEndReason
   >();
+  #filter: AudioFilter = "off";
+  #filterParam: FilterParam = {};
 
   constructor(options: PlaybackServiceOptions) {
     this.#encoder = options.encoder;
@@ -221,6 +234,9 @@ export class YoutubePlaybackService {
     if (restored?.loopMode !== undefined) {
       this.#loopMode = restored.loopMode;
     }
+    if (restored?.filter !== undefined && isAudioFilter(restored.filter)) {
+      this.#filter = restored.filter;
+    }
     this.#persistedQueue = restored?.queue ?? [];
   }
 
@@ -250,6 +266,10 @@ export class YoutubePlaybackService {
     return this.#loopMode;
   }
 
+  get filter(): AudioFilter {
+    return this.#filter;
+  }
+
   get audioHealth(): AudioPlayerMetrics | undefined {
     return this.#session?.player.metrics;
   }
@@ -258,6 +278,40 @@ export class YoutubePlaybackService {
     this.#loopMode = mode;
     this.#loopPool = mode === "queue" ? [...this.#queue.snapshot()] : [];
     this.#persistState();
+  }
+
+  setFilter(filter: AudioFilter, param?: FilterParam): void {
+    const nextParam = filter === "off" ? {} : (param ?? {});
+    if (filter === this.#filter && nextParam === this.#filterParam) {
+      return;
+    }
+    this.#filter = filter;
+    this.#filterParam = nextParam;
+    this.#persistState();
+    if (this.#current && this.#session) {
+      const positionMs =
+        this.#session.player.metrics.framesSent * FRAME_DURATION_MS;
+      this.#restartForFilterChange(Math.floor(positionMs / 1_000));
+    }
+  }
+
+  #restartForFilterChange(seekSeconds: number): void {
+    const track = this.#current;
+    if (!track) return;
+    this.#pendingSeek = seekSeconds;
+    this.#generation++;
+    if (this.#session) {
+      this.#sessionEndReasons.set(this.#session, "filter-change");
+      this.#session.stop();
+      this.#session = undefined;
+    }
+    try {
+      this.#queue.add(track);
+      this.#queue.moveToHead(track.id);
+    } catch {
+      // Duplicate already queued: the filter change acts like a restart.
+    }
+    this.#requestNext();
   }
 
   async enqueue(
@@ -1022,6 +1076,7 @@ export class YoutubePlaybackService {
     if (this.#persistenceSuppressed) return;
     this.#stateStore?.save({
       loopMode: this.#loopMode,
+      ...(this.#filter === "off" ? {} : { filter: this.#filter }),
       queue: this.#serializedQueue(),
       volumePercent: this.#volumePercent,
     });
@@ -1103,17 +1158,21 @@ export class YoutubePlaybackService {
         });
         const seekSeconds = this.#pendingSeek;
         this.#pendingSeek = undefined;
+        const playbackOptions: {
+          readonly seekSeconds?: number;
+          readonly audioFilter: { readonly name: AudioFilter; readonly param?: FilterParam };
+        } = {
+          ...(seekSeconds === undefined ? {} : { seekSeconds }),
+          audioFilter: { name: this.#filter, param: this.#filterParam },
+        };
         let session: FfmpegPlaybackSession;
         try {
-          session =
-            seekSeconds === undefined
-              ? this.#createPlayback(resolved.url, this.#encoder, this.#output)
-              : this.#createPlayback(
-                  resolved.url,
-                  this.#encoder,
-                  this.#output,
-                  { seekSeconds },
-                );
+          session = this.#createPlayback(
+            resolved.url,
+            this.#encoder,
+            this.#output,
+            playbackOptions,
+          );
         } catch (error) {
           this.#reportPlaybackError(track, error);
           this.#prepared.delete(track.source);

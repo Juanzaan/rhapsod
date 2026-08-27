@@ -24,9 +24,17 @@ export type ChatCommand =
   | { readonly name: "stats" }
   | { readonly name: "stop" }
   | { readonly name: "test-tone" }
-  | { readonly name: "volume"; readonly value: number };
+  | { readonly name: "volume"; readonly value: number }
+  | { readonly name: "bassboost"; readonly level?: number }
+  | { readonly name: "nightcore"; readonly rate?: number }
+  | { readonly name: "vaporwave"; readonly rate?: number }
+  | { readonly name: "8d" }
+  | { readonly name: "filter"; readonly off?: boolean };
 
 const COMMAND_ALIASES: Readonly<Record<string, ChatCommand["name"]>> = {
+  "8d": "8d",
+  bb: "bassboost",
+  bassboost: "bassboost",
   c: "clear",
   ch: "channel-move",
   "channel-move": "channel-move",
@@ -35,6 +43,7 @@ const COMMAND_ALIASES: Readonly<Record<string, ChatCommand["name"]>> = {
   diag: "diag",
   ds: "debug-server",
   "debug-server": "debug-server",
+  filter: "filter",
   h: "help",
   help: "help",
   loop: "loop",
@@ -44,6 +53,8 @@ const COMMAND_ALIASES: Readonly<Record<string, ChatCommand["name"]>> = {
   hist: "history",
   move: "move",
   mv: "move",
+  nc: "nightcore",
+  nightcore: "nightcore",
   np: "now-playing",
   now: "now-playing",
   "now-playing": "now-playing",
@@ -73,6 +84,8 @@ const COMMAND_ALIASES: Readonly<Record<string, ChatCommand["name"]>> = {
   v: "volume",
   vol: "volume",
   volume: "volume",
+  vw: "vaporwave",
+  vaporwave: "vaporwave",
   yt: "search",
   youtube: "search",
 };
@@ -134,6 +147,22 @@ export function parseChatCommand(
     case "seek":
       if (!/^\d+$/.test(argument)) throw new Error("Usá: !seek <segundos>");
       return { name, seconds: Number(argument) };
+    case "bassboost":
+      return argument
+        ? { name, level: parseBassboostLevel(argument) }
+        : { name };
+    case "nightcore":
+      return argument ? { name, rate: parseNightcoreRate(argument) } : { name };
+    case "vaporwave":
+      return argument ? { name, rate: parseVaporwaveRate(argument) } : { name };
+    case "8d":
+      if (argument)
+        throw new Error("El comando !8d no acepta argumentos");
+      return { name };
+    case "filter":
+      if (!argument) return { name };
+      if (argument === "off") return { name, off: true };
+      throw new Error("Usá: !filter [off]");
     default:
       if (argument)
         throw new Error(`El comando !${rawName} no acepta argumentos`);
@@ -200,4 +229,27 @@ function parseVolume(argument: string): number {
   if (value < 0 || value > 100)
     throw new Error("El volumen tiene que estar entre 0 y 100.");
   return value;
+}
+
+function parseBassboostLevel(argument: string): number {
+  if (!/^\d+$/.test(argument)) throw new Error("Usá: !bassboost [1-5]");
+  const level = Number(argument);
+  if (level < 1 || level > 5) throw new Error("Usá: !bassboost [1-5]");
+  return level;
+}
+
+function parseNightcoreRate(argument: string): number {
+  const rate = Number(argument);
+  if (!Number.isFinite(rate) || rate < 1.05 || rate > 1.35) {
+    throw new Error("Usá: !nightcore [1.05-1.35]");
+  }
+  return rate;
+}
+
+function parseVaporwaveRate(argument: string): number {
+  const rate = Number(argument);
+  if (!Number.isFinite(rate) || rate < 0.8 || rate > 0.95) {
+    throw new Error("Usá: !vaporwave [0.80-0.95]");
+  }
+  return rate;
 }

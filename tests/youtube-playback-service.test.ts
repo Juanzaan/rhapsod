@@ -19,7 +19,9 @@ import type { AudioPlayer } from "../src/audio/audio-player.js";
 import type { RhapsodOpusEncoder } from "../src/audio/opus-encoder.js";
 import type { DirectUrlResolver } from "../src/media/direct-url.js";
 import type { SerializedQueueTrack } from "../src/domain/state-store.js";
+import type { PlaybackState } from "../src/domain/state-store.js";
 import { AudioUrlCache } from "../src/application/audio-url-cache.js";
+import type { AudioFilter } from "../src/audio/filter-chain.js";
 
 interface TimingCall {
   readonly stage: string;
@@ -31,6 +33,7 @@ function setup(
   options: {
     createPlayback?: () => FfmpegPlaybackSession;
     directUrlResolver?: boolean;
+    framesSent?: number;
     lyricsResolver?: boolean;
     maxQueueTracks?: number;
     maxTracksPerUser?: number;
@@ -38,6 +41,7 @@ function setup(
       loopMode?: "off" | "queue" | "track";
       queue?: readonly SerializedQueueTrack[];
       volumePercent?: number;
+      filter?: AudioFilter;
     };
     soundcloudResolver?: boolean;
     spotifyResolver?: boolean;
@@ -58,7 +62,7 @@ function setup(
         player: {
           metrics: {
             bufferedBytes: 0,
-            framesSent: 1,
+            framesSent: options.framesSent ?? 1,
             maxBufferedBytes: 3_840,
             rebufferEvents: 0,
             underruns: 0,
@@ -202,7 +206,7 @@ function setup(
               volumePercent: 30,
             },
         ),
-        save: vi.fn(),
+        save: vi.fn<(state: PlaybackState) => void>(),
         flush: vi.fn(() => Promise.resolve()),
       }
     : undefined;
@@ -378,6 +382,7 @@ describe("YoutubePlaybackService", () => {
       "https://media.example/abc123",
       expect.anything(),
       expect.anything(),
+      expect.objectContaining({ audioFilter: { name: "off", param: {} } }),
     );
     expect(onPlaybackStarted).toHaveBeenCalledWith(track);
   });
@@ -960,6 +965,7 @@ describe("YoutubePlaybackService", () => {
       "https://media.example/audio",
       expect.anything(),
       expect.anything(),
+      expect.objectContaining({ audioFilter: { name: "off", param: {} } }),
     );
     expect(service.current?.id).toBe("first");
   });
@@ -983,6 +989,7 @@ describe("YoutubePlaybackService", () => {
       "https://media.example/audio",
       expect.anything(),
       expect.anything(),
+      expect.objectContaining({ audioFilter: { name: "off", param: {} } }),
     );
   });
 
@@ -1358,6 +1365,7 @@ describe("YoutubePlaybackService", () => {
       "https://media.example/second-audio",
       expect.anything(),
       expect.anything(),
+      expect.objectContaining({ audioFilter: { name: "off", param: {} } }),
     );
     expect(onPlaybackError).not.toHaveBeenCalled();
   });
@@ -1397,6 +1405,7 @@ describe("YoutubePlaybackService", () => {
       "https://media.example/second-audio",
       expect.anything(),
       expect.anything(),
+      expect.objectContaining({ audioFilter: { name: "off", param: {} } }),
     );
     expect(onPlaybackError).not.toHaveBeenCalled();
   });
@@ -1433,6 +1442,7 @@ describe("YoutubePlaybackService", () => {
       "https://media.example/second-audio",
       expect.anything(),
       expect.anything(),
+      expect.objectContaining({ audioFilter: { name: "off", param: {} } }),
     );
   });
 
@@ -2151,7 +2161,10 @@ describe("YoutubePlaybackService", () => {
       "https://media.example/audio",
       expect.anything(),
       expect.anything(),
-      { seekSeconds: 99 },
+      expect.objectContaining({
+        seekSeconds: 99,
+        audioFilter: { name: "off", param: {} },
+      }),
     );
     expect(service.current?.id).toBe("a");
     expect(service.queue()).toHaveLength(0);
@@ -2172,8 +2185,113 @@ describe("YoutubePlaybackService", () => {
       "https://media.example/a",
       expect.anything(),
       expect.anything(),
-      { seekSeconds: 500 },
+      expect.objectContaining({
+        seekSeconds: 500,
+        audioFilter: { name: "off", param: {} },
+      }),
     );
+  });
+
+  it("restores a persisted filter from state", () => {
+    const { service } = setup({
+      stateStore: true,
+      restoredState: {
+        filter: "bassboost",
+        loopMode: "off",
+        volumePercent: 50,
+        queue: [],
+      },
+    });
+    expect(service.filter).toBe("bassboost");
+  });
+
+  it("applies the active filter when creating a playback session", async () => {
+    const { createPlayback, service } = setup();
+    service.setFilter("nightcore", { rate: 1.25 });
+    await service.enqueue("https://youtu.be/a", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(createPlayback).toHaveBeenLastCalledWith(
+      "https://media.example/a",
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({
+        audioFilter: { name: "nightcore", param: { rate: 1.25 } },
+      }),
+    );
+  });
+
+  it("persists only the filter name to the state store", () => {
+    const { service, stateStore } = setup({ stateStore: true });
+    service.setFilter("bassboost", { level: 4 });
+    expect(stateStore!.save).toHaveBeenCalledWith(
+      expect.objectContaining({ filter: "bassboost" }),
+    );
+  });
+
+  it("omits the filter from state when set to off", () => {
+    const { service, stateStore } = setup({ stateStore: true });
+    service.setFilter("bassboost");
+    service.setFilter("off");
+    const lastSave = stateStore!.save.mock.calls.at(-1)?.[0];
+    expect(lastSave?.filter).toBeUndefined();
+  });
+
+  it("restarts playback at the current position when the filter changes", async () => {
+    const { createPlayback, playbackResolvers, service } = setup({
+      framesSent: 5000,
+    });
+
+    await service.enqueue("https://youtu.be/a", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+    service.setFilter("bassboost");
+    playbackResolvers[0]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(createPlayback).toHaveBeenCalledTimes(2);
+    expect(createPlayback).toHaveBeenLastCalledWith(
+      expect.stringContaining("media.example"),
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({
+        seekSeconds: 100,
+        audioFilter: { name: "bassboost", param: {} },
+      }),
+    );
+  });
+
+  it("coalesces two rapid filter changes into a single restart", async () => {
+    const { createPlayback, playbackResolvers, service } = setup();
+
+    await service.enqueue("https://youtu.be/a", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+    service.setFilter("bassboost");
+    service.setFilter("nightcore");
+    playbackResolvers[0]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(createPlayback).toHaveBeenCalledTimes(2);
+    expect(createPlayback).toHaveBeenLastCalledWith(
+      expect.stringContaining("media.example"),
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({
+        audioFilter: { name: "nightcore", param: {} },
+      }),
+    );
+  });
+
+  it("reports filter-change as the playback end reason", async () => {
+    const { onPlaybackFinished, playbackResolvers, service } = setup();
+    await service.enqueue("https://youtu.be/a", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    service.setFilter("bassboost");
+    playbackResolvers[0]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(onPlaybackFinished.mock.calls[0]?.[2]).toBe("filter-change");
   });
 
   it("replays the previous track at the front while playing", async () => {
