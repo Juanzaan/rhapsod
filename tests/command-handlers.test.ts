@@ -61,9 +61,11 @@ function makeHarness(
     shuffleQueued: vi.fn(() => 0),
     setLoopMode: vi.fn(),
     setVolume: vi.fn(),
+    setFilter: vi.fn(() => undefined),
     getLyrics: vi.fn(() => undefined),
     audioHealth: undefined,
     current: overrides.current,
+    filter: "off",
     loopMode: "off",
     tracksPlayed: 0,
     volume: 50,
@@ -152,6 +154,11 @@ describe("dispatchCommand", () => {
       ["loop", "!loop off"],
       ["volume", "!volume 50"],
       ["lyrics", "!lyrics"],
+      ["bassboost", "!bassboost 2"],
+      ["nightcore", "!nightcore 1.2"],
+      ["vaporwave", "!vaporwave 0.9"],
+      ["8d", "!8d"],
+      ["filter", "!filter"],
     ];
     const { ctx, send, sender } = makeHarness({ current: { title: "X" } });
     for (const [name, input] of cases) {
@@ -231,6 +238,30 @@ describe("dispatchCommand", () => {
       "No puedo reproducir el tono mientras hay música. Probá con !stop o esperá a que termine la pista.",
     );
     expect(playback.skip).not.toHaveBeenCalled();
+  });
+
+  it("applies bassboost through setFilter with the parsed level", async () => {
+    const { ctx, playback, send, sender } = makeHarness();
+    const command = parseChatCommand("!bassboost 3")!;
+    await dispatchCommand(ctx, command, sender, send);
+    expect(playback.setFilter).toHaveBeenCalledWith("bassboost", { level: 3 });
+    expect(send).toHaveBeenCalledWith("Filtro bassboost nivel 3 activado.");
+  });
+
+  it("reports the current filter from !filter", async () => {
+    const { ctx, playback, send, sender } = makeHarness();
+    (playback as { filter: string }).filter = "nightcore";
+    const command = parseChatCommand("!filter")!;
+    await dispatchCommand(ctx, command, sender, send);
+    expect(send).toHaveBeenCalledWith("Filtro actual: nightcore");
+  });
+
+  it("disables the filter with !filter off", async () => {
+    const { ctx, playback, send, sender } = makeHarness();
+    const command = parseChatCommand("!filter off")!;
+    await dispatchCommand(ctx, command, sender, send);
+    expect(playback.setFilter).toHaveBeenCalledWith("off");
+    expect(send).toHaveBeenCalledWith("Filtro desactivado.");
   });
 });
 

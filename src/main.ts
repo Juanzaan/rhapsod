@@ -257,6 +257,9 @@ async function main(): Promise<void> {
         ...(options?.seekSeconds === undefined
           ? {}
           : { seekSeconds: options.seekSeconds }),
+        ...(options?.audioFilter === undefined
+          ? {}
+          : { audioFilter: options.audioFilter }),
       }),
     encoder,
     onPlaybackStarted: async (track) => {

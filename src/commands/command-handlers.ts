@@ -14,6 +14,7 @@ import {
   canRemoveTrack,
   isAdminUid,
 } from "./permissions.js";
+import { FILTER_DISPLAY_NAMES } from "../audio/filter-chain.js";
 
 export interface CommandContext {
   readonly playback: YoutubePlaybackService;
@@ -653,6 +654,65 @@ async function handleLyrics(
   await send(`${title}\n${body}`);
 }
 
+async function handleBassboost(
+  ctx: CommandContext,
+  command: Extract<ChatCommand, { name: "bassboost" }>,
+  _sender: CommandSender,
+  send: SendFn,
+): Promise<void> {
+  const level = command.level;
+  ctx.playback.setFilter("bassboost", level === undefined ? {} : { level });
+  await send(
+    level === undefined
+      ? "Filtro bassboost activado."
+      : `Filtro bassboost nivel ${level} activado.`,
+  );
+}
+
+async function handleNightcore(
+  ctx: CommandContext,
+  command: Extract<ChatCommand, { name: "nightcore" }>,
+  _sender: CommandSender,
+  send: SendFn,
+): Promise<void> {
+  ctx.playback.setFilter("nightcore", command.rate === undefined ? {} : { rate: command.rate });
+  await send("Filtro nightcore activado.");
+}
+
+async function handleVaporwave(
+  ctx: CommandContext,
+  command: Extract<ChatCommand, { name: "vaporwave" }>,
+  _sender: CommandSender,
+  send: SendFn,
+): Promise<void> {
+  ctx.playback.setFilter("vaporwave", command.rate === undefined ? {} : { rate: command.rate });
+  await send("Filtro vaporwave activado.");
+}
+
+async function handle8d(
+  ctx: CommandContext,
+  _command: Extract<ChatCommand, { name: "8d" }>,
+  _sender: CommandSender,
+  send: SendFn,
+): Promise<void> {
+  ctx.playback.setFilter("8d");
+  await send("Filtro 8D activado.");
+}
+
+async function handleFilter(
+  ctx: CommandContext,
+  command: Extract<ChatCommand, { name: "filter" }>,
+  _sender: CommandSender,
+  send: SendFn,
+): Promise<void> {
+  if (command.off) {
+    ctx.playback.setFilter("off");
+    await send("Filtro desactivado.");
+    return;
+  }
+  await send(`Filtro actual: ${FILTER_DISPLAY_NAMES[ctx.playback.filter]}`);
+}
+
 export async function dispatchCommand(
   ctx: CommandContext,
   command: ChatCommand,
@@ -712,5 +772,15 @@ export async function dispatchCommand(
       return handleVolume(ctx, command, sender, send);
     case "lyrics":
       return handleLyrics(ctx, command, sender, send);
+    case "bassboost":
+      return handleBassboost(ctx, command, sender, send);
+    case "nightcore":
+      return handleNightcore(ctx, command, sender, send);
+    case "vaporwave":
+      return handleVaporwave(ctx, command, sender, send);
+    case "8d":
+      return handle8d(ctx, command, sender, send);
+    case "filter":
+      return handleFilter(ctx, command, sender, send);
   }
 }
