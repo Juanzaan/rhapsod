@@ -63,7 +63,14 @@ export type ChatCommand =
       readonly newName: string;
       readonly oldName: string;
     }
-  | { readonly action: "info"; readonly name: "playlist"; readonly nameArg: string };
+  | { readonly action: "info"; readonly name: "playlist"; readonly nameArg: string }
+  | { readonly name: "effects"; readonly action?: undefined }
+  | { readonly action: "chart" | "list" | "reset" | "test-tone"; readonly name: "effects" }
+  | {
+      readonly action: "off" | "on" | "toggle";
+      readonly effect: "8d" | "bassboost" | "nightcore" | "vaporwave";
+      readonly name: "effects";
+    };
 
 const COMMAND_ALIASES: Readonly<Record<string, ChatCommand["name"]>> = {
   "8d": "8d",
@@ -77,6 +84,7 @@ const COMMAND_ALIASES: Readonly<Record<string, ChatCommand["name"]>> = {
   diag: "diag",
   ds: "debug-server",
   "debug-server": "debug-server",
+  effects: "effects",
   filter: "filter",
   h: "help",
   help: "help",
@@ -199,6 +207,35 @@ export function parseChatCommand(
       if (!argument) return { name };
       if (argument === "off") return { name, off: true };
       throw new Error("Usá: !filter [off]");
+    case "effects": {
+      const parts = argument.split(/\s+/).filter(Boolean);
+      const sub = parts[0];
+      if (!sub) return { name };
+      if (
+        sub === "list" ||
+        sub === "reset" ||
+        sub === "test-tone" ||
+        sub === "chart"
+      ) {
+        return { name, action: sub };
+      }
+      if (
+        sub !== "8d" &&
+        sub !== "bassboost" &&
+        sub !== "nightcore" &&
+        sub !== "vaporwave"
+      ) {
+        throw new Error(
+          "Usá: !effects <8d|bassboost|nightcore|vaporwave|list|reset|test-tone|chart> [on|off]",
+        );
+      }
+      const state = parts[1];
+      if (state === undefined) return { name, action: "toggle", effect: sub };
+      if (state === "on" || state === "off") {
+        return { name, action: state, effect: sub };
+      }
+      throw new Error("Usá: !effects <efecto> [on|off]");
+    }
     case "playlist": {
       const parts = argument.split(/\s+/).filter(Boolean);
       const action = parts[0];

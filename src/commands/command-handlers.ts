@@ -727,6 +727,56 @@ async function handleFilter(
   await send(`Filtro actual: ${FILTER_DISPLAY_NAMES[ctx.playback.filter]}`);
 }
 
+async function handleEffects(
+  ctx: CommandContext,
+  command: Extract<ChatCommand, { name: "effects" }>,
+  sender: CommandSender,
+  send: SendFn,
+): Promise<void> {
+  switch (command.action) {
+    case "list": {
+      const active = ctx.playback.filter;
+      await send(
+        active === "off"
+          ? "Sin efectos activos."
+          : `Efectos activos: ${FILTER_DISPLAY_NAMES[active]}.`,
+      );
+      return;
+    }
+    case "reset":
+      ctx.playback.setFilter("off");
+      await send("Todos los efectos fueron desactivados.");
+      return;
+    case "test-tone":
+      return handleTestTone(ctx, { name: "test-tone" }, sender, send);
+    case "chart":
+      return handleChart(ctx, { name: "chart" }, sender, send);
+    case "on":
+    case "off":
+    case "toggle": {
+      const display = FILTER_DISPLAY_NAMES[command.effect];
+      if (command.action === "off") {
+        ctx.playback.setFilter("off");
+        await send(`Efecto ${display} desactivado.`);
+        return;
+      }
+      const isActive = ctx.playback.filter === command.effect;
+      if (command.action === "toggle" && isActive) {
+        ctx.playback.setFilter("off");
+        await send(`Efecto ${display} desactivado.`);
+        return;
+      }
+      ctx.playback.setFilter(command.effect);
+      await send(`Efecto ${display} activado.`);
+      return;
+    }
+    default:
+      await send(
+        "Efectos: 8d, nightcore, bassboost, vaporwave, test-tone, chart. Usá !effects <efecto> [on|off] para controlar.",
+      );
+  }
+}
+
 async function handlePlaylist(
   ctx: CommandContext,
   command: Extract<ChatCommand, { name: "playlist" }>,
@@ -985,6 +1035,8 @@ export async function dispatchCommand(
       return handle8d(ctx, command, sender, send);
     case "filter":
       return handleFilter(ctx, command, sender, send);
+    case "effects":
+      return handleEffects(ctx, command, sender, send);
     case "playlist":
       return handlePlaylist(ctx, command, sender, send);
   }

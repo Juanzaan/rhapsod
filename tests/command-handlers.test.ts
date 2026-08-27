@@ -177,6 +177,7 @@ describe("dispatchCommand", () => {
       ["vaporwave", "!vaporwave 0.9"],
       ["8d", "!8d"],
       ["filter", "!filter"],
+      ["effects", "!effects"],
       ["playlist", "!playlist"],
     ];
     const { ctx, send, sender } = makeHarness({ current: { title: "X" } });
@@ -524,6 +525,81 @@ describe("dispatchCommand", () => {
     await dispatchCommand(ctx, command, sender, send);
     expect(send).toHaveBeenCalledWith(
       'Playlist "fiesta": 3 pistas, duración total ~1h 34m. Creada el 15/01/2024.',
+    );
+  });
+
+  it("lists no active effects with !effects list", async () => {
+    const { ctx, send, sender } = makeHarness();
+    const command = parseChatCommand("!effects list")!;
+    await dispatchCommand(ctx, command, sender, send);
+    expect(send).toHaveBeenCalledWith("Sin efectos activos.");
+  });
+
+  it("lists the active effect with !effects list", async () => {
+    const { ctx, playback, send, sender } = makeHarness();
+    (playback as { filter: string }).filter = "nightcore";
+    const command = parseChatCommand("!effects list")!;
+    await dispatchCommand(ctx, command, sender, send);
+    expect(send).toHaveBeenCalledWith("Efectos activos: nightcore.");
+  });
+
+  it("resets all effects with !effects reset", async () => {
+    const { ctx, playback, send, sender } = makeHarness();
+    (playback as { filter: string }).filter = "8d";
+    const command = parseChatCommand("!effects reset")!;
+    await dispatchCommand(ctx, command, sender, send);
+    expect(playback.setFilter).toHaveBeenCalledWith("off");
+    expect(send).toHaveBeenCalledWith("Todos los efectos fueron desactivados.");
+  });
+
+  it("toggles an effect on with !effects 8d", async () => {
+    const { ctx, playback, send, sender } = makeHarness();
+    const command = parseChatCommand("!effects 8d")!;
+    await dispatchCommand(ctx, command, sender, send);
+    expect(playback.setFilter).toHaveBeenCalledWith("8d");
+    expect(send).toHaveBeenCalledWith("Efecto 8D activado.");
+  });
+
+  it("toggles an active effect off with !effects 8d", async () => {
+    const { ctx, playback, send, sender } = makeHarness();
+    (playback as { filter: string }).filter = "8d";
+    const command = parseChatCommand("!effects 8d")!;
+    await dispatchCommand(ctx, command, sender, send);
+    expect(playback.setFilter).toHaveBeenCalledWith("off");
+    expect(send).toHaveBeenCalledWith("Efecto 8D desactivado.");
+  });
+
+  it("enables an effect explicitly with on", async () => {
+    const { ctx, playback, send, sender } = makeHarness();
+    const command = parseChatCommand("!effects nightcore on")!;
+    await dispatchCommand(ctx, command, sender, send);
+    expect(playback.setFilter).toHaveBeenCalledWith("nightcore");
+    expect(send).toHaveBeenCalledWith("Efecto nightcore activado.");
+  });
+
+  it("disables an effect explicitly with off", async () => {
+    const { ctx, playback, send, sender } = makeHarness();
+    const command = parseChatCommand("!effects bassboost off")!;
+    await dispatchCommand(ctx, command, sender, send);
+    expect(playback.setFilter).toHaveBeenCalledWith("off");
+    expect(send).toHaveBeenCalledWith("Efecto bassboost desactivado.");
+  });
+
+  it("delegates !effects test-tone to the existing handler", async () => {
+    const { ctx, send, sender } = makeHarness({ current: { title: "X" } });
+    const command = parseChatCommand("!effects test-tone")!;
+    await dispatchCommand(ctx, command, sender, send);
+    expect(send).toHaveBeenCalledWith(
+      "No puedo reproducir el tono mientras hay música. Probá con !stop o esperá a que termine la pista.",
+    );
+  });
+
+  it("delegates !effects chart to the existing admin-only handler", async () => {
+    const { ctx, send, sender } = makeHarness();
+    const command = parseChatCommand("!effects chart")!;
+    await dispatchCommand(ctx, command, sender, send);
+    expect(send).toHaveBeenCalledWith(
+      "Solo los administradores pueden usar este comando.",
     );
   });
 });
