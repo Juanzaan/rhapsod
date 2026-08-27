@@ -160,4 +160,50 @@ describe("parseChatCommand", () => {
       "Usá: !filter",
     );
   });
+
+  it("parses playlist commands and the pl alias", () => {
+    expect(parseChatCommand("!playlist")).toEqual({ name: "playlist" });
+    expect(parseChatCommand("!playlist save fiesta")).toEqual({
+      name: "playlist",
+      action: "save",
+      nameArg: "fiesta",
+    });
+    expect(parseChatCommand("!pl load fiesta")).toEqual({
+      name: "playlist",
+      action: "load",
+      nameArg: "fiesta",
+    });
+    expect(parseChatCommand("!playlist list")).toEqual({
+      name: "playlist",
+      action: "list",
+    });
+    expect(parseChatCommand("!playlist list 2")).toEqual({
+      name: "playlist",
+      action: "list",
+      page: 2,
+    });
+    expect(parseChatCommand("!playlist show fiesta 2")).toEqual({
+      name: "playlist",
+      action: "show",
+      nameArg: "fiesta",
+      page: 2,
+    });
+    expect(parseChatCommand("!pl delete fiesta")).toEqual({
+      name: "playlist",
+      action: "delete",
+      nameArg: "fiesta",
+    });
+  });
+
+  it("rejects invalid playlist invocations", () => {
+    expect(() => parseChatCommand("!playlist save")).toThrow(
+      "Usá: !playlist save <nombre>",
+    );
+    expect(() => parseChatCommand("!playlist delete")).toThrow(
+      "Usá: !playlist delete <nombre>",
+    );
+    expect(() => parseChatCommand("!playlist bogus")).toThrow(
+      "Usá: !playlist save|load|list|show|delete",
+    );
+  });
 });

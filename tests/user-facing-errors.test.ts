@@ -80,6 +80,44 @@ describe("userFacingError", () => {
     const err = new Error("El rango tiene que ser ascendente (ej: 2-5).");
     expect(userFacingError(err)).toBe(err.message);
   });
+
+  it("save con cola vacía muestra el mensaje de playlist", () => {
+    const msg = "La cola está vacía: no hay nada para guardar en la playlist.";
+    expect(userFacingError(new Error(msg))).toBe(msg);
+  });
+
+  it("load de playlist inexistente muestra el mensaje", () => {
+    const msg = 'No encontré la playlist "fiesta".';
+    expect(userFacingError(new Error(msg))).toBe(msg);
+  });
+
+  it("límite de playlists muestra el mensaje", () => {
+    const msg = "Límite de 20 playlists por usuario.";
+    expect(userFacingError(new Error(msg))).toBe(msg);
+  });
+
+  it("límite de tracks muestra el mensaje", () => {
+    const msg = "Una playlist no puede tener más de 200 pistas.";
+    expect(userFacingError(new Error(msg))).toBe(msg);
+  });
+
+  it("playlists no configuradas muestra el mensaje", () => {
+    const msg = "Las playlists no están configuradas en este bot.";
+    expect(userFacingError(new Error(msg))).toBe(msg);
+  });
+
+  it("los errores esperados de playlists nunca caen al genérico", () => {
+    const messages = [
+      "La cola está vacía: no hay nada para guardar en la playlist.",
+      'No encontré la playlist "fiesta".',
+      "Límite de 20 playlists por usuario.",
+      "Una playlist no puede tener más de 200 pistas.",
+      "Las playlists no están configuradas en este bot.",
+    ];
+    for (const message of messages) {
+      expect(userFacingError(new Error(message))).toBe(message);
+    }
+  });
 });
 
 describe("parseChatCommand — mensajes en español", () => {

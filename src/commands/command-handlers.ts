@@ -713,6 +713,108 @@ async function handleFilter(
   await send(`Filtro actual: ${FILTER_DISPLAY_NAMES[ctx.playback.filter]}`);
 }
 
+async function handlePlaylist(
+  ctx: CommandContext,
+  command: Extract<ChatCommand, { name: "playlist" }>,
+  sender: CommandSender,
+  send: SendFn,
+): Promise<void> {
+  switch (command.action) {
+    case "save": {
+      const count = ctx.playback.savePlaylist(command.nameArg, sender.uid);
+      await send(`Playlist "${command.nameArg}" guardada (${count} pistas).`);
+      return;
+    }
+    case "load": {
+      const count = ctx.playback.loadPlaylist(
+        command.nameArg,
+        sender.name,
+        sender.uid,
+      );
+      await send(`Cargando "${command.nameArg}" (${count} pistas).`);
+      return;
+    }
+    case "list": {
+      const playlists = ctx.playback.listPlaylists(sender.uid);
+      if (playlists.length === 0) {
+        await send("No tenés playlists guardadas.");
+        return;
+      }
+      const pageSize = 10;
+      const pages = Math.max(1, Math.ceil(playlists.length / pageSize));
+      const page = command.page ?? 1;
+      if (page > pages) {
+        await send(
+          `La lista tiene ${pages} página(s). Usá !playlist list ${pages}.`,
+        );
+        return;
+      }
+      await send(
+        [
+          `Tus playlists (página ${page}/${pages}):`,
+          ...playlists
+            .slice((page - 1) * pageSize, page * pageSize)
+            .map(
+              (playlist, index) =>
+                `${(page - 1) * pageSize + index + 1}. ${playlist.name} (${playlist.trackCount} pistas)`,
+            ),
+        ].join("\n"),
+      );
+      return;
+    }
+    case "show": {
+      const playlist = ctx.playback.showPlaylist(
+        command.nameArg,
+        sender.uid,
+      );
+      if (playlist === undefined) {
+        await send(`No encontré la playlist "${command.nameArg}".`);
+        return;
+      }
+      if (playlist.tracks.length === 0) {
+        await send(`La playlist "${command.nameArg}" está vacía.`);
+        return;
+      }
+      const pageSize = 10;
+      const pages = Math.max(1, Math.ceil(playlist.tracks.length / pageSize));
+      const page = command.page ?? 1;
+      if (page > pages) {
+        await send(
+          `La playlist tiene ${pages} página(s). Usá !playlist show ${command.nameArg} ${pages}.`,
+        );
+        return;
+      }
+      await send(
+        [
+          `Playlist "${command.nameArg}" (página ${page}/${pages}):`,
+          ...playlist.tracks
+            .slice((page - 1) * pageSize, page * pageSize)
+            .map(
+              (track, index) =>
+                `${(page - 1) * pageSize + index + 1}. ${track.title}`,
+            ),
+        ].join("\n"),
+      );
+      return;
+    }
+    case "delete": {
+      const removed = ctx.playback.deletePlaylist(
+        command.nameArg,
+        sender.uid,
+        isAdminUid(sender.uid, ctx.adminUids),
+      );
+      await send(
+        removed
+          ? `Playlist "${command.nameArg}" eliminada.`
+          : `No encontré la playlist "${command.nameArg}".`,
+      );
+      return;
+    }
+    default:
+      await send("Usá: !playlist save|load|list|show|delete <nombre>");
+  }
+}
+
 export async function dispatchCommand(
   ctx: CommandContext,
   command: ChatCommand,
@@ -782,5 +884,7 @@ export async function dispatchCommand(
       return handle8d(ctx, command, sender, send);
     case "filter":
       return handleFilter(ctx, command, sender, send);
+    case "playlist":
+      return handlePlaylist(ctx, command, sender, send);
   }
 }

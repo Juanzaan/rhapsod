@@ -29,7 +29,22 @@ export type ChatCommand =
   | { readonly name: "nightcore"; readonly rate?: number }
   | { readonly name: "vaporwave"; readonly rate?: number }
   | { readonly name: "8d" }
-  | { readonly name: "filter"; readonly off?: boolean };
+  | { readonly name: "filter"; readonly off?: boolean }
+  | { readonly name: "playlist"; readonly action?: undefined }
+  | {
+      readonly action: "delete";
+      readonly name: "playlist";
+      readonly nameArg: string;
+    }
+  | { readonly action: "list"; readonly name: "playlist"; readonly page?: number }
+  | { readonly action: "load"; readonly name: "playlist"; readonly nameArg: string }
+  | { readonly action: "save"; readonly name: "playlist"; readonly nameArg: string }
+  | {
+      readonly action: "show";
+      readonly name: "playlist";
+      readonly nameArg: string;
+      readonly page?: number;
+    };
 
 const COMMAND_ALIASES: Readonly<Record<string, ChatCommand["name"]>> = {
   "8d": "8d",
@@ -61,6 +76,8 @@ const COMMAND_ALIASES: Readonly<Record<string, ChatCommand["name"]>> = {
   p: "play",
   pause: "pause",
   play: "play",
+  playlist: "playlist",
+  pl: "playlist",
   playnext: "playnext",
   pn: "playnext",
   next: "playnext",
@@ -163,6 +180,34 @@ export function parseChatCommand(
       if (!argument) return { name };
       if (argument === "off") return { name, off: true };
       throw new Error("Usá: !filter [off]");
+    case "playlist": {
+      const parts = argument.split(/\s+/).filter(Boolean);
+      const action = parts[0];
+      if (!action) return { name };
+      if (action === "list") {
+        return parts[1] === undefined
+          ? { name, action: "list" }
+          : { name, action: "list", page: parsePage(parts[1]) };
+      }
+      if (
+        action === "save" ||
+        action === "load" ||
+        action === "delete" ||
+        action === "show"
+      ) {
+        const nameArg = parts[1];
+        if (!nameArg) {
+          throw new Error(`Usá: !playlist ${action} <nombre>`);
+        }
+        if (action === "show") {
+          return parts[2] === undefined
+            ? { name, action, nameArg }
+            : { name, action, nameArg, page: parsePage(parts[2]) };
+        }
+        return { name, action, nameArg };
+      }
+      throw new Error("Usá: !playlist save|load|list|show|delete <nombre>");
+    }
     default:
       if (argument)
         throw new Error(`El comando !${rawName} no acepta argumentos`);
