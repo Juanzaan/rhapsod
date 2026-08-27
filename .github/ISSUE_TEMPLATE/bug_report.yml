@@ -1,0 +1,60 @@
+name: Bug report
+description: Report a bug or unexpected behavior
+title: "[Bug] <descripción breve>"
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Descripción
+      description: Describe el problema de forma clara y concisa.
+      placeholder: Qué está pasando...
+    validations:
+      required: true
+  - type: textarea
+    id: steps_to_reproduce
+    attributes:
+      label: Pasos para reproducir
+      description: Pasos numerados para reproducir el problema.
+      placeholder: |
+        1. Ejecutá `!play <url>`
+        2. Esperá X segundos
+        3. Observá el error
+      render: markdown
+    validations:
+      required: true
+  - type: textarea
+    id: expected_behavior
+    attributes:
+      label: Comportamiento esperado
+      description: Qué esperabas que pasara.
+    validations:
+      required: true
+  - type: textarea
+    id: actual_behavior
+    attributes:
+      label: Comportamiento actual
+      description: Qué pasó realmente.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Entorno
+      description: Node, OS y versión de Rhapsod.
+      placeholder: |
+        - Node: v22.x
+        - OS: Linux / Windows / macOS
+        - Rhapsod: v2.0.0
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Logs relevantes (por ejemplo, de `data/logs/`). No incluyas credenciales ni cookies.
+      render: shell
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: Capturas de pantalla si aplica.
