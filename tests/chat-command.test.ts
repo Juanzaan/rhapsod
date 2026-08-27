@@ -146,19 +146,11 @@ describe("parseChatCommand", () => {
 
   it("rejects invalid audio filter parameters", () => {
     expect(() => parseChatCommand("!bassboost 9")).toThrow("Usá: !bassboost");
-    expect(() => parseChatCommand("!bassboost abc")).toThrow(
-      "Usá: !bassboost",
-    );
-    expect(() => parseChatCommand("!nightcore 3")).toThrow(
-      "Usá: !nightcore",
-    );
-    expect(() => parseChatCommand("!vaporwave 0.5")).toThrow(
-      "Usá: !vaporwave",
-    );
+    expect(() => parseChatCommand("!bassboost abc")).toThrow("Usá: !bassboost");
+    expect(() => parseChatCommand("!nightcore 3")).toThrow("Usá: !nightcore");
+    expect(() => parseChatCommand("!vaporwave 0.5")).toThrow("Usá: !vaporwave");
     expect(() => parseChatCommand("!8d 5")).toThrow("no acepta argumentos");
-    expect(() => parseChatCommand("!filter custom")).toThrow(
-      "Usá: !filter",
-    );
+    expect(() => parseChatCommand("!filter custom")).toThrow("Usá: !filter");
   });
 
   it("parses playlist commands and the pl alias", () => {
@@ -209,7 +201,9 @@ describe("parseChatCommand", () => {
 
   it("parses !playlist add with a URL", () => {
     expect(
-      parseChatCommand("!playlist add fiesta https://www.youtube.com/watch?v=abc"),
+      parseChatCommand(
+        "!playlist add fiesta https://www.youtube.com/watch?v=abc",
+      ),
     ).toEqual({
       name: "playlist",
       action: "add",

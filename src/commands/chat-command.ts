@@ -36,9 +36,21 @@ export type ChatCommand =
       readonly name: "playlist";
       readonly nameArg: string;
     }
-  | { readonly action: "list"; readonly name: "playlist"; readonly page?: number }
-  | { readonly action: "load"; readonly name: "playlist"; readonly nameArg: string }
-  | { readonly action: "save"; readonly name: "playlist"; readonly nameArg: string }
+  | {
+      readonly action: "list";
+      readonly name: "playlist";
+      readonly page?: number;
+    }
+  | {
+      readonly action: "load";
+      readonly name: "playlist";
+      readonly nameArg: string;
+    }
+  | {
+      readonly action: "save";
+      readonly name: "playlist";
+      readonly nameArg: string;
+    }
   | {
       readonly action: "show";
       readonly name: "playlist";
@@ -63,9 +75,16 @@ export type ChatCommand =
       readonly newName: string;
       readonly oldName: string;
     }
-  | { readonly action: "info"; readonly name: "playlist"; readonly nameArg: string }
+  | {
+      readonly action: "info";
+      readonly name: "playlist";
+      readonly nameArg: string;
+    }
   | { readonly name: "effects"; readonly action?: undefined }
-  | { readonly action: "chart" | "list" | "reset" | "test-tone"; readonly name: "effects" }
+  | {
+      readonly action: "chart" | "list" | "reset" | "test-tone";
+      readonly name: "effects";
+    }
   | {
       readonly action: "off" | "on" | "toggle";
       readonly effect: "8d" | "bassboost" | "nightcore" | "vaporwave";
@@ -200,8 +219,7 @@ export function parseChatCommand(
     case "vaporwave":
       return argument ? { name, rate: parseVaporwaveRate(argument) } : { name };
     case "8d":
-      if (argument)
-        throw new Error("El comando !8d no acepta argumentos");
+      if (argument) throw new Error("El comando !8d no acepta argumentos");
       return { name };
     case "filter":
       if (!argument) return { name };

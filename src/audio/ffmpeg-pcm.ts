@@ -16,7 +16,10 @@ export interface FfmpegPcmOptions {
   readonly loudnessTargetLufs?: number;
   readonly seekSeconds?: number;
   readonly userAgent?: string;
-  readonly audioFilter?: { readonly name: AudioFilter; readonly param?: FilterParam };
+  readonly audioFilter?: {
+    readonly name: AudioFilter;
+    readonly param?: FilterParam;
+  };
 }
 
 export interface FfmpegPcmStream {

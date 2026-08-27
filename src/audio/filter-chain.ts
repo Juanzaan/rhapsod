@@ -1,9 +1,5 @@
 export type AudioFilter =
-  | "off"
-  | "bassboost"
-  | "nightcore"
-  | "vaporwave"
-  | "8d";
+  "off" | "bassboost" | "nightcore" | "vaporwave" | "8d";
 
 export const AUDIO_FILTERS: readonly AudioFilter[] = [
   "off",

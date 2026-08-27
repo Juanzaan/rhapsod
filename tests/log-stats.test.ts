@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  mkdtempSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -35,9 +31,7 @@ function timingLine(
     trackId: "t",
     stage: "audio-url",
     durationMs,
-    ...(prefetchStatus === undefined
-      ? {}
-      : { prefetchStatus }),
+    ...(prefetchStatus === undefined ? {} : { prefetchStatus }),
     msg: "Playback timing",
   });
 }
@@ -323,9 +317,9 @@ describe("log-stats PII safety", () => {
 
 describe("log-stats readLogFiles error handling", () => {
   it("throws a friendly error for a missing file (ENOENT)", () => {
-    expect(() => readLogFiles(["Z:/definitely-missing-log-file.log"])).toThrowError(
-      /no encontrado/,
-    );
+    expect(() =>
+      readLogFiles(["Z:/definitely-missing-log-file.log"]),
+    ).toThrowError(/no encontrado/);
   });
 
   it("throws a friendly error for generic read failures (e.g. a directory)", () => {
@@ -341,10 +335,7 @@ describe("log-stats readLogFiles error handling", () => {
     const dir = mkdtempSync(join(tmpdir(), "logstats-"));
     const file = join(dir, "a.log");
     try {
-      writeFileSync(
-        file,
-        '{"level":30,"msg":"ok"}\n{"level":30,"msg":"ok"}\n',
-      );
+      writeFileSync(file, '{"level":30,"msg":"ok"}\n{"level":30,"msg":"ok"}\n');
       expect(readLogFiles([file])).toEqual([
         '{"level":30,"msg":"ok"}',
         '{"level":30,"msg":"ok"}',

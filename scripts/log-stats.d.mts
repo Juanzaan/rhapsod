@@ -41,9 +41,7 @@ export interface CliArgs {
   error?: string;
 }
 
-export function parseLogLine(
-  line: string,
-): Record<string, unknown> | undefined;
+export function parseLogLine(line: string): Record<string, unknown> | undefined;
 export function parseIsoTime(value: string): number | undefined;
 export function parseCliArgs(argv: string[]): CliArgs;
 export function filterLinesByTime(
@@ -51,9 +49,7 @@ export function filterLinesByTime(
   sinceMs?: number,
   untilMs?: number,
 ): { lines: string[]; discarded: number };
-export function classifyPrefetchStatus(
-  value: unknown,
-): string | undefined;
+export function classifyPrefetchStatus(value: unknown): string | undefined;
 export function analyzeLogs(lines: string[]): LogStats;
 export function formatStats(
   stats: LogStats,
