@@ -18,3 +18,11 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
+      - name: Test coverage
+        run: npm run test:coverage
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 7
