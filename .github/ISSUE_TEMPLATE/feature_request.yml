@@ -1,0 +1,36 @@
+name: Feature request
+description: Suggest a new feature or improvement
+title: "[Feature] <descripción breve>"
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Descripción
+      description: Describe la feature de forma clara y concisa.
+    validations:
+      required: true
+  - type: textarea
+    id: problem_statement
+    attributes:
+      label: Problema que resuelve
+      description: Qué problema resuelve o qué user story cubre.
+      placeholder: Como <rol>, quiero <capacidad> para <beneficio>.
+    validations:
+      required: true
+  - type: textarea
+    id: proposed_solution
+    attributes:
+      label: Solución propuesta
+      description: Cómo proponés implementarla.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternativas consideradas
+      description: Otras opciones que consideraste y por qué las descartaste.
+  - type: textarea
+    id: additional_context
+    attributes:
+      label: Contexto adicional
+      description: Cualquier otra información que ayude a evaluar la propuesta.
