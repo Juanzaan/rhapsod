@@ -203,7 +203,66 @@ describe("parseChatCommand", () => {
       "Usá: !playlist delete <nombre>",
     );
     expect(() => parseChatCommand("!playlist bogus")).toThrow(
-      "Usá: !playlist save|load|list|show|delete",
+      "Usá: !playlist save|load|list|show|delete|add|remove|rename|info",
+    );
+  });
+
+  it("parses !playlist add with a URL", () => {
+    expect(
+      parseChatCommand("!playlist add fiesta https://www.youtube.com/watch?v=abc"),
+    ).toEqual({
+      name: "playlist",
+      action: "add",
+      nameArg: "fiesta",
+      urlArg: "https://www.youtube.com/watch?v=abc",
+    });
+    expect(
+      parseChatCommand(
+        "!pl add fiesta https://www.youtube.com/playlist?list=PL123",
+      ),
+    ).toEqual({
+      name: "playlist",
+      action: "add",
+      nameArg: "fiesta",
+      urlArg: "https://www.youtube.com/playlist?list=PL123",
+    });
+  });
+
+  it("parses !playlist remove with a 1-based index", () => {
+    expect(parseChatCommand("!playlist remove fiesta 2")).toEqual({
+      name: "playlist",
+      action: "remove",
+      nameArg: "fiesta",
+      index: 2,
+    });
+    expect(() => parseChatCommand("!playlist remove fiesta 0")).toThrow(
+      /mayor a 0/,
+    );
+    expect(() => parseChatCommand("!playlist remove fiesta")).toThrow(
+      "Usá: !playlist remove <nombre> <índice>",
+    );
+  });
+
+  it("parses !playlist rename", () => {
+    expect(parseChatCommand("!pl rename fiesta partido")).toEqual({
+      name: "playlist",
+      action: "rename",
+      oldName: "fiesta",
+      newName: "partido",
+    });
+    expect(() => parseChatCommand("!playlist rename fiesta")).toThrow(
+      "Usá: !playlist rename <viejo> <nuevo>",
+    );
+  });
+
+  it("parses !playlist info", () => {
+    expect(parseChatCommand("!pl info fiesta")).toEqual({
+      name: "playlist",
+      action: "info",
+      nameArg: "fiesta",
+    });
+    expect(() => parseChatCommand("!playlist info")).toThrow(
+      "Usá: !playlist info <nombre>",
     );
   });
 });

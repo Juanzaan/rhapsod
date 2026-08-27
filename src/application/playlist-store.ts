@@ -24,6 +24,31 @@ export interface PlaylistSummary {
   readonly trackCount: number;
 }
 
+export interface PlaylistAddResult {
+  readonly added: number;
+  readonly created: boolean;
+  readonly skipped: number;
+  readonly total: number;
+  readonly truncated: boolean;
+}
+
+export type PlaylistRemoveResult =
+  | { readonly status: "invalid-index"; readonly total: number }
+  | { readonly status: "not-found" }
+  | { readonly status: "removed"; readonly total: number };
+
+export type PlaylistRenameResult =
+  | { readonly status: "name-exists"; readonly name: string }
+  | { readonly status: "not-found" }
+  | { readonly status: "renamed" };
+
+export interface PlaylistInfo {
+  readonly createdAt: number;
+  readonly name: string;
+  readonly totalDurationSeconds: number;
+  readonly trackCount: number;
+}
+
 export const MAX_PLAYLISTS_PER_USER = 20;
 export const MAX_TRACKS_PER_PLAYLIST = 200;
 export const PLAYLIST_NAME_MAX_LENGTH = 32;
@@ -194,6 +219,186 @@ export class PlaylistStore {
 
   flush(): Promise<void> {
     return this.#writeChain;
+  }
+
+  addTracksToPlaylist(
+    ownerUid: string,
+    rawName: string,
+    tracks: readonly StoredPlaylistTrack[],
+  ): PlaylistAddResult {
+    const name = normalizePlaylistName(rawName);
+    this.#ensureLoaded();
+    const list = this.#playlists.get(ownerUid);
+    const existing = list?.find((playlist) => playlist.name === name);
+    const cleanTracks: StoredPlaylistTrack[] = [];
+    for (const track of tracks) {
+      const parsed = parseStoredTrack(track);
+      if (parsed !== undefined) cleanTracks.push(parsed);
+    }
+    const existingIds = new Set(existing?.tracks.map((track) => track.id) ?? []);
+    const batchIds = new Set<string>();
+    const newTracks: StoredPlaylistTrack[] = [];
+    let skipped = 0;
+    let truncated = false;
+    for (const track of cleanTracks) {
+      if (existingIds.has(track.id) || batchIds.has(track.id)) {
+        skipped++;
+        continue;
+      }
+      if (
+        (existing?.tracks.length ?? 0) + batchIds.size >=
+        MAX_TRACKS_PER_PLAYLIST
+      ) {
+        truncated = true;
+        break;
+      }
+      batchIds.add(track.id);
+      newTracks.push(track);
+    }
+    if (existing === undefined && newTracks.length === 0) {
+      throw new Error("No hay pistas válidas para agregar a la playlist.");
+    }
+    if (newTracks.length === 0) {
+      return {
+        added: 0,
+        created: false,
+        skipped,
+        total: existing?.tracks.length ?? 0,
+        truncated,
+      };
+    }
+    if (existing !== undefined) {
+      const index = list!.indexOf(existing);
+      list![index] = { ...existing, tracks: [...existing.tracks, ...newTracks] };
+    } else {
+      if ((list?.length ?? 0) >= MAX_PLAYLISTS_PER_USER) {
+        throw new Error(
+          `Límite de ${MAX_PLAYLISTS_PER_USER} playlists por usuario.`,
+        );
+      }
+      const entry: SerializedPlaylist = {
+        createdAt: Date.now(),
+        name,
+        tracks: newTracks,
+      };
+      if (list === undefined) {
+        this.#playlists.set(ownerUid, [entry]);
+      } else {
+        list.push(entry);
+      }
+    }
+    void this.#schedulePersist();
+    const total =
+      existing === undefined
+        ? newTracks.length
+        : existing.tracks.length + newTracks.length;
+    return {
+      added: newTracks.length,
+      created: existing === undefined,
+      skipped,
+      total,
+      truncated,
+    };
+  }
+
+  removeTrackFromPlaylist(
+    ownerUid: string,
+    rawName: string,
+    trackIndex: number,
+    allowAnyUser: boolean,
+  ): PlaylistRemoveResult {
+    const name = normalizePlaylistName(rawName);
+    this.#ensureLoaded();
+    const found = this.#findPlaylistForAccess(ownerUid, name, allowAnyUser);
+    if (found === undefined) return { status: "not-found" };
+    const index = trackIndex - 1;
+    if (
+      !Number.isSafeInteger(trackIndex) ||
+      index < 0 ||
+      index >= found.entry.tracks.length
+    ) {
+      return { status: "invalid-index", total: found.entry.tracks.length };
+    }
+    const tracks = [...found.entry.tracks];
+    tracks.splice(index, 1);
+    if (tracks.length === 0) {
+      found.list.splice(found.list.indexOf(found.entry), 1);
+      if (found.list.length === 0) this.#playlists.delete(found.ownerUid);
+    } else {
+      found.list[found.list.indexOf(found.entry)] = {
+        ...found.entry,
+        tracks,
+      };
+    }
+    void this.#schedulePersist();
+    return { status: "removed", total: tracks.length };
+  }
+
+  renamePlaylist(
+    ownerUid: string,
+    rawOldName: string,
+    rawNewName: string,
+    allowAnyUser: boolean,
+  ): PlaylistRenameResult {
+    const oldName = normalizePlaylistName(rawOldName);
+    const newName = normalizePlaylistName(rawNewName);
+    this.#ensureLoaded();
+    const found = this.#findPlaylistForAccess(ownerUid, oldName, allowAnyUser);
+    if (found === undefined) return { status: "not-found" };
+    if (
+      this.#playlists
+        .get(found.ownerUid)
+        ?.some((playlist) => playlist.name === newName) === true
+    ) {
+      return { status: "name-exists", name: newName };
+    }
+    found.list[found.list.indexOf(found.entry)] = { ...found.entry, name: newName };
+    void this.#schedulePersist();
+    return { status: "renamed" };
+  }
+
+  getPlaylistInfo(ownerUid: string, rawName: string): PlaylistInfo | undefined {
+    const name = normalizePlaylistName(rawName);
+    this.#ensureLoaded();
+    const entry = this.#playlists.get(ownerUid)?.find(
+      (playlist) => playlist.name === name,
+    );
+    if (entry === undefined) return undefined;
+    let totalDurationSeconds = 0;
+    for (const track of entry.tracks) {
+      if (track.durationSeconds !== undefined) {
+        totalDurationSeconds += track.durationSeconds;
+      }
+    }
+    return {
+      createdAt: entry.createdAt,
+      name: entry.name,
+      totalDurationSeconds,
+      trackCount: entry.tracks.length,
+    };
+  }
+
+  #findPlaylistForAccess(
+    ownerUid: string,
+    name: string,
+    allowAnyUser: boolean,
+  ): {
+    readonly entry: SerializedPlaylist;
+    readonly list: SerializedPlaylist[];
+    readonly ownerUid: string;
+  } | undefined {
+    if (allowAnyUser) {
+      for (const [uid, list] of this.#playlists) {
+        const entry = list.find((playlist) => playlist.name === name);
+        if (entry !== undefined) {
+          return { entry, list, ownerUid: uid };
+        }
+      }
+      return undefined;
+    }
+    const list = this.#playlists.get(ownerUid);
+    const entry = list?.find((playlist) => playlist.name === name);
+    return entry === undefined ? undefined : { entry, list: list!, ownerUid };
   }
 
   #ensureLoaded(): void {

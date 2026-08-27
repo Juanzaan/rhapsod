@@ -50,6 +50,20 @@ function formatDuration(durationSeconds: number | undefined): string {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
+function formatLongDuration(durationSeconds: number): string {
+  const hours = Math.floor(durationSeconds / 3600);
+  const minutes = Math.round((durationSeconds % 3600) / 60);
+  if (hours > 0) return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+  return `${minutes}m`;
+}
+
+function formatDate(timestampMs: number): string {
+  const date = new Date(timestampMs);
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  return `${day}/${month}/${date.getFullYear()}`;
+}
+
 async function handlePlay(
   ctx: CommandContext,
   command: Extract<ChatCommand, { name: "play" }>,
@@ -810,8 +824,95 @@ async function handlePlaylist(
       );
       return;
     }
+    case "add": {
+      const exists =
+        ctx.playback.showPlaylist(command.nameArg, sender.uid) !== undefined;
+      const { source, tracks } = await ctx.playback.resolvePlaylistTracks(
+        command.urlArg,
+      );
+      if (tracks.length === 0) {
+        await send("No encontré pistas en esa URL.");
+        return;
+      }
+      await send(
+        exists
+          ? source === "playlist"
+            ? `Agregando ${tracks.length} pistas de la playlist a "${command.nameArg}"...`
+            : `Agregando ${tracks.length} pista(s) a "${command.nameArg}"...`
+          : `Playlist "${command.nameArg}" creada. Agregando ${tracks.length} pistas...`,
+      );
+      const result = ctx.playback.addPlaylistTracks(
+        command.nameArg,
+        tracks,
+        sender.uid,
+      );
+      const verb = result.created ? "creada" : "actualizada";
+      let message = `Playlist "${command.nameArg}" ${verb}. Tiene ${result.total} pistas.`;
+      if (result.truncated) {
+        message = `Playlist "${command.nameArg}" ${verb}. Tiene ${result.total} pistas (límite: 200).`;
+      } else if (result.skipped > 0) {
+        message = `Playlist "${command.nameArg}" ${verb}. Tiene ${result.total} pistas (${result.skipped} duplicada(s) saltada(s)).`;
+      }
+      await send(message);
+      return;
+    }
+    case "remove": {
+      const result = ctx.playback.removePlaylistTrack(
+        command.nameArg,
+        command.index,
+        sender.uid,
+        isAdminUid(sender.uid, ctx.adminUids),
+      );
+      if (result.status === "not-found") {
+        await send(`No encontré la playlist "${command.nameArg}".`);
+        return;
+      }
+      if (result.status === "invalid-index") {
+        await send(
+          `Índice inválido. La playlist "${command.nameArg}" tiene ${result.total} pistas.`,
+        );
+        return;
+      }
+      await send(
+        `Track eliminado de "${command.nameArg}". Tiene ${result.total} pistas.`,
+      );
+      return;
+    }
+    case "rename": {
+      const result = ctx.playback.renamePlaylist(
+        command.oldName,
+        command.newName,
+        sender.uid,
+        isAdminUid(sender.uid, ctx.adminUids),
+      );
+      if (result.status === "not-found") {
+        await send(`No encontré la playlist "${command.oldName}".`);
+        return;
+      }
+      if (result.status === "name-exists") {
+        await send(`Ya existe una playlist llamada "${result.name}".`);
+        return;
+      }
+      await send(
+        `Playlist "${command.oldName}" renombrada a "${command.newName}".`,
+      );
+      return;
+    }
+    case "info": {
+      const info = ctx.playback.getPlaylistInfo(command.nameArg, sender.uid);
+      if (info === undefined) {
+        await send(`No encontré la playlist "${command.nameArg}".`);
+        return;
+      }
+      await send(
+        `Playlist "${info.name}": ${info.trackCount} pistas, duración total ~${formatLongDuration(info.totalDurationSeconds)}. Creada el ${formatDate(info.createdAt)}.`,
+      );
+      return;
+    }
     default:
-      await send("Usá: !playlist save|load|list|show|delete <nombre>");
+      await send(
+        "Usá: !playlist save|load|list|show|delete|add|remove|rename|info <nombre>",
+      );
   }
 }
 
