@@ -2441,9 +2441,9 @@ describe("YoutubePlaybackService", () => {
       await expect(
         service.resolvePlaylistTracks("https://open.spotify.com/track/abc"),
       ).rejects.toThrow(/Solo se soportan URLs de YouTube/);
-      await expect(service.resolvePlaylistTracks("duki rockstar")).rejects.toThrow(
-        /Solo se soportan URLs de YouTube/,
-      );
+      await expect(
+        service.resolvePlaylistTracks("duki rockstar"),
+      ).rejects.toThrow(/Solo se soportan URLs de YouTube/);
     });
 
     it("adds resolved tracks through the playlist store", () => {
@@ -2463,17 +2463,16 @@ describe("YoutubePlaybackService", () => {
       store.save("uid-1", "fiesta", [track("a"), track("b")]);
       const { service } = setup({ playlistStore: store });
 
-      expect(
-        service.removePlaylistTrack("fiesta", 2, "uid-1", false),
-      ).toEqual({ status: "removed", total: 1 });
+      expect(service.removePlaylistTrack("fiesta", 2, "uid-1", false)).toEqual({
+        status: "removed",
+        total: 1,
+      });
       expect(
         service.renamePlaylist("fiesta", "partido", "uid-1", false),
       ).toEqual({ status: "renamed" });
       const info = service.getPlaylistInfo("partido", "uid-1");
       expect(info?.trackCount).toBe(1);
-      expect(
-        service.getPlaylistInfo("partido", "other"),
-      ).toBeUndefined();
+      expect(service.getPlaylistInfo("partido", "other")).toBeUndefined();
     });
   });
 

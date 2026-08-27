@@ -299,7 +299,9 @@ describe("dispatchCommand", () => {
     const command = parseChatCommand("!playlist save fiesta")!;
     await dispatchCommand(ctx, command, sender, send);
     expect(playback.savePlaylist).toHaveBeenCalledWith("fiesta", "uid-1");
-    expect(send).toHaveBeenCalledWith('Playlist "fiesta" guardada (15 pistas).');
+    expect(send).toHaveBeenCalledWith(
+      'Playlist "fiesta" guardada (15 pistas).',
+    );
   });
 
   it("loads a playlist with !playlist load", async () => {
@@ -364,7 +366,11 @@ describe("dispatchCommand", () => {
     (playback.deletePlaylist as Mock).mockReturnValueOnce(true);
     const command = parseChatCommand("!playlist delete fiesta")!;
     await dispatchCommand(ctx, command, sender, send);
-    expect(playback.deletePlaylist).toHaveBeenCalledWith("fiesta", "uid-1", false);
+    expect(playback.deletePlaylist).toHaveBeenCalledWith(
+      "fiesta",
+      "uid-1",
+      false,
+    );
     expect(send).toHaveBeenCalledWith('Playlist "fiesta" eliminada.');
   });
 
@@ -375,7 +381,11 @@ describe("dispatchCommand", () => {
     (playback.deletePlaylist as Mock).mockReturnValueOnce(true);
     const command = parseChatCommand("!playlist delete fiesta")!;
     await dispatchCommand(ctx, command, sender, send);
-    expect(playback.deletePlaylist).toHaveBeenCalledWith("fiesta", "uid-1", true);
+    expect(playback.deletePlaylist).toHaveBeenCalledWith(
+      "fiesta",
+      "uid-1",
+      true,
+    );
   });
 
   it("adds tracks to an existing playlist with !playlist add", async () => {
@@ -406,7 +416,9 @@ describe("dispatchCommand", () => {
     expect(send).toHaveBeenCalledWith(
       'Agregando 2 pistas de la playlist a "fiesta"...',
     );
-    expect(send).toHaveBeenCalledWith('Playlist "fiesta" actualizada. Tiene 2 pistas.');
+    expect(send).toHaveBeenCalledWith(
+      'Playlist "fiesta" actualizada. Tiene 2 pistas.',
+    );
     expect(playback.addPlaylistTracks).toHaveBeenCalledWith(
       "fiesta",
       [
@@ -435,7 +447,9 @@ describe("dispatchCommand", () => {
       "!playlist add fiesta https://www.youtube.com/watch?v=a",
     )!;
     await dispatchCommand(ctx, command, sender, send);
-    expect(send).toHaveBeenCalledWith('Playlist "fiesta" creada. Agregando 1 pistas...');
+    expect(send).toHaveBeenCalledWith(
+      'Playlist "fiesta" creada. Agregando 1 pistas...',
+    );
     expect(send).toHaveBeenCalledWith(
       'Playlist "fiesta" creada. Tiene 1 pistas (1 duplicada(s) saltada(s)).',
     );
@@ -468,7 +482,9 @@ describe("dispatchCommand", () => {
       "uid-1",
       false,
     );
-    expect(send).toHaveBeenCalledWith('Track eliminado de "fiesta". Tiene 2 pistas.');
+    expect(send).toHaveBeenCalledWith(
+      'Track eliminado de "fiesta". Tiene 2 pistas.',
+    );
   });
 
   it("reports an invalid index in !playlist remove", async () => {
@@ -497,7 +513,9 @@ describe("dispatchCommand", () => {
       "uid-1",
       false,
     );
-    expect(send).toHaveBeenCalledWith('Playlist "fiesta" renombrada a "partido".');
+    expect(send).toHaveBeenCalledWith(
+      'Playlist "fiesta" renombrada a "partido".',
+    );
   });
 
   it("reports an existing name in !playlist rename", async () => {

@@ -290,8 +290,10 @@ export function formatStats(stats, options = {}) {
     lines.push(`Período: ${stats.period.from} -> ${stats.period.to}`);
   }
   if (sinceMs !== undefined || untilMs !== undefined) {
-    const since = sinceMs === undefined ? "(inicio)" : new Date(sinceMs).toISOString();
-    const until = untilMs === undefined ? "(fin)" : new Date(untilMs).toISOString();
+    const since =
+      sinceMs === undefined ? "(inicio)" : new Date(sinceMs).toISOString();
+    const until =
+      untilMs === undefined ? "(fin)" : new Date(untilMs).toISOString();
     lines.push(
       `Filtro temporal (inclusivo): since=${since} until=${until} (${discardedByTime ?? 0} líneas descartadas)`,
     );
@@ -333,8 +335,7 @@ export function readLogFiles(filePaths) {
     try {
       content = readFileSync(filePath, "utf8");
     } catch (error) {
-      const code =
-        typeof error?.code === "string" ? error.code : "UNKNOWN";
+      const code = typeof error?.code === "string" ? error.code : "UNKNOWN";
       const name = filePath.split(/[\\/]/).pop() ?? filePath;
       const wrapped = new Error(
         code === "ENOENT"

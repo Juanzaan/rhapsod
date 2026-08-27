@@ -89,11 +89,7 @@ interface PlaybackServiceOptions {
 }
 
 type PlaybackEndReason =
-  | "completed"
-  | "error"
-  | "skipped"
-  | "stopped"
-  | "filter-change";
+  "completed" | "error" | "skipped" | "stopped" | "filter-change";
 
 interface PlaybackTiming {
   readonly audioUrlSource?: AudioUrlSource;
@@ -633,16 +629,16 @@ export class YoutubePlaybackService {
 
   savePlaylist(rawName: string, requestedByUid: string): number {
     const store = this.#requirePlaylistStore();
-    const tracks: StoredPlaylistTrack[] = this.#queue.snapshot().map(
-      (track) => ({
+    const tracks: StoredPlaylistTrack[] = this.#queue
+      .snapshot()
+      .map((track) => ({
         ...(track.durationSeconds === undefined
           ? {}
           : { durationSeconds: track.durationSeconds }),
         id: track.id,
         source: track.source,
         title: track.title,
-      }),
-    );
+      }));
     if (tracks.length === 0) {
       throw new Error(
         "La cola está vacía: no hay nada para guardar en la playlist.",
@@ -683,7 +679,10 @@ export class YoutubePlaybackService {
         added++;
       } catch (error) {
         if (error instanceof QueueLimitError) break;
-        if (error instanceof Error && /ya está en la cola/i.test(error.message)) {
+        if (
+          error instanceof Error &&
+          /ya está en la cola/i.test(error.message)
+        ) {
           continue;
         }
         throw error;
@@ -715,9 +714,7 @@ export class YoutubePlaybackService {
     );
   }
 
-  async resolvePlaylistTracks(
-    url: string,
-  ): Promise<{
+  async resolvePlaylistTracks(url: string): Promise<{
     readonly source: "playlist" | "video";
     readonly tracks: readonly StoredPlaylistTrack[];
   }> {
@@ -1360,7 +1357,10 @@ export class YoutubePlaybackService {
         this.#pendingSeek = undefined;
         const playbackOptions: {
           readonly seekSeconds?: number;
-          readonly audioFilter: { readonly name: AudioFilter; readonly param?: FilterParam };
+          readonly audioFilter: {
+            readonly name: AudioFilter;
+            readonly param?: FilterParam;
+          };
         } = {
           ...(seekSeconds === undefined ? {} : { seekSeconds }),
           audioFilter: { name: this.#filter, param: this.#filterParam },

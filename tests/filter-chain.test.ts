@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  buildFilterChain,
-  isAudioFilter,
-} from "../src/audio/filter-chain.js";
+import { buildFilterChain, isAudioFilter } from "../src/audio/filter-chain.js";
 import {
   buildFfmpegPcmArguments,
   type FfmpegPcmOptions,
@@ -42,7 +39,9 @@ describe("buildFilterChain", () => {
   });
 
   it("builds nightcore with the default rate and clamped explicit rates", () => {
-    expect(buildFilterChain("nightcore")).toBe("asetrate=55200,aresample=48000");
+    expect(buildFilterChain("nightcore")).toBe(
+      "asetrate=55200,aresample=48000",
+    );
     expect(buildFilterChain("nightcore", { rate: 1.25 })).toBe(
       "asetrate=60000,aresample=48000",
     );
@@ -68,36 +67,36 @@ describe("buildFilterChain", () => {
     expect(buildFilterChain("bassboost", { level: NaN })).toBe(
       "bass=g=6:f=110:w=0.6",
     );
-    expect(buildFilterChain("bassboost", { level: Number.POSITIVE_INFINITY })).toBe(
-      "bass=g=6:f=110:w=0.6",
-    );
-    expect(buildFilterChain("bassboost", { level: Number.NEGATIVE_INFINITY })).toBe(
-      "bass=g=6:f=110:w=0.6",
-    );
+    expect(
+      buildFilterChain("bassboost", { level: Number.POSITIVE_INFINITY }),
+    ).toBe("bass=g=6:f=110:w=0.6");
+    expect(
+      buildFilterChain("bassboost", { level: Number.NEGATIVE_INFINITY }),
+    ).toBe("bass=g=6:f=110:w=0.6");
   });
 
   it("treats non-finite nightcore rates as the default", () => {
     expect(buildFilterChain("nightcore", { rate: NaN })).toBe(
       "asetrate=55200,aresample=48000",
     );
-    expect(buildFilterChain("nightcore", { rate: Number.POSITIVE_INFINITY })).toBe(
-      "asetrate=55200,aresample=48000",
-    );
-    expect(buildFilterChain("nightcore", { rate: Number.NEGATIVE_INFINITY })).toBe(
-      "asetrate=55200,aresample=48000",
-    );
+    expect(
+      buildFilterChain("nightcore", { rate: Number.POSITIVE_INFINITY }),
+    ).toBe("asetrate=55200,aresample=48000");
+    expect(
+      buildFilterChain("nightcore", { rate: Number.NEGATIVE_INFINITY }),
+    ).toBe("asetrate=55200,aresample=48000");
   });
 
   it("treats non-finite vaporwave rates as the default", () => {
     expect(buildFilterChain("vaporwave", { rate: NaN })).toBe(
       "asetrate=40800,aresample=48000,aecho=0.8:0.85:60|120:0.4|0.25",
     );
-    expect(buildFilterChain("vaporwave", { rate: Number.POSITIVE_INFINITY })).toBe(
-      "asetrate=40800,aresample=48000,aecho=0.8:0.85:60|120:0.4|0.25",
-    );
-    expect(buildFilterChain("vaporwave", { rate: Number.NEGATIVE_INFINITY })).toBe(
-      "asetrate=40800,aresample=48000,aecho=0.8:0.85:60|120:0.4|0.25",
-    );
+    expect(
+      buildFilterChain("vaporwave", { rate: Number.POSITIVE_INFINITY }),
+    ).toBe("asetrate=40800,aresample=48000,aecho=0.8:0.85:60|120:0.4|0.25");
+    expect(
+      buildFilterChain("vaporwave", { rate: Number.NEGATIVE_INFINITY }),
+    ).toBe("asetrate=40800,aresample=48000,aecho=0.8:0.85:60|120:0.4|0.25");
   });
 });
 
@@ -112,9 +111,9 @@ describe("buildFfmpegPcmArguments filter composition", () => {
   }
 
   it("keeps loudnorm only when the filter is off", () => {
-    expect(
-      af({ loudnessTargetLufs: -14, audioFilter: { name: "off" } }),
-    ).toBe("loudnorm=I=-14:TP=-1.5:LRA=11");
+    expect(af({ loudnessTargetLufs: -14, audioFilter: { name: "off" } })).toBe(
+      "loudnorm=I=-14:TP=-1.5:LRA=11",
+    );
   });
 
   it("composes loudnorm -> effect -> alimiter", () => {
@@ -126,9 +125,9 @@ describe("buildFfmpegPcmArguments filter composition", () => {
   });
 
   it("applies alimiter without loudnorm when loudness is disabled", () => {
-    expect(
-      af({ loudnessTargetLufs: 0, audioFilter: { name: "8d" } }),
-    ).toBe("apulsator=hz=0.125:width=1,alimiter=limit=0.95");
+    expect(af({ loudnessTargetLufs: 0, audioFilter: { name: "8d" } })).toBe(
+      "apulsator=hz=0.125:width=1,alimiter=limit=0.95",
+    );
   });
 
   it("emits no -af when filter is off and loudness is disabled", () => {

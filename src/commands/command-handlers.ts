@@ -689,7 +689,10 @@ async function handleNightcore(
   _sender: CommandSender,
   send: SendFn,
 ): Promise<void> {
-  ctx.playback.setFilter("nightcore", command.rate === undefined ? {} : { rate: command.rate });
+  ctx.playback.setFilter(
+    "nightcore",
+    command.rate === undefined ? {} : { rate: command.rate },
+  );
   await send("Filtro nightcore activado.");
 }
 
@@ -699,7 +702,10 @@ async function handleVaporwave(
   _sender: CommandSender,
   send: SendFn,
 ): Promise<void> {
-  ctx.playback.setFilter("vaporwave", command.rate === undefined ? {} : { rate: command.rate });
+  ctx.playback.setFilter(
+    "vaporwave",
+    command.rate === undefined ? {} : { rate: command.rate },
+  );
   await send("Filtro vaporwave activado.");
 }
 
@@ -827,10 +833,7 @@ async function handlePlaylist(
       return;
     }
     case "show": {
-      const playlist = ctx.playback.showPlaylist(
-        command.nameArg,
-        sender.uid,
-      );
+      const playlist = ctx.playback.showPlaylist(command.nameArg, sender.uid);
       if (playlist === undefined) {
         await send(`No encontré la playlist "${command.nameArg}".`);
         return;

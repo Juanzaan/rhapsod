@@ -209,7 +209,11 @@ describe("PlaylistStore addTracksToPlaylist", () => {
 
   it("respects the 200-track limit and reports truncation", () => {
     const store = new PlaylistStore(join(directory, "add-truncate.json"));
-    store.save("uid-1", "fiesta", Array.from({ length: 199 }, (_, i) => track(`t${i}`)));
+    store.save(
+      "uid-1",
+      "fiesta",
+      Array.from({ length: 199 }, (_, i) => track(`t${i}`)),
+    );
     const result = store.addTracksToPlaylist("uid-1", "fiesta", [
       track("x1"),
       track("x2"),
@@ -222,7 +226,11 @@ describe("PlaylistStore addTracksToPlaylist", () => {
 
   it("reports only duplicates when the playlist is full", () => {
     const store = new PlaylistStore(join(directory, "add-full.json"));
-    store.save("uid-1", "fiesta", Array.from({ length: 200 }, (_, i) => track(`t${i}`)));
+    store.save(
+      "uid-1",
+      "fiesta",
+      Array.from({ length: 200 }, (_, i) => track(`t${i}`)),
+    );
     const result = store.addTracksToPlaylist("uid-1", "fiesta", [track("t0")]);
     expect(result).toEqual({
       added: 0,
@@ -293,12 +301,13 @@ describe("PlaylistStore removeTrackFromPlaylist", () => {
   it("lets an admin remove from another user's playlist", () => {
     const store = new PlaylistStore(join(directory, "remove-admin.json"));
     store.save("uid-2", "fiesta", [track("a"), track("b")]);
-    expect(
-      store.removeTrackFromPlaylist("uid-1", "fiesta", 1, true),
-    ).toEqual({ status: "removed", total: 1 });
-    expect(
-      store.removeTrackFromPlaylist("uid-1", "fiesta", 1, false),
-    ).toEqual({ status: "not-found" });
+    expect(store.removeTrackFromPlaylist("uid-1", "fiesta", 1, true)).toEqual({
+      status: "removed",
+      total: 1,
+    });
+    expect(store.removeTrackFromPlaylist("uid-1", "fiesta", 1, false)).toEqual({
+      status: "not-found",
+    });
   });
 });
 

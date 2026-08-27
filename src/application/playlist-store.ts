@@ -76,9 +76,7 @@ export function normalizePlaylistName(raw: string): string {
   return name;
 }
 
-function parseStoredTrack(
-  raw: unknown,
-): StoredPlaylistTrack | undefined {
+function parseStoredTrack(raw: unknown): StoredPlaylistTrack | undefined {
   if (typeof raw !== "object" || raw === null) return undefined;
   const record = raw as Record<string, unknown>;
   if (
@@ -235,7 +233,9 @@ export class PlaylistStore {
       const parsed = parseStoredTrack(track);
       if (parsed !== undefined) cleanTracks.push(parsed);
     }
-    const existingIds = new Set(existing?.tracks.map((track) => track.id) ?? []);
+    const existingIds = new Set(
+      existing?.tracks.map((track) => track.id) ?? [],
+    );
     const batchIds = new Set<string>();
     const newTracks: StoredPlaylistTrack[] = [];
     let skipped = 0;
@@ -269,7 +269,10 @@ export class PlaylistStore {
     }
     if (existing !== undefined) {
       const index = list!.indexOf(existing);
-      list![index] = { ...existing, tracks: [...existing.tracks, ...newTracks] };
+      list![index] = {
+        ...existing,
+        tracks: [...existing.tracks, ...newTracks],
+      };
     } else {
       if ((list?.length ?? 0) >= MAX_PLAYLISTS_PER_USER) {
         throw new Error(
@@ -352,7 +355,10 @@ export class PlaylistStore {
     ) {
       return { status: "name-exists", name: newName };
     }
-    found.list[found.list.indexOf(found.entry)] = { ...found.entry, name: newName };
+    found.list[found.list.indexOf(found.entry)] = {
+      ...found.entry,
+      name: newName,
+    };
     void this.#schedulePersist();
     return { status: "renamed" };
   }
@@ -360,9 +366,9 @@ export class PlaylistStore {
   getPlaylistInfo(ownerUid: string, rawName: string): PlaylistInfo | undefined {
     const name = normalizePlaylistName(rawName);
     this.#ensureLoaded();
-    const entry = this.#playlists.get(ownerUid)?.find(
-      (playlist) => playlist.name === name,
-    );
+    const entry = this.#playlists
+      .get(ownerUid)
+      ?.find((playlist) => playlist.name === name);
     if (entry === undefined) return undefined;
     let totalDurationSeconds = 0;
     for (const track of entry.tracks) {
@@ -382,11 +388,13 @@ export class PlaylistStore {
     ownerUid: string,
     name: string,
     allowAnyUser: boolean,
-  ): {
-    readonly entry: SerializedPlaylist;
-    readonly list: SerializedPlaylist[];
-    readonly ownerUid: string;
-  } | undefined {
+  ):
+    | {
+        readonly entry: SerializedPlaylist;
+        readonly list: SerializedPlaylist[];
+        readonly ownerUid: string;
+      }
+    | undefined {
     if (allowAnyUser) {
       for (const [uid, list] of this.#playlists) {
         const entry = list.find((playlist) => playlist.name === name);
@@ -434,7 +442,9 @@ export class PlaylistStore {
             }
             const tracks = record.tracks
               .map(parseStoredTrack)
-              .filter((track): track is StoredPlaylistTrack => track !== undefined)
+              .filter(
+                (track): track is StoredPlaylistTrack => track !== undefined,
+              )
               .slice(0, MAX_TRACKS_PER_PLAYLIST);
             if (tracks.length === 0) continue;
             list.push({
