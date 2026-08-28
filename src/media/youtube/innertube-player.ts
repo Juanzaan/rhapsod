@@ -1,5 +1,6 @@
 export interface InnertubePlayerOptions {
   readonly fetchImpl?: typeof fetch;
+  readonly signal?: AbortSignal;
   readonly timeoutMs?: number;
 }
 
@@ -38,6 +39,10 @@ export async function fetchInnertubePlayerAudioUrl(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   timer.unref();
+  const signal =
+    options.signal === undefined
+      ? controller.signal
+      : AbortSignal.any([options.signal, controller.signal]);
   try {
     const response = await fetchImpl(
       `https://www.youtube.com/youtubei/v1/player?key=${encodeURIComponent(ANDROID_VR_API_KEY)}&prettyPrint=false`,
@@ -51,7 +56,7 @@ export async function fetchInnertubePlayerAudioUrl(
           "user-agent": ANDROID_VR_USER_AGENT,
         },
         method: "POST",
-        signal: controller.signal,
+        signal,
       },
     );
     if (!response.ok) return undefined;
@@ -68,7 +73,8 @@ export async function fetchInnertubePlayerAudioUrl(
     const preferred =
       audio.find((format) => format.itag === 251) ??
       [...audio].sort((a, b) => (b.bitrate ?? 0) - (a.bitrate ?? 0))[0];
-    return preferred?.url;
+    const url = preferred?.url;
+    return url && /^https:\/\//i.test(url) ? url : undefined;
   } catch {
     return undefined;
   } finally {

@@ -2557,4 +2557,115 @@ describe("YoutubePlaybackService", () => {
       "No hay ninguna canción anterior",
     );
   });
+
+  it("does not break the chain when an observability callback throws", async () => {
+    const {
+      createPlayback,
+      onPlaybackError,
+      onPlaybackFinished,
+      onPlaybackStarted,
+      onTiming,
+      playbackResolvers,
+      resolver,
+      service,
+    } = setup();
+    onPlaybackStarted.mockImplementation(() => {
+      throw new Error("metrics broken");
+    });
+    onTiming.mockImplementation(() => {
+      throw new Error("metrics broken");
+    });
+    onPlaybackFinished.mockImplementation(() => {
+      throw new Error("metrics broken");
+    });
+    onPlaybackError.mockImplementation(() => {
+      throw new Error("metrics broken");
+    });
+    resolver.getTrack.mockImplementation((resource: { id: string }) =>
+      Promise.resolve({
+        ...(resource.id === "first"
+          ? { audioUrl: "https://media.example/first" }
+          : {}),
+        id: resource.id,
+        title: `Track ${resource.id}`,
+        webpageUrl: `https://www.youtube.com/watch?v=${resource.id}`,
+      }),
+    );
+    await service.enqueue("https://youtu.be/first", "user-1");
+    await service.enqueue("https://youtu.be/second", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(service.current?.id).toBe("first");
+    expect(createPlayback).toHaveBeenCalledTimes(1);
+
+    playbackResolvers[0]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(service.current?.id).toBe("second");
+    expect(createPlayback).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not apply a stale seek to the next track after a failed seek", async () => {
+    const { createPlayback, playbackResolvers, resolver, service } = setup();
+    resolver.getTrack.mockImplementation((resource: { id: string }) =>
+      Promise.resolve({
+        id: resource.id,
+        title: `Track ${resource.id}`,
+        webpageUrl: `https://www.youtube.com/watch?v=${resource.id}`,
+      }),
+    );
+    resolver.getAudioUrlFromUrl.mockImplementation(() =>
+      Promise.resolve("https://media.example/audio?expire=1000000000"),
+    );
+    await service.enqueue("https://youtu.be/first", "user-1");
+    await service.enqueue("https://youtu.be/second", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(service.current?.id).toBe("first");
+
+    service.seek(30);
+    resolver.getAudioUrlFromUrl.mockRejectedValueOnce(
+      new Error("audio unavailable"),
+    );
+    playbackResolvers[0]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(service.current?.id).toBe("second");
+    const lastOptions = (createPlayback as Mock).mock.calls.at(-1)?.[3] as {
+      seekSeconds?: number;
+    };
+    expect(lastOptions?.seekSeconds).toBeUndefined();
+  });
+
+  it("does not restart playback when the same filter is re-applied", async () => {
+    const { createPlayback, service } = setup();
+    await service.enqueue("https://youtu.be/a", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(createPlayback).toHaveBeenCalledTimes(1);
+
+    service.setFilter("bassboost", { level: 3 });
+    service.setFilter("bassboost", { level: 3 });
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(createPlayback).toHaveBeenCalledTimes(1);
+  });
+
+  it("expands a SoundCloud set link through the music link path", async () => {
+    const { alternativeResolver, service } = setup();
+    alternativeResolver.findAlternative.mockResolvedValue({
+      provider: "youtube",
+      url: "https://youtu.be/fallback",
+    });
+
+    const track = await service.enqueue(
+      "https://soundcloud.com/artist/sets/mix",
+      "user-1",
+    );
+
+    expect(alternativeResolver.findAlternative).toHaveBeenCalledWith(
+      "https://soundcloud.com/artist/sets/mix",
+    );
+    expect(track).toMatchObject({ id: "fallback" });
+  });
 });

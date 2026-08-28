@@ -68,11 +68,14 @@ export function parseMediaInput(input: string): MediaInput {
     return { kind: "amazon-music", value: url.toString() };
   }
 
+  const soundcloudSegments = url.pathname.split("/").filter(Boolean).length;
   if (
     (SOUNDCLOUD_HOSTS.has(url.hostname) &&
-      url.pathname.split("/").filter(Boolean).length === 2) ||
+      soundcloudSegments >= 2 &&
+      soundcloudSegments <= 3) ||
     (url.hostname === SOUNDCLOUD_SHORT_HOST &&
-      url.pathname.split("/").filter(Boolean).length === 1)
+      soundcloudSegments >= 1 &&
+      soundcloudSegments <= 2)
   ) {
     return { kind: "soundcloud", value: url.toString() };
   }

@@ -167,10 +167,12 @@ describe("parseChatCommand — mensajes en español", () => {
     );
   });
 
-  it("move rango descendente → error en español", () => {
-    expect(() => parseChatCommand("!move 5 2")).toThrow(
-      /El rango tiene que ser ascendente/,
-    );
+  it("move descendente → permite subir una pista", () => {
+    expect(parseChatCommand("!move 5 2")).toEqual({
+      name: "move",
+      from: 5,
+      to: 2,
+    });
   });
 
   it("comando sin argumentos acepta → no lanza error", () => {

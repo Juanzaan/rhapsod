@@ -141,6 +141,10 @@ export function createFfmpegPcmStream(
     stopped = true;
     child.stdout.unpipe(stream);
     stream.end();
+    if (child.exitCode !== null || child.signalCode !== null) {
+      // The process already exited (e.g. natural completion): nothing to kill.
+      return;
+    }
     child.kill("SIGTERM");
     const graceTimer = setTimeout(() => {
       if (child.exitCode === null && child.signalCode === null) {
