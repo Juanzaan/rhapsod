@@ -4,6 +4,34 @@ All notable changes to Rhapsod are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims
 for [Semantic Versioning](https://semver.org/).
 
+## [2.2.0] - 2026-08-28
+
+### Added
+
+- **Audio fast path (Innertube)**: stream URLs for videos that are not behind
+  YouTube's bot-check wall now resolve in ~150 ms via a single POST to
+  `/youtubei/v1/player` (ANDROID_VR client), with automatic fallback to
+  yt-dlp when a video is gated or the endpoint fails.
+- **Fast-path search**: `!play <query>` now searches through the Innertube
+  `/youtubei/v1/search` endpoint (~0.5 s) feeding the existing result ranking,
+  falling back to the yt-dlp `ytsearch5` path when needed.
+- **Link redirect resolution**: pasted links that redirect (Spotify share
+  links, URL shorteners, social shares) are followed safely (SSRF-guarded,
+  hop-limited) and re-classified to their real provider.
+- **YouTube Music links**: `music.youtube.com` video and playlist URLs now
+  work like regular YouTube links.
+- **Persistent yt-dlp daemon** (`scripts/yt-dlp-daemon.py`): an optional
+  `RHAPSOD_YTDLP_DAEMON_URL` tier that keeps a warm `YoutubeDL` process with a
+  per-video URL cache, resolving gated videos in ~1.5 s instead of ~3.5 s.
+  The bot tries it before spawning yt-dlp and falls back automatically if the
+  daemon is down or a video is not embeddable.
+
+### Removed
+
+- Dead resolver stacks (youtubei.js and Piped) and their configuration options,
+  after it was confirmed that yt-dlp `web_safari` with a PO token is the only
+  reliable path from the datacenter IP.
+
 ## [2.1.0] - 2026-08-27
 
 ### Added
