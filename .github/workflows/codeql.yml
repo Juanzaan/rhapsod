@@ -2,11 +2,11 @@ name: "CodeQL"
 
 on:
   push:
-    branches: [main, 'next/*']
+    branches: [main, "next/*"]
   pull_request:
     branches: [main]
   schedule:
-    - cron: '0 0 * * 0' # weekly on Sunday
+    - cron: "0 0 * * 0" # weekly on Sunday
 
 jobs:
   analyze:
@@ -20,19 +20,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: ['javascript-typescript']
+        language: ["javascript-typescript"]
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Initialize CodeQL
-      uses: github/codeql-action/init@v3
-      with:
-        languages: ${{ matrix.language }}
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
 
-    - name: Autobuild
-      uses: github/codeql-action/autobuild@v3
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
 
-    - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v3
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
