@@ -4,6 +4,44 @@ All notable changes to Rhapsod are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims
 for [Semantic Versioning](https://semver.org/).
 
+## [2.1.0] - 2026-08-27
+
+### Added
+
+- **Saved playlists**: `!playlist save|load|list|show|delete` and
+  `!playlist add|remove|rename|info` (alias `!pl`). JSON persistence under
+  `data/playlists.json` (schema v1, atomic writes, corrupt-file recovery),
+  20 playlists per user, 200 tracks per playlist, names `[a-z0-9-_]{1,32}`,
+  per-user ownership with admin override for delete/remove/rename.
+  `!playlist add` accepts YouTube playlists and single videos, resolved via
+  yt-dlp `--flat-playlist` without downloading audio.
+- **Audio effects**: `!bassboost` (`!bb`), `!nightcore` (`!nc`), `!vaporwave`
+  (`!vw`) and `!8d` filters, applied through FFmpeg after loudness
+  normalization, persisted across restarts, and restarted live when changed
+  mid-track. `!filter` shows or clears the active filter.
+- **Unified effects panel**: `!effects 8d|nightcore|bassboost|vaporwave
+  [on|off]`, `!effects list`, `!effects reset`, plus delegation to
+  `!test-tone` and `!chart`.
+- **Ops tooling**: `scripts/log-stats.mjs` to analyze the structured logs
+  (playback sessions, prefetch, timing) with `--since`/`--until` filtering.
+- **Repo / community improvements**: `CODE_OF_CONDUCT.md`, GitHub issue
+  templates (bug + feature), README troubleshooting section, Prettier
+  formatting baseline, CI now runs on `next/*` branches with coverage
+  artifacts and CodeQL static analysis.
+
+### Changed
+
+- Command handling refactored into typed handlers
+  (`src/commands/command-handlers.ts`).
+- Playlist and effects errors now surface clear, consistent user messages
+  instead of the generic fallback.
+
+### Fixed
+
+- YouTube resolver fallback and authentication health checks hardened.
+- Prefetch status is recorded before awaiting, so in-flight prefetches are
+  observable instead of always reading as "miss".
+
 ## [2.0.0] - 2026-08-24
 
 Production release for the OCI profile (4 vCPUs, 3 GB RAM). This is a
