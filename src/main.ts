@@ -30,13 +30,9 @@ import {
   SystemYtDlpExecutor,
   YoutubeResolver,
 } from "./media/youtube/yt-dlp.js";
-import { createYoutubeiClient } from "./media/youtube/youtubei-client.js";
-import { YoutubeiResolver } from "./media/youtube/youtubei-resolver.js";
 import { getTimeoutConfig } from "./lib/timeout-config.js";
-import { YoutubeResolverWithFallback } from "./media/youtube/youtube-resolver-with-fallback.js";
-import { PipedClient } from "./media/youtube/piped-client.js";
-import { PipedResolver } from "./media/youtube/piped-resolver.js";
 import type { YoutubePlaybackResolver } from "./media/youtube/youtube-resolver.js";
+import { RedirectResolver } from "./media/redirect-resolver.js";
 import { SongLinkClient } from "./media/song-link.js";
 import { DirectUrlClient } from "./media/direct-url.js";
 import { LyricsClient } from "./media/lyrics.js";
@@ -197,56 +193,7 @@ async function main(): Promise<void> {
     onSearchMetrics: (m) => metrics.recordSearchMetrics(m),
     timeouts: getTimeoutConfig(),
   });
-  let youtubeiResolver: YoutubeiResolver | undefined;
-  if (config.RHAPSOD_YOUTUBEI_ENABLED) {
-    try {
-      const youtubeiHandle = await createYoutubeiClient({
-        cacheDirectory: join(config.RHAPSOD_DATA_DIR, "youtubei-cache"),
-        ...(config.RHAPSOD_YOUTUBEI_POT_URL === undefined
-          ? {}
-          : { potProviderUrl: config.RHAPSOD_YOUTUBEI_POT_URL }),
-        ...(config.RHAPSOD_YOUTUBEI_COOKIE === undefined
-          ? {}
-          : { cookie: config.RHAPSOD_YOUTUBEI_COOKIE }),
-        ...(config.RHAPSOD_YOUTUBE_CLIENT_ID === undefined
-          ? {}
-          : { youtubeClientId: config.RHAPSOD_YOUTUBE_CLIENT_ID }),
-        ...(config.RHAPSOD_YOUTUBE_CLIENT_SECRET === undefined
-          ? {}
-          : { youtubeClientSecret: config.RHAPSOD_YOUTUBE_CLIENT_SECRET }),
-        ...(config.RHAPSOD_YOUTUBE_REFRESH_TOKEN === undefined
-          ? {}
-          : { youtubeRefreshToken: config.RHAPSOD_YOUTUBE_REFRESH_TOKEN }),
-        logger,
-      });
-      youtubeiResolver = new YoutubeiResolver(
-        youtubeiHandle.clients,
-        youtubeiHandle.oauth !== undefined
-          ? undefined
-          : youtubeiHandle.poTokens,
-      );
-      logger.info("youtubei.js primary resolver enabled");
-    } catch (error) {
-      logger.warn(
-        { err: error },
-        "youtubei.js failed to initialize; using yt-dlp only",
-      );
-    }
-  }
-  const baseResolver = new YoutubeResolverWithFallback(
-    youtubeiResolver,
-    ytDlpResolver,
-    logger,
-  );
-  let resolver: YoutubePlaybackResolver = baseResolver;
-  if (config.RHAPSOD_PIPED_ENABLED) {
-    const pipedClient = new PipedClient(config.RHAPSOD_PIPED_INSTANCES, {
-      timeoutMs: config.RHAPSOD_PIPED_TIMEOUT_MS,
-      logger,
-    });
-    resolver = new PipedResolver(pipedClient, baseResolver, logger);
-    logger.info("Piped primary resolver enabled");
-  }
+  const resolver: YoutubePlaybackResolver = ytDlpResolver;
   const playback = new YoutubePlaybackService({
     createPlayback: (url, playbackEncoder, output, options) =>
       playFfmpegUrl(url, playbackEncoder, output, {
@@ -327,6 +274,7 @@ async function main(): Promise<void> {
       logger,
     ),
     audioUrlCache,
+    redirectResolver: new RedirectResolver(),
     playlistStore: new PlaylistStore(
       join(config.RHAPSOD_DATA_DIR, "playlists.json"),
       logger,

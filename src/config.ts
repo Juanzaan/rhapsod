@@ -122,25 +122,6 @@ const configSchema = z.object({
   RHAPSOD_YOUTUBE_CLIENT_ID: optionalSecret,
   RHAPSOD_YOUTUBE_CLIENT_SECRET: optionalSecret,
   RHAPSOD_YOUTUBE_REFRESH_TOKEN: optionalSecret,
-  RHAPSOD_PIPED_ENABLED: z
-    .enum(["true", "false"])
-    .default("false")
-    .transform((value) => value === "true"),
-  RHAPSOD_PIPED_INSTANCES: z
-    .string()
-    .default("https://pipedapi.kavin.rocks")
-    .transform((value) =>
-      value
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean),
-    ),
-  RHAPSOD_PIPED_TIMEOUT_MS: z.coerce
-    .number()
-    .int()
-    .min(1000)
-    .max(10000)
-    .default(3000),
   RHAPSOD_VERBOSE: z
     .enum(["true", "false"])
     .default("false")
