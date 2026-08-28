@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, type Mock } from "vitest";
 
 import { fetchInnertubePlayerAudioUrl } from "../src/media/youtube/innertube-player.js";
+import { searchInnertubeVideos } from "../src/media/youtube/innertube-search.js";
 import {
   buildYtDlpArguments,
   buildYtDlpCommand,
@@ -15,6 +16,10 @@ import {
 
 vi.mock("../src/media/youtube/innertube-player.js", () => ({
   fetchInnertubePlayerAudioUrl: vi.fn(() => Promise.resolve(undefined)),
+}));
+
+vi.mock("../src/media/youtube/innertube-search.js", () => ({
+  searchInnertubeVideos: vi.fn(() => Promise.resolve([])),
 }));
 
 class FakeExecutor implements YtDlpExecutor {
@@ -248,6 +253,7 @@ describe("YoutubeResolver", () => {
 
     const first = resolver.search("duki rockstar");
     const second = resolver.search("duki rockstar");
+    await new Promise((resolve) => setImmediate(resolve));
     expect(runMock.mock.calls).toHaveLength(1);
 
     resolveOutput(
@@ -350,6 +356,37 @@ describe("YoutubeResolver", () => {
       ),
     ).resolves.toBe("https://media.example/audio");
     expect(executor.calls.length).toBeGreaterThan(0);
+  });
+
+  it("uses the Innertube search fast path and skips yt-dlp", async () => {
+    (searchInnertubeVideos as Mock).mockResolvedValueOnce([
+      {
+        durationSeconds: 180,
+        id: "fast1",
+        title: "Duki Rockstar official video",
+      },
+      { id: "fast2", title: "Unrelated podcast" },
+    ]);
+    const executor = new FakeExecutor("{}");
+    const resolver = new YoutubeResolver(executor);
+
+    await expect(resolver.search("duki rockstar")).resolves.toMatchObject({
+      id: "fast1",
+      title: "Duki Rockstar official video",
+    });
+    expect(executor.calls).toHaveLength(0);
+  });
+
+  it("falls back to yt-dlp search when the fast path yields nothing", async () => {
+    const executor = new FakeExecutor(
+      '{"entries":[{"id":"yt1","title":"Duki Rockstar official video","webpage_url":"https://www.youtube.com/watch?v=yt1"}]}',
+    );
+    const resolver = new YoutubeResolver(executor);
+
+    await expect(resolver.search("duki rockstar")).resolves.toMatchObject({
+      id: "yt1",
+    });
+    expect(executor.calls[0]).toContain("ytsearch5:duki rockstar");
   });
 
   it("skips web_embedded when web_safari succeeds on first try", async () => {
