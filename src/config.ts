@@ -110,18 +110,10 @@ const configSchema = z.object({
     (value) => (value === "" ? undefined : value),
     z.string().optional(),
   ),
-  RHAPSOD_YOUTUBEI_ENABLED: z
-    .enum(["true", "false"])
-    .default("false")
-    .transform((value) => value === "true"),
-  RHAPSOD_YOUTUBEI_COOKIE: optionalSecret,
-  RHAPSOD_YOUTUBEI_POT_URL: z.preprocess(
+  RHAPSOD_YTDLP_DAEMON_URL: z.preprocess(
     (value) => (value === "" ? undefined : value),
     z.string().url().optional(),
   ),
-  RHAPSOD_YOUTUBE_CLIENT_ID: optionalSecret,
-  RHAPSOD_YOUTUBE_CLIENT_SECRET: optionalSecret,
-  RHAPSOD_YOUTUBE_REFRESH_TOKEN: optionalSecret,
   RHAPSOD_VERBOSE: z
     .enum(["true", "false"])
     .default("false")

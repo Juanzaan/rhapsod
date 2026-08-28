@@ -11,6 +11,7 @@ import { fetchInnertubePlayerAudioUrl } from "./innertube-player.js";
 import { searchInnertubeVideos } from "./innertube-search.js";
 
 const MAX_BUFFER_BYTES = 8 * 1024 * 1024;
+const DAEMON_TIMEOUT_MS = 8_000;
 const SEARCH_CACHE_TTL_MS = 60 * 60 * 1000;
 const SEARCH_CACHE_MAX_ENTRIES = 500;
 const ABORT_GRACE_MS = 3_000;
@@ -355,11 +356,15 @@ export class YoutubeResolver {
   readonly #logger: MinimalLogger;
   readonly #onSearchMetrics: ((metrics: SearchMetrics) => void) | undefined;
   readonly #timeouts: TimeoutConfig | undefined;
+  readonly #daemonUrl: string | undefined;
+  readonly #daemonFetch: typeof fetch;
 
   constructor(
     private readonly executor: YtDlpExecutor,
     logger?: MinimalLogger,
     options?: {
+      daemonFetch?: typeof fetch;
+      daemonUrl?: string;
       onSearchMetrics?: (metrics: SearchMetrics) => void;
       timeouts?: TimeoutConfig;
     },
@@ -367,6 +372,8 @@ export class YoutubeResolver {
     this.#logger = logger ?? noopLogger;
     this.#onSearchMetrics = options?.onSearchMetrics;
     this.#timeouts = options?.timeouts;
+    this.#daemonUrl = options?.daemonUrl;
+    this.#daemonFetch = options?.daemonFetch ?? fetch;
   }
 
   async getTrack(resource: YoutubeResource): Promise<YoutubeTrackMetadata> {
@@ -612,6 +619,15 @@ export class YoutubeResolver {
       return fastPathUrl;
     }
 
+    const daemonUrl = await this.#tryDaemonResolve(url, signal);
+    if (daemonUrl !== undefined) {
+      this.#logger.info(
+        { winner: "yt-dlp-daemon", durationMs: Date.now() - startedAt },
+        "Audio URL resolved",
+      );
+      return daemonUrl;
+    }
+
     // Try web_safari first (fastest, no JS runtime needed).
     // If it fails (e.g. 403), fall back to web_embedded (requires Deno).
     const clients: YoutubePlayerClient[] = ["web_safari", "web_embedded"];
@@ -672,6 +688,32 @@ export class YoutubeResolver {
       return undefined;
     }
     return fetchInnertubePlayerAudioUrl(media.resource.id);
+  }
+
+  async #tryDaemonResolve(
+    url: string,
+    signal?: AbortSignal,
+  ): Promise<string | undefined> {
+    if (this.#daemonUrl === undefined || signal?.aborted) return undefined;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), DAEMON_TIMEOUT_MS);
+    timer.unref();
+    try {
+      const response = await this.#daemonFetch(
+        `${this.#daemonUrl}/resolve?url=${encodeURIComponent(url)}`,
+        { signal: controller.signal },
+      );
+      if (!response.ok) return undefined;
+      const body = (await response.json()) as { readonly url?: string };
+      if (typeof body.url === "string" && /^https:\/\//i.test(body.url)) {
+        return body.url;
+      }
+      return undefined;
+    } catch {
+      return undefined;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   async prefetchAudioUrls(

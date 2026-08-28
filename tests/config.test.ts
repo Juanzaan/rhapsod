@@ -102,6 +102,22 @@ describe("loadConfig", () => {
     expect(config.RHAPSOD_YTDLP_EXTRACTOR_ARGS).toBeUndefined();
   });
 
+  it("loads the optional yt-dlp daemon URL", () => {
+    const config = loadConfig({
+      RHAPSOD_TS3_HOST: "ts.example.com",
+      RHAPSOD_YTDLP_DAEMON_URL: "http://127.0.0.1:8765",
+    });
+    expect(config.RHAPSOD_YTDLP_DAEMON_URL).toBe("http://127.0.0.1:8765");
+  });
+
+  it("normalizes an empty daemon URL to undefined", () => {
+    const config = loadConfig({
+      RHAPSOD_TS3_HOST: "ts.example.com",
+      RHAPSOD_YTDLP_DAEMON_URL: "",
+    });
+    expect(config.RHAPSOD_YTDLP_DAEMON_URL).toBeUndefined();
+  });
+
   it("defaults RHAPSOD_VERBOSE to false", () => {
     const config = loadConfig({ RHAPSOD_TS3_HOST: "ts.example.com" });
     expect(config.RHAPSOD_VERBOSE).toBe(false);

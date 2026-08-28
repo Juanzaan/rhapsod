@@ -192,6 +192,9 @@ async function main(): Promise<void> {
   const ytDlpResolver = new YoutubeResolver(ytDlpExecutor, logger, {
     onSearchMetrics: (m) => metrics.recordSearchMetrics(m),
     timeouts: getTimeoutConfig(),
+    ...(config.RHAPSOD_YTDLP_DAEMON_URL === undefined
+      ? {}
+      : { daemonUrl: config.RHAPSOD_YTDLP_DAEMON_URL }),
   });
   const resolver: YoutubePlaybackResolver = ytDlpResolver;
   const playback = new YoutubePlaybackService({
