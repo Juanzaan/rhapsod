@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { fetchInnertubePlayerAudioUrl } from "../src/media/youtube/innertube-player.js";
 
@@ -109,6 +109,56 @@ describe("fetchInnertubePlayerAudioUrl", () => {
     const fetchImpl = (() => {
       throw new Error("network down");
     }) as unknown as typeof fetch;
+    expect(
+      await fetchInnertubePlayerAudioUrl("abc", { fetchImpl }),
+    ).toBeUndefined();
+  });
+
+  it("honors an external abort signal by rejecting the request", async () => {
+    const controller = new AbortController();
+    const fetchImpl = vi.fn(() => jsonResponse(200, {}));
+    const promise = fetchInnertubePlayerAudioUrl("abc", {
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      signal: controller.signal,
+    });
+    controller.abort();
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(await promise).toBeUndefined();
+  });
+
+  it("ignores a non-HTTPS preferred audio URL", async () => {
+    const fetchImpl = (() =>
+      jsonResponse(200, {
+        playabilityStatus: { status: "OK" },
+        streamingData: {
+          adaptiveFormats: [
+            {
+              bitrate: 160_000,
+              itag: 251,
+              mimeType: 'audio/webm; codecs="opus"',
+              url: "http://googlevideo.example/251",
+            },
+          ],
+        },
+      })) as unknown as typeof fetch;
+    expect(
+      await fetchInnertubePlayerAudioUrl("abc", { fetchImpl }),
+    ).toBeUndefined();
+  });
+
+  it("rejects an empty preferred audio URL", async () => {
+    const fetchImpl = (() =>
+      jsonResponse(200, {
+        playabilityStatus: { status: "OK" },
+        streamingData: {
+          adaptiveFormats: [
+            {
+              itag: 251,
+              mimeType: "audio/webm",
+            },
+          ],
+        },
+      })) as unknown as typeof fetch;
     expect(
       await fetchInnertubePlayerAudioUrl("abc", { fetchImpl }),
     ).toBeUndefined();

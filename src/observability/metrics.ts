@@ -66,16 +66,22 @@ export function sanitizeUrl(input: string): string {
     });
 }
 
-function sanitizeSensitive(input: string): string {
+export function sanitizeSensitive(input: string): string {
   let result = input;
-  result = result.replace(/cookie[s]?[:=]\s*[^\s;,"']+/gi, "cookie=[redacted]");
   result = result.replace(
-    /po_token[s]?[:=]\s*[^\s;,"']+/gi,
+    /cookie[s]?[:=]\s*"[^"]*"|cookie[s]?[:=]\s*[^\s;,"']+/gi,
+    "cookie=[redacted]",
+  );
+  result = result.replace(
+    /po_token[s]?[:=]\s*"[^"]*"|po_token[s]?[:=]\s*[^\s;,"']+/gi,
     "po_token=[redacted]",
   );
-  result = result.replace(/token[s]?[:=]\s*[^\s;,"']+/gi, "token=[redacted]");
   result = result.replace(
-    /authorization[s]?[:=]\s*[^\s;,"']+/gi,
+    /token[s]?[:=]\s*"[^"]*"|token[s]?[:=]\s*[^\s;,"']+/gi,
+    "token=[redacted]",
+  );
+  result = result.replace(
+    /authorization[s]?[:=]\s*"[^"]*"|authorization[s]?[:=]\s*[^\s;,"']+/gi,
     "authorization=[redacted]",
   );
   result = result.replace(/header[s]?[:=]\s*\{[^}]+\}/gi, "headers=[redacted]");

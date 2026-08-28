@@ -194,7 +194,8 @@ export class YoutubePlaybackService {
   #session: FfmpegPlaybackSession | undefined;
   #generation = 0;
   #chainActive = false;
-  #pendingSeek: number | undefined;
+  #pendingSeek:
+    { readonly seconds: number; readonly trackId: string } | undefined;
   #pendingSkips = 0;
   #volumePercent = 50;
   #tracksPlayed = 0;
@@ -296,7 +297,11 @@ export class YoutubePlaybackService {
 
   setFilter(filter: AudioFilter, param?: FilterParam): void {
     const nextParam = filter === "off" ? {} : (param ?? {});
-    if (filter === this.#filter && nextParam === this.#filterParam) {
+    if (
+      filter === this.#filter &&
+      nextParam.level === this.#filterParam.level &&
+      nextParam.rate === this.#filterParam.rate
+    ) {
       return;
     }
     this.#filter = filter;
@@ -312,7 +317,7 @@ export class YoutubePlaybackService {
   #restartForFilterChange(seekSeconds: number): void {
     const track = this.#current;
     if (!track) return;
-    this.#pendingSeek = seekSeconds;
+    this.#pendingSeek = { seconds: seekSeconds, trackId: track.id };
     this.#generation++;
     if (this.#session) {
       this.#sessionEndReasons.set(this.#session, "filter-change");
@@ -1207,7 +1212,7 @@ export class YoutubePlaybackService {
     if (this.#current.durationSeconds !== undefined) {
       target = Math.min(target, Math.max(0, this.#current.durationSeconds - 1));
     }
-    this.#pendingSeek = target;
+    this.#pendingSeek = { seconds: target, trackId: this.#current.id };
     this.#generation++;
     if (this.#session) this.#sessionEndReasons.set(this.#session, "skipped");
     this.#session?.stop();
@@ -1282,11 +1287,13 @@ export class YoutubePlaybackService {
 
   #persistState(): void {
     if (this.#persistenceSuppressed) return;
-    this.#stateStore?.save({
-      loopMode: this.#loopMode,
-      ...(this.#filter === "off" ? {} : { filter: this.#filter }),
-      queue: this.#serializedQueue(),
-      volumePercent: this.#volumePercent,
+    this.#safeObserver(() => {
+      this.#stateStore?.save({
+        loopMode: this.#loopMode,
+        ...(this.#filter === "off" ? {} : { filter: this.#filter }),
+        queue: this.#serializedQueue(),
+        volumePercent: this.#volumePercent,
+      });
     });
   }
 
@@ -1332,7 +1339,10 @@ export class YoutubePlaybackService {
           const toDrop =
             this.#pendingSkips - (this.#current === undefined ? 0 : 1);
           this.#pendingSkips = 0;
-          for (let i = 0; i < toDrop; i++) this.#queue.next();
+          for (let i = 0; i < toDrop; i++) {
+            const dropped = this.#queue.next();
+            if (dropped) this.#invalidatePrepared(dropped.source);
+          }
         }
         if (this.#queue.length === 0 && this.#loopPool.length > 0) {
           for (const pooled of this.#loopPool) {
@@ -1355,17 +1365,28 @@ export class YoutubePlaybackService {
         this.#persistState();
         const audioResolutionStartedAt = Date.now();
         const resolved = await this.#resolveOrSkip(track, generation);
-        if (resolved === undefined) continue;
-        this.#onTiming({
-          audioUrlSource: resolved.audioUrlSource,
-          cacheHit: resolved.cacheHit,
-          durationMs: Date.now() - audioResolutionStartedAt,
-          prefetchStatus: resolved.prefetchStatus,
-          stage: "audio-url",
-          trackId: track.id,
+        if (resolved === undefined) {
+          if (this.#pendingSeek?.trackId === track.id) {
+            this.#pendingSeek = undefined;
+          }
+          continue;
+        }
+        this.#safeObserver(() => {
+          this.#onTiming({
+            audioUrlSource: resolved.audioUrlSource,
+            cacheHit: resolved.cacheHit,
+            durationMs: Date.now() - audioResolutionStartedAt,
+            prefetchStatus: resolved.prefetchStatus,
+            stage: "audio-url",
+            trackId: track.id,
+          });
         });
-        const seekSeconds = this.#pendingSeek;
+        const pendingSeek = this.#pendingSeek;
         this.#pendingSeek = undefined;
+        const seekSeconds =
+          pendingSeek !== undefined && pendingSeek.trackId === track.id
+            ? pendingSeek.seconds
+            : undefined;
         const playbackOptions: {
           readonly seekSeconds?: number;
           readonly audioFilter: {
@@ -1393,9 +1414,7 @@ export class YoutubePlaybackService {
         this.#session = session;
         this.#tracksPlayed++;
         this.#recordHistory(track);
-        void Promise.resolve(this.#onPlaybackStarted(track)).catch(
-          () => undefined,
-        );
+        this.#safeObserver(() => this.#onPlaybackStarted(track));
         this.#prefetchWhenStable();
         let playbackError: unknown;
         try {
@@ -1403,12 +1422,14 @@ export class YoutubePlaybackService {
         } catch (error) {
           playbackError = error;
         }
-        this.#onPlaybackFinished(
-          track,
-          session.player.metrics,
-          this.#sessionEndReasons.get(session) ??
-            (playbackError !== undefined ? "error" : "completed"),
-        );
+        this.#safeObserver(() => {
+          this.#onPlaybackFinished(
+            track,
+            session.player.metrics,
+            this.#sessionEndReasons.get(session) ??
+              (playbackError !== undefined ? "error" : "completed"),
+          );
+        });
         if (playbackError !== undefined) {
           this.#reportPlaybackError(track, playbackError);
         }
@@ -1469,11 +1490,20 @@ export class YoutubePlaybackService {
   #reportPlaybackError(track: Track, error: unknown): void {
     const playbackError =
       error instanceof Error ? error : new Error(String(error));
-    void Promise.resolve(this.#onPlaybackError(track, playbackError)).catch(
-      () => {
-        // Observability callbacks must never break the playback chain.
-      },
-    );
+    this.#safeObserver(() => this.#onPlaybackError(track, playbackError));
+  }
+
+  #safeObserver(operation: () => void | Promise<void>): void {
+    try {
+      const result = operation();
+      if (result instanceof Promise) {
+        void result.catch(() => {
+          // Observability callbacks must never break the playback chain.
+        });
+      }
+    } catch {
+      // Observability callbacks must never break the playback chain.
+    }
   }
 
   #cacheAudioUrl(track: Track, url: string): void {
@@ -1703,13 +1733,19 @@ export class YoutubePlaybackService {
     if (isPlaylist && toResolve.length > PLAYLIST_PREFETCH_BATCH) {
       const immediate = toResolve.slice(0, PLAYLIST_PREFETCH_BATCH);
       const deferred = toResolve.slice(PLAYLIST_PREFETCH_BATCH);
+      const stopEpoch = this.#stopEpoch;
+      const queueSnapshotIds = new Set(
+        queueSnapshot.map((queued) => queued.id),
+      );
       for (const { track } of immediate) {
         void this.#resolveAudioUrl(track, "prefetch").catch(() => {
           this.#invalidatePrepared(track.source);
         });
       }
       setTimeout(() => {
+        if (stopEpoch !== this.#stopEpoch) return;
         for (const { track } of deferred) {
+          if (!queueSnapshotIds.has(track.id)) continue;
           const stillPrepared = this.#prepared.get(track.source);
           if (
             stillPrepared === undefined ||
@@ -1757,10 +1793,12 @@ export class YoutubePlaybackService {
     metadata: YoutubeTrackMetadata,
     startedAt: number,
   ): void {
-    this.#onTiming({
-      durationMs: Date.now() - startedAt,
-      stage: "metadata",
-      trackId: metadata.id,
+    this.#safeObserver(() => {
+      this.#onTiming({
+        durationMs: Date.now() - startedAt,
+        stage: "metadata",
+        trackId: metadata.id,
+      });
     });
   }
 

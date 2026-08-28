@@ -73,7 +73,7 @@ describe("parseMediaInput", () => {
     expect(
       parseMediaInput("https://soundcloud.com/artist-name/sets/playlist-name"),
     ).toEqual({
-      kind: "url",
+      kind: "soundcloud",
       value: "https://soundcloud.com/artist-name/sets/playlist-name",
     });
     expect(

@@ -248,11 +248,16 @@ export class DirectUrlClient implements DirectUrlResolver {
 
   #fallbackTitle(url: string, hasDuration: boolean): string {
     if (hasDuration) {
-      const filename =
-        decodeURIComponent(url.split("/").pop() ?? "").replace(
-          /\.[^.]+$/,
-          "",
-        ) || "Audio";
+      let filename = "Audio";
+      try {
+        filename =
+          decodeURIComponent(url.split("/").pop() ?? "").replace(
+            /\.[^.]+$/,
+            "",
+          ) || "Audio";
+      } catch {
+        // Malformed percent-encoding in the filename; fall back to "Audio".
+      }
       return filename.replace(/[_-]+/g, " ").trim() || "Audio";
     }
     try {

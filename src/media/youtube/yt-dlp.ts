@@ -631,7 +631,7 @@ export class YoutubeResolver {
     // Try web_safari first (fastest, no JS runtime needed).
     // If it fails (e.g. 403), fall back to web_embedded (requires Deno).
     const clients: YoutubePlayerClient[] = ["web_safari", "web_embedded"];
-    let lastError: unknown;
+    let lastError: unknown = new Error("yt-dlp did not return an audio URL");
 
     for (const playerClient of clients) {
       if (signal?.aborted) break;
@@ -675,6 +675,9 @@ export class YoutubeResolver {
       }
     }
 
+    if (signal?.aborted) {
+      throw new Error(YTDLP_ABORT_ERROR);
+    }
     throw lastError instanceof Error ? lastError : new Error(String(lastError));
   }
 
@@ -687,7 +690,9 @@ export class YoutubeResolver {
     if (media.kind !== "youtube" || media.resource.type !== "video") {
       return undefined;
     }
-    return fetchInnertubePlayerAudioUrl(media.resource.id);
+    return fetchInnertubePlayerAudioUrl(media.resource.id, {
+      ...(signal === undefined ? {} : { signal }),
+    });
   }
 
   async #tryDaemonResolve(
@@ -698,10 +703,14 @@ export class YoutubeResolver {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), DAEMON_TIMEOUT_MS);
     timer.unref();
+    const combinedSignal =
+      signal === undefined
+        ? controller.signal
+        : AbortSignal.any([signal, controller.signal]);
     try {
       const response = await this.#daemonFetch(
         `${this.#daemonUrl}/resolve?url=${encodeURIComponent(url)}`,
-        { signal: controller.signal },
+        { signal: combinedSignal },
       );
       if (!response.ok) return undefined;
       const body = (await response.json()) as { readonly url?: string };

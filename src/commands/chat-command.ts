@@ -364,8 +364,6 @@ function parseMove(argument: string): { from: number; to: number } {
   if (parts.length !== 2) throw new Error("Usá: !move <desde> <hasta>");
   const from = parsePosition(parts[0] ?? "", "!move <desde> <hasta>");
   const to = parsePosition(parts[1] ?? "", "!move <desde> <hasta>");
-  if (to < from)
-    throw new Error("El rango tiene que ser ascendente (ej: 2-5).");
   return { from, to };
 }
 
