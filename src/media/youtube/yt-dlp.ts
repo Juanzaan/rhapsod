@@ -8,6 +8,7 @@ import { parseMediaInput, type YoutubeResource } from "../media-input.js";
 import { rankYoutubeCandidatesScored } from "./search-ranking.js";
 import type { TimeoutConfig } from "../../lib/timeout-config.js";
 import { fetchInnertubePlayerAudioUrl } from "./innertube-player.js";
+import { searchInnertubeVideos } from "./innertube-search.js";
 
 const MAX_BUFFER_BYTES = 8 * 1024 * 1024;
 const SEARCH_CACHE_TTL_MS = 60 * 60 * 1000;
@@ -492,20 +493,9 @@ export class YoutubeResolver {
     cacheKey: string,
   ): Promise<readonly YoutubeTrackMetadata[]> {
     const searchStartedAt = Date.now();
-    const raw = await this.executor.run(
-      [
-        "--dump-single-json",
-        "--flat-playlist",
-        "--playlist-end",
-        "5",
-        "--no-warnings",
-        `ytsearch5:${query}`,
-      ],
-      this.#timeouts?.search ?? 30_000,
-    );
-    const candidates = (parseResponse(raw).entries ?? [])
-      .filter((entry) => entry.id && entry.title)
-      .map((entry) => parseSearchCandidate(entry));
+    const candidates =
+      (await this.#searchViaInnertube(query)) ??
+      (await this.#searchViaYtDlp(query));
     const scored = rankYoutubeCandidatesScored(
       query,
       candidates,
@@ -545,6 +535,41 @@ export class YoutubeResolver {
       if (oldest !== undefined) this.#searchCache.delete(oldest);
     }
     return ranked;
+  }
+
+  async #searchViaInnertube(
+    query: string,
+  ): Promise<readonly YoutubeSearchCandidate[] | undefined> {
+    const results = await searchInnertubeVideos(query);
+    if (results.length === 0) return undefined;
+    return results.map((result) => ({
+      ...(result.durationSeconds === undefined
+        ? {}
+        : { durationSeconds: result.durationSeconds }),
+      ...(result.channel === undefined ? {} : { channel: result.channel }),
+      id: result.id,
+      title: result.title,
+      webpageUrl: `https://www.youtube.com/watch?v=${result.id}`,
+    }));
+  }
+
+  async #searchViaYtDlp(
+    query: string,
+  ): Promise<readonly YoutubeSearchCandidate[]> {
+    const raw = await this.executor.run(
+      [
+        "--dump-single-json",
+        "--flat-playlist",
+        "--playlist-end",
+        "5",
+        "--no-warnings",
+        `ytsearch5:${query}`,
+      ],
+      this.#timeouts?.search ?? 30_000,
+    );
+    return (parseResponse(raw).entries ?? [])
+      .filter((entry) => entry.id && entry.title)
+      .map((entry) => parseSearchCandidate(entry));
   }
 
   async expandPlaylist(
