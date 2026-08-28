@@ -358,6 +358,78 @@ describe("YoutubeResolver", () => {
     expect(executor.calls.length).toBeGreaterThan(0);
   });
 
+  it("prefers the yt-dlp daemon when configured and returns its URL", async () => {
+    const daemonFetch = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        json: () => ({ url: "https://daemon.example/audio" }),
+      } as unknown as Response),
+    );
+    const executor = new FakeExecutor("https://media.example/audio");
+    const resolver = new YoutubeResolver(executor, undefined, {
+      daemonFetch: daemonFetch as unknown as typeof fetch,
+      daemonUrl: "http://127.0.0.1:8765",
+    });
+
+    await expect(
+      resolver.getAudioUrlFromUrl("https://www.youtube.com/watch?v=abc"),
+    ).resolves.toBe("https://daemon.example/audio");
+    expect(daemonFetch).toHaveBeenCalledWith(
+      "http://127.0.0.1:8765/resolve?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3Dabc",
+      expect.anything(),
+    );
+    expect(executor.calls).toHaveLength(0);
+  });
+
+  it("falls back to yt-dlp when the daemon reports an error", async () => {
+    const daemonFetch = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        json: () => ({ error: "no playable audio format found" }),
+      } as unknown as Response),
+    );
+    const executor = new FakeExecutor("https://media.example/audio\n");
+    const resolver = new YoutubeResolver(executor, undefined, {
+      daemonFetch: daemonFetch as unknown as typeof fetch,
+      daemonUrl: "http://127.0.0.1:8765",
+    });
+
+    await expect(
+      resolver.getAudioUrlFromUrl("https://www.youtube.com/watch?v=abc"),
+    ).resolves.toBe("https://media.example/audio");
+    expect(executor.calls.length).toBeGreaterThan(0);
+  });
+
+  it("falls back to yt-dlp when the daemon returns an HTTP error", async () => {
+    const daemonFetch = vi.fn(() =>
+      Promise.resolve({ ok: false, status: 500 } as unknown as Response),
+    );
+    const executor = new FakeExecutor("https://media.example/audio\n");
+    const resolver = new YoutubeResolver(executor, undefined, {
+      daemonFetch: daemonFetch as unknown as typeof fetch,
+      daemonUrl: "http://127.0.0.1:8765",
+    });
+
+    await expect(
+      resolver.getAudioUrlFromUrl("https://www.youtube.com/watch?v=abc"),
+    ).resolves.toBe("https://media.example/audio");
+    expect(executor.calls.length).toBeGreaterThan(0);
+  });
+
+  it("falls back to yt-dlp when the daemon is unreachable", async () => {
+    const daemonFetch = vi.fn(() => Promise.reject(new Error("ECONNREFUSED")));
+    const executor = new FakeExecutor("https://media.example/audio\n");
+    const resolver = new YoutubeResolver(executor, undefined, {
+      daemonFetch: daemonFetch as unknown as typeof fetch,
+      daemonUrl: "http://127.0.0.1:8765",
+    });
+
+    await expect(
+      resolver.getAudioUrlFromUrl("https://www.youtube.com/watch?v=abc"),
+    ).resolves.toBe("https://media.example/audio");
+    expect(executor.calls.length).toBeGreaterThan(0);
+  });
+
   it("uses the Innertube search fast path and skips yt-dlp", async () => {
     (searchInnertubeVideos as Mock).mockResolvedValueOnce([
       {
