@@ -29,6 +29,21 @@ describe("parseMediaInput", () => {
     });
   });
 
+  it("classifies YouTube Music links like regular YouTube", () => {
+    expect(
+      parseMediaInput("https://music.youtube.com/watch?v=abc_123"),
+    ).toEqual({
+      kind: "youtube",
+      resource: { id: "abc_123", type: "video" },
+    });
+    expect(
+      parseMediaInput("https://music.youtube.com/playlist?list=PL_test-123"),
+    ).toEqual({
+      kind: "youtube",
+      resource: { id: "PL_test-123", type: "playlist" },
+    });
+  });
+
   it("classifies Spotify resources without treating them as audio URLs", () => {
     expect(
       parseMediaInput(

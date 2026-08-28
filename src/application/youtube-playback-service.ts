@@ -1,4 +1,5 @@
 import { parseMediaInput } from "../media/media-input.js";
+import type { RedirectResolver } from "../media/redirect-resolver.js";
 import type {
   PlaylistExpansion,
   YoutubeTrackMetadata,
@@ -69,6 +70,7 @@ interface PlaybackServiceOptions {
   readonly lyricsResolver?: LyricsResolver;
   readonly stateStore?: PlaybackStateStore;
   readonly audioUrlCache?: AudioUrlCache;
+  readonly redirectResolver?: RedirectResolver;
   readonly playlistStore?: PlaylistStore;
   readonly output: VoiceFrameOutput;
   readonly playlistMaxTracks?: number;
@@ -181,6 +183,7 @@ export class YoutubePlaybackService {
   ) => void;
   readonly #onTiming: (timing: PlaybackTiming) => void;
   readonly #audioUrlCache: AudioUrlCache | undefined;
+  readonly #redirectResolver: RedirectResolver | undefined;
   readonly #playlistStore: PlaylistStore | undefined;
   readonly #playlistMaxTracks: number;
   readonly #maxQueueTracks: number;
@@ -223,6 +226,7 @@ export class YoutubePlaybackService {
     this.#onPlaybackFinished = options.onPlaybackFinished ?? (() => undefined);
     this.#onTiming = options.onTiming ?? (() => undefined);
     this.#audioUrlCache = options.audioUrlCache;
+    this.#redirectResolver = options.redirectResolver;
     this.#playlistStore = options.playlistStore;
     for (const [source, entry] of this.#audioUrlCache?.entries() ?? []) {
       this.#prepared.set(source, {
@@ -370,20 +374,27 @@ export class YoutubePlaybackService {
     }
     if (media.kind === "url") {
       if (
-        !this.#directUrlResolver ||
-        !(await this.#directUrlResolver.match(media.value))
+        this.#directUrlResolver &&
+        (await this.#directUrlResolver.match(media.value))
       ) {
-        throw new Error(
-          "No reconozco ese link: pegá un link de YouTube o SoundCloud, una URL de audio directa (mp3, ogg, m3u8…), o buscá con !yt.",
+        const metadata = await this.#directUrlResolver.getTrack(media.value);
+        this.#recordMetadataTiming(metadata, startedAt);
+        return this.#enqueueMetadata(
+          metadata,
+          requestedBy,
+          "direct-url",
+          requestedByUid,
         );
       }
-      const metadata = await this.#directUrlResolver.getTrack(media.value);
-      this.#recordMetadataTiming(metadata, startedAt);
-      return this.#enqueueMetadata(
-        metadata,
-        requestedBy,
-        "direct-url",
-        requestedByUid,
+      const finalUrl = await this.#redirectResolver?.resolve(media.value);
+      if (finalUrl !== undefined && finalUrl !== media.value) {
+        const reParsed = parseMediaInput(finalUrl);
+        if (reParsed.kind !== "url") {
+          return this.enqueue(finalUrl, requestedBy, requestedByUid);
+        }
+      }
+      throw new Error(
+        "No reconozco ese link: pegá un link de YouTube o SoundCloud, una URL de audio directa (mp3, ogg, m3u8…), o buscá con !yt.",
       );
     }
     if (media.kind === "soundcloud") {

@@ -4,9 +4,10 @@ import { availableParallelism } from "node:os";
 import type { MinimalLogger } from "../../observability/logger.js";
 import { noopLogger } from "../../observability/logger.js";
 import type { SearchMetrics } from "../../observability/metrics.js";
-import type { YoutubeResource } from "../media-input.js";
+import { parseMediaInput, type YoutubeResource } from "../media-input.js";
 import { rankYoutubeCandidatesScored } from "./search-ranking.js";
 import type { TimeoutConfig } from "../../lib/timeout-config.js";
+import { fetchInnertubePlayerAudioUrl } from "./innertube-player.js";
 
 const MAX_BUFFER_BYTES = 8 * 1024 * 1024;
 const SEARCH_CACHE_TTL_MS = 60 * 60 * 1000;
@@ -577,6 +578,15 @@ export class YoutubeResolver {
   async getAudioUrlFromUrl(url: string, signal?: AbortSignal): Promise<string> {
     const startedAt = Date.now();
 
+    const fastPathUrl = await this.#tryInnertubeFastPath(url, signal);
+    if (fastPathUrl !== undefined) {
+      this.#logger.info(
+        { winner: "innertube-android-vr", durationMs: Date.now() - startedAt },
+        "Audio URL resolved",
+      );
+      return fastPathUrl;
+    }
+
     // Try web_safari first (fastest, no JS runtime needed).
     // If it fails (e.g. 403), fall back to web_embedded (requires Deno).
     const clients: YoutubePlayerClient[] = ["web_safari", "web_embedded"];
@@ -625,6 +635,18 @@ export class YoutubeResolver {
     }
 
     throw lastError instanceof Error ? lastError : new Error(String(lastError));
+  }
+
+  async #tryInnertubeFastPath(
+    url: string,
+    signal?: AbortSignal,
+  ): Promise<string | undefined> {
+    if (signal?.aborted) return undefined;
+    const media = parseMediaInput(url);
+    if (media.kind !== "youtube" || media.resource.type !== "video") {
+      return undefined;
+    }
+    return fetchInnertubePlayerAudioUrl(media.resource.id);
   }
 
   async prefetchAudioUrls(

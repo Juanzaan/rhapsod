@@ -26,6 +26,7 @@ import type { PlaybackState } from "../src/domain/state-store.js";
 import { AudioUrlCache } from "../src/application/audio-url-cache.js";
 import type { AudioFilter } from "../src/audio/filter-chain.js";
 import { PlaylistStore } from "../src/application/playlist-store.js";
+import type { RedirectResolver } from "../src/media/redirect-resolver.js";
 
 interface TimingCall {
   readonly stage: string;
@@ -51,6 +52,7 @@ function setup(
     spotifyResolver?: boolean;
     stateStore?: boolean;
     playlistStore?: PlaylistStore;
+    redirectResolver?: RedirectResolver;
     audioUrlCache?: AudioUrlCache;
   } = {},
 ) {
@@ -233,6 +235,9 @@ function setup(
     ...(lyricsResolver ? { lyricsResolver } : {}),
     ...(stateStore ? { stateStore } : {}),
     ...(options.playlistStore ? { playlistStore: options.playlistStore } : {}),
+    ...(options.redirectResolver
+      ? { redirectResolver: options.redirectResolver }
+      : {}),
     ...(options.audioUrlCache ? { audioUrlCache: options.audioUrlCache } : {}),
     ...(options.maxQueueTracks
       ? { maxQueueTracks: options.maxQueueTracks }
@@ -2473,6 +2478,38 @@ describe("YoutubePlaybackService", () => {
       const info = service.getPlaylistInfo("partido", "uid-1");
       expect(info?.trackCount).toBe(1);
       expect(service.getPlaylistInfo("partido", "other")).toBeUndefined();
+    });
+  });
+
+  describe("YoutubePlaybackService redirect re-routing", () => {
+    it("re-routes an unrecognized URL through the redirect resolver", async () => {
+      const resolve = vi.fn(() =>
+        Promise.resolve("https://www.youtube.com/watch?v=abc"),
+      );
+      const redirectResolver = { resolve } as unknown as RedirectResolver;
+      const { resolver, service } = setup({ redirectResolver });
+
+      await service.enqueue("https://spotify.link/abc", "user-1");
+      await new Promise((resolveTick) => setImmediate(resolveTick));
+
+      expect(resolve).toHaveBeenCalledWith("https://spotify.link/abc");
+      expect(resolver.getTrack).toHaveBeenCalledWith({
+        id: "abc",
+        type: "video",
+      });
+      expect(service.current?.id).toBe("abc");
+    });
+
+    it("still fails when the redirect target is not recognized", async () => {
+      const resolve = vi.fn(() =>
+        Promise.resolve("https://somepage.example/thing"),
+      );
+      const redirectResolver = { resolve } as unknown as RedirectResolver;
+      const { service } = setup({ redirectResolver });
+
+      await expect(
+        service.enqueue("https://bit.ly/xyz", "user-1"),
+      ).rejects.toThrow(/No reconozco ese link/);
     });
   });
 

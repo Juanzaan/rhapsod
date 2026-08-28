@@ -21,9 +21,10 @@ export type SpotifyResource =
   | { readonly id: string; readonly type: "track" };
 
 const YOUTUBE_HOSTS = new Set([
-  "youtube.com",
-  "www.youtube.com",
   "m.youtube.com",
+  "music.youtube.com",
+  "www.youtube.com",
+  "youtube.com",
 ]);
 const SPOTIFY_HOST = "open.spotify.com";
 const APPLE_MUSIC_HOSTS = new Set(["music.apple.com", "itunes.apple.com"]);

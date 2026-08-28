@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, type Mock } from "vitest";
 
+import { fetchInnertubePlayerAudioUrl } from "../src/media/youtube/innertube-player.js";
 import {
   buildYtDlpArguments,
   buildYtDlpCommand,
@@ -11,6 +12,10 @@ import {
   type YtDlpJobPriority,
   type YoutubePlayerClient,
 } from "../src/media/youtube/yt-dlp.js";
+
+vi.mock("../src/media/youtube/innertube-player.js", () => ({
+  fetchInnertubePlayerAudioUrl: vi.fn(() => Promise.resolve(undefined)),
+}));
 
 class FakeExecutor implements YtDlpExecutor {
   readonly calls: string[][] = [];
@@ -322,6 +327,29 @@ describe("YoutubeResolver", () => {
       ),
     ).resolves.toBe("https://media.example/audio");
     expect(players).toEqual(["web_safari", "web_embedded"]);
+  });
+
+  it("prefers the Innertube fast path and skips yt-dlp for YouTube URLs", async () => {
+    (fetchInnertubePlayerAudioUrl as Mock).mockResolvedValueOnce(
+      "https://fast.example/audio",
+    );
+    const executor = new FakeExecutor("https://media.example/audio");
+    await expect(
+      new YoutubeResolver(executor).getAudioUrlFromUrl(
+        "https://www.youtube.com/watch?v=abc",
+      ),
+    ).resolves.toBe("https://fast.example/audio");
+    expect(executor.calls).toHaveLength(0);
+  });
+
+  it("falls back to yt-dlp when the fast path returns no URL", async () => {
+    const executor = new FakeExecutor("https://media.example/audio");
+    await expect(
+      new YoutubeResolver(executor).getAudioUrlFromUrl(
+        "https://www.youtube.com/watch?v=abc",
+      ),
+    ).resolves.toBe("https://media.example/audio");
+    expect(executor.calls.length).toBeGreaterThan(0);
   });
 
   it("skips web_embedded when web_safari succeeds on first try", async () => {
