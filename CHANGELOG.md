@@ -4,6 +4,8 @@ All notable changes to Rhapsod are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims
 for [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
 ## [2.2.0] - 2026-08-28
 
 ### Added
@@ -82,12 +84,12 @@ preserving low-end fallbacks where practical.
   tracks and sets, Spotify tracks/albums/playlists (metadata only, playback
   via YouTube), Apple Music and Amazon Music links (resolved via SongLink),
   and direct HTTP(S) audio URLs / HLS streams.
-- **Smart search ranking**: fuzzy term matching, channel-name credits,
+- **Search ranking**: fuzzy term matching, channel-name credits,
   duration-based candidate selection, shortened-query retry, and penalty
   rules for altered audio (bass boosted, 8d, instrumental, mashup, etc.).
 - **Playlist expansion**: YouTube, Spotify, and Apple Music / Amazon Music
   playlists expand up to 100 tracks per `!play` with duplicate detection
-  and a friendly progress report.
+  and a progress report.
 - **Queue persistence**: the pending queue and current track survive bot
   restarts through `data/state.json`; tracks are restored only for users
   still connected to the TeamSpeak server, matched by UID.
@@ -105,10 +107,10 @@ preserving low-end fallbacks where practical.
 - **yt-dlp optimizations**: sequential fallback from `web_safari` to
   `web_embedded` player clients, reduced metadata timeout (3.5s baseline),
   single extractor retry, and `nice -n 10` priority on Linux.
-- **Aggressive caching**: search results cached for 60 minutes (500
+- **Caching**: search results cached for 60 minutes (500
   entries), audio URLs persisted across restarts with 12-hour TTL, and
   a shared in-flight resolution for prefetch and playback.
-- **Smart playlist prefetch**: depth 20 for playlists (>10 tracks), batch
+- **Playlist prefetch**: depth 20 for playlists (>10 tracks), batch
   of 5 immediate + 5 deferred resolutions, parallel batch URL resolution
   (batch size 10), and max 4 concurrent yt-dlp jobs on the OCI profile.
 - **Minimalist messages**: "Reproduciendo: {title}" on first play, "Ahora:
@@ -421,7 +423,7 @@ preserving low-end fallbacks where practical.
   `reverb`, `extended`, ...) are penalized unless the query asks for them,
   keeping album/playlist playback close to the original masters.
 - Failed commands are now logged (`Command failed`) and transient network
-  errors (`fetch failed`) get a friendly retry message.
+  errors (`fetch failed`) get a retry message.
 - Lyric videos are lightly penalized so official masters win when available,
   but still play when nothing else matches (same skip rule when asked).
 - Audio pipeline: EBU R128 loudness normalization
@@ -453,7 +455,7 @@ preserving low-end fallbacks where practical.
   serialized chain, so consecutive skips coalesce into one audio resolution
   instead of piling up wasted yt-dlp jobs that froze the queue for minutes
   on long, uncached queues (search/playlist tracks).
-- yt-dlp jobs beyond 8 pending are rejected with a friendly Spanish message
+- yt-dlp jobs beyond 8 pending are rejected with a Spanish message
   instead of queuing forever ("El bot está saturado..."), and observer
   callbacks (`onPlaybackStarted`) can no longer crash the playback chain.
 - `!volume <0-100>`: PCM gain applied to frames before Opus encoding, affecting
