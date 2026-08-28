@@ -20,7 +20,7 @@ for [Semantic Versioning](https://semver.org/).
   normalization, persisted across restarts, and restarted live when changed
   mid-track. `!filter` shows or clears the active filter.
 - **Unified effects panel**: `!effects 8d|nightcore|bassboost|vaporwave
-  [on|off]`, `!effects list`, `!effects reset`, plus delegation to
+[on|off]`, `!effects list`, `!effects reset`, plus delegation to
   `!test-tone` and `!chart`.
 - **Ops tooling**: `scripts/log-stats.mjs` to analyze the structured logs
   (playback sessions, prefetch, timing) with `--since`/`--until` filtering.
