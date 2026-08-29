@@ -121,7 +121,7 @@ describe("FFmpeg PCM source", () => {
     expect(args.indexOf("-analyzeduration")).toBeLessThan(inputIndex);
     expect(args.indexOf("-probesize")).toBeLessThan(inputIndex);
     expect(args[args.indexOf("-analyzeduration") + 1]).toBe("0");
-    expect(args[args.indexOf("-probesize") + 1]).toBe("32768");
+    expect(args[args.indexOf("-probesize") + 1]).toBe("327680");
   });
 
   it("reconnects on 5xx but not on 4xx stale URLs", () => {
