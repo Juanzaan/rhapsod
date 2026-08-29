@@ -4,14 +4,34 @@ import { serve } from "@hono/node-server";
 import type { Logger } from "pino";
 
 import type { AppConfig } from "../config.js";
+import { COMMAND_SPECS } from "../commands/command-registry.js";
 import { loadEnvFile, maskSecret, saveEnvFile } from "./env-file.js";
+import {
+  renderDashboard,
+  renderSetupWizard,
+  renderCommandsPage,
+  renderSettingsPage,
+} from "./panel-templates.js";
+
+export interface QueueEntry {
+  readonly title: string;
+  readonly source: string;
+  readonly requestedBy?: string;
+}
 
 export interface PanelStatus {
   readonly connected: boolean;
   readonly currentChannelId?: number;
   readonly queueLength: number;
   readonly currentTitle?: string;
+  readonly currentArtist?: string;
+  readonly currentDuration?: number;
+  readonly currentPosition?: number;
+  readonly volume?: number;
+  readonly loopMode?: string;
   readonly version: string;
+  readonly uptime?: number;
+  readonly hostname?: string;
 }
 
 export interface PanelOptions {
@@ -19,6 +39,13 @@ export interface PanelOptions {
   readonly envFilePath: string;
   readonly logger: Logger;
   readonly status: () => PanelStatus;
+  readonly queue: () => QueueEntry[];
+  readonly executeCommand: (command: string) => Promise<string>;
+  readonly restart: () => void;
+  readonly testConnection?: (
+    host: string,
+    port: number,
+  ) => Promise<{ ok: boolean; error?: string; serverName?: string }>;
 }
 
 const SECRET_KEYS = new Set([
@@ -34,27 +61,58 @@ const MASKED_KEYS = new Set([
   "RHAPSOD_ADMIN_UIDS",
 ]);
 
+const ENV_DESCRIPTIONS: Record<string, string> = {
+  RHAPSOD_TS3_HOST: "Direccion del servidor TeamSpeak",
+  RHAPSOD_TS3_PORT: "Puerto de voz (default 9987)",
+  RHAPSOD_TS3_NICKNAME: "Nombre del bot",
+  RHAPSOD_TS3_PASSWORD: "Contrasena del servidor (si tiene)",
+  RHAPSOD_TS3_CHANNEL_NAME: "Canal al que entrar (vacio = default)",
+  RHAPSOD_TS3_CHANNEL_ID: "ID del canal (override de CHANNEL_NAME)",
+  RHAPSOD_TS3_CHANNEL_PASSWORD: "Contrasena del canal",
+  RHAPSOD_TS3_AUTO_CONNECT: "Conectar automaticamente (true/false)",
+  RHAPSOD_TS3_HEARTBEAT_SECONDS: "Heartbeat en segundos (0 = off)",
+  RHAPSOD_TS3_CONNECT_TIMEOUT_SECONDS: "Timeout de conexion (15-300s)",
+  RHAPSOD_TS3_CLIENT_DESCRIPTION: "Descripcion del bot en el servidor",
+  RHAPSOD_ADMIN_UIDS: "UIDs de admin separados por coma",
+  RHAPSOD_PRIVATE_COMMAND_UIDS: "UIDs con acceso a comandos privados",
+  RHAPSOD_YTDLP_PATH: "Ruta del binario yt-dlp",
+  RHAPSOD_YTDLP_COOKIES_PATH: "Ruta a cookies.txt de YouTube",
+  RHAPSOD_YTDLP_DAEMON_URL: "URL del daemon yt-dlp (http://127.0.0.1:8765)",
+  RHAPSOD_YTDLP_EXTRACTOR_ARGS: "Args extra para yt-dlp",
+  RHAPSOD_FFMPEG_PATH: "Ruta del binario ffmpeg",
+  RHAPSOD_FFMPEG_USER_AGENT: "User-Agent para ffmpeg",
+  RHAPSOD_FFPROBE_PATH: "Ruta del binario ffprobe",
+  RHAPSOD_LOUDNESS_TARGET_LUFS:
+    "Normalizacion de volumen (-30 a 0, default -14)",
+  RHAPSOD_OPUS_BITRATE: "Bitrate de Opus (64000-160000)",
+  RHAPSOD_OPUS_COMPLEXITY: "Complejidad de Opus (0-10)",
+  RHAPSOD_OPUS_PACKET_LOSS_PERCENT: "Perdida de packets Opus (0-30)",
+  RHAPSOD_SPOTIFY_CLIENT_ID: "Spotify Client ID (opcional)",
+  RHAPSOD_SPOTIFY_CLIENT_SECRET: "Spotify Client Secret (opcional)",
+  RHAPSOD_SPOTIFY_REFRESH_TOKEN: "Spotify Refresh Token (opcional)",
+  RHAPSOD_AUDIO_TEST_TONE_SECONDS: "Tono de prueba al iniciar (0 = off)",
+  RHAPSOD_LOG_LEVEL: "Nivel de log (trace/debug/info/warn/error/fatal)",
+  RHAPSOD_LOG_RETENTION_DAYS: "Dias de retencion de logs (1-90)",
+  RHAPSOD_METRICS_INTERVAL_MINUTES: "Intervalo de metricas (0 = off)",
+  RHAPSOD_WATCHDOG_INTERVAL_MINUTES: "Intervalo de watchdog (0 = off)",
+  RHAPSOD_MAX_CONCURRENT_COMMANDS: "Comandos concurrentes max (1-20)",
+  RHAPSOD_MAX_CONCURRENT_YTDLP_JOBS: "Jobs yt-dlp concurrentes (1-4)",
+  RHAPSOD_MAX_QUEUE_TRACKS: "Tracks max en cola (1-1000)",
+  RHAPSOD_MAX_TRACKS_PER_USER: "Tracks por usuario (1-200)",
+  RHAPSOD_MOVE_GROUP_IDS: "Group IDs para !move",
+  RHAPSOD_MOVE_ADMIN_CHANNELS: "Channels para move admin",
+  RHAPSOD_MOVE_SENIOR_CHANNELS: "Channels para move senior",
+  RHAPSOD_MOVE_ADMIN_GROUP_IDS: "Group IDs admin move",
+  RHAPSOD_MOVE_SENIOR_GROUP_IDS: "Group IDs senior move",
+  RHAPSOD_VERBOSE: "Modo verbose (true/false)",
+  RHAPSOD_PANEL_ENABLED: "Panel habilitado (true/false)",
+  RHAPSOD_PANEL_PORT: "Puerto del panel (default 8080)",
+  RHAPSOD_PANEL_USER: "Usuario del panel",
+  RHAPSOD_PANEL_PASSWORD: "Contrasena del panel",
+};
+
 function describeEnvKey(key: string): string {
-  const descriptions: Record<string, string> = {
-    RHAPSOD_TS3_HOST: "Dirección del servidor TeamSpeak",
-    RHAPSOD_TS3_PORT: "Puerto de voz de TeamSpeak (default 9987)",
-    RHAPSOD_TS3_NICKNAME: "Nombre del bot en el servidor",
-    RHAPSOD_TS3_PASSWORD: "Contraseña del servidor (si tiene)",
-    RHAPSOD_TS3_CHANNEL_NAME: "Canal al que entrar (vacío = cualquiera)",
-    RHAPSOD_TS3_CHANNEL_PASSWORD: "Contraseña del canal (si tiene)",
-    RHAPSOD_ADMIN_UIDS: "UIDs de administradores (separados por coma)",
-    RHAPSOD_YTDLP_PATH: "Ruta del binario yt-dlp",
-    RHAPSOD_YTDLP_COOKIES_PATH: "Ruta al archivo de cookies de YouTube",
-    RHAPSOD_YTDLP_DAEMON_URL: "URL del daemon yt-dlp (opcional)",
-    RHAPSOD_FFMPEG_PATH: "Ruta del binario ffmpeg",
-    RHAPSOD_LOUDNESS_TARGET_LUFS: "Normalización de volumen (LUFS, -30 a 0)",
-    RHAPSOD_OPUS_BITRATE: "Bitrate de Opus (64000-160000)",
-    RHAPSOD_SPOTIFY_CLIENT_ID: "Spotify Client ID (opcional)",
-    RHAPSOD_SPOTIFY_CLIENT_SECRET: "Spotify Client Secret (opcional)",
-    RHAPSOD_PANEL_USER: "Usuario del panel",
-    RHAPSOD_PANEL_PASSWORD: "Contraseña del panel",
-  };
-  return descriptions[key] ?? "";
+  return ENV_DESCRIPTIONS[key] ?? "";
 }
 
 function isSecret(key: string): boolean {
@@ -81,79 +139,60 @@ export function createPanelServer(options: PanelOptions): {
   );
 
   app.get("/", (c) => {
-    return c.html(`<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Rhapsod Panel</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; padding: 2rem; }
-    h1 { font-size: 1.5rem; margin-bottom: 1.5rem; color: #38bdf8; }
-    .status { background: #1e293b; border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; }
-    .status h2 { font-size: 1rem; margin-bottom: 1rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; }
-    .field { display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid #334155; }
-    .field:last-child { border-bottom: none; }
-    .label { color: #94a3b8; }
-    .value { font-weight: 600; }
-    .ok { color: #22c55e; }
-    .warn { color: #eab308; }
-    .err { color: #ef4444; }
-    .env { background: #1e293b; border-radius: 8px; padding: 1.5rem; }
-    .env h2 { font-size: 1rem; margin-bottom: 1rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; }
-    .env-row { display: flex; justify-content: space-between; padding: 0.4rem 0; border-bottom: 1px solid #334155; font-size: 0.85rem; }
-    .env-row:last-child { border-bottom: none; }
-    .env-key { color: #38bdf8; font-family: monospace; }
-    .env-val { color: #e2e8f0; font-family: monospace; }
-    .masked { color: #64748b; }
-  </style>
-</head>
-<body>
-  <h1>Rhapsod</h1>
-  <div class="status" id="status">
-    <h2>Estado del bot</h2>
-    <div class="field"><span class="label">Cargando...</span></div>
-  </div>
-  <div class="env" id="env">
-    <h2>Configuraci&#243;n</h2>
-    <div class="env-row"><span class="label">Cargando...</span></div>
-  </div>
-  <script>
-    const auth = 'Basic ' + btoa('${panelUser}:${panelPassword}');
-    const headers = { authorization: auth };
-    async function load() {
-      try {
-        const s = await fetch('/api/health', { headers }).then(r => r.json());
-        document.getElementById('status').innerHTML =
-          '<h2>Estado del bot</h2>' +
-          '<div class="field"><span class="label">Conectado</span><span class="value ' + (s.connected ? 'ok' : 'err') + '">' + (s.connected ? 'Si' : 'No') + '</span></div>' +
-          '<div class="field"><span class="label">Canal ID</span><span class="value">' + (s.currentChannelId || '-') + '</span></div>' +
-          '<div class="field"><span class="label">Cola</span><span class="value">' + s.queueLength + '</span></div>' +
-          '<div class="field"><span class="label">Track</span><span class="value">' + (s.currentTitle || '-') + '</span></div>' +
-          '<div class="field"><span class="label">Version</span><span class="value">' + s.version + '</span></div>';
-      } catch(e) { console.error(e); }
+    const status = options.status();
+    return c.html(renderDashboard(status, panelUser, panelPassword));
+  });
 
-      try {
-        const e = await fetch('/api/env', { headers }).then(r => r.json());
-        let html = '<h2>Configuracion</h2>';
-        for (const entry of e.entries) {
-          const val = entry.masked ? entry.value : (entry.value || '(vacio)');
-          const cls = entry.masked ? 'env-val masked' : 'env-val';
-          const desc = entry.description ? ' title="' + entry.description + '"' : '';
-          html += '<div class="env-row"><span class="env-key"' + desc + '>' + entry.key + '</span><span class="' + cls + '">' + val + '</span></div>';
-        }
-        document.getElementById('env').innerHTML = html;
-      } catch(e) { console.error(e); }
-    }
-    load();
-    setInterval(load, 10000);
-  </script>
-</body>
-</html>`);
+  app.get("/setup", (c) => {
+    return c.html(renderSetupWizard(panelUser, panelPassword));
+  });
+
+  app.get("/settings", (c) => {
+    return c.html(renderSettingsPage(panelUser, panelPassword));
+  });
+
+  app.get("/commands", (c) => {
+    return c.html(renderCommandsPage(panelUser, panelPassword));
   });
 
   app.get("/api/health", (c) => c.json(options.status()));
+
+  app.get("/api/queue", (c) => {
+    return c.json({ tracks: options.queue() });
+  });
+
+  app.get("/api/commands", (c) => {
+    return c.json({
+      commands: COMMAND_SPECS.map((spec) => ({
+        name: spec.name,
+        aliases: spec.aliases,
+        group: spec.group,
+        adminOnly: spec.adminOnly,
+        usage: spec.usage,
+        summary: spec.summary,
+      })),
+    });
+  });
+
+  app.post("/api/command", async (c) => {
+    const body: unknown = await c.req.json().catch(() => undefined);
+    if (
+      typeof body !== "object" ||
+      body === null ||
+      typeof (body as Record<string, unknown>).command !== "string"
+    ) {
+      return c.json({ ok: false, error: "Comando invalido" }, 400);
+    }
+    const { command } = body as { command: string };
+    try {
+      const response = await options.executeCommand(command);
+      return c.json({ ok: true, response });
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Error desconocido";
+      return c.json({ ok: false, error: message });
+    }
+  });
 
   app.get("/api/env", (c) => {
     const env = loadEnvFile(options.envFilePath);
@@ -170,7 +209,7 @@ export function createPanelServer(options: PanelOptions): {
   app.put("/api/env", async (c) => {
     const body: unknown = await c.req.json().catch(() => undefined);
     if (typeof body !== "object" || body === null) {
-      return c.json({ ok: false, error: "Cuerpo inválido" }, 400);
+      return c.json({ ok: false, error: "Cuerpo invalido" }, 400);
     }
     const env = loadEnvFile(options.envFilePath);
     const incoming = body as Record<string, unknown>;
@@ -186,7 +225,37 @@ export function createPanelServer(options: PanelOptions): {
     return c.json({ ok: true });
   });
 
-  app.get("/api/status", (c) => c.json(options.status()));
+  app.post("/api/test-connection", async (c) => {
+    if (!options.testConnection) {
+      return c.json({ ok: false, error: "Test no disponible" }, 501);
+    }
+    const body: unknown = await c.req.json().catch(() => undefined);
+    if (typeof body !== "object" || body === null) {
+      return c.json({ ok: false, error: "Cuerpo invalido" }, 400);
+    }
+    const data = body as Record<string, unknown>;
+    const host =
+      typeof data.RHAPSOD_TS3_HOST === "string" ? data.RHAPSOD_TS3_HOST : "";
+    const port =
+      typeof data.RHAPSOD_TS3_PORT === "string"
+        ? parseInt(data.RHAPSOD_TS3_PORT, 10)
+        : 9987;
+    if (!host) {
+      return c.json({ ok: false, error: "Host requerido" }, 400);
+    }
+    try {
+      return c.json(await options.testConnection(host, port));
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Error de conexion";
+      return c.json({ ok: false, error: message });
+    }
+  });
+
+  app.post("/api/restart", (c) => {
+    options.restart();
+    return c.json({ ok: true, message: "Reiniciando..." });
+  });
 
   const server = serve({
     fetch: app.fetch,

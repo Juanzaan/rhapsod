@@ -79,6 +79,9 @@ function startTestPanel(envContent: string, port: number) {
     envFilePath: envPath,
     logger,
     status: () => ({ connected: true, queueLength: 2, version: "2.2.0" }),
+    queue: () => [],
+    executeCommand: () => Promise.resolve("OK"),
+    restart: () => undefined,
   });
   const baseUrl = `http://127.0.0.1:${port}`;
   const auth = `Basic ${Buffer.from("admin:secret").toString("base64")}`;

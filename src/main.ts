@@ -33,7 +33,7 @@ import {
 } from "./media/youtube/yt-dlp.js";
 import { getTimeoutConfig } from "./lib/timeout-config.js";
 import { UserError } from "./lib/user-error.js";
-import { createPanelServer } from "./panel/panel-server.js";
+import { createPanelServer, type QueueEntry } from "./panel/panel-server.js";
 import type { YoutubePlaybackResolver } from "./media/youtube/youtube-resolver.js";
 import { RedirectResolver } from "./media/redirect-resolver.js";
 import { SongLinkClient } from "./media/song-link.js";
@@ -636,6 +636,30 @@ async function main(): Promise<void> {
             : { currentTitle: playback.current.title }),
           version: process.env.npm_package_version ?? "2.2.0",
         }),
+        queue: (): QueueEntry[] =>
+          playback.queue().map((track) => ({
+            title: track.title ?? "Sin titulo",
+            source: track.source,
+            requestedBy: track.requestedBy,
+          })),
+        executeCommand: async (raw: string): Promise<string> => {
+          const parsed = parseChatCommand(raw);
+          if (parsed === undefined) {
+            throw new Error("Comando no valido");
+          }
+          const responses: string[] = [];
+          const send = (text: string): Promise<void> => {
+            responses.push(text);
+            return Promise.resolve();
+          };
+          const sender = { name: "Panel", uid: "panel", groups: [] };
+          await dispatchCommand(commandContext, parsed, sender, send);
+          return responses.join("\n") || "OK";
+        },
+        restart: (): void => {
+          logger.info("Panel requested restart");
+          process.exit(1);
+        },
       })
     : undefined;
 
