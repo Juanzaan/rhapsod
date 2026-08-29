@@ -1,18 +1,21 @@
 #!/usr/bin/env python3
 """Persistent yt-dlp daemon that resolves YouTube audio stream URLs fast.
 
-Keeps a single `yt_dlp.YoutubeDL` alive (no per-call Python startup) and
-resolves audio URLs with `player_client=web_embedded` (no PO token needed for
-most videos), caching the resolved URL per video ID (URLs expire in ~6h).
+Resolutions run through a single `yt_dlp.YoutubeDL` worker under a lock:
+parallel extraction is intentionally avoided because YouTube rate-limits the
+datacenter IP, so concurrent calls degrade every request. Duplicate in-flight
+requests for the same video share one extraction. Resolves with
+`player_client=web_embedded` (no PO token needed for most videos), caching the
+resolved URL per video ID (URLs expire in ~6h).
 
 Usage:
   PYTHONPATH=/path/to/yt_dlp_package python3 scripts/yt-dlp-daemon.py
 
 Environment:
-  RHAPSOD_YTDLP_DAEMON_HOST  bind host (default 127.0.0.1)
-  RHAPSOD_YTDLP_DAEMON_PORT  bind port (default 8765)
-  RHAPSOD_YTDLP_COOKIES_PATH youtube cookies file (default
-                             /home/rhapsod/youtube-cookies.txt)
+  RHAPSOD_YTDLP_DAEMON_HOST    bind host (default 127.0.0.1)
+  RHAPSOD_YTDLP_DAEMON_PORT    bind port (default 8765)
+  RHAPSOD_YTDLP_COOKIES_PATH   youtube cookies file (default
+                               /home/rhapsod/youtube-cookies.txt)
 
 Endpoint:
   GET /resolve?url=<encoded youtube watch url>
@@ -23,6 +26,7 @@ Endpoint:
 import json
 import os
 import re
+import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Lock
@@ -57,11 +61,27 @@ BASE = {
 }
 
 
+class _Pending:
+    def __init__(self):
+        self.event = threading.Event()
+        self.result = None
+
+    def wait(self):
+        self.event.wait()
+        return self.result
+
+    def set(self, result):
+        self.result = result
+        self.event.set()
+
+
 class Daemon:
     def __init__(self):
         self.ydl = yt_dlp.YoutubeDL(dict(BASE, format="bestaudio/best"))
-        self.lock = Lock()
+        self.extract_lock = Lock()
+        self.cache_lock = Lock()
         self.cache = {}
+        self.inflight = {}
 
     @staticmethod
     def _video_id(url):
@@ -70,9 +90,9 @@ class Daemon:
 
     def resolve(self, url):
         video_id = self._video_id(url)
-        with self.lock:
-            if video_id and video_id in self.cache:
-                entry = self.cache[video_id]
+        with self.cache_lock:
+            entry = self.cache.get(video_id)
+            if entry is not None:
                 if entry["expire_ts"] > time.time():
                     return {
                         "url": entry["url"],
@@ -81,31 +101,52 @@ class Daemon:
                         "cached": True,
                     }
                 del self.cache[video_id]
-            try:
-                info = self.ydl.extract_info(url, download=False)
-                if not info.get("url"):
-                    return {"error": "no playable audio format found"}
-                self._cache(video_id, info)
-                return {
-                    "url": info["url"],
-                    "id": info.get("id"),
-                    "format_id": info.get("format_id"),
-                }
-            except Exception as error:
-                return {"error": str(error)}
+        if video_id:
+            with self.cache_lock:
+                pending = self.inflight.get(video_id)
+            if pending is not None:
+                return pending.wait()
+            pending = _Pending()
+            with self.cache_lock:
+                self.inflight[video_id] = pending
+        try:
+            with self.extract_lock:
+                result = self._extract(url, video_id)
+            if pending is not None:
+                pending.set(result)
+            return result
+        finally:
+            if video_id:
+                with self.cache_lock:
+                    self.inflight.pop(video_id, None)
+
+    def _extract(self, url, video_id):
+        try:
+            info = self.ydl.extract_info(url, download=False)
+            if not info.get("url"):
+                return {"error": "no playable audio format found"}
+            self._cache(video_id, info)
+            return {
+                "url": info["url"],
+                "id": info.get("id"),
+                "format_id": info.get("format_id"),
+            }
+        except Exception as error:
+            return {"error": str(error)}
 
     def _cache(self, video_id, info):
         if not video_id or not info.get("url"):
             return
         expire_ts = info.get("expires") or (time.time() + 6 * 3600)
-        self.cache[video_id] = {
-            "expire_ts": expire_ts,
-            "url": info["url"],
-            "format_id": info.get("format_id"),
-        }
-        if len(self.cache) > 500:
-            oldest = min(self.cache, key=lambda k: self.cache[k]["expire_ts"])
-            del self.cache[oldest]
+        with self.cache_lock:
+            self.cache[video_id] = {
+                "expire_ts": expire_ts,
+                "url": info["url"],
+                "format_id": info.get("format_id"),
+            }
+            if len(self.cache) > 500:
+                oldest = min(self.cache, key=lambda k: self.cache[k]["expire_ts"])
+                del self.cache[oldest]
 
 
 daemon = Daemon()
