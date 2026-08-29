@@ -163,6 +163,31 @@ describe("AudioPlayer", () => {
     }
   });
 
+  it("keeps a slow-but-alive source buffering past the stall timeout", async () => {
+    vi.useFakeTimers();
+    try {
+      const { clock, player } = setup();
+      const source = new PassThrough();
+      const completion = player.play(source);
+
+      for (let i = 0; i < 5; i++) {
+        await vi.advanceTimersByTimeAsync(14_000);
+        source.write(Buffer.alloc(PCM_FRAME_BYTES * 2));
+        expect(player.state).toBe("buffering");
+      }
+
+      source.end(Buffer.alloc(PCM_FRAME_BYTES));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(player.state).toBe("playing");
+      for (let frame = 0; frame <= 12; frame++) clock.tick();
+
+      await expect(completion).resolves.toBeUndefined();
+      expect(player.state).toBe("idle");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("finishes after draining an ended source", async () => {
     const { clock, player } = setup();
     const source = new PassThrough();

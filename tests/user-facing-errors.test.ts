@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { userFacingError } from "../src/main.js";
 import { parseChatCommand } from "../src/commands/chat-command.js";
 import { PlaybackQueue } from "../src/domain/playback-queue.js";
+import { UserError } from "../src/lib/user-error.js";
 import type { Track } from "../src/domain/track.js";
 
 function fakeTrack(id: string, title = `Track ${id}`): Track {
@@ -117,6 +118,17 @@ describe("userFacingError", () => {
     for (const message of messages) {
       expect(userFacingError(new Error(message))).toBe(message);
     }
+  });
+
+  it("UserError pasa su mensaje tal cual", () => {
+    expect(userFacingError(new UserError("La playlist está vacía."))).toBe(
+      "La playlist está vacía.",
+    );
+    expect(
+      userFacingError(
+        new UserError("No hay nada reproduciéndose para saltar de posición."),
+      ),
+    ).toBe("No hay nada reproduciéndose para saltar de posición.");
   });
 });
 

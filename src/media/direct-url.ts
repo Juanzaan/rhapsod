@@ -3,7 +3,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
 import type { YoutubeTrackMetadata } from "./youtube/yt-dlp.js";
-import { isPublicHostname } from "../lib/ssrf.js";
+import { isPublicHostname, safeFetch } from "../lib/ssrf.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -77,7 +77,7 @@ export class DirectUrlClient implements DirectUrlResolver {
   readonly #validatedUrls = new Map<string, ValidatedUrl>();
 
   constructor(options: DirectUrlResolverOptions = {}) {
-    this.#fetch = options.fetch ?? fetch;
+    this.#fetch = options.fetch ?? safeFetch;
     this.#ffprobeBinary = options.ffprobeBinary ?? "ffprobe";
     this.#timeoutMs = options.timeoutMs ?? PROBE_TIMEOUT_MS;
   }
