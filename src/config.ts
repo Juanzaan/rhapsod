@@ -114,6 +114,13 @@ const configSchema = z.object({
     (value) => (value === "" ? undefined : value),
     z.string().url().optional(),
   ),
+  RHAPSOD_PANEL_ENABLED: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
+  RHAPSOD_PANEL_PORT: z.coerce.number().int().min(1).max(65535).default(8080),
+  RHAPSOD_PANEL_USER: z.string().min(1).default("admin"),
+  RHAPSOD_PANEL_PASSWORD: z.string().min(1).default("rhapsod"),
   RHAPSOD_VERBOSE: z
     .enum(["true", "false"])
     .default("false")

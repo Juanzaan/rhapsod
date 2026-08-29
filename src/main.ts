@@ -33,6 +33,7 @@ import {
 } from "./media/youtube/yt-dlp.js";
 import { getTimeoutConfig } from "./lib/timeout-config.js";
 import { UserError } from "./lib/user-error.js";
+import { createPanelServer } from "./panel/panel-server.js";
 import type { YoutubePlaybackResolver } from "./media/youtube/youtube-resolver.js";
 import { RedirectResolver } from "./media/redirect-resolver.js";
 import { SongLinkClient } from "./media/song-link.js";
@@ -619,6 +620,25 @@ async function main(): Promise<void> {
     "Rhapsod is ready",
   );
 
+  const panel = config.RHAPSOD_PANEL_ENABLED
+    ? createPanelServer({
+        config,
+        envFilePath: ".env",
+        logger,
+        status: () => ({
+          connected: connection.getCurrentChannelId() > 0,
+          ...(connection.getCurrentChannelId() > 0
+            ? { currentChannelId: connection.getCurrentChannelId() }
+            : {}),
+          queueLength: playback.queue().length,
+          ...(playback.current === undefined
+            ? {}
+            : { currentTitle: playback.current.title }),
+          version: process.env.npm_package_version ?? "2.2.0",
+        }),
+      })
+    : undefined;
+
   const shutdown = (): void => {
     logger.info("Shutdown initiated; stopping playback and flushing state");
     playback.stop(false);
@@ -630,6 +650,7 @@ async function main(): Promise<void> {
       playback.flushState().catch(() => undefined),
       audioUrlCache.flush().catch(() => undefined),
       telemetry.save(),
+      ...(panel === undefined ? [] : [panel.close().catch(() => undefined)]),
       new Promise((resolve) => setTimeout(resolve, 5_000)),
     ]).then(() => {
       logger.info("Shutdown complete");
