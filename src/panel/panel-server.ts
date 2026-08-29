@@ -80,6 +80,79 @@ export function createPanelServer(options: PanelOptions): {
     }),
   );
 
+  app.get("/", (c) => {
+    return c.html(`<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rhapsod Panel</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; padding: 2rem; }
+    h1 { font-size: 1.5rem; margin-bottom: 1.5rem; color: #38bdf8; }
+    .status { background: #1e293b; border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; }
+    .status h2 { font-size: 1rem; margin-bottom: 1rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; }
+    .field { display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid #334155; }
+    .field:last-child { border-bottom: none; }
+    .label { color: #94a3b8; }
+    .value { font-weight: 600; }
+    .ok { color: #22c55e; }
+    .warn { color: #eab308; }
+    .err { color: #ef4444; }
+    .env { background: #1e293b; border-radius: 8px; padding: 1.5rem; }
+    .env h2 { font-size: 1rem; margin-bottom: 1rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; }
+    .env-row { display: flex; justify-content: space-between; padding: 0.4rem 0; border-bottom: 1px solid #334155; font-size: 0.85rem; }
+    .env-row:last-child { border-bottom: none; }
+    .env-key { color: #38bdf8; font-family: monospace; }
+    .env-val { color: #e2e8f0; font-family: monospace; }
+    .masked { color: #64748b; }
+  </style>
+</head>
+<body>
+  <h1>Rhapsod</h1>
+  <div class="status" id="status">
+    <h2>Estado del bot</h2>
+    <div class="field"><span class="label">Cargando...</span></div>
+  </div>
+  <div class="env" id="env">
+    <h2>Configuraci&#243;n</h2>
+    <div class="env-row"><span class="label">Cargando...</span></div>
+  </div>
+  <script>
+    const auth = 'Basic ' + btoa('${panelUser}:${panelPassword}');
+    const headers = { authorization: auth };
+    async function load() {
+      try {
+        const s = await fetch('/api/health', { headers }).then(r => r.json());
+        document.getElementById('status').innerHTML =
+          '<h2>Estado del bot</h2>' +
+          '<div class="field"><span class="label">Conectado</span><span class="value ' + (s.connected ? 'ok' : 'err') + '">' + (s.connected ? 'Si' : 'No') + '</span></div>' +
+          '<div class="field"><span class="label">Canal ID</span><span class="value">' + (s.currentChannelId || '-') + '</span></div>' +
+          '<div class="field"><span class="label">Cola</span><span class="value">' + s.queueLength + '</span></div>' +
+          '<div class="field"><span class="label">Track</span><span class="value">' + (s.currentTitle || '-') + '</span></div>' +
+          '<div class="field"><span class="label">Version</span><span class="value">' + s.version + '</span></div>';
+      } catch(e) { console.error(e); }
+
+      try {
+        const e = await fetch('/api/env', { headers }).then(r => r.json());
+        let html = '<h2>Configuracion</h2>';
+        for (const entry of e.entries) {
+          const val = entry.masked ? entry.value : (entry.value || '(vacio)');
+          const cls = entry.masked ? 'env-val masked' : 'env-val';
+          const desc = entry.description ? ' title="' + entry.description + '"' : '';
+          html += '<div class="env-row"><span class="env-key"' + desc + '>' + entry.key + '</span><span class="' + cls + '">' + val + '</span></div>';
+        }
+        document.getElementById('env').innerHTML = html;
+      } catch(e) { console.error(e); }
+    }
+    load();
+    setInterval(load, 10000);
+  </script>
+</body>
+</html>`);
+  });
+
   app.get("/api/health", (c) => c.json(options.status()));
 
   app.get("/api/env", (c) => {
