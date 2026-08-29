@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -119,6 +119,62 @@ describe("UserTelemetry", () => {
     const t = new UserTelemetry(filePath(), logger);
     expect(() => t.load()).not.toThrow();
     expect(t.snapshot()).toHaveLength(0);
+  });
+
+  it("drops malformed entries but sanitizes valid ones on load", () => {
+    writeFileSync(
+      filePath(),
+      JSON.stringify({
+        version: 1,
+        users: {
+          good: {
+            uid: "good",
+            names: ["ana"],
+            serverGroupIds: ["1"],
+            maxTalkPower: 5,
+            firstSeenAt: 1,
+            lastSeenAt: 1,
+            commandCount: 2,
+            botMovedBy: 0,
+            botChannelEntries: 0,
+          },
+          bad: "not an object",
+          noUid: { names: [] },
+          wrongCount: {
+            uid: "neg",
+            names: [],
+            serverGroupIds: [],
+            maxTalkPower: 5,
+            firstSeenAt: 0,
+            lastSeenAt: 0,
+            commandCount: "many",
+            botMovedBy: 0,
+            botChannelEntries: 0,
+          },
+        },
+      }),
+    );
+    const t = new UserTelemetry(filePath(), logger);
+    t.load();
+    expect(t.snapshot().map((e) => e.uid)).toEqual(["good", "neg"]);
+    expect(t.snapshot().find((e) => e.uid === "neg")?.commandCount).toBe(0);
+  });
+
+  it("writes atomically and leaves no temporary file behind", async () => {
+    const t = new UserTelemetry(filePath(), logger);
+    t.clientEntered({
+      clid: 1,
+      uid: "u1",
+      name: "juan",
+      groupIds: [],
+      talkPower: 10,
+      channelId: 1,
+    });
+    await t.save();
+    expect(readFileSync(filePath(), "utf8")).toContain('"u1"');
+    expect(() =>
+      readFileSync(join(dir, "telemetry.json.tmp"), "utf8"),
+    ).toThrow();
   });
 
   it("sorts snapshot by max talk power descending", () => {

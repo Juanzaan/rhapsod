@@ -14,6 +14,7 @@ import {
   canRemoveTrack,
   isAdminUid,
 } from "./permissions.js";
+import { formatHelp } from "./command-registry.js";
 import { FILTER_DISPLAY_NAMES } from "../audio/filter-chain.js";
 
 export interface CommandContext {
@@ -576,37 +577,13 @@ async function handleTestTone(
 }
 
 async function handleHelp(
-  _ctx: CommandContext,
+  ctx: CommandContext,
   _command: Extract<ChatCommand, { name: "help" }>,
-  _sender: CommandSender,
+  sender: CommandSender,
   send: SendFn,
 ): Promise<void> {
-  await send(
-    [
-      "Comandos disponibles:",
-      "!play <URL o búsqueda> - Reproducir YouTube, SoundCloud, Spotify, playlists o buscar",
-      "!playnext (!pn) <URL o búsqueda> - Agregar como próxima pista",
-      "!yt [n] <búsqueda> - Buscar en YouTube (el resultado n con un número)",
-      "!queue [página] - Mostrar la cola",
-      "!history (!hist) - Historial reciente",
-      "!now-playing (!np) - Canción actual",
-      "!move (!mv) <origen> <destino> - Mover una pista",
-      "!channel-move (!ch) <canal> - Mover el bot (solo admins)",
-      "!remove <n|a-b> - Quitar una posición o rango",
-      "!clear - Vaciar la cola",
-      "!shuffle - Mezclar la cola",
-      "!skip - Saltar la canción",
-      "!stop - Detener y vaciar",
-      "!pause / !resume - Pausar o continuar",
-      "!test-tone - Probar el audio",
-      "!volume <0-100> - Ajustar el volumen",
-      "!loop [off|track|queue] - Repetir la pista o la cola",
-      "!lyrics (!ly) - Letra de la canción actual",
-      "!stats (!st) - Estado del bot (solo lectura)",
-      "!debug-server (!ds) - Info del servidor TS3 (solo admins)",
-      "!help - Mostrar esta ayuda",
-    ].join("\n"),
-  );
+  const isAdmin = isAdminUid(sender.uid, ctx.adminUids);
+  await send(formatHelp(isAdmin));
 }
 
 async function handleLoop(

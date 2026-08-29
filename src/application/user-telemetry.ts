@@ -1,8 +1,6 @@
-import { readFileSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
-
 import type { Logger } from "pino";
+
+import { readJsonFile, writeJsonFile } from "../lib/json-file-store.js";
 
 export interface UserTelemetryEntry {
   readonly uid: string;
@@ -22,6 +20,44 @@ interface TelemetryFile {
   readonly users: Record<string, UserTelemetryEntry>;
 }
 
+function parseEntry(raw: unknown): UserTelemetryEntry | undefined {
+  if (typeof raw !== "object" || raw === null) return undefined;
+  const record = raw as Record<string, unknown>;
+  if (typeof record.uid !== "string" || record.uid.length === 0)
+    return undefined;
+  const entry: UserTelemetryEntry = {
+    uid: record.uid,
+    names: Array.isArray(record.names)
+      ? record.names.filter((name): name is string => typeof name === "string")
+      : [],
+    serverGroupIds: Array.isArray(record.serverGroupIds)
+      ? record.serverGroupIds.filter(
+          (gid): gid is string => typeof gid === "string",
+        )
+      : [],
+    maxTalkPower: finiteNumber(record.maxTalkPower, 0),
+    firstSeenAt: finiteNumber(record.firstSeenAt, Date.now()),
+    lastSeenAt: finiteNumber(record.lastSeenAt, Date.now()),
+    commandCount: nonNegativeInt(record.commandCount),
+    botMovedBy: nonNegativeInt(record.botMovedBy),
+    botChannelEntries: nonNegativeInt(record.botChannelEntries),
+  };
+  const lastSeenChannelId = finiteNumber(record.lastSeenChannelId, NaN);
+  if (Number.isFinite(lastSeenChannelId))
+    entry.lastSeenChannelId = lastSeenChannelId;
+  return entry;
+}
+
+function finiteNumber(raw: unknown, fallback: number): number {
+  return typeof raw === "number" && Number.isFinite(raw) ? raw : fallback;
+}
+
+function nonNegativeInt(raw: unknown): number {
+  return typeof raw === "number" && Number.isSafeInteger(raw) && raw >= 0
+    ? raw
+    : 0;
+}
+
 export class UserTelemetry {
   private readonly users = new Map<string, UserTelemetryEntry>();
   private readonly clidToUid = new Map<number, string>();
@@ -32,24 +68,39 @@ export class UserTelemetry {
   ) {}
 
   load(): void {
-    try {
-      const raw = JSON.parse(
-        readFileSync(this.filePath, "utf8"),
-      ) as Partial<TelemetryFile>;
-      const users = raw.users ?? {};
-      for (const entry of Object.values(users)) {
-        if (entry?.uid) this.users.set(entry.uid, entry);
-      }
-      this.logger.info(
-        { loadedUsers: this.users.size, filePath: this.filePath },
-        "User telemetry loaded",
-      );
-    } catch (error) {
+    const file = readJsonFile(
+      this.filePath,
+      (raw): TelemetryFile | undefined => {
+        if (typeof raw !== "object" || raw === null) return undefined;
+        const record = raw as Record<string, unknown>;
+        if (
+          record.version !== 1 ||
+          typeof record.users !== "object" ||
+          record.users === null
+        ) {
+          return undefined;
+        }
+        return {
+          version: 1,
+          users: record.users as Record<string, unknown>,
+        } as unknown as TelemetryFile;
+      },
+    );
+    if (file === undefined) {
       this.logger.warn(
-        { err: error },
+        { filePath: this.filePath },
         "Failed to load user telemetry; starting fresh",
       );
+      return;
     }
+    for (const entry of Object.values(file.users)) {
+      const parsed = parseEntry(entry);
+      if (parsed !== undefined) this.users.set(parsed.uid, parsed);
+    }
+    this.logger.info(
+      { loadedUsers: this.users.size, filePath: this.filePath },
+      "User telemetry loaded",
+    );
   }
 
   resetClients(): void {
@@ -139,12 +190,11 @@ export class UserTelemetry {
 
   async save(): Promise<void> {
     try {
-      await mkdir(dirname(this.filePath), { recursive: true });
       const data: TelemetryFile = {
         version: 1,
         users: Object.fromEntries(this.users),
       };
-      await writeFile(this.filePath, JSON.stringify(data, null, 2), "utf8");
+      await writeJsonFile(this.filePath, data);
     } catch (error) {
       this.logger.error({ err: error }, "Failed to save user telemetry");
     }

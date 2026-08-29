@@ -1,0 +1,25 @@
+[Unit]
+Description=Rhapsod yt-dlp audio resolution daemon
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=rhapsod
+ExecStart=/usr/bin/python3 /home/rhapsod/rhapsod/scripts/yt-dlp-daemon.py
+Environment=PYTHONPATH=/home/rhapsod/ytdlp-deps
+Environment=RHAPSOD_YTDLP_COOKIES_PATH=/home/rhapsod/youtube-cookies.txt
+Restart=on-failure
+RestartSec=5
+RuntimeMaxSec=86400
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+MemoryHigh=512M
+MemoryMax=768M
+MemorySwapMax=0
+TasksMax=64
+
+[Install]
+WantedBy=multi-user.target
