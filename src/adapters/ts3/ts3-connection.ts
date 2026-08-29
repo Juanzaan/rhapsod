@@ -10,6 +10,29 @@ import type { Logger } from "pino";
 import type { AppConfig } from "../../config.js";
 
 const MESSAGE_SEND_TIMEOUT_MS = 10_000;
+const MESSAGE_RATE_INTERVAL_MS = 1_100;
+const MESSAGE_QUEUE_MAX = 50;
+
+function createMessageGate() {
+  let lastSendAt = 0;
+  let queue = 0;
+  const gate = async (send: () => Promise<void>): Promise<void> => {
+    if (queue >= MESSAGE_QUEUE_MAX) {
+      // Drop the message instead of piling up against the anti-flood.
+      return;
+    }
+    queue++;
+    const waitMs = Math.max(
+      0,
+      lastSendAt + MESSAGE_RATE_INTERVAL_MS - Date.now(),
+    );
+    if (waitMs > 0) await new Promise((resolve) => setTimeout(resolve, waitMs));
+    queue--;
+    lastSendAt = Date.now();
+    await send();
+  };
+  return gate;
+}
 
 export function withTimeout<T>(
   promise: Promise<T>,
@@ -163,6 +186,7 @@ export function createTs3Connection(
         : { serverPassword: config.RHAPSOD_TS3_PASSWORD }),
     },
   );
+  const messageGate = createMessageGate();
 
   return {
     connect: async () => {
@@ -391,36 +415,40 @@ export function createTs3Connection(
       return () => undefined;
     },
     sendChannelMessage: async (message) => {
-      try {
-        await withTimeout(
-          client.execCommand(
-            `sendtextmessage targetmode=2 target=${client.channelID()} msg=${escapeClientParam(message)}`,
-          ),
-          MESSAGE_SEND_TIMEOUT_MS,
-          "Sending the channel message timed out",
-        );
-      } catch (error) {
-        logger.error(
-          { err: error, channelId: String(client.channelID()) },
-          "Failed to send channel message",
-        );
-      }
+      await messageGate(async () => {
+        try {
+          await withTimeout(
+            client.execCommand(
+              `sendtextmessage targetmode=2 target=${client.channelID()} msg=${escapeClientParam(message)}`,
+            ),
+            MESSAGE_SEND_TIMEOUT_MS,
+            "Sending the channel message timed out",
+          );
+        } catch (error) {
+          logger.error(
+            { err: error, channelId: String(client.channelID()) },
+            "Failed to send channel message",
+          );
+        }
+      });
     },
     sendPrivateMessage: async (clid, message) => {
-      try {
-        await withTimeout(
-          client.execCommand(
-            `sendtextmessage targetmode=1 target=${clid} msg=${escapeClientParam(message)}`,
-          ),
-          MESSAGE_SEND_TIMEOUT_MS,
-          "Sending the private message timed out",
-        );
-      } catch (error) {
-        logger.error(
-          { err: error, targetClid: clid },
-          "Failed to send private message",
-        );
-      }
+      await messageGate(async () => {
+        try {
+          await withTimeout(
+            client.execCommand(
+              `sendtextmessage targetmode=1 target=${clid} msg=${escapeClientParam(message)}`,
+            ),
+            MESSAGE_SEND_TIMEOUT_MS,
+            "Sending the private message timed out",
+          );
+        } catch (error) {
+          logger.error(
+            { err: error, targetClid: clid },
+            "Failed to send private message",
+          );
+        }
+      });
     },
     sendVoiceFrame: (frame) => client.sendVoice(frame, 5),
     onTextMessage: (handler) => {

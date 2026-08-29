@@ -6,6 +6,8 @@ const execFileAsync = promisify(execFile);
 const DEFAULT_BINARY = "ffmpeg";
 const MEASURE_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_ENTRIES = 500;
+const MAX_CONCURRENT = 2;
+const SAMPLE_SECONDS = 120;
 
 export interface LoudnessProfile {
   readonly measuredI: number;
@@ -72,6 +74,8 @@ export class LoudnessProfiler {
     string,
     { profile: LoudnessProfile; expiresAt: number }
   >();
+  readonly #measuring = new Set<string>();
+  #activeMeasurements = 0;
 
   constructor(options: LoudnessProfilerOptions = {}) {
     this.#binary = options.binary ?? DEFAULT_BINARY;
@@ -91,7 +95,14 @@ export class LoudnessProfiler {
 
   measure(source: string, url: string): void {
     if (this.cached(source) !== undefined) return;
-    void this.#measureImpl(source, url);
+    if (this.#measuring.has(source)) return;
+    if (this.#activeMeasurements >= MAX_CONCURRENT) return;
+    this.#measuring.add(source);
+    this.#activeMeasurements++;
+    void this.#measureImpl(source, url).finally(() => {
+      this.#measuring.delete(source);
+      this.#activeMeasurements--;
+    });
   }
 
   async #measureImpl(source: string, url: string): Promise<void> {
@@ -104,6 +115,8 @@ export class LoudnessProfiler {
           "-loglevel",
           "error",
           "-nostdin",
+          "-t",
+          String(SAMPLE_SECONDS),
           "-i",
           url,
           "-af",

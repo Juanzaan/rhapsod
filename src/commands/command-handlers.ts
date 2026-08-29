@@ -34,6 +34,7 @@ export interface CommandContext {
   readonly encoder: RhapsodOpusEncoder;
   readonly verbose: boolean;
   hasStartedPlaying: boolean;
+  youtubeAuthHealthy: boolean;
 }
 
 export interface CommandSender {
@@ -460,7 +461,10 @@ async function handleStats(
     ytdlpActive: ytdlp.active,
     ytdlpQueued: ytdlp.queued,
   });
-  await send(statsOutput);
+  const authLine = ctx.youtubeAuthHealthy
+    ? ""
+    : "\n⚠ Autenticación de YouTube FALLANDO — revisá las cookies del bot.";
+  await send(`${statsOutput}${authLine}`);
 }
 
 async function handleDiag(

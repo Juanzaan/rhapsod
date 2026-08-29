@@ -1166,9 +1166,23 @@ export class YoutubePlaybackService {
         `La cola está llena (máximo ${this.#maxQueueTracks} pistas).`,
       );
     }
-    const requesterCount = this.#queue
-      .snapshot()
-      .filter((queued) => queued.requestedBy === requestedBy).length;
+    const requesterCount =
+      (this.#current !== undefined &&
+      requestedByUid !== undefined &&
+      this.#current.requestedByUid === requestedByUid
+        ? 1
+        : this.#current !== undefined &&
+            requestedByUid === undefined &&
+            this.#current.requestedBy === requestedBy
+          ? 1
+          : 0) +
+      this.#queue
+        .snapshot()
+        .filter((queued) =>
+          requestedByUid !== undefined
+            ? queued.requestedByUid === requestedByUid
+            : queued.requestedBy === requestedBy,
+        ).length;
     if (requesterCount >= this.#maxTracksPerUser) {
       throw new QueueLimitError(
         `Límite de ${this.#maxTracksPerUser} pistas por usuario en la cola.`,
@@ -1525,17 +1539,22 @@ export class YoutubePlaybackService {
       }
     | undefined
   > {
+    const discardInFlight = (): undefined => {
+      this.#invalidatePrepared(track.source);
+      // A skip that landed while this track was resolving consumed this track.
+      // Do not let that same skip drop an extra queued track in the next loop.
+      if (this.#pendingSkips > 0) this.#pendingSkips--;
+      return undefined;
+    };
     try {
       const resolved = await this.#getAudioUrl(track);
       if (generation !== this.#generation || this.#current !== track) {
-        this.#invalidatePrepared(track.source);
-        return undefined;
+        return discardInFlight();
       }
       return resolved;
     } catch (error) {
       if (generation !== this.#generation || this.#current !== track) {
-        this.#invalidatePrepared(track.source);
-        return undefined;
+        return discardInFlight();
       }
       const playbackError =
         error instanceof Error ? error : new Error(String(error));

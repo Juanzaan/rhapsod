@@ -77,6 +77,15 @@ class _Pending:
         self.event.set()
 
 
+ALLOWED_YOUTUBE_HOSTS = {
+    "youtube.com",
+    "www.youtube.com",
+    "m.youtube.com",
+    "music.youtube.com",
+    "youtu.be",
+}
+
+
 class Daemon:
     def __init__(self):
         self.ydl = yt_dlp.YoutubeDL(dict(BASE, format="bestaudio/best"))
@@ -90,7 +99,20 @@ class Daemon:
         match = VIDEO_ID_RE.search(url)
         return match.group(1) if match else None
 
+    @staticmethod
+    def _allowed(url):
+        try:
+            parsed = urlparse(url)
+        except ValueError:
+            return False
+        return (
+            parsed.scheme in ("http", "https")
+            and parsed.hostname in ALLOWED_YOUTUBE_HOSTS
+        )
+
     def resolve(self, url):
+        if not self._allowed(url):
+            return {"error": "only YouTube URLs are allowed"}
         video_id = self._video_id(url)
         with self.cache_lock:
             entry = self.cache.get(video_id)
