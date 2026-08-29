@@ -74,10 +74,10 @@ export function buildFfmpegPcmArguments(
   }
   // Low-latency flags: skip buffering and probe delays so the first audio
   // frames reach the Opus encoder as soon as YouTube starts delivering them.
-  // probesize 32k still keeps the probe short (WebM/Opus header is ~40 bytes)
-  // while avoiding codec-detection stalls at the 32-byte edge.
+  // 320k is fast enough to avoid codec-detection stalls while reliable for
+  // most YouTube stream formats (WebM/Opus, MP4/AAC).
   args.push("-fflags", "+nobuffer", "-flags", "+low_delay");
-  args.push("-analyzeduration", "0", "-probesize", "32768");
+  args.push("-analyzeduration", "0", "-probesize", "327680");
   args.push(
     "-i",
     url,
