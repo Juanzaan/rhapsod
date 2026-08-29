@@ -67,7 +67,8 @@ async function main(): Promise<void> {
     }
   };
   process.on("unhandledRejection", (reason: unknown) => {
-    logger.error({ reason }, "Unhandled promise rejection");
+    logger.error({ reason }, "Unhandled promise rejection; restarting");
+    process.exit(1);
   });
   process.on("uncaughtException", (error: Error) => {
     logger.error({ error }, "Uncaught exception; restarting");
@@ -305,7 +306,7 @@ async function main(): Promise<void> {
   });
   const youtubeAuthCheckUrl = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
   const youtubeAuthCheckIntervalMs = 24 * 60 * 60 * 1_000;
-  let youtubeAuthHealthy = true;
+  const youtubeAuthState = { healthy: true };
   const checkYoutubeAuth = async (): Promise<void> => {
     try {
       await ytDlpExecutor.run(
@@ -313,19 +314,19 @@ async function main(): Promise<void> {
         25_000,
         "metadata",
       );
-      if (!youtubeAuthHealthy) {
+      if (!youtubeAuthState.healthy) {
         logger.info("YouTube authentication recovered");
-        youtubeAuthHealthy = true;
+        youtubeAuthState.healthy = true;
       }
     } catch (error) {
-      if (youtubeAuthHealthy) {
+      if (youtubeAuthState.healthy) {
         const category = classifyYoutubeAuthFailure(error);
         logger.error(
           { err: error, category },
           "YouTube authentication health check FAILED",
         );
       }
-      youtubeAuthHealthy = false;
+      youtubeAuthState.healthy = false;
     }
   };
   setInterval(
@@ -351,6 +352,9 @@ async function main(): Promise<void> {
     encoder,
     verbose,
     hasStartedPlaying: false,
+    get youtubeAuthHealthy() {
+      return youtubeAuthState.healthy;
+    },
   };
   const maxConcurrentCommands = config.RHAPSOD_MAX_CONCURRENT_COMMANDS;
   let activeCommands = 0;
@@ -639,18 +643,6 @@ async function main(): Promise<void> {
 export function userFacingError(error: Error): string {
   if (error instanceof UserError) return error.message;
   const msg = error.message;
-  if (
-    /^(No reconozco|Usá:|El comando !|La posición|El volumen|El rango|Usage: !)/.test(
-      msg,
-    )
-  )
-    return msg;
-  if (
-    /^(La cola está vacía: no hay nada para guardar en la playlist|No encontré la playlist|Límite de \d+ playlists por usuario|Una playlist no puede tener más de \d+ pistas|Las playlists no están configuradas|No hay pistas válidas para guardar en la playlist)/.test(
-      msg,
-    )
-  )
-    return msg;
   if (/DRM protected/i.test(msg))
     return "SoundCloud no permite reproducir esta pista porque está protegida con DRM. Probá otra versión o una fuente distinta.";
   if (/Requested format is not available/i.test(msg))

@@ -2036,18 +2036,29 @@ describe("YoutubePlaybackService", () => {
     ).rejects.toThrow("La cola está llena");
   });
 
-  it("rejects enqueues beyond the per-user cap", async () => {
+  it("rejects enqueues beyond the per-user cap counting the current track", async () => {
     const { service } = setup({ maxTracksPerUser: 1 });
 
     await service.enqueue("https://youtu.be/a", "user-1");
-    await service.enqueue("https://youtu.be/b", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
 
     await expect(
-      service.enqueue("https://youtu.be/c", "user-1"),
+      service.enqueue("https://youtu.be/b", "user-1"),
     ).rejects.toThrow("Límite de 1 pistas por usuario");
     await expect(
       service.enqueue("https://youtu.be/x", "user-2"),
     ).resolves.toMatchObject({ id: "x" });
+  });
+
+  it("counts per-user cap by UID, not display name", async () => {
+    const { service } = setup({ maxTracksPerUser: 1 });
+
+    await service.enqueue("https://youtu.be/a", "user-1", "uid-1");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    await expect(
+      service.enqueue("https://youtu.be/b", "user-1-renamed", "uid-1"),
+    ).rejects.toThrow("Límite de 1 pistas por usuario");
   });
 
   it("halts a playlist expansion when the queue cap is hit", async () => {

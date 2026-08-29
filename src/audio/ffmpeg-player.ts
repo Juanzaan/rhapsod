@@ -32,9 +32,10 @@ export interface FfmpegPlaybackSession {
  */
 export function createPcmStream(
   url: string,
-  options: FfmpegPcmOptions = {},
+  options: FfmpegPlaybackOptions = {},
 ): FfmpegPcmStream {
-  return createFfmpegPcmStream(url, options);
+  const createStream = options.createStream ?? createFfmpegPcmStream;
+  return createStream(url, options);
 }
 
 /**

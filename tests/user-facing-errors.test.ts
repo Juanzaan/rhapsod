@@ -51,60 +51,60 @@ describe("userFacingError", () => {
   });
 
   it("error de comando desconocido se pasa tal cual", () => {
-    const err = new Error(
+    const err = new UserError(
       "No reconozco ese comando. Escribí !help para ver los disponibles.",
     );
     expect(userFacingError(err)).toBe(err.message);
   });
 
   it("error de usage se pasa tal cual", () => {
-    const err = new Error("Usá: !play <link o término de búsqueda>");
+    const err = new UserError("Usá: !play <link o término de búsqueda>");
     expect(userFacingError(err)).toBe(err.message);
   });
 
   it("error de argumentos inesperados se pasa tal cual", () => {
-    const err = new Error("El comando !xyz no acepta argumentos");
+    const err = new UserError("El comando !xyz no acepta argumentos");
     expect(userFacingError(err)).toBe(err.message);
   });
 
   it("error de posición se pasa tal cual", () => {
-    const err = new Error("La posición tiene que ser mayor a 0.");
+    const err = new UserError("La posición tiene que ser mayor a 0.");
     expect(userFacingError(err)).toBe(err.message);
   });
 
   it("error de volumen se pasa tal cual", () => {
-    const err = new Error("El volumen tiene que estar entre 0 y 100.");
+    const err = new UserError("El volumen tiene que estar entre 0 y 100.");
     expect(userFacingError(err)).toBe(err.message);
   });
 
   it("error de rango se pasa tal cual", () => {
-    const err = new Error("El rango tiene que ser ascendente (ej: 2-5).");
+    const err = new UserError("El rango tiene que ser ascendente (ej: 2-5).");
     expect(userFacingError(err)).toBe(err.message);
   });
 
   it("save con cola vacía muestra el mensaje de playlist", () => {
     const msg = "La cola está vacía: no hay nada para guardar en la playlist.";
-    expect(userFacingError(new Error(msg))).toBe(msg);
+    expect(userFacingError(new UserError(msg))).toBe(msg);
   });
 
   it("load de playlist inexistente muestra el mensaje", () => {
     const msg = 'No encontré la playlist "fiesta".';
-    expect(userFacingError(new Error(msg))).toBe(msg);
+    expect(userFacingError(new UserError(msg))).toBe(msg);
   });
 
   it("límite de playlists muestra el mensaje", () => {
     const msg = "Límite de 20 playlists por usuario.";
-    expect(userFacingError(new Error(msg))).toBe(msg);
+    expect(userFacingError(new UserError(msg))).toBe(msg);
   });
 
   it("límite de tracks muestra el mensaje", () => {
     const msg = "Una playlist no puede tener más de 200 pistas.";
-    expect(userFacingError(new Error(msg))).toBe(msg);
+    expect(userFacingError(new UserError(msg))).toBe(msg);
   });
 
   it("playlists no configuradas muestra el mensaje", () => {
     const msg = "Las playlists no están configuradas en este bot.";
-    expect(userFacingError(new Error(msg))).toBe(msg);
+    expect(userFacingError(new UserError(msg))).toBe(msg);
   });
 
   it("los errores esperados de playlists nunca caen al genérico", () => {
@@ -116,7 +116,7 @@ describe("userFacingError", () => {
       "Las playlists no están configuradas en este bot.",
     ];
     for (const message of messages) {
-      expect(userFacingError(new Error(message))).toBe(message);
+      expect(userFacingError(new UserError(message))).toBe(message);
     }
   });
 

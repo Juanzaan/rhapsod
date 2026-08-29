@@ -3,6 +3,7 @@ import { availableParallelism } from "node:os";
 
 import type { MinimalLogger } from "../../observability/logger.js";
 import { noopLogger } from "../../observability/logger.js";
+import { UserError } from "../../lib/user-error.js";
 import type { SearchMetrics } from "../../observability/metrics.js";
 import { parseMediaInput, type YoutubeResource } from "../media-input.js";
 import { rankYoutubeCandidatesScored } from "./search-ranking.js";
@@ -89,7 +90,7 @@ export class YtDlpJobQueue<Input, Output> {
       const jobs = priority === "playback" ? this.#playback : this.#metadata;
       if (this.#queued >= this.#maxQueuedJobs) {
         reject(
-          new Error(
+          new UserError(
             "El bot está saturado de búsquedas: probá de nuevo en unos segundos.",
           ),
         );
