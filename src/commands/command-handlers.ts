@@ -14,7 +14,7 @@ import {
   canRemoveTrack,
   isAdminUid,
 } from "./permissions.js";
-import { formatHelp } from "./command-registry.js";
+import { formatHelpCategory, formatHelpMenu } from "./command-registry.js";
 import { FILTER_DISPLAY_NAMES } from "../audio/filter-chain.js";
 
 export interface CommandContext {
@@ -578,12 +578,16 @@ async function handleTestTone(
 
 async function handleHelp(
   ctx: CommandContext,
-  _command: Extract<ChatCommand, { name: "help" }>,
+  command: Extract<ChatCommand, { name: "help" }>,
   sender: CommandSender,
   send: SendFn,
 ): Promise<void> {
   const isAdmin = isAdminUid(sender.uid, ctx.adminUids);
-  await send(formatHelp(isAdmin));
+  if (command.category === undefined) {
+    await send(formatHelpMenu(isAdmin));
+    return;
+  }
+  await send(formatHelpCategory(command.category, isAdmin));
 }
 
 async function handleLoop(

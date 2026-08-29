@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import { parseChatCommand } from "../src/commands/chat-command.js";
 import {
   COMMAND_SPECS,
-  formatHelp,
+  formatHelpCategory,
+  formatHelpMenu,
   lookupCommandName,
+  resolveHelpCategory,
 } from "../src/commands/command-registry.js";
 
 describe("command registry", () => {
@@ -59,29 +61,65 @@ describe("command registry", () => {
     }
   });
 
-  it("generates help with grouped commands and aliases", () => {
-    const help = formatHelp(false);
-    expect(help).toContain("Comandos disponibles:");
-    expect(help).toContain("--- Reproducción ---");
-    expect(help).toContain("!play <URL o búsqueda>");
-    expect(help).toContain("!queue [página]");
-    expect(help).toContain("!help (!h) - Mostrar esta ayuda");
+  it("shows a menu of 4 categories when !help has no argument", () => {
+    const menu = formatHelpMenu(false);
+    expect(menu).toContain("Comandos disponibles");
+    expect(menu).toContain("!help 1");
+    expect(menu).toContain("!help 2");
+    expect(menu).toContain("!help 3");
+    expect(menu).toContain("!help 4");
+    expect(menu).toContain("Reproducción");
+    expect(menu).toContain("Cola");
+    expect(menu).toContain("Administración");
+    expect(menu).toContain("Otros");
+    expect(menu).toContain("!help 2 para ver");
   });
 
-  it("hides admin commands from non-admins and shows them for admins", () => {
-    const regular = formatHelp(false);
-    const admin = formatHelp(true);
-    expect(regular).not.toContain("!debug-server");
+  it("resolves help categories by number and by name", () => {
+    expect(resolveHelpCategory("1")).toBe("music");
+    expect(resolveHelpCategory("2")).toBe("queue");
+    expect(resolveHelpCategory("3")).toBe("admin");
+    expect(resolveHelpCategory("4")).toBe("misc");
+    expect(resolveHelpCategory("reproduccion")).toBe("music");
+    expect(resolveHelpCategory("cola")).toBe("queue");
+    expect(resolveHelpCategory("admin")).toBe("admin");
+    expect(resolveHelpCategory("otros")).toBe("misc");
+    expect(resolveHelpCategory("9")).toBeUndefined();
+    expect(resolveHelpCategory("x")).toBeUndefined();
+    expect(resolveHelpCategory(undefined)).toBeUndefined();
+  });
+
+  it("formats a category with its commands", () => {
+    const music = formatHelpCategory("music", false);
+    expect(music).toContain("Reproducción:");
+    expect(music).toContain("!play <URL o búsqueda>");
+    expect(music).toContain("!skip");
+    expect(music).toContain("!help para volver");
+
+    const admin = formatHelpCategory("admin", true);
+    expect(admin).toContain("Administración:");
     expect(admin).toContain("!debug-server");
-    expect(regular).not.toContain("!diag");
     expect(admin).toContain("!diag");
-    expect(admin).toContain("--- Administración ---");
   });
 
-  it("lists every known command in help (no stale entries)", () => {
-    const help = formatHelp(true);
-    for (const spec of COMMAND_SPECS) {
-      expect(help, `missing ${spec.name}`).toContain(`!${spec.usage}`);
-    }
+  it("hides admin commands from non-admins in their category", () => {
+    const adminForRegular = formatHelpCategory("admin", false);
+    expect(adminForRegular).toContain("No hay comandos");
+    const adminForAdmin = formatHelpCategory("admin", true);
+    expect(adminForAdmin).toContain("!debug-server");
+  });
+
+  it("parses !help with a category argument", () => {
+    expect(parseChatCommand("!help")).toEqual({ name: "help" });
+    expect(parseChatCommand("!help 2")).toEqual({
+      category: "queue",
+      name: "help",
+    });
+    expect(parseChatCommand("!h cola")).toEqual({
+      category: "queue",
+      name: "help",
+    });
+    expect(() => parseChatCommand("!help 9")).toThrow(/Usá: !help/);
+    expect(() => parseChatCommand("!help xyz")).toThrow(/Usá: !help/);
   });
 });
