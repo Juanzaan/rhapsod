@@ -66,16 +66,16 @@ describe("AudioUrlCache", () => {
 
   it("keeps the cache bounded", () => {
     const cache = AudioUrlCache.memoryOnly();
-    for (let i = 0; i < 600; i++) {
+    for (let i = 0; i < 2100; i++) {
       cache.set(
         `source-${i}`,
         `https://media.example/${i}`,
         Date.now() + 60_000,
       );
     }
-    expect(cache.entries().size).toBe(500);
+    expect(cache.entries().size).toBe(2000);
     expect(cache.get("source-0")).toBeUndefined();
-    expect(cache.get("source-599")).toBeDefined();
+    expect(cache.get("source-2099")).toBeDefined();
   });
 
   it("writes a valid JSON file after setting entries", async () => {

@@ -15,7 +15,7 @@ export interface AudioUrlCacheMetrics {
   readonly onMiss?: () => void;
 }
 
-const MAX_CACHE_ENTRIES = 500;
+const MAX_CACHE_ENTRIES = 2000;
 const PERSIST_DEBOUNCE_MS = 1_000;
 
 interface SerializedAudioUrlCache {

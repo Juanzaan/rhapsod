@@ -8,9 +8,12 @@ import type { YoutubeResource } from "../media/media-input.js";
 import type { Track } from "../domain/track.js";
 import { PlaybackQueue } from "../domain/playback-queue.js";
 import {
+  createPcmStream,
   playFfmpegUrl,
   type FfmpegPlaybackSession,
 } from "../audio/ffmpeg-player.js";
+import type { LoudnessProfiler } from "../audio/loudness-profiler.js";
+import type { FfmpegPcmStream } from "../audio/ffmpeg-pcm.js";
 import type { RhapsodOpusEncoder } from "../audio/opus-encoder.js";
 import { FRAME_DURATION_MS } from "../audio/opus-encoder.js";
 import type { VoiceFrameOutput } from "../audio/audio-player.js";
@@ -78,6 +81,9 @@ interface PlaybackServiceOptions {
   readonly maxQueueTracks?: number;
   readonly maxTracksPerUser?: number;
   readonly createPlayback?: typeof playFfmpegUrl;
+  readonly createPcmStream?: typeof createPcmStream;
+  readonly prewarmNext?: boolean;
+  readonly loudnessProfiler?: LoudnessProfiler;
   readonly onPlaybackError?: (
     track: Track,
     error: Error,
@@ -172,6 +178,11 @@ export class YoutubePlaybackService {
   #persistedQueue: readonly SerializedQueueTrack[] = [];
   readonly #output: VoiceFrameOutput;
   readonly #createPlayback: typeof playFfmpegUrl;
+  readonly #createPcmStream: typeof createPcmStream;
+  readonly #prewarmEnabled: boolean;
+  readonly #loudnessProfiler: LoudnessProfiler | undefined;
+  #warmStream:
+    { readonly source: string; readonly stream: FfmpegPcmStream } | undefined;
   readonly #onPlaybackError: (
     track: Track,
     error: Error,
@@ -223,6 +234,9 @@ export class YoutubePlaybackService {
     this.#stateStore = options.stateStore;
     this.#output = options.output;
     this.#createPlayback = options.createPlayback ?? playFfmpegUrl;
+    this.#createPcmStream = options.createPcmStream ?? createPcmStream;
+    this.#prewarmEnabled = options.prewarmNext ?? false;
+    this.#loudnessProfiler = options.loudnessProfiler;
     this.#onPlaybackError = options.onPlaybackError ?? (() => undefined);
     this.#onPlaybackStarted = options.onPlaybackStarted ?? (() => undefined);
     this.#onPlaybackFinished = options.onPlaybackFinished ?? (() => undefined);
@@ -1183,6 +1197,7 @@ export class YoutubePlaybackService {
     this.#generation++;
     this.#pendingSkips++;
     this.#pendingSeek = undefined;
+    this.#discardWarmStream();
     if (this.#current) this.#invalidatePrepared(this.#current.source);
     if (this.#session) this.#sessionEndReasons.set(this.#session, "skipped");
     this.#session?.stop();
@@ -1196,6 +1211,7 @@ export class YoutubePlaybackService {
     this.#stopEpoch++;
     this.#pendingSkips = 0;
     this.#pendingSeek = undefined;
+    this.#discardWarmStream();
     if (this.#session) this.#sessionEndReasons.set(this.#session, "stopped");
     this.#session?.stop();
     this.#session = undefined;
@@ -1269,6 +1285,7 @@ export class YoutubePlaybackService {
     this.#stopEpoch++;
     this.#pendingSkips = 0;
     this.#pendingSeek = undefined;
+    this.#discardWarmStream();
     this.#queue.clear();
     this.#loopMode = "off";
     this.#loopPool = [];
@@ -1398,18 +1415,53 @@ export class YoutubePlaybackService {
             readonly name: AudioFilter;
             readonly param?: FilterParam;
           };
+          readonly stream?: FfmpegPcmStream;
+          readonly loudnessProfile?: {
+            readonly measuredI: number;
+            readonly measuredLra: number;
+            readonly measuredThresh: number;
+            readonly measuredTp: number;
+          };
         } = {
           ...(seekSeconds === undefined ? {} : { seekSeconds }),
           audioFilter: { name: this.#filter, param: this.#filterParam },
+          ...(this.#loudnessProfiler === undefined
+            ? {}
+            : (() => {
+                const profile = this.#loudnessProfiler.cached(track.source);
+                return profile === undefined
+                  ? {}
+                  : { loudnessProfile: profile };
+              })()),
         };
         let session: FfmpegPlaybackSession;
         try {
-          session = this.#createPlayback(
-            resolved.url,
-            this.#encoder,
-            this.#output,
-            playbackOptions,
-          );
+          if (seekSeconds === undefined) {
+            const warm = this.#takeWarmStream(track.source);
+            if (warm !== undefined) {
+              session = this.#createPlayback(
+                resolved.url,
+                this.#encoder,
+                this.#output,
+                { ...playbackOptions, stream: warm },
+              );
+            } else {
+              session = this.#createPlayback(
+                resolved.url,
+                this.#encoder,
+                this.#output,
+                playbackOptions,
+              );
+            }
+          } else {
+            this.#discardWarmStream();
+            session = this.#createPlayback(
+              resolved.url,
+              this.#encoder,
+              this.#output,
+              playbackOptions,
+            );
+          }
         } catch (error) {
           this.#reportPlaybackError(track, error);
           this.#prepared.delete(track.source);
@@ -1421,6 +1473,7 @@ export class YoutubePlaybackService {
         this.#recordHistory(track);
         this.#safeObserver(() => this.#onPlaybackStarted(track));
         this.#prefetchWhenStable();
+        this.#prewarmNext();
         let playbackError: unknown;
         try {
           await session.done;
@@ -1792,6 +1845,69 @@ export class YoutubePlaybackService {
       setTimeout(check, PREFETCH_STABILITY_POLL_MS);
     };
     check();
+  }
+
+  #prewarmNext(): void {
+    if (!this.#prewarmEnabled || this.#warmStream !== undefined) return;
+    const session = this.#session;
+    const current = this.#current;
+    if (!session || !current) return;
+    const next = this.#queue.snapshot()[0];
+    if (!next || next.source === current.source) return;
+    const framesSent = session.player.metrics.framesSent;
+    if (framesSent === 0) return;
+    const playedMs = framesSent * FRAME_DURATION_MS;
+    const durationMs = current.durationSeconds
+      ? current.durationSeconds * 1_000
+      : undefined;
+    // Prewarm only when the current track is past its midpoint or near its end,
+    // so the next ffmpeg process is not idle for an entire long track.
+    const halfwayMs = durationMs === undefined ? 30_000 : durationMs / 2;
+    if (playedMs < halfwayMs) return;
+    this.#startPrewarm(next);
+  }
+
+  #startPrewarm(next: Track): void {
+    const stopEpoch = this.#stopEpoch;
+    const generation = this.#generation;
+    void this.#resolveAudioUrl(next)
+      .then((url) => {
+        if (stopEpoch !== this.#stopEpoch || generation !== this.#generation) {
+          return undefined;
+        }
+        this.#loudnessProfiler?.measure(next.source, url);
+        if (
+          this.#current === undefined ||
+          this.#queue.snapshot()[0]?.source !== next.source
+        ) {
+          return undefined;
+        }
+        const stream = this.#createPcmStream(url, {
+          audioFilter: { name: this.#filter, param: this.#filterParam },
+        });
+        this.#warmStream = { source: next.source, stream };
+        return stream;
+      })
+      .catch(() => {
+        // Prewarm is best-effort; playback falls back to the normal path.
+      });
+  }
+
+  #takeWarmStream(source: string): FfmpegPcmStream | undefined {
+    if (this.#warmStream === undefined || this.#warmStream.source !== source) {
+      this.#discardWarmStream();
+      return undefined;
+    }
+    const { stream } = this.#warmStream;
+    this.#warmStream = undefined;
+    return stream;
+  }
+
+  #discardWarmStream(): void {
+    if (this.#warmStream === undefined) return;
+    const { stream } = this.#warmStream;
+    this.#warmStream = undefined;
+    stream.stop();
   }
 
   #recordMetadataTiming(
