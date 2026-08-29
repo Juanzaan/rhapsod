@@ -274,8 +274,8 @@ export const COMMAND_SPECS: readonly CommandSpec[] = [
     aliases: ["h"],
     group: "misc",
     adminOnly: false,
-    usage: "help",
-    summary: "Mostrar esta ayuda",
+    usage: "help [1-4]",
+    summary: "Mostrar el menú o los comandos de una categoría",
   },
 ];
 
@@ -291,32 +291,96 @@ export function lookupCommandName(
   return ALIAS_INDEX.get(raw.toLowerCase());
 }
 
-export function formatHelp(isAdmin: boolean): string {
-  const groups: Readonly<Record<CommandGroup, string>> = {
-    music: "Reproducción",
-    queue: "Cola",
-    admin: "Administración",
-    misc: "Otros",
-  };
-  const visible = COMMAND_SPECS.filter(
-    (spec) => !spec.adminOnly || isAdmin,
-  ).sort((a, b) => a.name.localeCompare(b.name));
-  const byGroup = new Map<CommandGroup, CommandSpec[]>();
-  for (const spec of visible) {
-    const list = byGroup.get(spec.group) ?? [];
-    list.push(spec);
-    byGroup.set(spec.group, list);
+export const HELP_GROUPS: readonly CommandGroup[] = [
+  "music",
+  "queue",
+  "admin",
+  "misc",
+];
+
+export const HELP_GROUP_NAMES: Readonly<Record<CommandGroup, string>> = {
+  music: "Reproducción",
+  queue: "Cola",
+  admin: "Administración",
+  misc: "Otros",
+};
+
+export const HELP_GROUP_SUMMARIES: Readonly<Record<CommandGroup, string>> = {
+  music: "Reproducir, buscar, saltar y controlar la canción",
+  queue: "Ver, mover y ordenar la cola",
+  admin: "Administración y diagnóstico (solo admins)",
+  misc: "Efectos, playlists, volumen y más",
+};
+
+export function visibleCommandSpecs(isAdmin: boolean): CommandSpec[] {
+  return COMMAND_SPECS.filter((spec) => !spec.adminOnly || isAdmin).sort(
+    (a, b) => a.name.localeCompare(b.name),
+  );
+}
+
+export function resolveHelpCategory(
+  raw: string | undefined,
+): CommandGroup | undefined {
+  if (raw === undefined || raw === "") return undefined;
+  const normalized = stripAccents(raw.toLowerCase());
+  const index = Number(normalized);
+  if (
+    Number.isSafeInteger(index) &&
+    index >= 1 &&
+    index <= HELP_GROUPS.length
+  ) {
+    return HELP_GROUPS[index - 1];
   }
-  const lines = ["Comandos disponibles:"];
-  for (const group of ["music", "queue", "admin", "misc"] as const) {
-    const specs = byGroup.get(group);
-    if (specs === undefined || specs.length === 0) continue;
-    lines.push(`--- ${groups[group]} ---`);
-    for (const spec of specs) {
+  return HELP_GROUPS.find((group) => {
+    const name = stripAccents(HELP_GROUP_NAMES[group].toLowerCase());
+    return (
+      group === normalized || name === normalized || name.startsWith(normalized)
+    );
+  });
+}
+
+function stripAccents(input: string): string {
+  return input.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+export function formatHelpMenu(isAdmin: boolean): string {
+  const lines = [
+    "Comandos disponibles — elegí una opción:",
+    "",
+    ...HELP_GROUPS.map((group, index) => {
+      const count = visibleCommandSpecs(isAdmin).filter(
+        (spec) => spec.group === group,
+      ).length;
+      if (count === 0)
+        return `!help ${index + 1} (${HELP_GROUP_NAMES[group]}) — vacío`;
+      return `!help ${index + 1} (${HELP_GROUP_NAMES[group]}) — ${HELP_GROUP_SUMMARIES[group]}`;
+    }),
+    "",
+    "Ej: escribí !help 2 para ver los comandos de cola.",
+  ];
+  return lines.join("\n");
+}
+
+export function formatHelpCategory(
+  group: CommandGroup,
+  isAdmin: boolean,
+): string {
+  const specs = visibleCommandSpecs(isAdmin).filter(
+    (spec) => spec.group === group,
+  );
+  if (specs.length === 0) {
+    return `No hay comandos en "${HELP_GROUP_NAMES[group]}" para tu nivel.`;
+  }
+  const lines = [
+    `${HELP_GROUP_NAMES[group]}:`,
+    "",
+    ...specs.map((spec) => {
       const aliasSuffix =
         spec.aliases.length > 0 ? ` (!${spec.aliases.join(", !")})` : "";
-      lines.push(`!${spec.usage}${aliasSuffix} - ${spec.summary}`);
-    }
-  }
+      return `!${spec.usage}${aliasSuffix} - ${spec.summary}`;
+    }),
+    "",
+    "Usá !help para volver al menú.",
+  ];
   return lines.join("\n");
 }

@@ -1,4 +1,8 @@
-import { lookupCommandName } from "./command-registry.js";
+import {
+  lookupCommandName,
+  resolveHelpCategory,
+  type CommandGroup,
+} from "./command-registry.js";
 
 export type ChatCommand =
   | { readonly name: "channel-move"; readonly input: string }
@@ -6,7 +10,7 @@ export type ChatCommand =
   | { readonly name: "clear" }
   | { readonly name: "debug-server" }
   | { readonly name: "diag" }
-  | { readonly name: "help" }
+  | { readonly category?: CommandGroup; readonly name: "help" }
   | { readonly name: "loop"; readonly mode?: "off" | "queue" | "track" }
   | { readonly name: "lyrics" }
   | { readonly input: string; readonly name: "playnext" }
@@ -253,6 +257,15 @@ export function parseChatCommand(
       throw new Error(
         "Usá: !playlist save|load|list|show|delete|add|remove|rename|info <nombre>",
       );
+    }
+    case "help": {
+      const category = resolveHelpCategory(argument);
+      if (argument && category === undefined) {
+        throw new Error(
+          "Usá: !help [1-4 | reproducción | cola | administración | otros]",
+        );
+      }
+      return category === undefined ? { name } : { category, name };
     }
     default:
       if (argument)
