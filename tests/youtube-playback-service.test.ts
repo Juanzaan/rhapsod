@@ -42,6 +42,7 @@ function setup(
     lyricsResolver?: boolean;
     maxQueueTracks?: number;
     maxTracksPerUser?: number;
+    prewarmNext?: boolean;
     restoredState?: {
       loopMode?: "off" | "queue" | "track";
       queue?: readonly SerializedQueueTrack[];
@@ -217,8 +218,31 @@ function setup(
         flush: vi.fn(() => Promise.resolve()),
       }
     : undefined;
+  const createPcmStreamMock = options.prewarmNext
+    ? vi.fn(() => ({
+        process: {
+          exitCode: null,
+          signalCode: null,
+          kill: () => true,
+          on: () => undefined,
+          once: () => undefined,
+          stderr: { on: () => undefined },
+          stdout: { pipe: () => undefined, unpipe: () => undefined },
+        },
+        stop: vi.fn(),
+        stream: {
+          on: () => undefined,
+          once: () => undefined,
+          pipe: () => undefined,
+          destroy: () => undefined,
+        },
+      }))
+    : undefined;
   const service = new YoutubePlaybackService({
     createPlayback,
+    ...(createPcmStreamMock === undefined
+      ? {}
+      : { createPcmStream: createPcmStreamMock as never }),
     encoder,
     onPlaybackError,
     onPlaybackFinished,
@@ -245,6 +269,7 @@ function setup(
     ...(options.maxTracksPerUser
       ? { maxTracksPerUser: options.maxTracksPerUser }
       : {}),
+    ...(options.prewarmNext ? { prewarmNext: true } : {}),
   });
   return {
     alternativeResolver,
@@ -2667,5 +2692,101 @@ describe("YoutubePlaybackService", () => {
       "https://soundcloud.com/artist/sets/mix",
     );
     expect(track).toMatchObject({ id: "fallback" });
+  });
+
+  it("prewarms the next track after the midpoint and reuses its stream", async () => {
+    const { createPlayback, playbackResolvers, resolver, service } = setup({
+      framesSent: 4000,
+      prewarmNext: true,
+    });
+    resolver.getTrack.mockImplementation((resource: { id: string }) =>
+      Promise.resolve({
+        durationSeconds: 120,
+        ...(resource.id === "first"
+          ? { audioUrl: "https://media.example/first" }
+          : {}),
+        id: resource.id,
+        title: `Track ${resource.id}`,
+        webpageUrl: `https://www.youtube.com/watch?v=${resource.id}`,
+      }),
+    );
+
+    await service.enqueue("https://youtu.be/first", "user-1");
+    await service.enqueue("https://youtu.be/second", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(service.current?.id).toBe("first");
+    expect(createPlayback).toHaveBeenCalledTimes(1);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const next = service.queue()[0];
+    expect(next?.id).toBe("second");
+    expect(createPlayback).toHaveBeenCalledTimes(1);
+
+    playbackResolvers[0]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(service.current?.id).toBe("second");
+    expect(createPlayback).toHaveBeenCalledTimes(2);
+    expect((createPlayback as Mock).mock.calls.at(-1)?.[3]).toHaveProperty(
+      "stream",
+    );
+  });
+
+  it("does not prewarm before the midpoint", async () => {
+    const { createPlayback, playbackResolvers, resolver, service } = setup({
+      framesSent: 1000,
+      prewarmNext: true,
+    });
+    resolver.getTrack.mockImplementation((resource: { id: string }) =>
+      Promise.resolve({
+        durationSeconds: 120,
+        id: resource.id,
+        title: `Track ${resource.id}`,
+        webpageUrl: `https://www.youtube.com/watch?v=${resource.id}`,
+      }),
+    );
+
+    await service.enqueue("https://youtu.be/first", "user-1");
+    await service.enqueue("https://youtu.be/second", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    playbackResolvers[0]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(service.current?.id).toBe("second");
+    expect(createPlayback).toHaveBeenCalledTimes(2);
+    expect((createPlayback as Mock).mock.calls.at(-1)?.[3]).not.toHaveProperty(
+      "stream",
+    );
+  });
+
+  it("does not prewarm the next track when disabled", async () => {
+    const { createPlayback, playbackResolvers, resolver, service } = setup({
+      framesSent: 4000,
+    });
+    resolver.getTrack.mockImplementation((resource: { id: string }) =>
+      Promise.resolve({
+        durationSeconds: 120,
+        id: resource.id,
+        title: `Track ${resource.id}`,
+        webpageUrl: `https://www.youtube.com/watch?v=${resource.id}`,
+      }),
+    );
+
+    await service.enqueue("https://youtu.be/first", "user-1");
+    await service.enqueue("https://youtu.be/second", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    playbackResolvers[0]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(service.current?.id).toBe("second");
+    expect(createPlayback).toHaveBeenCalledTimes(2);
   });
 });

@@ -39,6 +39,40 @@ describe("FFmpeg PCM source", () => {
     expect(args).not.toContain("loudnorm");
   });
 
+  it("applies measured loudness with linear=true when a profile is provided", () => {
+    const args = buildFfmpegPcmArguments("https://cdn.example.test/audio", {
+      loudnessProfile: {
+        measuredI: -13.42,
+        measuredLra: 9.8,
+        measuredThresh: -23.1,
+        measuredTp: -1.11,
+      },
+      loudnessTargetLufs: -14,
+    });
+
+    const afIndex = args.indexOf("-af");
+    expect(afIndex).toBeGreaterThan(-1);
+    const filter = args[afIndex + 1];
+    expect(filter).toContain("measured_I=-13.42");
+    expect(filter).toContain("measured_TP=-1.11");
+    expect(filter).toContain("measured_LRA=9.8");
+    expect(filter).toContain("measured_thresh=-23.1");
+    expect(filter).toContain("linear=true");
+    expect(filter).toContain("I=-14");
+  });
+
+  it("falls back to the single-pass filter without a profile", () => {
+    const args = buildFfmpegPcmArguments("https://cdn.example.test/audio", {
+      loudnessTargetLufs: -14,
+    });
+
+    const afIndex = args.indexOf("-af");
+    expect(afIndex).toBeGreaterThan(-1);
+    const filter = args[afIndex + 1];
+    expect(filter).toContain("loudnorm=I=-14");
+    expect(filter).not.toContain("linear=true");
+  });
+
   it("sends a custom User-Agent before the input URL when configured", () => {
     const args = buildFfmpegPcmArguments("https://cdn.example.test/audio", {
       userAgent: "Rhapsod/1.0",

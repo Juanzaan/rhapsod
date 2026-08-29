@@ -14,6 +14,12 @@ export interface FfmpegPcmOptions {
   readonly binary?: string;
   readonly spawnProcess?: typeof spawn;
   readonly loudnessTargetLufs?: number;
+  readonly loudnessProfile?: {
+    readonly measuredI: number;
+    readonly measuredLra: number;
+    readonly measuredThresh: number;
+    readonly measuredTp: number;
+  };
   readonly seekSeconds?: number;
   readonly userAgent?: string;
   readonly audioFilter?: {
@@ -86,9 +92,14 @@ export function buildFfmpegPcmArguments(
     "pcm_s16le",
   );
   const loudnessFilter =
-    options.loudnessTargetLufs !== undefined && options.loudnessTargetLufs < 0
-      ? `loudnorm=I=${options.loudnessTargetLufs}:TP=-1.5:LRA=11`
-      : undefined;
+    options.loudnessProfile !== undefined &&
+    options.loudnessTargetLufs !== undefined &&
+    options.loudnessTargetLufs < 0
+      ? `loudnorm=I=${options.loudnessTargetLufs}:TP=-1.5:LRA=11:measured_I=${options.loudnessProfile.measuredI}:measured_TP=${options.loudnessProfile.measuredTp}:measured_LRA=${options.loudnessProfile.measuredLra}:measured_thresh=${options.loudnessProfile.measuredThresh}:offset=0:linear=true`
+      : options.loudnessTargetLufs !== undefined &&
+          options.loudnessTargetLufs < 0
+        ? `loudnorm=I=${options.loudnessTargetLufs}:TP=-1.5:LRA=11`
+        : undefined;
   const filterChain = buildFilterChain(
     options.audioFilter?.name ?? "off",
     options.audioFilter?.param,

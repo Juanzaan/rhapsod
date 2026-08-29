@@ -10,8 +10,9 @@ import {
 } from "./ffmpeg-pcm.js";
 import { type RhapsodOpusEncoder } from "./opus-encoder.js";
 
-interface FfmpegPlaybackOptions extends FfmpegPcmOptions {
+export interface FfmpegPlaybackOptions extends FfmpegPcmOptions {
   readonly clock?: AudioPlayerClock;
+  readonly stream?: FfmpegPcmStream;
   readonly createStream?: (
     url: string,
     options: FfmpegPcmOptions,
@@ -24,23 +25,47 @@ export interface FfmpegPlaybackSession {
   stop(): void;
 }
 
-export function playFfmpegUrl(
+/**
+ * Creates a new PCM stream (ffmpeg subprocess) for a track without starting
+ * playback. The service uses this to pre-spawn the NEXT track's stream while
+ * the current one is still playing, so the handoff is gapless.
+ */
+export function createPcmStream(
   url: string,
+  options: FfmpegPcmOptions = {},
+): FfmpegPcmStream {
+  return createFfmpegPcmStream(url, options);
+}
+
+/**
+ * Plays a stream through a fresh AudioPlayer, returning a session whose
+ * `done` resolves when playback completes.
+ */
+export function playPcmStream(
+  stream: FfmpegPcmStream,
   encoder: RhapsodOpusEncoder,
   output: VoiceFrameOutput,
   options: FfmpegPlaybackOptions = {},
 ): FfmpegPlaybackSession {
-  const createStream = options.createStream ?? createFfmpegPcmStream;
-  const source = createStream(url, options);
   const player = new AudioPlayer(encoder, output, options.clock);
-  const done = player.play(source.stream).finally(() => source.stop());
+  const done = player.play(stream.stream).finally(() => stream.stop());
 
   return {
     done,
     player,
     stop: () => {
       player.stop();
-      source.stop();
+      stream.stop();
     },
   };
+}
+
+export function playFfmpegUrl(
+  url: string,
+  encoder: RhapsodOpusEncoder,
+  output: VoiceFrameOutput,
+  options: FfmpegPlaybackOptions = {},
+): FfmpegPlaybackSession {
+  const source = options.stream ?? createPcmStream(url, options);
+  return playPcmStream(source, encoder, output, options);
 }

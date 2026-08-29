@@ -6,6 +6,7 @@ import { Ts3IdentityStore } from "./adapters/ts3/identity-store.js";
 import { createTs3Connection } from "./adapters/ts3/ts3-connection.js";
 import { createRhapsodOpusEncoder } from "./audio/opus-encoder.js";
 import { playFfmpegUrl } from "./audio/ffmpeg-player.js";
+import { LoudnessProfiler } from "./audio/loudness-profiler.js";
 import { playTestTone } from "./audio/test-tone-player.js";
 import { YoutubePlaybackService } from "./application/youtube-playback-service.js";
 import { AudioUrlCache } from "./application/audio-url-cache.js";
@@ -170,6 +171,10 @@ async function main(): Promise<void> {
       : undefined;
   const ffmpegPath = config.RHAPSOD_FFMPEG_PATH;
   const ffmpegUserAgent = config.RHAPSOD_FFMPEG_USER_AGENT;
+  const loudnessProfiler = new LoudnessProfiler({
+    ...(ffmpegPath === undefined ? {} : { binary: ffmpegPath }),
+    targetLufs: config.RHAPSOD_LOUDNESS_TARGET_LUFS,
+  });
   const ytDlpExecutor = new SystemYtDlpExecutor(
     config.RHAPSOD_YTDLP_PATH,
     config.RHAPSOD_YTDLP_COOKIES_PATH,
@@ -212,7 +217,10 @@ async function main(): Promise<void> {
         ...(options?.audioFilter === undefined
           ? {}
           : { audioFilter: options.audioFilter }),
+        ...(options?.stream === undefined ? {} : { stream: options.stream }),
       }),
+    prewarmNext: true,
+    loudnessProfiler,
     encoder,
     onPlaybackStarted: async (track) => {
       const timings = trackTimings.get(track.id);
