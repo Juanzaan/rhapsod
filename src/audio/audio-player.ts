@@ -186,6 +186,10 @@ export class AudioPlayer {
         this.#maxBufferedBytes,
         this.#bufferedBytes,
       );
+      if (this.#state === "buffering") {
+        // A slow-but-alive source keeps refreshing the stall timer.
+        this.#armBufferTimeout();
+      }
     }
 
     if (

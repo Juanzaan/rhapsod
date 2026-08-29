@@ -31,6 +31,7 @@ import {
   YoutubeResolver,
 } from "./media/youtube/yt-dlp.js";
 import { getTimeoutConfig } from "./lib/timeout-config.js";
+import { UserError } from "./lib/user-error.js";
 import type { YoutubePlaybackResolver } from "./media/youtube/youtube-resolver.js";
 import { RedirectResolver } from "./media/redirect-resolver.js";
 import { SongLinkClient } from "./media/song-link.js";
@@ -568,11 +569,17 @@ async function main(): Promise<void> {
       }
       logger.error(
         { maxReconnectAttempts },
-        "Reconnect limit reached; stopping bot",
+        "Reconnect limit reached; flushing state and stopping bot",
       );
       shuttingDown = true;
       stopHeartbeat();
+      playback.stop(false);
       await connection.disconnect().catch(() => undefined);
+      await Promise.all([
+        playback.flushState().catch(() => undefined),
+        audioUrlCache.flush().catch(() => undefined),
+        telemetry.save().catch(() => undefined),
+      ]);
       process.exit(1);
     })();
   });
@@ -622,6 +629,7 @@ async function main(): Promise<void> {
 }
 
 export function userFacingError(error: Error): string {
+  if (error instanceof UserError) return error.message;
   const msg = error.message;
   if (
     /^(No reconozco|Usá:|El comando !|La posición|El volumen|El rango|Usage: !)/.test(

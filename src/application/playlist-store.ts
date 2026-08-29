@@ -4,6 +4,7 @@ import { dirname } from "node:path";
 
 import type { MinimalLogger } from "../observability/logger.js";
 import { noopLogger } from "../observability/logger.js";
+import { UserError } from "../lib/user-error.js";
 
 export interface StoredPlaylistTrack {
   readonly durationSeconds?: number;
@@ -69,7 +70,7 @@ interface PlaylistStoreFile {
 export function normalizePlaylistName(raw: string): string {
   const name = raw.trim().toLowerCase();
   if (!PLAYLIST_NAME_RE.test(name)) {
-    throw new Error(
+    throw new UserError(
       "Usá: nombre de playlist de 1 a 32 caracteres (a-z, 0-9, - o _).",
     );
   }
@@ -128,10 +129,10 @@ export class PlaylistStore {
       if (parsed !== undefined) cleanTracks.push(parsed);
     }
     if (cleanTracks.length === 0) {
-      throw new Error("No hay pistas válidas para guardar en la playlist.");
+      throw new UserError("No hay pistas válidas para guardar en la playlist.");
     }
     if (cleanTracks.length > MAX_TRACKS_PER_PLAYLIST) {
-      throw new Error(
+      throw new UserError(
         `Una playlist no puede tener más de ${MAX_TRACKS_PER_PLAYLIST} pistas.`,
       );
     }
@@ -151,7 +152,7 @@ export class PlaylistStore {
       list[index] = entry;
     } else {
       if (list.length >= MAX_PLAYLISTS_PER_USER) {
-        throw new Error(
+        throw new UserError(
           `Límite de ${MAX_PLAYLISTS_PER_USER} playlists por usuario.`,
         );
       }
@@ -256,7 +257,7 @@ export class PlaylistStore {
       newTracks.push(track);
     }
     if (existing === undefined && newTracks.length === 0) {
-      throw new Error("No hay pistas válidas para agregar a la playlist.");
+      throw new UserError("No hay pistas válidas para agregar a la playlist.");
     }
     if (newTracks.length === 0) {
       return {
@@ -275,7 +276,7 @@ export class PlaylistStore {
       };
     } else {
       if ((list?.length ?? 0) >= MAX_PLAYLISTS_PER_USER) {
-        throw new Error(
+        throw new UserError(
           `Límite de ${MAX_PLAYLISTS_PER_USER} playlists por usuario.`,
         );
       }

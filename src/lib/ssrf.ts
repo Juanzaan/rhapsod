@@ -1,23 +1,48 @@
 import { lookup } from "node:dns/promises";
+import type dns from "node:dns";
+import { isIP } from "node:net";
+
+import ipaddr from "ipaddr.js";
+import { Agent, fetch as undiciFetch } from "undici";
 
 const DNS_TIMEOUT_MS = 5_000;
+
+export function isBlockedAddress(ip: string): boolean {
+  const trimmed = ip.trim();
+  if (/^::5efe:/i.test(trimmed)) {
+    // ISATAP (::5efe:a.b.c.d) embeds an IPv4 address.
+    const embedded = trimmed.slice(trimmed.lastIndexOf(":") + 1);
+    return isBlockedAddress(embedded);
+  }
+  let addr: ipaddr.IPv4 | ipaddr.IPv6;
+  try {
+    addr = ipaddr.parse(trimmed);
+  } catch {
+    return true;
+  }
+  if (addr.kind() === "ipv6") {
+    const v6 = addr as ipaddr.IPv6;
+    if (v6.isIPv4MappedAddress()) {
+      return isBlockedAddress(v6.toIPv4Address().toString());
+    }
+  }
+  return addr.range() !== "unicast";
+}
 
 export function isPrivateHost(hostname: string): boolean {
   const normalized = hostname.toLowerCase().replace(/^\[|\]$/g, "");
   if (normalized === "localhost") return true;
-  if (normalized.includes(":")) return isPrivateIpv6(normalized);
-  return isPrivateIpv4(normalized);
+  if (isIP(normalized) !== 0) return isBlockedAddress(normalized);
+  return false;
 }
 
 export async function isPublicHostname(hostname: string): Promise<boolean> {
   const normalized = hostname.toLowerCase().replace(/^\[|\]$/g, "");
   if (isPrivateHost(normalized)) return false;
-  if (normalized.includes(":") || /^\d+\.\d+\.\d+\.\d+$/.test(normalized)) {
-    return true;
-  }
+  if (isIP(normalized) !== 0) return true;
   try {
     const addresses = await lookupHostnames(normalized);
-    return addresses.every(({ address }) => !isPrivateHost(address));
+    return addresses.every(({ address }) => !isBlockedAddress(address));
   } catch {
     return false;
   }
@@ -44,70 +69,57 @@ export function lookupHostnames(
   });
 }
 
-function isPrivateIpv4(address: string): boolean {
-  const octets = address.split(".").map((part) => Number(part));
-  if (
-    octets.length !== 4 ||
-    octets.some((octet) => !Number.isInteger(octet) || octet < 0 || octet > 255)
-  ) {
-    return false;
-  }
-  const [a, b] = octets;
-  if (a === undefined || b === undefined) return false;
-  if (a === 0) return true;
-  if (a === 10) return true;
-  if (a === 100 && b >= 64 && b <= 127) return true;
-  if (a === 127) return true;
-  if (a === 169 && b === 254) return true;
-  if (a === 172 && b >= 16 && b <= 31) return true;
-  if (a === 192 && b === 168) return true;
-  if (a === 192 && b === 0 && (octets[2] === 0 || octets[2] === 2)) return true;
-  if (a === 198 && (b === 18 || b === 19)) return true;
-  if (a === 198 && b === 51 && octets[2] === 100) return true;
-  if (a === 203 && b === 0 && octets[2] === 113) return true;
-  if (a >= 224) return true;
-  return false;
-}
+type SsrfCallback = (
+  err: NodeJS.ErrnoException | null,
+  address?: string | dns.LookupAddress[],
+  family?: number,
+) => void;
 
-function isPrivateIpv6(address: string): boolean {
-  const lower = address.toLowerCase();
-  if (lower === "::" || lower === "::1" || lower === "0:0:0:0:0:0:0:1") {
-    return true;
-  }
-  if (
-    lower.startsWith("fe8") ||
-    lower.startsWith("fe9") ||
-    lower.startsWith("fea") ||
-    lower.startsWith("feb")
-  ) {
-    return true;
-  }
-  if (lower.startsWith("fc") || lower.startsWith("fd")) return true;
-  if (lower.startsWith("ff")) return true;
-  if (lower.startsWith("2001:db8")) return true;
-  if (lower.startsWith("64:ff9b")) return true;
-  if (lower.startsWith("::ffff:")) {
-    return isPrivateEmbeddedIpv4(lower.slice("::ffff:".length));
-  }
-  if (lower.startsWith("0:0:0:0:0:ffff:")) {
-    return isPrivateEmbeddedIpv4(lower.slice("0:0:0:0:0:ffff:".length));
-  }
-  if (lower.startsWith("::")) {
-    return isPrivateEmbeddedIpv4(lower.slice(2));
-  }
-  return false;
-}
+type SsrfLookup = (
+  hostname: string,
+  options: dns.LookupOptions,
+  callback: SsrfCallback,
+) => void;
 
-function isPrivateEmbeddedIpv4(embedded: string): boolean {
-  if (embedded.includes(".")) return isPrivateIpv4(embedded);
-  const hex = embedded.replace(/:/g, "");
-  if (!/^[0-9a-f]{8}$/.test(hex)) return true;
-  return isPrivateIpv4(
-    [
-      Number.parseInt(hex.slice(0, 2), 16),
-      Number.parseInt(hex.slice(2, 4), 16),
-      Number.parseInt(hex.slice(4, 6), 16),
-      Number.parseInt(hex.slice(6, 8), 16),
-    ].join("."),
+const ssrfLookup: SsrfLookup = (hostname, options, callback) => {
+  const timer = setTimeout(() => {
+    callback(new Error(`SSRF: DNS lookup for ${hostname} timed out`));
+  }, DNS_TIMEOUT_MS);
+  timer.unref();
+  void lookup(hostname, { all: true, verbatim: true }).then(
+    (addresses) => {
+      clearTimeout(timer);
+      if (addresses.some(({ address }) => isBlockedAddress(address))) {
+        callback(new Error(`SSRF: ${hostname} resolved to a blocked address`));
+        return;
+      }
+      if (options.all) {
+        callback(null, addresses);
+        return;
+      }
+      const first = addresses[0];
+      if (first === undefined) {
+        callback(new Error(`SSRF: ${hostname} resolved to no addresses`));
+        return;
+      }
+      callback(null, first.address, first.family);
+    },
+    (error) => {
+      clearTimeout(timer);
+      callback(error instanceof Error ? error : new Error(String(error)));
+    },
   );
-}
+};
+
+const ssrfAgent = new Agent({
+  connect: { lookup: ssrfLookup as unknown as never },
+});
+
+export const safeFetch: typeof fetch = (input, init): Promise<Response> => {
+  return undiciFetch(
+    input as Parameters<typeof undiciFetch>[0],
+    init === undefined
+      ? { dispatcher: ssrfAgent, redirect: "manual" }
+      : { ...init, dispatcher: ssrfAgent, redirect: init.redirect ?? "manual" },
+  );
+};

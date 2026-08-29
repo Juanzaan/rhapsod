@@ -1,4 +1,4 @@
-import { isPublicHostname } from "../lib/ssrf.js";
+import { isPublicHostname, safeFetch } from "../lib/ssrf.js";
 
 export interface RedirectResolverOptions {
   readonly cacheMaxEntries?: number;
@@ -19,7 +19,7 @@ export class RedirectResolver {
   readonly #timeoutMs: number;
 
   constructor(options: RedirectResolverOptions = {}) {
-    this.#fetch = options.fetch ?? fetch;
+    this.#fetch = options.fetch ?? safeFetch;
     this.#maxRedirects = options.maxRedirects ?? DEFAULT_MAX_REDIRECTS;
     this.#timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.#cacheMaxEntries =
