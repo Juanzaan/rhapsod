@@ -88,13 +88,25 @@ When these variables are missing, Spotify links fail with a clear message.
 
 ## systemd
 
-Example production unit file (adjust the environment values for your server):
+Rhapsod runs as two systemd services: the bot itself and a persistent yt-dlp
+daemon that resolves YouTube audio URLs fast (a single warm `YoutubeDL` process
+instead of a per-call Python startup). The repo ships both unit files,
+`rhapsod.service` and `rhapsod-ytdlp-daemon.service`, plus a
+`deploy-rhapsod.sh` script that rebuilds from the stable tag and restarts both.
+
+The daemon needs the `yt-dlp[default]` Python package installed into its
+`PYTHONPATH` (see `oci-cloud-init.sh` for the reference setup). It listens on
+`127.0.0.1:8765` and reads the bot's cookies file, so the bot can reach it via
+`RHAPSOD_YTDLP_DAEMON_URL=http://127.0.0.1:8765`.
+
+Example production bot unit (adjust the environment values for your server):
 
 ```ini
 [Unit]
 Description=Rhapsod TeamSpeak music bot
-After=network-online.target
+After=network-online.target rhapsod-ytdlp-daemon.service
 Wants=network-online.target
+Requires=rhapsod-ytdlp-daemon.service
 
 [Service]
 Environment=RHAPSOD_TS3_HOST=voice.example.com
@@ -104,6 +116,7 @@ Environment=RHAPSOD_TS3_CLIENT_DESCRIPTION=Rhapsod - [url=https://github.com/Jua
 Environment=RHAPSOD_DATA_DIR=/var/lib/rhapsod
 Environment=RHAPSOD_YTDLP_PATH=/usr/local/bin/yt-dlp
 Environment=RHAPSOD_YTDLP_COOKIES_PATH=/home/rhapsod/youtube-cookies.txt
+Environment=RHAPSOD_YTDLP_DAEMON_URL=http://127.0.0.1:8765
 Environment=RHAPSOD_FFMPEG_PATH=/usr/bin/ffmpeg
 Environment=RHAPSOD_SPOTIFY_CLIENT_ID=
 Environment=RHAPSOD_SPOTIFY_CLIENT_SECRET=
@@ -124,6 +137,36 @@ MemorySwapMax=1G
 WantedBy=multi-user.target
 ```
 
+Example daemon unit (shipped as `rhapsod-ytdlp-daemon.service`):
+
+```ini
+[Unit]
+Description=Rhapsod yt-dlp audio resolution daemon
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=rhapsod
+ExecStart=/usr/bin/python3 /home/rhapsod/rhapsod/scripts/yt-dlp-daemon.py
+Environment=PYTHONPATH=/home/rhapsod/ytdlp-deps
+Environment=RHAPSOD_YTDLP_COOKIES_PATH=/home/rhapsod/youtube-cookies.txt
+Restart=on-failure
+RestartSec=5
+RuntimeMaxSec=86400
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+MemoryHigh=512M
+MemoryMax=768M
+MemorySwapMax=0
+TasksMax=64
+
+[Install]
+WantedBy=multi-user.target
+```
+
 `RHAPSOD_TS3_CLIENT_DESCRIPTION` sets the bot's client description, which
 any client can set for itself — no server permissions required. BBCode is
 allowed (e.g. `[url=...]...[/url]`). `RHAPSOD_DATA_DIR` persists the TS3
@@ -137,14 +180,14 @@ credentials and the yt-dlp cookies file must not be committed.
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable --now rhapsod
+sudo systemctl enable --now rhapsod-ytdlp-daemon rhapsod
 journalctl -u rhapsod -f
 ```
 
 The process handles `SIGINT` and `SIGTERM` by disconnecting from TeamSpeak
 cleanly. After a runtime disconnect or kick, it retries at most five times,
-with a five-second delay, then exits normally. `TimeoutStopSec=15` gives the
-shutdown sequence room; `Restart=on-failure` recovers crashes without restarting
-after the intentional reconnect-limit shutdown. On resource-constrained VMs, keep the `MemoryMax=` /
-`MemorySwapMax=` limits (see issue #8) and watch journald logs for `underruns`
-/ `rebufferEvents`.
+with a five-second delay, then flushes its state and exits. `TimeoutStopSec=15`
+gives the shutdown sequence room; `Restart=on-failure` recovers crashes without
+restarting after the intentional reconnect-limit shutdown. On
+resource-constrained VMs, keep the `MemoryMax=` / `MemorySwapMax=` limits (see
+issue #8) and watch journald logs for `underruns` / `rebufferEvents`.

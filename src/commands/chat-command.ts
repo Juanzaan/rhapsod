@@ -1,3 +1,5 @@
+import { lookupCommandName } from "./command-registry.js";
+
 export type ChatCommand =
   | { readonly name: "channel-move"; readonly input: string }
   | { readonly name: "chart" }
@@ -91,68 +93,6 @@ export type ChatCommand =
       readonly name: "effects";
     };
 
-const COMMAND_ALIASES: Readonly<Record<string, ChatCommand["name"]>> = {
-  "8d": "8d",
-  bb: "bassboost",
-  bassboost: "bassboost",
-  c: "clear",
-  ch: "channel-move",
-  "channel-move": "channel-move",
-  chart: "chart",
-  clear: "clear",
-  diag: "diag",
-  ds: "debug-server",
-  "debug-server": "debug-server",
-  effects: "effects",
-  filter: "filter",
-  h: "help",
-  help: "help",
-  loop: "loop",
-  ly: "lyrics",
-  lyrics: "lyrics",
-  history: "history",
-  hist: "history",
-  move: "move",
-  mv: "move",
-  nc: "nightcore",
-  nightcore: "nightcore",
-  np: "now-playing",
-  now: "now-playing",
-  "now-playing": "now-playing",
-  p: "play",
-  pause: "pause",
-  play: "play",
-  playlist: "playlist",
-  pl: "playlist",
-  playnext: "playnext",
-  pn: "playnext",
-  next: "playnext",
-  prev: "previous",
-  previous: "previous",
-  q: "queue",
-  queue: "queue",
-  remove: "remove",
-  resume: "resume",
-  search: "search",
-  rm: "remove",
-  s: "skip",
-  seek: "seek",
-  shuffle: "shuffle",
-  skip: "skip",
-  st: "stats",
-  stats: "stats",
-  stop: "stop",
-  "test-tone": "test-tone",
-  tone: "test-tone",
-  v: "volume",
-  vol: "volume",
-  volume: "volume",
-  vw: "vaporwave",
-  vaporwave: "vaporwave",
-  yt: "search",
-  youtube: "search",
-};
-
 export function parseChatCommand(
   message: string,
   prefix = "!",
@@ -163,7 +103,7 @@ export function parseChatCommand(
     .slice(prefix.length)
     .trim()
     .split(/\s+/);
-  const name = COMMAND_ALIASES[rawName.toLowerCase()];
+  const name = lookupCommandName(rawName);
   if (!name)
     throw new Error(
       "No reconozco ese comando. Escribí !help para ver los disponibles.",
