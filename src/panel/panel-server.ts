@@ -157,6 +157,12 @@ export function createPanelServer(options: PanelOptions): {
 
   app.get("/api/health", (c) => c.json(options.status()));
 
+  app.get("/api/state", (c) => {
+    const status = options.status();
+    const queue = options.queue();
+    return c.json({ ...status, queue });
+  });
+
   app.get("/api/queue", (c) => {
     return c.json({ tracks: options.queue() });
   });
