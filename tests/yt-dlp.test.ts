@@ -332,7 +332,7 @@ describe("YoutubeResolver", () => {
         "https://www.youtube.com/watch?v=abc",
       ),
     ).resolves.toBe("https://media.example/audio");
-    expect(players).toEqual(["web_safari", "web_embedded"]);
+    expect(players).toEqual(["web_embedded", "web_safari"]);
   });
 
   it("prefers the Innertube fast path and skips yt-dlp for YouTube URLs", async () => {
@@ -461,7 +461,7 @@ describe("YoutubeResolver", () => {
     expect(executor.calls[0]).toContain("ytsearch5:duki rockstar");
   });
 
-  it("skips web_embedded when web_safari succeeds on first try", async () => {
+  it("skips web_safari when web_embedded succeeds on first try", async () => {
     const players: Array<string | undefined> = [];
     const executor: YtDlpExecutor = {
       run: (
@@ -481,7 +481,7 @@ describe("YoutubeResolver", () => {
         "https://www.youtube.com/watch?v=abc",
       ),
     ).resolves.toBe("https://media.example/audio");
-    expect(players).toEqual(["web_safari"]);
+    expect(players).toEqual(["web_embedded"]);
   });
 
   it("throws the last error when every player client fails", async () => {
@@ -494,8 +494,8 @@ describe("YoutubeResolver", () => {
         playerClient?: YoutubePlayerClient,
       ) =>
         playerClient === "web_safari"
-          ? Promise.reject(new Error("yt-dlp exited with code 1: boom"))
-          : Promise.reject(new Error("yt-dlp exited with code 2: nope")),
+          ? Promise.reject(new Error("yt-dlp exited with code 2: nope"))
+          : Promise.reject(new Error("yt-dlp exited with code 1: boom")),
     };
 
     await expect(
@@ -514,7 +514,7 @@ describe("YoutubeResolver", () => {
         _signal?: AbortSignal,
         playerClient?: YoutubePlayerClient,
       ) =>
-        playerClient === "web_safari"
+        playerClient === "web_embedded"
           ? Promise.resolve("https://media.example/audio\n")
           : Promise.reject(new Error("nope")),
     };
@@ -535,7 +535,7 @@ describe("YoutubeResolver", () => {
       string,
     ];
     expect(call[1]).toBe("Audio URL resolved");
-    expect(call[0].winner).toBe("web_safari");
+    expect(call[0].winner).toBe("web_embedded");
     expect(typeof call[0].durationMs).toBe("number");
     expect(call[0].attemptCount).toBe(1);
   });

@@ -46,11 +46,11 @@ function setup() {
 }
 
 describe("AudioPlayer", () => {
-  it("prebuffers 240ms of PCM and emits one exact frame per clock tick", () => {
+  it("prebuffers 320ms of PCM and emits one exact frame per clock tick", () => {
     const { clock, encodeMock, output, player } = setup();
     const source = new PassThrough();
     void player.play(source);
-    source.write(Buffer.alloc(PCM_FRAME_BYTES * 11, 7));
+    source.write(Buffer.alloc(PCM_FRAME_BYTES * 15, 7));
     expect(player.state).toBe("buffering");
     source.write(Buffer.alloc(PCM_FRAME_BYTES, 7));
 
@@ -261,7 +261,7 @@ describe("AudioPlayer", () => {
     const source = new PassThrough();
     void player.play(source);
     player.setVolume(0.5);
-    const frame = Buffer.alloc(PCM_FRAME_BYTES * 12);
+    const frame = Buffer.alloc(PCM_FRAME_BYTES * 20);
     frame[0] = 0x10;
     frame[1] = 0x10;
     source.write(frame);

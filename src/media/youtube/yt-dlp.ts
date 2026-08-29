@@ -628,9 +628,10 @@ export class YoutubeResolver {
       return daemonUrl;
     }
 
-    // Try web_safari first (fastest, no JS runtime needed).
-    // If it fails (e.g. 403), fall back to web_embedded (requires Deno).
-    const clients: YoutubePlayerClient[] = ["web_safari", "web_embedded"];
+    // Try web_embedded first (least bot-checked from datacenter IPs, no PO token
+    // needed, no JS runtime for the n-challenge). Fall back to web_safari if the
+    // URL is not embeddable.
+    const clients: YoutubePlayerClient[] = ["web_embedded", "web_safari"];
     let lastError: unknown = new Error("yt-dlp did not return an audio URL");
 
     for (const playerClient of clients) {

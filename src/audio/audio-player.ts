@@ -7,7 +7,7 @@ import {
   type RhapsodOpusEncoder,
 } from "./opus-encoder.js";
 
-const PREBUFFER_FRAMES = 12;
+const PREBUFFER_FRAMES = 16;
 const BUFFER_HIGH_WATER_FRAMES = 250;
 const BUFFER_LOW_WATER_FRAMES = 150;
 const MAX_UNDERRUN_FRAMES = 250;

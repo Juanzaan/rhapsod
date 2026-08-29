@@ -47,6 +47,8 @@ BASE = {
     "noplaylist": True,
     "force_ipv4": True,
     "socket_timeout": 5,
+    "extractor_retries": 2,
+    "fragment_retries": 2,
     "cookiefile": COOKIES_PATH,
     "extract_flat": "discard",
     "js_runtimes": {"node": {}},
