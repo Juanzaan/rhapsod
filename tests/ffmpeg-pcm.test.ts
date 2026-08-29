@@ -87,7 +87,17 @@ describe("FFmpeg PCM source", () => {
     expect(args.indexOf("-analyzeduration")).toBeLessThan(inputIndex);
     expect(args.indexOf("-probesize")).toBeLessThan(inputIndex);
     expect(args[args.indexOf("-analyzeduration") + 1]).toBe("0");
-    expect(args[args.indexOf("-probesize") + 1]).toBe("32");
+    expect(args[args.indexOf("-probesize") + 1]).toBe("32768");
+  });
+
+  it("reconnects on 5xx but not on 4xx stale URLs", () => {
+    const args = buildFfmpegPcmArguments("https://cdn.example.test/audio");
+    expect(args[args.indexOf("-reconnect_on_http_error") + 1]).toBe("5xx");
+    expect(args).toContain("-reconnect_on_network_error");
+    expect(args[args.indexOf("-reconnect_delay_max") + 1]).toBe("5");
+    expect(args[args.indexOf("-reconnect_max_retries") + 1]).toBe("3");
+    expect(args[args.indexOf("-rw_timeout") + 1]).toBe("8000000");
+    expect(args).toContain("-timeout");
   });
 
   it("rejects non-HTTPS inputs", () => {

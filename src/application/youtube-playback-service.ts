@@ -136,9 +136,9 @@ const AUTH_REQUIRED_RE =
   /sign in to confirm|cookies for the authentication|request you to sign in|login required/i;
 const PREFETCH_STABILITY_TIMEOUT_MS = 8_000;
 const PREFETCH_STABILITY_POLL_MS = 100;
-const PREFETCH_DEPTH = 10;
-const PLAYLIST_PREFETCH_DEPTH = 20;
-const PLAYLIST_PREFETCH_BATCH = 5;
+const PREFETCH_DEPTH = 4;
+const PLAYLIST_PREFETCH_DEPTH = 6;
+const PLAYLIST_PREFETCH_BATCH = 3;
 const DEFAULT_PLAYLIST_MAX_TRACKS = 100;
 const DEFAULT_MAX_QUEUE_TRACKS = 200;
 const DEFAULT_MAX_TRACKS_PER_USER = 30;

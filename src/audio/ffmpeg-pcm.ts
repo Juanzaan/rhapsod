@@ -48,13 +48,17 @@ export function buildFfmpegPcmArguments(
     "-reconnect_streamed",
     "1",
     "-reconnect_delay_max",
-    "10",
+    "5",
+    "-reconnect_max_retries",
+    "3",
     "-reconnect_on_network_error",
     "1",
     "-reconnect_on_http_error",
-    "4xx,5xx",
+    "5xx",
     "-rw_timeout",
-    "10000000",
+    "8000000",
+    "-timeout",
+    "5000000",
   ];
   if (options.userAgent !== undefined && options.userAgent.length > 0) {
     args.push("-user_agent", options.userAgent);
@@ -64,8 +68,10 @@ export function buildFfmpegPcmArguments(
   }
   // Low-latency flags: skip buffering and probe delays so the first audio
   // frames reach the Opus encoder as soon as YouTube starts delivering them.
+  // probesize 32k still keeps the probe short (WebM/Opus header is ~40 bytes)
+  // while avoiding codec-detection stalls at the 32-byte edge.
   args.push("-fflags", "+nobuffer", "-flags", "+low_delay");
-  args.push("-analyzeduration", "0", "-probesize", "32");
+  args.push("-analyzeduration", "0", "-probesize", "32768");
   args.push(
     "-i",
     url,
