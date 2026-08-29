@@ -1,0 +1,22 @@
+services:
+  rhapsod:
+    build: .
+    image: rhapsod:latest
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # The daemon binds to 127.0.0.1 inside the container; the bot reaches it
+      # via the same network namespace.
+      RHAPSOD_YTDLP_DAEMON_URL: ${RHAPSOD_YTDLP_DAEMON_URL:-http://127.0.0.1:8765}
+    ports:
+      # Setup panel (auth via RHAPSOD_PANEL_USER/PASSWORD in .env). Change the
+      # left port to 127.0.0.1:8080:8080 if you only want localhost access.
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data
+      - ./cookies.txt:/app/cookies.txt:ro
+      # The daemon reads cookies from this path when set.
+    # The bot must reach the TeamSpeak server over UDP. If TeamSpeak runs on
+    # this same host, `network_mode: host` is the simplest reliable option:
+    # network_mode: host
