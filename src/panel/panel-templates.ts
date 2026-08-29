@@ -381,7 +381,7 @@ export function renderDashboard(
     }
 
     function refresh(){
-      fetch('/api/health',{headers:H}).then(function(r){return r.json();}).then(function(d){
+      fetch('/api/state',{headers:H}).then(function(r){return r.json();}).then(function(d){
         document.getElementById('nt').textContent=d.currentTitle||'Sin reproducir';
         document.getElementById('nc2').textContent='Canal '+(d.currentChannelId||'-');
         document.getElementById('qc').textContent=d.queueLength+' pistas';
@@ -389,15 +389,13 @@ export function renderDashboard(
         var txt=document.getElementById('stxt');
         dot.className='dot '+(d.connected?'on':'off');
         txt.textContent=d.connected?'Conectado':'Desconectado';
-      }).catch(function(){});
-      fetch('/api/queue',{headers:H}).then(function(r){return r.json();}).then(function(d){
         var list=document.getElementById('ql');
         var empty=document.getElementById('qe');
-        if(!d.tracks||d.tracks.length===0){list.innerHTML='';empty.style.display='block';return;}
+        if(!d.queue||d.queue.length===0){list.innerHTML='';empty.style.display='block';return;}
         empty.style.display='none';
         var h='';
-        for(var i=0;i<d.tracks.length;i++){
-          var t=d.tracks[i];
+        for(var i=0;i<d.queue.length;i++){
+          var t=d.queue[i];
           var title=t.title||'Sin titulo';
           h+='<li class="qi"><span class="qn">'+(i+1)+'</span><span class="qt" title="'+title.replace(/"/g,'&quot;')+'">'+title.replace(/</g,'&lt;')+'</span></li>';
         }
