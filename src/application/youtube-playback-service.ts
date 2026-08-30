@@ -1504,6 +1504,25 @@ export class YoutubePlaybackService {
         });
         if (playbackError !== undefined) {
           this.#reportPlaybackError(track, playbackError);
+          const is403 =
+            playbackError instanceof Error &&
+            /403|Forbidden/i.test(playbackError.message);
+          if (is403) {
+            // Invalidate stale URL (daemon may have cached 403) and retry once
+            this.#prepared.delete(track.source);
+            if (generation === this.#generation && this.#current === track) {
+              try {
+                this.#queue.add(track);
+                this.#queue.moveToHead(track.id);
+                this.#session = undefined;
+                this.#current = undefined;
+                this.#persistState();
+                continue;
+              } catch {
+                // Already queued or limit reached: fall through to next track
+              }
+            }
+          }
         }
         if (generation !== this.#generation || this.#current !== track) {
           continue;

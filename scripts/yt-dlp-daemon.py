@@ -88,7 +88,17 @@ ALLOWED_YOUTUBE_HOSTS = {
 
 class Daemon:
     def __init__(self):
-        self.ydl = yt_dlp.YoutubeDL(dict(BASE, format="bestaudio/best"))
+        self.ydl_embedded = yt_dlp.YoutubeDL(dict(BASE, format="bestaudio/best"))
+        # Fallback client for videos that return 403/no format via web_embedded (e.g. music-only)
+        base_safari = dict(BASE)
+        base_safari["extractor_args"] = {
+            "youtube": {
+                "player_client": ["web_safari"],
+                "player_skip": ["webpage", "initial_data"],
+                "skip": ["hls", "dash"],
+            }
+        }
+        self.ydl_safari = yt_dlp.YoutubeDL(dict(base_safari, format="bestaudio/best"))
         self.extract_lock = Lock()
         self.cache_lock = Lock()
         self.cache = {}
@@ -145,18 +155,40 @@ class Daemon:
                     self.inflight.pop(video_id, None)
 
     def _extract(self, url, video_id):
-        try:
-            info = self.ydl.extract_info(url, download=False)
-            if not info.get("url"):
-                return {"error": "no playable audio format found"}
-            self._cache(video_id, info)
-            return {
-                "url": info["url"],
-                "id": info.get("id"),
-                "format_id": info.get("format_id"),
-            }
-        except Exception as error:
-            return {"error": str(error)}
+        last_error = None
+        for ydl in (self.ydl_embedded, self.ydl_safari):
+            try:
+                info = ydl.extract_info(url, download=False)
+                if not info.get("url"):
+                    last_error = "no playable audio format found"
+                    continue
+                # Validate URL is not 403 before caching (transient CDN 403)
+                test_url = info["url"]
+                try:
+                    import urllib.request
+
+                    req = urllib.request.Request(test_url, method="HEAD")
+                    req.add_header(
+                        "User-Agent",
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                    )
+                    with urllib.request.urlopen(req, timeout=3) as resp:
+                        if resp.status == 403:
+                            last_error = "Server returned 403 Forbidden (access denied)"
+                            continue
+                except Exception:
+                    # If HEAD fails for other reason, still try to use URL
+                    pass
+                self._cache(video_id, info)
+                return {
+                    "url": info["url"],
+                    "id": info.get("id"),
+                    "format_id": info.get("format_id"),
+                }
+            except Exception as error:
+                last_error = str(error)
+                continue
+        return {"error": last_error or "no playable audio format found"}
 
     def _cache(self, video_id, info):
         if not video_id or not info.get("url"):
