@@ -126,6 +126,48 @@ function tryParseTwoWords(cleaned: string): ParsedQuery | null {
   return null;
 }
 
+function tryParseTrailingArtist(cleaned: string): ParsedQuery | null {
+  const words = cleaned.split(/\s+/);
+  if (words.length < 4 || words.length > 5) return null;
+  // 4-5 words: "my bad bro fimiguerrero" -> title "my bad bro", artist "fimiguerrero"
+  const artist1 = words[words.length - 1]!;
+  const title1 = words.slice(0, -1).join(" ");
+  if (
+    title1.length >= 4 &&
+    artist1.length >= 3 &&
+    artist1.length <= 20 &&
+    !/^\d+$/.test(artist1)
+  ) {
+    const titleWordCount = title1.split(/\s+/).length;
+    if (titleWordCount >= 2 && titleWordCount <= 4) {
+      return {
+        artist: artist1,
+        title: title1,
+        original: cleaned,
+        confidence: "low",
+      };
+    }
+  }
+  if (words.length === 4) {
+    const artist2 = words.slice(-2).join(" ");
+    const title2 = words.slice(0, -2).join(" ");
+    if (
+      title2.length >= 4 &&
+      artist2.length >= 5 &&
+      title2.split(/\s+/).length === 2 &&
+      artist2.split(/\s+/).every((w) => w.length >= 3)
+    ) {
+      return {
+        artist: artist2,
+        title: title2,
+        original: cleaned,
+        confidence: "low",
+      };
+    }
+  }
+  return null;
+}
+
 export function parseMusicQuery(query: string): ParsedQuery {
   const trimmed = query.trim();
   if (trimmed.length === 0) {
@@ -138,7 +180,8 @@ export function parseMusicQuery(query: string): ParsedQuery {
     tryParseSeparator(cleaned) ||
     tryParseColon(cleaned) ||
     tryParseFeat(cleaned) ||
-    tryParseTwoWords(cleaned) || {
+    tryParseTwoWords(cleaned) ||
+    tryParseTrailingArtist(cleaned) || {
       title: cleaned,
       original: trimmed,
       confidence: "low",

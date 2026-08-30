@@ -57,6 +57,16 @@ export const TITLE_PENALTIES: readonly RankingRule[] = [
   },
   { term: /\b(slowed|sped up|nightcore)\b/i, bonus: -25 },
   {
+    term: /\bclean\b/i,
+    bonus: -15,
+    condition: (query) => !query.toLowerCase().includes("clean"),
+  },
+  {
+    term: /\b(extended|full version|verison)\b/i,
+    bonus: -15,
+    condition: (query) => !/\b(extended|full)\b/i.test(query),
+  },
+  {
     term: /\b(reaction|review)\b/i,
     bonus: -15,
     condition: (query) => !/\b(reaction|review)\b/i.test(query),
