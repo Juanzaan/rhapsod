@@ -9,7 +9,10 @@ import { parseMediaInput, type YoutubeResource } from "../media-input.js";
 import { rankYoutubeCandidatesScored } from "./search-ranking.js";
 import type { TimeoutConfig } from "../../lib/timeout-config.js";
 import { fetchInnertubePlayerAudioUrl } from "./innertube-player.js";
-import { searchInnertubeVideos } from "./innertube-search.js";
+import {
+  searchInnertubeMusicVideos,
+  searchInnertubeVideos,
+} from "./innertube-search.js";
 
 const MAX_BUFFER_BYTES = 8 * 1024 * 1024;
 const DAEMON_TIMEOUT_MS = 8_000;
@@ -548,17 +551,40 @@ export class YoutubeResolver {
   async #searchViaInnertube(
     query: string,
   ): Promise<readonly YoutubeSearchCandidate[] | undefined> {
+    // Generic YouTube search is more reliable for 403 (datacenter IP)
+    // Music search is kept as fallback for queries like "poland" where generic returns travel
     const results = await searchInnertubeVideos(query);
-    if (results.length === 0) return undefined;
-    return results.map((result) => ({
-      ...(result.durationSeconds === undefined
-        ? {}
-        : { durationSeconds: result.durationSeconds }),
-      ...(result.channel === undefined ? {} : { channel: result.channel }),
-      id: result.id,
-      title: result.title,
-      webpageUrl: `https://www.youtube.com/watch?v=${result.id}`,
-    }));
+    if (results.length > 0) {
+      const hasMusicLike = results.some(
+        (r) =>
+          /official|audio|lyrics|topic/i.test(r.title) ||
+          /topic|official/i.test(r.channel ?? ""),
+      );
+      if (!hasMusicLike) {
+        const musicResults = await searchInnertubeMusicVideos(query);
+        if (musicResults.length > 0) {
+          return musicResults.map((result) => ({
+            ...(result.durationSeconds === undefined
+              ? {}
+              : { durationSeconds: result.durationSeconds }),
+            ...(result.channel === undefined ? {} : { channel: result.channel }),
+            id: result.id,
+            title: result.title,
+            webpageUrl: `https://www.youtube.com/watch?v=${result.id}`,
+          }));
+        }
+      }
+      return results.map((result) => ({
+        ...(result.durationSeconds === undefined
+          ? {}
+          : { durationSeconds: result.durationSeconds }),
+        ...(result.channel === undefined ? {} : { channel: result.channel }),
+        id: result.id,
+        title: result.title,
+        webpageUrl: `https://www.youtube.com/watch?v=${result.id}`,
+      }));
+    }
+    return undefined;
   }
 
   async #searchViaYtDlp(

@@ -19,6 +19,7 @@ const DURATION_TOLERANCE = 0.25;
 const DURATION_MISMATCH_PENALTY = 40;
 const VERSION_PENALTY = 35;
 const MINOR_VERSION_PENALTY = 10;
+const TITLE_LENGTH_PENALTY = 12;
 const VERIFIED_CHANNEL_BONUS = 12;
 const VIEW_COUNT_LOG_BONUS = 8;
 const MIN_DURATION_FOR_median = 60;
@@ -89,9 +90,20 @@ function scoreCandidate(
   normalizedExpectedTitle?: string,
 ): { score: number; breakdown: Record<string, number> } {
   const title = normalize(candidate.title);
-  const queryTerms = normalizedQuery
+  const rawQueryTerms = normalizedQuery
     .split(" ")
     .filter((term) => term.length > 0 && !STOPWORD_TERMS.test(term));
+  // When artist is extracted (e.g. "my bad bro fimiguerrero" -> artist "fimiguerrero"),
+  // don't penalize titles that omit the artist (e.g. "my bad bro" channel fimiguerrero).
+  // Use title part only for termMatch, artist handled via channelMatch/expectedTitleMatch.
+  let queryTerms = rawQueryTerms;
+  if (normalizedExpectedTitle) {
+    const artistTermsForFilter = normalizedExpectedTitle.split(" ").filter(Boolean);
+    const filtered = rawQueryTerms.filter(
+      (term) => !artistTermsForFilter.some((a) => termMatches(a, term) || termMatches(term, a)),
+    );
+    if (filtered.length > 0) queryTerms = filtered;
+  }
   const titleTerms = title.split(" ").filter(Boolean);
   const matchingTerms = queryTerms.filter((term) =>
     titleTerms.some((titleTerm) => termMatches(term, titleTerm)),
@@ -99,9 +111,27 @@ function scoreCandidate(
   const breakdown: Record<string, number> = {};
   let score = queryTerms.length ? (matchingTerms / queryTerms.length) * 45 : 0;
   breakdown.termMatch = score;
-  if (normalizedExpectedTitle && title.includes(normalizedExpectedTitle)) {
-    score += 30;
-    breakdown.expectedTitleMatch = 30;
+  if (normalizedExpectedTitle) {
+    const artistTerms = normalizedExpectedTitle.split(" ").filter(Boolean);
+    const allArtistTermsMatchTitle = artistTerms.every((artistTerm) =>
+      titleTerms.some((titleTerm) => termMatches(artistTerm, titleTerm)),
+    );
+    const channelNorm = candidate.channel
+      ? normalize(candidate.channel)
+      : "";
+    const channelTermsForArtist = channelNorm.split(" ").filter(Boolean);
+    const allArtistTermsMatchChannel = artistTerms.every((artistTerm) =>
+      channelTermsForArtist.some((ch) => termMatches(artistTerm, ch)),
+    );
+    if (
+      artistTerms.length > 0 &&
+      (title.includes(normalizedExpectedTitle) ||
+        allArtistTermsMatchTitle ||
+        allArtistTermsMatchChannel)
+    ) {
+      score += 30;
+      breakdown.expectedTitleMatch = 30;
+    }
   }
   if (title === normalizedQuery) {
     score += 25;
@@ -132,7 +162,9 @@ function scoreCandidate(
     const channelTerms = normalize(candidate.channel)
       .split(" ")
       .filter(Boolean);
-    const channelMatches = queryTerms.filter((term) =>
+    // Use raw terms for channel matching so artist in channel still counts
+    // even when we filtered it from title termMatch
+    const channelMatches = rawQueryTerms.filter((term) =>
       channelTerms.some((channelTerm) => termMatches(term, channelTerm)),
     ).length;
     const channelBonus = Math.min(
@@ -176,8 +208,12 @@ function scoreCandidate(
     MINOR_PENALIZED_TERMS.test(candidate.title) &&
     !MINOR_PENALIZED_TERMS.test(normalizedQuery)
   ) {
-    score -= MINOR_VERSION_PENALTY;
-    breakdown.minorVersionPenalty = -MINOR_VERSION_PENALTY;
+    // For single-term queries like "poland", lyric videos are often the only
+    // music result - penalize less to avoid filtering them out entirely.
+    const penalty =
+      queryTerms.length === 1 ? 3 : MINOR_VERSION_PENALTY;
+    score -= penalty;
+    breakdown.minorVersionPenalty = -penalty;
   }
   if (
     LIVE_EVENT_CONTEXT.test(candidate.title) &&
@@ -185,6 +221,12 @@ function scoreCandidate(
   ) {
     score -= VERSION_PENALTY;
     breakdown.liveEventPenalty = -VERSION_PENALTY;
+  }
+  // Penalize overly long titles for short queries (e.g. documentaries for "poland")
+  // Original issue: "Nazi invasion of Poland | James Holland and Lex Fridman" won over music
+  if (queryTerms.length <= 2 && titleTerms.length > queryTerms.length * 4 + 4) {
+    score -= TITLE_LENGTH_PENALTY;
+    breakdown.titleLengthPenalty = -TITLE_LENGTH_PENALTY;
   }
   const durationRules = applyRankingRules(
     query,
@@ -244,31 +286,41 @@ function termMatches(queryTerm: string, candidateTerm: string): boolean {
   if (candidateTerm.includes(queryTerm) || queryTerm.includes(candidateTerm))
     return true;
   if (queryTerm.length < FUZZY_MIN_TERM_LENGTH) return false;
-  return levenshteinDistance(queryTerm, candidateTerm) <= 1;
+  const maxDistance = queryTerm.length >= 6 ? 2 : 1;
+  return levenshteinDistance(queryTerm, candidateTerm) <= maxDistance;
 }
 
 function levenshteinDistance(left: string, right: string): number {
   if (left === right) return 0;
-  const shorter = left.length <= right.length ? left : right;
-  const longer = left.length <= right.length ? right : left;
-  if (longer.length === shorter.length) {
-    let differences = 0;
-    for (let i = 0; i < shorter.length; i++) {
-      if (shorter.charAt(i) !== longer.charAt(i)) differences++;
-      if (differences > 1) return 2;
+  const m = left.length;
+  const n = right.length;
+  if (Math.abs(m - n) > 2) return 3;
+  // DP limited to 2 edits - small strings so full DP is cheap
+  const dp: number[][] = Array.from({ length: m + 1 }, () =>
+    Array.from({ length: n + 1 }, () => 0),
+  );
+  for (let i = 0; i <= m; i++) dp[i]![0] = i;
+  for (let j = 0; j <= n; j++) dp[0]![j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      const cost = left.charAt(i - 1) === right.charAt(j - 1) ? 0 : 1;
+      dp[i]![j] = Math.min(
+        dp[i - 1]![j]! + 1,
+        dp[i]![j - 1]! + 1,
+        dp[i - 1]![j - 1]! + cost,
+      );
+      // Transposition (Damerau) for amarni vs armani swap
+      if (
+        i > 1 &&
+        j > 1 &&
+        left.charAt(i - 1) === right.charAt(j - 2) &&
+        left.charAt(i - 2) === right.charAt(j - 1)
+      ) {
+        dp[i]![j] = Math.min(dp[i]![j]!, dp[i - 2]![j - 2]! + 1);
+      }
     }
-    return differences;
   }
-  if (longer.length - shorter.length > 1) return 2;
-  let offset = 0;
-  for (let i = 0; i < shorter.length; i++) {
-    if (shorter.charAt(i) !== longer.charAt(i + offset)) {
-      offset++;
-      if (offset > 1) return 2;
-      if (shorter.charAt(i) !== longer.charAt(i + offset)) return 2;
-    }
-  }
-  return 1;
+  return dp[m]![n]!;
 }
 
 function normalize(value: string): string {
