@@ -129,13 +129,24 @@ export function createFfmpegPcmStream(
   let stopped = false;
   let stderr = "";
 
-  child.stdout.pipe(stream);
+  child.stdout.pipe(stream, { end: false });
   child.stderr.on("data", (chunk: Buffer) => {
     stderr = `${stderr}${chunk.toString("utf8")}`.slice(-8_192);
   });
   child.on("error", (error) => stream.destroy(error));
   child.on("close", (code, signal) => {
-    if (stopped) return;
+    if (stopped) {
+      if (code === 0 || signal === "SIGTERM" || signal === "SIGKILL") return;
+      if (!stream.destroyed) {
+        const detail = stderr.trim();
+        stream.destroy(
+          new Error(
+            `FFmpeg exited with code ${code ?? "unknown"}${detail ? `: ${detail}` : ""}`,
+          ),
+        );
+      }
+      return;
+    }
     if (code === 0 || signal === "SIGTERM") stream.end();
     else {
       const detail = stderr.trim();
