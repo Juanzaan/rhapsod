@@ -117,9 +117,19 @@ export function createFfmpegPcmStream(
   options: FfmpegPcmOptions = {},
 ): FfmpegPcmStream {
   const spawnProcess = options.spawnProcess ?? spawn;
+  const args = buildFfmpegPcmArguments(url, options);
+  console.error(
+    JSON.stringify({
+      msg: "FFmpeg spawn",
+      binary: options.binary ?? ffmpegStaticPath ?? "ffmpeg",
+      argCount: args.length,
+      hasUserAgent: args.includes("-user_agent"),
+      url: url.slice(0, 80),
+    }),
+  );
   const child = spawnProcess(
     options.binary ?? ffmpegStaticPath ?? "ffmpeg",
-    buildFfmpegPcmArguments(url, options),
+    args,
     {
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
@@ -135,6 +145,16 @@ export function createFfmpegPcmStream(
   });
   child.on("error", (error) => stream.destroy(error));
   child.on("close", (code, signal) => {
+    console.error(
+      JSON.stringify({
+        msg: "FFmpeg close",
+        code,
+        signal,
+        stopped,
+        url: url.slice(0, 80),
+        stderr: stderr.trim().slice(0, 200),
+      }),
+    );
     if (stopped) {
       if (code === 0 || signal === "SIGTERM" || signal === "SIGKILL") return;
       if (!stream.destroyed) {
