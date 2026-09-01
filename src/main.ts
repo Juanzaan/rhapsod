@@ -623,7 +623,7 @@ async function main(): Promise<void> {
   const panel = config.RHAPSOD_PANEL_ENABLED
     ? createPanelServer({
         config,
-        envFilePath: ".env",
+        envFilePath: config.RHAPSOD_ENV_FILE,
         logger,
         status: () => ({
           connected: connection.getCurrentChannelId() > 0,
