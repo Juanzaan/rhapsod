@@ -112,71 +112,81 @@ export function buildFfmpegPcmArguments(
   return args;
 }
 
+const FFMPEG_403_RETRY_COUNT = 2;
+const FFMPEG_403_RETRY_DELAY_MS = 1_500;
+
 export function createFfmpegPcmStream(
   url: string,
   options: FfmpegPcmOptions = {},
 ): FfmpegPcmStream {
   const spawnProcess = options.spawnProcess ?? spawn;
-  const args = buildFfmpegPcmArguments(url, options);
-  console.error(
-    JSON.stringify({
-      msg: "FFmpeg spawn",
-      binary: options.binary ?? ffmpegStaticPath ?? "ffmpeg",
-      argCount: args.length,
-      hasUserAgent: args.includes("-user_agent"),
-      url: url.slice(0, 80),
-    }),
-  );
-  const child = spawnProcess(
-    options.binary ?? ffmpegStaticPath ?? "ffmpeg",
-    args,
-    {
-      stdio: ["ignore", "pipe", "pipe"],
-      windowsHide: true,
-    },
-  );
+  const binary = options.binary ?? ffmpegStaticPath ?? "ffmpeg";
   const stream = new PassThrough({ highWaterMark: 256 * 1024 });
   let stopped = false;
+  let child = null as unknown as ChildProcessByStdio<null, Readable, Readable>;
   let stderr = "";
+  let retries = 0;
 
-  child.stdout.pipe(stream, { end: false });
-  child.stderr.on("data", (chunk: Buffer) => {
-    stderr = `${stderr}${chunk.toString("utf8")}`.slice(-8_192);
-  });
-  child.on("error", (error) => stream.destroy(error));
-  child.on("close", (code, signal) => {
-    console.error(
-      JSON.stringify({
-        msg: "FFmpeg close",
-        code,
-        signal,
-        stopped,
-        url: url.slice(0, 80),
-        stderr: stderr.trim().slice(0, 200),
-      }),
-    );
-    if (stopped) {
-      if (code === 0 || signal === "SIGTERM" || signal === "SIGKILL") return;
-      if (!stream.destroyed) {
-        const detail = stderr.trim();
-        stream.destroy(
-          new Error(
-            `FFmpeg exited with code ${code ?? "unknown"}${detail ? `: ${detail}` : ""}`,
-          ),
-        );
+  const start = (): void => {
+    const args = buildFfmpegPcmArguments(url, options);
+    stderr = "";
+    child = spawnProcess(binary, args, {
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+    });
+    child.stdout.pipe(stream, { end: false });
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderr = `${stderr}${chunk.toString("utf8")}`.slice(-8_192);
+    });
+    child.on("error", (error) => {
+      if (!stopped && !stream.destroyed) stream.destroy(error);
+    });
+    child.on("close", (code, signal) => {
+      console.error(
+        JSON.stringify({
+          msg: "FFmpeg close",
+          code,
+          signal,
+          stopped,
+          retries,
+          url: url.slice(0, 80),
+          stderr: stderr.trim().slice(0, 200),
+        }),
+      );
+      if (stopped) {
+        if (code === 0 || signal === "SIGTERM" || signal === "SIGKILL") return;
+        if (!stream.destroyed) {
+          const detail = stderr.trim();
+          stream.destroy(
+            new Error(
+              `FFmpeg exited with code ${code ?? "unknown"}${detail ? `: ${detail}` : ""}`,
+            ),
+          );
+        }
+        return;
       }
-      return;
-    }
-    if (code === 0 || signal === "SIGTERM") stream.end();
-    else {
+      if (code === 0 || signal === "SIGTERM") {
+        stream.end();
+        return;
+      }
+      // Intermittent CDN 403: retry the same URL in place after a short delay.
+      // The player stays in "buffering" and receives audio when a retry succeeds.
+      if (/403|Forbidden/i.test(stderr) && retries < FFMPEG_403_RETRY_COUNT) {
+        retries++;
+        const timer = setTimeout(start, FFMPEG_403_RETRY_DELAY_MS);
+        timer.unref();
+        return;
+      }
       const detail = stderr.trim();
       stream.destroy(
         new Error(
           `FFmpeg exited with code ${code ?? "unknown"}${detail ? `: ${detail}` : ""}`,
         ),
       );
-    }
-  });
+    });
+  };
+
+  start();
 
   const stop = (): void => {
     if (stopped) return;
