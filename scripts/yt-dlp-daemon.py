@@ -58,6 +58,7 @@ BASE = {
             "player_client": ["web_embedded"],
             "player_skip": ["webpage", "initial_data"],
             "skip": ["hls", "dash"],
+            "po_token_uri": "http://127.0.0.1:4416/get_pot",
         }
     },
 }
@@ -96,6 +97,7 @@ class Daemon:
                 "player_client": ["web_safari"],
                 "player_skip": ["webpage", "initial_data"],
                 "skip": ["hls", "dash"],
+                "po_token_uri": "http://127.0.0.1:4416/get_pot",
             }
         }
         self.ydl_safari = yt_dlp.YoutubeDL(dict(base_safari, format="bestaudio/best"))
