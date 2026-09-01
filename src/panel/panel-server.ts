@@ -263,17 +263,19 @@ export function createPanelServer(options: PanelOptions): {
     return c.json({ ok: true, message: "Reiniciando..." });
   });
 
+  const panelHost = options.config.RHAPSOD_PANEL_HOST;
   const server = serve({
     fetch: app.fetch,
-    hostname: "127.0.0.1",
+    hostname: panelHost,
     port: options.config.RHAPSOD_PANEL_PORT,
   });
   options.logger.info(
     {
+      host: panelHost,
       port: options.config.RHAPSOD_PANEL_PORT,
       user: panelUser,
     },
-    "Setup panel listening on 127.0.0.1",
+    "Setup panel listening",
   );
 
   return {
