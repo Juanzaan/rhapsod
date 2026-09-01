@@ -190,6 +190,15 @@ class Daemon:
                 continue
         return {"error": last_error or "no playable audio format found"}
 
+    def invalidate(self, url):
+        """Drop a cached URL for a video so a 403'd host is re-resolved fresh."""
+        video_id = self._video_id(url)
+        if not video_id:
+            return {"error": "invalid url"}
+        with self.cache_lock:
+            removed = self.cache.pop(video_id, None)
+        return {"invalidated": removed is not None, "id": video_id}
+
     def _cache(self, video_id, info):
         if not video_id or not info.get("url"):
             return
@@ -214,6 +223,9 @@ class Handler(BaseHTTPRequestHandler):
         url = qs.get("url", [""])[0]
         if not url:
             self._json({"error": "missing url"})
+            return
+        if self.path.startswith("/invalidate"):
+            self._json(daemon.invalidate(url))
             return
         self._json(daemon.resolve(url))
 

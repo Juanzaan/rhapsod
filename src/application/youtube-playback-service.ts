@@ -111,6 +111,7 @@ interface PlaybackTiming {
 
 export interface YoutubePlaybackResolver {
   getAudioUrlFromUrl(url: string, signal?: AbortSignal): Promise<string>;
+  invalidateAudioUrl?(url: string): Promise<boolean>;
   getTrack(resource: YoutubeResource): Promise<YoutubeTrackMetadata>;
   getTrackFromUrl(url: string): Promise<YoutubeTrackMetadata>;
   search(
@@ -140,6 +141,7 @@ const AUDIO_URL_EXPIRY_MARGIN_MS = 60_000;
 const AUDIO_URL_REFRESH_AHEAD_MS = 3 * 60_000;
 const AUTH_REQUIRED_RE =
   /sign in to confirm|cookies for the authentication|request you to sign in|login required/i;
+const MAX_AUDIO_URL_403_RETRIES = 3;
 const PREFETCH_STABILITY_TIMEOUT_MS = 8_000;
 const PREFETCH_STABILITY_POLL_MS = 100;
 const PREFETCH_DEPTH = 4;
@@ -220,6 +222,7 @@ export class YoutubePlaybackService {
     FfmpegPlaybackSession,
     PlaybackEndReason
   >();
+  readonly #retries = new WeakMap<Track, number>();
   #filter: AudioFilter = "off";
   #filterParam: FilterParam = {};
 
@@ -1508,18 +1511,25 @@ export class YoutubePlaybackService {
             playbackError instanceof Error &&
             /403|Forbidden/i.test(playbackError.message);
           if (is403) {
-            // Invalidate stale URL (daemon may have cached 403) and retry once
-            this.#prepared.delete(track.source);
-            if (generation === this.#generation && this.#current === track) {
-              try {
-                this.#queue.add(track);
-                this.#queue.moveToHead(track.id);
-                this.#session = undefined;
-                this.#current = undefined;
-                this.#persistState();
-                continue;
-              } catch {
-                // Already queued or limit reached: fall through to next track
+            const retries = this.#retries.get(track) ?? 0;
+            if (retries < MAX_AUDIO_URL_403_RETRIES) {
+              this.#retries.set(track, retries + 1);
+              // Invalidate stale URL (daemon may have cached a 403'd host)
+              this.#prepared.delete(track.source);
+              void this.#resolver
+                .invalidateAudioUrl?.(track.source)
+                .catch(() => undefined);
+              if (generation === this.#generation && this.#current === track) {
+                try {
+                  this.#queue.add(track);
+                  this.#queue.moveToHead(track.id);
+                  this.#session = undefined;
+                  this.#current = undefined;
+                  this.#persistState();
+                  continue;
+                } catch {
+                  // Already queued or limit reached: fall through
+                }
               }
             }
           }
@@ -1528,6 +1538,7 @@ export class YoutubePlaybackService {
           continue;
         }
         this.#prepared.delete(track.source);
+        this.#retries.delete(track);
         this.#session = undefined;
         this.#current = undefined;
         this.#persistState();
