@@ -12,6 +12,7 @@ const optionalPositiveInteger = z.preprocess(
 
 const configSchema = z.object({
   RHAPSOD_ADMIN_UIDS: z.string().default(""),
+  RHAPSOD_ENV_FILE: z.string().min(1).default(".env"),
   RHAPSOD_PRIVATE_COMMAND_UIDS: z.string().default(""),
   RHAPSOD_DATA_DIR: z.string().min(1).default("./data"),
   RHAPSOD_FFMPEG_PATH: optionalSecret,
