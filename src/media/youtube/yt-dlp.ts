@@ -753,6 +753,20 @@ export class YoutubeResolver {
     }
   }
 
+  async invalidateAudioUrl(url: string): Promise<boolean> {
+    if (this.#daemonUrl === undefined) return false;
+    try {
+      const response = await this.#daemonFetch(
+        `${this.#daemonUrl}/invalidate?url=${encodeURIComponent(url)}`,
+      );
+      if (!response.ok) return false;
+      const body = (await response.json()) as { readonly invalidated?: boolean };
+      return body.invalidated === true;
+    } catch {
+      return false;
+    }
+  }
+
   async prefetchAudioUrls(
     urls: readonly string[],
     signal?: AbortSignal,
