@@ -352,6 +352,12 @@ export function renderDashboard(
           <button class="ch" onclick="cmd('stats')">Stats</button>
         </div>
       </div>
+      <div class="cd" style="grid-column:1/-1">
+        <div class="ct">Errores <span id="ec" style="float:right;color:#64748b">0 total</span></div>
+        <div class="fc" id="ek"></div>
+        <ul class="ql" id="el"></ul>
+        <div class="em" id="ee">Sin errores registrados</div>
+      </div>
     </div>
   </div>
   <div class="toast" id="toast"></div>
@@ -380,6 +386,10 @@ export function renderDashboard(
       setTimeout(function(){el.classList.remove('show');},3000);
     }
 
+    function esc(s){
+      return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
     function refresh(){
       fetch('/api/state',{headers:H}).then(function(r){return r.json();}).then(function(d){
         document.getElementById('nt').textContent=d.currentTitle||'Sin reproducir';
@@ -391,13 +401,37 @@ export function renderDashboard(
         txt.textContent=d.connected?'Conectado':'Desconectado';
         var list=document.getElementById('ql');
         var empty=document.getElementById('qe');
-        if(!d.queue||d.queue.length===0){list.innerHTML='';empty.style.display='block';return;}
+        if(!d.queue||d.queue.length===0){list.innerHTML='';empty.style.display='block';}
+        else{
+          empty.style.display='none';
+          var h='';
+          for(var i=0;i<d.queue.length;i++){
+            var t=d.queue[i];
+            var title=t.title||'Sin titulo';
+            h+='<li class="qi"><span class="qn">'+(i+1)+'</span><span class="qt" title="'+title.replace(/"/g,'&quot;')+'">'+title.replace(/</g,'&lt;')+'</span></li>';
+          }
+          list.innerHTML=h;
+        }
+      }).catch(function(){});
+      fetch('/api/errors',{headers:H}).then(function(r){return r.json();}).then(function(e){
+        document.getElementById('ec').textContent=(e.totalErrors||0)+' total';
+        var k=document.getElementById('ek');
+        var cats=e.byCategory||{};
+        var names=Object.keys(cats);
+        var kh='';
+        for(var i=0;i<names.length;i++){var n=names[i];kh+='<span class="ch">'+esc(n)+' '+cats[n]+'</span>';}
+        k.innerHTML=kh;
+        var list=document.getElementById('el');
+        var empty=document.getElementById('ee');
+        var rec=e.recent||[];
+        if(rec.length===0){list.innerHTML='';empty.style.display='block';return;}
         empty.style.display='none';
         var h='';
-        for(var i=0;i<d.queue.length;i++){
-          var t=d.queue[i];
-          var title=t.title||'Sin titulo';
-          h+='<li class="qi"><span class="qn">'+(i+1)+'</span><span class="qt" title="'+title.replace(/"/g,'&quot;')+'">'+title.replace(/</g,'&lt;')+'</span></li>';
+        for(var j=rec.length-1;j>=0;j--){
+          var r2=rec[j];
+          var t=new Date(r2.ts).toLocaleTimeString();
+          var ti=r2.trackTitle||r2.trackId||'';
+          h+='<li class="qi"><span class="qn">'+esc(t)+'</span><span class="qt" title="'+esc(r2.message)+'">['+esc(r2.category)+'] '+esc(ti)+' — '+esc(r2.message)+'</span></li>';
         }
         list.innerHTML=h;
       }).catch(function(){});

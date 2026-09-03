@@ -4,6 +4,7 @@ import { serve } from "@hono/node-server";
 import type { Logger } from "pino";
 
 import type { AppConfig } from "../config.js";
+import type { ErrorSummary } from "../observability/metrics.js";
 import { COMMAND_SPECS } from "../commands/command-registry.js";
 import { loadEnvFile, maskSecret, saveEnvFile } from "./env-file.js";
 import {
@@ -40,6 +41,7 @@ export interface PanelOptions {
   readonly logger: Logger;
   readonly status: () => PanelStatus;
   readonly queue: () => QueueEntry[];
+  readonly errors?: () => ErrorSummary;
   readonly executeCommand: (command: string) => Promise<string>;
   readonly restart: () => void;
   readonly testConnection?: (
@@ -79,6 +81,7 @@ const ENV_DESCRIPTIONS: Record<string, string> = {
   RHAPSOD_YTDLP_COOKIES_PATH: "Ruta a cookies.txt de YouTube",
   RHAPSOD_YTDLP_DAEMON_URL: "URL del daemon yt-dlp (http://127.0.0.1:8765)",
   RHAPSOD_YTDLP_EXTRACTOR_ARGS: "Args extra para yt-dlp",
+  RHAPSOD_WARP_PROXY: "Egress fallback para 403 (vacio = solo directo)",
   RHAPSOD_FFMPEG_PATH: "Ruta del binario ffmpeg",
   RHAPSOD_FFMPEG_USER_AGENT: "User-Agent para ffmpeg",
   RHAPSOD_FFPROBE_PATH: "Ruta del binario ffprobe",
@@ -165,6 +168,13 @@ export function createPanelServer(options: PanelOptions): {
 
   app.get("/api/queue", (c) => {
     return c.json({ tracks: options.queue() });
+  });
+
+  app.get("/api/errors", (c) => {
+    if (options.errors === undefined) {
+      return c.json({ totalErrors: 0, byCategory: {}, recent: [] });
+    }
+    return c.json(options.errors());
   });
 
   app.get("/api/commands", (c) => {

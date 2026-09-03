@@ -269,7 +269,7 @@ describe("FFmpeg PCM source", () => {
       failWith403();
       await vi.advanceTimersByTimeAsync(1_500);
       expect(spawns).toHaveLength(4);
-      const proxyArgs = spawns[3];
+      const proxyArgs = spawns[3] ?? [];
       expect(proxyArgs).toContain("-http_proxy");
       expect(proxyArgs[proxyArgs.indexOf("-http_proxy") + 1]).toBe(
         "http://127.0.0.1:40000",

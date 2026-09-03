@@ -118,6 +118,70 @@ describe("panel-server", () => {
     }
   });
 
+  it("serves error summary over HTTP", async () => {
+    const port = 23459;
+    const dir = mkdtempSync(join(tmpdir(), "panel-"));
+    const envPath = join(dir, ".env");
+    writeFileSync(envPath, "");
+    const panel = createPanelServer({
+      config: baseConfig({ RHAPSOD_PANEL_PORT: port }),
+      envFilePath: envPath,
+      logger,
+      status: () => ({ connected: true, queueLength: 0, version: "2.2.0" }),
+      queue: () => [],
+      executeCommand: () => Promise.resolve("OK"),
+      restart: () => undefined,
+      errors: () => ({
+        totalErrors: 2,
+        byCategory: { auth: 1, playback: 1 },
+        recent: [
+          {
+            ts: 1_700_000_000_000,
+            trackId: "vid1",
+            trackTitle: "Song One",
+            category: "auth",
+            message: "sign in to confirm",
+          },
+        ],
+      }),
+    });
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/api/errors`, {
+        headers: {
+          authorization: `Basic ${Buffer.from("admin:secret").toString("base64")}`,
+        },
+      });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        totalErrors: number;
+        byCategory: Record<string, number>;
+        recent: { trackTitle?: string }[];
+      };
+      expect(body.totalErrors).toBe(2);
+      expect(body.byCategory).toEqual({ auth: 1, playback: 1 });
+      expect(body.recent[0]?.trackTitle).toBe("Song One");
+    } finally {
+      await panel.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("returns empty error summary when no provider is configured", async () => {
+    const port = 23460;
+    const state = startTestPanel("", port);
+    try {
+      const res = await fetch(`${state.baseUrl}/api/errors`, {
+        headers: { authorization: state.auth },
+      });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { totalErrors: number };
+      expect(body.totalErrors).toBe(0);
+    } finally {
+      await state.close();
+      rmSync(state.dir, { recursive: true, force: true });
+    }
+  });
+
   it("rejects unauthenticated requests", async () => {
     const port = 23457;
     const state = startTestPanel("", port);
