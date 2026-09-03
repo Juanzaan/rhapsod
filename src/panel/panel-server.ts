@@ -28,8 +28,14 @@ export interface PanelStatus {
   readonly currentArtist?: string;
   readonly currentDuration?: number;
   readonly currentPosition?: number;
+  readonly durationMs?: number;
+  readonly positionMs?: number;
+  readonly playerState?: "idle" | "buffering" | "playing" | "paused";
   readonly volume?: number;
   readonly loopMode?: string;
+  readonly currentFilter?: string;
+  readonly tracksPlayed?: number;
+  readonly uptimeMs?: number;
   readonly version: string;
   readonly uptime?: number;
   readonly hostname?: string;

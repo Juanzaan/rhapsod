@@ -644,6 +644,16 @@ async function main(): Promise<void> {
           ...(playback.current === undefined
             ? {}
             : { currentTitle: playback.current.title }),
+          ...(playback.current?.durationSeconds === undefined
+            ? {}
+            : { durationMs: playback.current.durationSeconds * 1000 }),
+          positionMs: playback.playbackPositionMs,
+          playerState: playback.playerState,
+          volume: playback.volume,
+          loopMode: playback.loopMode,
+          currentFilter: playback.filter,
+          tracksPlayed: playback.tracksPlayed,
+          uptimeMs: Math.round(process.uptime() * 1000),
           version: process.env.npm_package_version ?? "2.2.0",
         }),
         queue: (): QueueEntry[] =>

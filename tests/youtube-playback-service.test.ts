@@ -55,6 +55,7 @@ function setup(
     playlistStore?: PlaylistStore;
     redirectResolver?: RedirectResolver;
     audioUrlCache?: AudioUrlCache;
+    proxyUrl?: string;
   } = {},
 ) {
   const stopSession = vi.fn();
@@ -270,10 +271,12 @@ function setup(
       ? { maxTracksPerUser: options.maxTracksPerUser }
       : {}),
     ...(options.prewarmNext ? { prewarmNext: true } : {}),
+    ...(options.proxyUrl === undefined ? {} : { proxyUrl: options.proxyUrl }),
   });
   return {
     alternativeResolver,
     createPlayback,
+    createPcmStreamMock,
     directUrlResolverMocks,
     lyricsResolver,
     onPlaybackError,
@@ -1055,6 +1058,42 @@ describe("YoutubePlaybackService", () => {
 
     expect(service.loopMode).toBe("off");
     expect(service.current).toBeUndefined();
+  });
+
+  it("exposes idle panel state before playback starts", () => {
+    const { service } = setup();
+    expect(service.playerState).toBe("idle");
+    expect(service.playbackPositionMs).toBe(0);
+    expect(service.volume).toBe(50);
+    expect(service.loopMode).toBe("off");
+    expect(service.filter).toBe("off");
+    expect(service.tracksPlayed).toBe(0);
+  });
+
+  it("passes proxyUrl to the prewarm stream when configured", async () => {
+    const { createPcmStreamMock, resolver, service } = setup({
+      framesSent: 4000,
+      prewarmNext: true,
+      proxyUrl: "http://127.0.0.1:40000",
+    });
+    resolver.getTrack.mockImplementation((resource: { id: string }) =>
+      Promise.resolve({
+        durationSeconds: 120,
+        id: resource.id,
+        title: `Track ${resource.id}`,
+        webpageUrl: `https://www.youtube.com/watch?v=${resource.id}`,
+      }),
+    );
+
+    await service.enqueue("https://youtu.be/first", "user-1");
+    await service.enqueue("https://youtu.be/second", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(createPcmStreamMock).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ proxyUrl: "http://127.0.0.1:40000" }),
+    );
   });
 
   it("removes queued tracks without stopping the current track", async () => {

@@ -306,6 +306,15 @@ export class YoutubePlaybackService {
     return this.#filter;
   }
 
+  get playerState(): "idle" | "buffering" | "playing" | "paused" {
+    return this.#session?.player.state ?? "idle";
+  }
+
+  get playbackPositionMs(): number {
+    const frames = this.#session?.player.metrics.framesSent ?? 0;
+    return Math.max(0, frames * FRAME_DURATION_MS);
+  }
+
   get audioHealth(): AudioPlayerMetrics | undefined {
     return this.#session?.player.metrics;
   }
