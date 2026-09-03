@@ -57,9 +57,29 @@ export class ChannelDirectory {
     return [...this.#cache.values()].sort((a, b) => a.cid - b.cid);
   }
 
+  prime(entry: SnapshotChannel): void {
+    if (Number.isSafeInteger(entry.cid) && entry.cid > 0) {
+      this.#cache.set(entry.cid, { ...entry });
+    }
+  }
+
   clear(): void {
     this.#cache.clear();
   }
+}
+
+export type ServerViewMode = "full" | "partial";
+
+/**
+ * Picks the channel source: the full channellist when the server allows it,
+ * otherwise the channels resolved from visible clients (occupied only).
+ */
+export function pickChannels(
+  full: readonly SnapshotChannel[],
+  visible: readonly SnapshotChannel[],
+): { channels: readonly SnapshotChannel[]; mode: ServerViewMode } {
+  if (full.length > 0) return { channels: full, mode: "full" };
+  return { channels: visible, mode: "partial" };
 }
 
 /**

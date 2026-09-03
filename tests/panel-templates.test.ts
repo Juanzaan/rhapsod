@@ -341,11 +341,12 @@ describe("renderDashboard console", () => {
       "setInterval",
       "setTimeout",
       "btoa",
-      `${code};return {render:render,poll:poll,moveBot:moveBot};`,
+      `${code};return {render:render,poll:poll,moveBot:moveBot,toggleCh:toggleCh};`,
     ) as (...args: unknown[]) => {
       render: (view: unknown) => void;
       poll: () => void;
       moveBot: (cid: number) => void;
+      toggleCh: (event: unknown, cid: number) => void;
     };
     const api = factory(
       { getElementById: getEl, readyState: "loading" },
@@ -383,6 +384,25 @@ describe("renderDashboard console", () => {
     expect(tree.indexOf("Music")).toBeLessThan(tree.indexOf("Sub"));
     expect(getEl("ucount").textContent).toBe("3 usuarios");
     expect(tree.match(/onclick="moveBot\(2\)"/)).not.toBeNull();
+    // Nested kids container + chevron toggle for channels with children.
+    expect(tree).toContain('data-kids="2"');
+    expect(tree).toContain("toggleCh(event,2)");
+    api.toggleCh({ stopPropagation: () => {} }, 2);
+    expect(getEl("tree").innerHTML).toContain('style="display:none"');
+    api.toggleCh({ stopPropagation: () => {} }, 2);
+    expect(getEl("tree").innerHTML).not.toContain('style="display:none"');
+    // Mode hint reflects permission-limited views.
+    expect(getEl("treeHint").textContent).toContain("permisos limitados");
+    api.render({
+      version: 2,
+      botChannelId: 2,
+      mode: "full",
+      channels: [{ cid: 1, name: "Lobby" }],
+      clients: [],
+    });
+    expect(getEl("treeHint").textContent).toBe(
+      "Click en un canal para mover el bot ahí",
+    );
 
     api.poll();
     api.moveBot(3);
