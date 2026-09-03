@@ -16,6 +16,52 @@ export interface ServerView {
   readonly clients: readonly SnapshotClient[];
 }
 
+export type ChannelInfoFetcher = (
+  cid: number,
+) => Promise<{ name?: string; parentCid?: number } | undefined>;
+
+/**
+ * Resolves channel metadata without `channellist` (some servers restrict
+ * that command to admins). Channels are discovered from the cids of visible
+ * clients and enriched one by one via `channelinfo`, which regular clients
+ * can usually call. Results are cached; unknown channels degrade to `#cid`.
+ */
+export class ChannelDirectory {
+  readonly #cache = new Map<number, SnapshotChannel>();
+
+  constructor(private readonly fetchInfo: ChannelInfoFetcher) {}
+
+  async resolve(cid: number): Promise<SnapshotChannel> {
+    const cached = this.#cache.get(cid);
+    if (cached !== undefined) return cached;
+    const fallback: SnapshotChannel = { cid, name: `#${cid}` };
+    try {
+      const info = await this.fetchInfo(cid);
+      const name =
+        info?.name !== undefined && info.name.length > 0
+          ? info.name
+          : fallback.name;
+      const entry: SnapshotChannel =
+        info?.parentCid !== undefined
+          ? { cid, name, parentCid: info.parentCid }
+          : { cid, name };
+      this.#cache.set(cid, entry);
+      return entry;
+    } catch {
+      this.#cache.set(cid, fallback);
+      return fallback;
+    }
+  }
+
+  snapshot(): readonly SnapshotChannel[] {
+    return [...this.#cache.values()].sort((a, b) => a.cid - b.cid);
+  }
+
+  clear(): void {
+    this.#cache.clear();
+  }
+}
+
 /**
  * In-memory mirror of the TeamSpeak server structure for the panel's live
  * server view. Seeded with a full channellist/clientlist, then patched
@@ -65,6 +111,16 @@ export class ServerSnapshot {
 
   applyLeave(clid: number): void {
     if (this.#clients.delete(clid)) this.#version++;
+  }
+
+  setChannels(channels: readonly SnapshotChannel[]): void {
+    this.#channels.clear();
+    for (const channel of channels) {
+      if (Number.isSafeInteger(channel.cid) && channel.cid > 0) {
+        this.#channels.set(channel.cid, { ...channel });
+      }
+    }
+    this.#version++;
   }
 
   toJSON(): ServerView {
