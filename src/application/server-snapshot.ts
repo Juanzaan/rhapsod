@@ -2,6 +2,7 @@ export interface SnapshotChannel {
   readonly cid: number;
   readonly name: string;
   readonly parentCid?: number;
+  readonly order?: number;
 }
 
 export interface SnapshotClient {
@@ -18,7 +19,7 @@ export interface ServerView {
 
 export type ChannelInfoFetcher = (
   cid: number,
-) => Promise<{ name?: string; parentCid?: number } | undefined>;
+) => Promise<{ name?: string; parentCid?: number; order?: number } | undefined>;
 
 /**
  * Resolves channel metadata without `channellist` (some servers restrict
@@ -41,10 +42,12 @@ export class ChannelDirectory {
         info?.name !== undefined && info.name.length > 0
           ? info.name
           : fallback.name;
-      const entry: SnapshotChannel =
-        info?.parentCid !== undefined
-          ? { cid, name, parentCid: info.parentCid }
-          : { cid, name };
+      const entry: SnapshotChannel = {
+        cid,
+        name,
+        ...(info?.parentCid !== undefined ? { parentCid: info.parentCid } : {}),
+        ...(info?.order !== undefined ? { order: info.order } : {}),
+      };
       this.#cache.set(cid, entry);
       return entry;
     } catch {
