@@ -39,3 +39,32 @@ export class ChatLog {
     return [...this.#entries];
   }
 }
+
+export interface OutgoingMarker {
+  readonly text: string;
+  readonly ts: number;
+}
+
+const ECHO_WINDOW_MS = 5_000;
+
+/**
+ * TeamSpeak echoes our own channel messages back to us. Without this check
+ * every bot message would appear twice in the log (once as sent, once as
+ * received). Only exact sender+text matches inside a short window are
+ * treated as echoes; anything else is always kept.
+ */
+export function isOwnEcho(
+  senderName: string,
+  nickname: string,
+  message: string,
+  lastOutgoing: OutgoingMarker | undefined,
+  now: number,
+): boolean {
+  return (
+    lastOutgoing !== undefined &&
+    senderName === nickname &&
+    message === lastOutgoing.text &&
+    now - lastOutgoing.ts >= 0 &&
+    now - lastOutgoing.ts <= ECHO_WINDOW_MS
+  );
+}

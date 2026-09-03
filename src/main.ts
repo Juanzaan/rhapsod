@@ -38,7 +38,7 @@ import {
 import { getTimeoutConfig } from "./lib/timeout-config.js";
 import { UserError } from "./lib/user-error.js";
 import { createPanelServer, type QueueEntry } from "./panel/panel-server.js";
-import { ChatLog } from "./application/chat-log.js";
+import { ChatLog, isOwnEcho } from "./application/chat-log.js";
 import {
   createCookieSaver,
   createYoutubeHealthCheck,
@@ -155,8 +155,10 @@ async function main(): Promise<void> {
   }
   const connection = createTs3Connection(config, identity, logger);
   const chatLog = new ChatLog();
+  let lastOutgoing: { text: string; ts: number } | undefined;
   const rawSendChannelMessage = connection.sendChannelMessage.bind(connection);
   connection.sendChannelMessage = async (text: string): Promise<void> => {
+    lastOutgoing = { text, ts: Date.now() };
     chatLog.push(config.RHAPSOD_TS3_NICKNAME, text, true);
     return rawSendChannelMessage(text);
   };
@@ -438,7 +440,18 @@ async function main(): Promise<void> {
   };
   connection.onTextMessage(
     (message, senderUid, senderName, senderGroups, isPrivate, invokerClid) => {
-      if (!isPrivate) chatLog.push(senderName, message, false);
+      if (
+        !isPrivate &&
+        !isOwnEcho(
+          senderName,
+          config.RHAPSOD_TS3_NICKNAME,
+          message,
+          lastOutgoing,
+          Date.now(),
+        )
+      ) {
+        chatLog.push(senderName, message, false);
+      }
       const privateAllowed = isPrivate && privateCommandUids.has(senderUid);
       const respond = privateAllowed
         ? (text: string) => connection.sendPrivateMessage(invokerClid, text)
