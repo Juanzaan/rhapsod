@@ -26,9 +26,18 @@ describe("loadConfig", () => {
     expect(config.RHAPSOD_MAX_CONCURRENT_YTDLP_JOBS).toBeUndefined();
     expect(config.RHAPSOD_FFMPEG_PATH).toBeUndefined();
     expect(config.RHAPSOD_FFMPEG_USER_AGENT).toBeUndefined();
+    expect(config.RHAPSOD_WARP_PROXY).toBeUndefined();
     expect(config.RHAPSOD_FFPROBE_PATH).toBeUndefined();
     expect(config.RHAPSOD_ADMIN_UIDS).toBe("");
     expect(config.RHAPSOD_DATA_DIR).toBe("./data");
+  });
+
+  it("loads the optional WARP proxy egress", () => {
+    const config = loadConfig({
+      RHAPSOD_TS3_HOST: "ts.example.com",
+      RHAPSOD_WARP_PROXY: "socks5h://127.0.0.1:40000",
+    });
+    expect(config.RHAPSOD_WARP_PROXY).toBe("socks5h://127.0.0.1:40000");
   });
 
   it("loads optional FFmpeg probe settings", () => {

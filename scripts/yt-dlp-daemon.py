@@ -16,16 +16,24 @@ Environment:
   RHAPSOD_YTDLP_DAEMON_PORT    bind port (default 8765)
   RHAPSOD_YTDLP_COOKIES_PATH   youtube cookies file (default
                                /home/rhapsod/youtube-cookies.txt)
+  RHAPSOD_WARP_PROXY           optional fallback egress for blocked fetches
+                               (e.g. socks5h://127.0.0.1:40000 for Cloudflare
+                               WARP in proxy mode). Empty/disabled by default.
+                               When set, extraction and URL validation retry
+                               through the proxy after direct attempts fail.
 
 Endpoint:
   GET /resolve?url=<encoded youtube watch url>
-  -> {"url": "...", "id": "...", "format_id": "...", "cached": true?}
+  -> {"url": "...", "id": "...", "format_id": "...", "cached": true?,
+      "egress": "warp"?}
   or {"error": "..."}
 """
 
 import json
 import os
 import re
+import shutil
+import subprocess
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -40,6 +48,9 @@ COOKIES_PATH = os.environ.get(
 )
 HOST = os.environ.get("RHAPSOD_YTDLP_DAEMON_HOST", "127.0.0.1")
 PORT = int(os.environ.get("RHAPSOD_YTDLP_DAEMON_PORT", "8765"))
+# Optional fallback egress (e.g. socks5h://127.0.0.1:40000). Empty = disabled.
+WARP_PROXY = os.environ.get("RHAPSOD_WARP_PROXY", "")
+CURL_BIN = shutil.which("curl")
 
 BASE = {
     "quiet": True,
@@ -101,6 +112,20 @@ class Daemon:
             }
         }
         self.ydl_safari = yt_dlp.YoutubeDL(dict(base_safari, format="bestaudio/best"))
+        # Optional WARP-proxy extraction clients (same clients, different
+        # egress). Built lazily only when RHAPSOD_WARP_PROXY is configured.
+        if WARP_PROXY:
+            self.ydl_embedded_proxy = yt_dlp.YoutubeDL(
+                dict(BASE, format="bestaudio/best", proxy=WARP_PROXY)
+            )
+            proxy_safari = dict(base_safari)
+            proxy_safari["proxy"] = WARP_PROXY
+            self.ydl_safari_proxy = yt_dlp.YoutubeDL(
+                dict(proxy_safari, format="bestaudio/best")
+            )
+        else:
+            self.ydl_embedded_proxy = None
+            self.ydl_safari_proxy = None
         self.extract_lock = Lock()
         self.cache_lock = Lock()
         self.cache = {}
@@ -156,37 +181,83 @@ class Daemon:
                 with self.cache_lock:
                     self.inflight.pop(video_id, None)
 
+    @staticmethod
+    def _head_status(test_url, via_proxy):
+        """HEAD-check a stream URL. Returns the HTTP status, or None when the
+        check itself is inconclusive (caller should still try the URL)."""
+        user_agent = (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        )
+        if via_proxy:
+            if not CURL_BIN:
+                return None
+            try:
+                proc = subprocess.run(
+                    [
+                        CURL_BIN,
+                        "-s",
+                        "-o",
+                        "/dev/null",
+                        "-w",
+                        "%{http_code}",
+                        "-m",
+                        "8",
+                        "--proxy",
+                        WARP_PROXY,
+                        "-I",
+                        "-A",
+                        user_agent,
+                        test_url,
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+                code = int(proc.stdout.strip())
+                return code
+            except Exception:
+                return None
+        try:
+            import urllib.request
+
+            req = urllib.request.Request(test_url, method="HEAD")
+            req.add_header("User-Agent", user_agent)
+            with urllib.request.urlopen(req, timeout=3) as resp:
+                return resp.status
+        except Exception:
+            return None
+
     def _extract(self, url, video_id):
         last_error = None
-        for ydl in (self.ydl_embedded, self.ydl_safari):
+        attempts = [
+            (self.ydl_embedded, False),
+            (self.ydl_safari, False),
+        ]
+        # Fallback egress: same clients through the proxy, only when configured.
+        if self.ydl_embedded_proxy is not None:
+            attempts.append((self.ydl_embedded_proxy, True))
+        if self.ydl_safari_proxy is not None:
+            attempts.append((self.ydl_safari_proxy, True))
+        for ydl, via_proxy in attempts:
             try:
                 info = ydl.extract_info(url, download=False)
                 if not info.get("url"):
                     last_error = "no playable audio format found"
                     continue
                 # Validate URL is not 403 before caching (transient CDN 403)
-                test_url = info["url"]
-                try:
-                    import urllib.request
-
-                    req = urllib.request.Request(test_url, method="HEAD")
-                    req.add_header(
-                        "User-Agent",
-                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                    )
-                    with urllib.request.urlopen(req, timeout=3) as resp:
-                        if resp.status == 403:
-                            last_error = "Server returned 403 Forbidden (access denied)"
-                            continue
-                except Exception:
-                    # If HEAD fails for other reason, still try to use URL
-                    pass
+                status = self._head_status(info["url"], via_proxy)
+                if status == 403:
+                    last_error = "Server returned 403 Forbidden (access denied)"
+                    continue
                 self._cache(video_id, info)
-                return {
+                result = {
                     "url": info["url"],
                     "id": info.get("id"),
                     "format_id": info.get("format_id"),
                 }
+                if via_proxy:
+                    result["egress"] = "warp"
+                return result
             except Exception as error:
                 last_error = str(error)
                 continue

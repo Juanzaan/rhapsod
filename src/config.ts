@@ -115,6 +115,7 @@ const configSchema = z.object({
     (value) => (value === "" ? undefined : value),
     z.string().url().optional(),
   ),
+  RHAPSOD_WARP_PROXY: optionalSecret,
   RHAPSOD_PANEL_ENABLED: z
     .enum(["true", "false"])
     .default("false")

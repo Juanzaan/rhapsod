@@ -22,6 +22,12 @@ export interface FfmpegPcmOptions {
   };
   readonly seekSeconds?: number;
   readonly userAgent?: string;
+  /**
+   * Optional HTTP proxy URL (e.g. Cloudflare WARP in proxy mode) used ONLY
+   * as a fallback egress when the direct fetch hits a 403. The first attempt
+   * is always direct; the proxy is never used unless a retry needs it.
+   */
+  readonly proxyUrl?: string;
   readonly audioFilter?: {
     readonly name: AudioFilter;
     readonly param?: FilterParam;
@@ -39,6 +45,7 @@ const STOP_GRACE_MS = 3_000;
 export function buildFfmpegPcmArguments(
   url: string,
   options: FfmpegPcmOptions = {},
+  useProxy = false,
 ): string[] {
   if (!/^https:\/\//i.test(url)) {
     throw new Error("FFmpeg audio input must use HTTPS");
@@ -72,6 +79,13 @@ export function buildFfmpegPcmArguments(
   // most YouTube stream formats (WebM/Opus, MP4/AAC).
   args.push("-fflags", "+nobuffer", "-flags", "+low_delay");
   args.push("-analyzeduration", "0", "-probesize", "327680");
+  if (
+    useProxy &&
+    options.proxyUrl !== undefined &&
+    options.proxyUrl.length > 0
+  ) {
+    args.push("-http_proxy", options.proxyUrl);
+  }
   args.push(
     "-i",
     url,
@@ -126,9 +140,11 @@ export function createFfmpegPcmStream(
   let child = null as unknown as ChildProcessByStdio<null, Readable, Readable>;
   let stderr = "";
   let retries = 0;
+  let usedProxy = false;
 
-  const start = (): void => {
-    const args = buildFfmpegPcmArguments(url, options);
+  const start = (useProxy = false): void => {
+    usedProxy = useProxy;
+    const args = buildFfmpegPcmArguments(url, options, useProxy);
     stderr = "";
     child = spawnProcess(binary, args, {
       stdio: ["ignore", "pipe", "pipe"],
@@ -149,6 +165,7 @@ export function createFfmpegPcmStream(
           signal,
           stopped,
           retries,
+          proxy: usedProxy,
           url: url.slice(0, 80),
           stderr: stderr.trim().slice(0, 200),
         }),
@@ -171,9 +188,21 @@ export function createFfmpegPcmStream(
       }
       // Intermittent CDN 403: retry the same URL in place after a short delay.
       // The player stays in "buffering" and receives audio when a retry succeeds.
+      // After the direct retries are exhausted, one last attempt goes through
+      // the configured proxy egress (e.g. Cloudflare WARP) when available.
       if (/403|Forbidden/i.test(stderr) && retries < FFMPEG_403_RETRY_COUNT) {
         retries++;
-        const timer = setTimeout(start, FFMPEG_403_RETRY_DELAY_MS);
+        const timer = setTimeout(() => start(false), FFMPEG_403_RETRY_DELAY_MS);
+        timer.unref();
+        return;
+      }
+      if (
+        /403|Forbidden/i.test(stderr) &&
+        !usedProxy &&
+        options.proxyUrl !== undefined &&
+        options.proxyUrl.length > 0
+      ) {
+        const timer = setTimeout(() => start(true), FFMPEG_403_RETRY_DELAY_MS);
         timer.unref();
         return;
       }

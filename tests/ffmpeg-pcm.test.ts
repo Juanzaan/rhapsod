@@ -90,6 +90,39 @@ describe("FFmpeg PCM source", () => {
     expect(args).not.toContain("-user_agent");
   });
 
+  it("routes through the proxy egress when requested", () => {
+    const args = buildFfmpegPcmArguments(
+      "https://cdn.example.test/audio",
+      { proxyUrl: "http://127.0.0.1:40000" },
+      true,
+    );
+
+    const inputIndex = args.indexOf("-i");
+    expect(inputIndex).toBeGreaterThan(-1);
+    expect(args.indexOf("-http_proxy")).toBeLessThan(inputIndex);
+    expect(args[args.indexOf("-http_proxy") + 1]).toBe(
+      "http://127.0.0.1:40000",
+    );
+  });
+
+  it("stays direct by default even when a proxy is configured", () => {
+    const args = buildFfmpegPcmArguments("https://cdn.example.test/audio", {
+      proxyUrl: "http://127.0.0.1:40000",
+    });
+
+    expect(args).not.toContain("-http_proxy");
+  });
+
+  it("omits the proxy flag when no proxy is configured", () => {
+    const args = buildFfmpegPcmArguments(
+      "https://cdn.example.test/audio",
+      {},
+      true,
+    );
+
+    expect(args).not.toContain("-http_proxy");
+  });
+
   it("seeks the input when a start offset is configured", () => {
     const args = buildFfmpegPcmArguments("https://cdn.example.test/audio", {
       seekSeconds: 42,
@@ -171,6 +204,89 @@ describe("FFmpeg PCM source", () => {
     expect(args).toContain("-user_agent");
     expect(args).toContain("Rhapsod/1.0");
     ffmpeg.stop();
+  });
+
+  it("retries a 403 through the proxy egress after direct retries", async () => {
+    vi.useFakeTimers();
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const spawns: string[][] = [];
+      const closeHandlers: Array<
+        (code: number | null, signal: string | null) => void
+      > = [];
+      const stderrHandlers: Array<(chunk: Buffer) => void> = [];
+      const child = {
+        exitCode: null,
+        signalCode: null,
+        kill: vi.fn(() => true),
+        on: vi.fn(
+          (
+            event: string,
+            handler: (code: number | null, signal: string | null) => void,
+          ) => {
+            if (event === "close") closeHandlers.push(handler);
+          },
+        ),
+        once: vi.fn(),
+        stderr: {
+          on: vi.fn((event: string, handler: (chunk: Buffer) => void) => {
+            if (event === "data") stderrHandlers.push(handler);
+          }),
+        },
+        stdout: { pipe: vi.fn(), unpipe: vi.fn() },
+      };
+      const spawnProcess = vi.fn((...spawnArgs: [string, string[]]) => {
+        spawns.push([...spawnArgs[1]]);
+        return child;
+      }) as never;
+      const ffmpeg = createFfmpegPcmStream("https://cdn.example.test/audio", {
+        binary: "ffmpeg",
+        proxyUrl: "http://127.0.0.1:40000",
+        spawnProcess,
+      });
+      ffmpeg.stream.on("error", () => {});
+      const failWith403 = () => {
+        stderrHandlers[stderrHandlers.length - 1]?.(
+          Buffer.from("HTTP error 403 Forbidden"),
+        );
+        closeHandlers[closeHandlers.length - 1]?.(1, null);
+      };
+
+      expect(spawns).toHaveLength(1);
+      expect(spawns[0]).not.toContain("-http_proxy");
+
+      failWith403();
+      await vi.advanceTimersByTimeAsync(1_500);
+      expect(spawns).toHaveLength(2);
+      expect(spawns[1]).not.toContain("-http_proxy");
+
+      failWith403();
+      await vi.advanceTimersByTimeAsync(1_500);
+      expect(spawns).toHaveLength(3);
+      expect(spawns[2]).not.toContain("-http_proxy");
+
+      // After the direct retries are exhausted, the last attempt uses proxy.
+      failWith403();
+      await vi.advanceTimersByTimeAsync(1_500);
+      expect(spawns).toHaveLength(4);
+      const proxyArgs = spawns[3];
+      expect(proxyArgs).toContain("-http_proxy");
+      expect(proxyArgs[proxyArgs.indexOf("-http_proxy") + 1]).toBe(
+        "http://127.0.0.1:40000",
+      );
+      expect(proxyArgs.indexOf("-http_proxy")).toBeLessThan(
+        proxyArgs.indexOf("-i"),
+      );
+
+      // A 403 on the proxy attempt ends the stream: no fifth spawn.
+      failWith403();
+      await vi.advanceTimersByTimeAsync(1_500);
+      expect(spawns).toHaveLength(4);
+      ffmpeg.stop();
+    } finally {
+      errorSpy.mockRestore();
+      vi.useRealTimers();
+    }
   });
 
   it("escalates to SIGKILL when SIGTERM does not stop the process", async () => {
