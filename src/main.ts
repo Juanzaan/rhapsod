@@ -181,10 +181,13 @@ async function main(): Promise<void> {
     try {
       const info = await connection.getChannelInfo(cid);
       const name = info["channel_name"];
-      const pid = Number(info["pid"] ?? Number.NaN);
+      // channellist uses `pid`, channelinfo uses `cpid`.
+      const pid = Number(info["cpid"] ?? info["pid"] ?? Number.NaN);
+      const order = Number(info["channel_order"] ?? Number.NaN);
       return {
         ...(name === undefined || name.length === 0 ? {} : { name }),
         ...(Number.isSafeInteger(pid) && pid > 0 ? { parentCid: pid } : {}),
+        ...(Number.isSafeInteger(order) ? { order } : {}),
       };
     } catch {
       return undefined;

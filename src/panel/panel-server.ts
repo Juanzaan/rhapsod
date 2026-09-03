@@ -234,14 +234,18 @@ export function createPanelServer(options: PanelOptions): {
   app.get("/api/state", (c) => {
     const status = options.status();
     const queue = options.queue();
-    // Single round trip per poll: queue + errors + chat ride along with
-    // status so the dashboard needs only one request per refresh interval.
+    // Single round trip per poll: queue + errors + chat + server tree ride
+    // along with status so the dashboard needs only one request per refresh.
     const errors =
       options.errors === undefined
         ? { totalErrors: 0, byCategory: {}, recent: [] }
         : options.errors();
     const chat = options.chat === undefined ? [] : options.chat();
-    return c.json({ ...status, queue, errors, chat });
+    const server =
+      options.serverView === undefined
+        ? { version: 0, botChannelId: 0, channels: [], clients: [] }
+        : options.serverView();
+    return c.json({ ...status, queue, errors, chat, server });
   });
 
   app.post("/api/chat", async (c) => {
