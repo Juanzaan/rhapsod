@@ -16,6 +16,7 @@ import {
   renderDashboard,
   renderSetupWizard,
   renderCommandsPage,
+  renderServerPage,
   renderSettingsPage,
 } from "./panel-templates.js";
 
@@ -23,6 +24,25 @@ export interface QueueEntry {
   readonly title: string;
   readonly source: string;
   readonly requestedBy?: string;
+}
+
+export interface ServerViewChannel {
+  readonly cid: number;
+  readonly name: string;
+  readonly parentCid?: number;
+}
+
+export interface ServerViewClient {
+  readonly clid: number;
+  readonly name: string;
+  readonly cid: number;
+}
+
+export interface ServerView {
+  readonly version: number;
+  readonly botChannelId: number;
+  readonly channels: readonly ServerViewChannel[];
+  readonly clients: readonly ServerViewClient[];
 }
 
 export interface PanelStatus {
@@ -55,6 +75,8 @@ export interface PanelOptions {
   readonly queue: () => QueueEntry[];
   readonly chat?: () => readonly ChatEntry[];
   readonly sendChat?: (text: string) => Promise<void>;
+  readonly serverView?: () => ServerView;
+  readonly moveBot?: (cid: number) => Promise<void>;
   readonly errors?: () => ErrorSummary;
   readonly youtubeHealth?: () => Promise<{
     readonly ok: boolean;
@@ -202,6 +224,10 @@ export function createPanelServer(options: PanelOptions): {
     return c.html(renderCommandsPage(panelUser, panelPassword));
   });
 
+  app.get("/server", (c) => {
+    return c.html(renderServerPage(panelUser, panelPassword));
+  });
+
   app.get("/api/health", (c) => c.json(options.status()));
 
   app.get("/api/state", (c) => {
@@ -244,6 +270,35 @@ export function createPanelServer(options: PanelOptions): {
 
   app.get("/api/queue", (c) => {
     return c.json({ tracks: options.queue() });
+  });
+
+  app.get("/api/server", (c) => {
+    if (options.serverView === undefined) {
+      return c.json({ version: 0, botChannelId: 0, channels: [], clients: [] });
+    }
+    return c.json(options.serverView());
+  });
+
+  app.post("/api/move", async (c) => {
+    if (options.moveBot === undefined) {
+      return c.json({ ok: false, error: "Movimiento no disponible" }, 501);
+    }
+    const body: unknown = await c.req.json().catch(() => undefined);
+    const cid =
+      typeof body === "object" && body !== null
+        ? (body as Record<string, unknown>).cid
+        : undefined;
+    if (typeof cid !== "number" || !Number.isSafeInteger(cid) || cid <= 0) {
+      return c.json({ ok: false, error: "Canal inválido" }, 400);
+    }
+    try {
+      await options.moveBot(cid);
+      return c.json({ ok: true });
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "No se pudo mover";
+      return c.json({ ok: false, error: message }, 400);
+    }
   });
 
   app.get("/api/errors", (c) => {

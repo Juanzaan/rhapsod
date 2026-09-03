@@ -42,6 +42,7 @@ import { getTimeoutConfig } from "./lib/timeout-config.js";
 import { UserError } from "./lib/user-error.js";
 import { createPanelServer, type QueueEntry } from "./panel/panel-server.js";
 import { ChatLog, isOwnEcho } from "./application/chat-log.js";
+import { ServerSnapshot } from "./application/server-snapshot.js";
 import {
   createCookieSaver,
   createYoutubeHealthCheck,
@@ -170,6 +171,26 @@ async function main(): Promise<void> {
     logger,
   );
   telemetry.load();
+  const serverSnapshot = new ServerSnapshot();
+  const resyncServerView = async (): Promise<void> => {
+    try {
+      const [channels, clients] = await Promise.all([
+        connection.listChannels(),
+        connection.listClients(),
+      ]);
+      // Map explicitly: uids and groups must never reach the panel payload.
+      serverSnapshot.fullResync(
+        channels,
+        clients.map((client) => ({
+          clid: client.clid,
+          name: client.name,
+          cid: client.cid,
+        })),
+      );
+    } catch (error) {
+      logger.debug({ err: error }, "Server view resync failed");
+    }
+  };
   setInterval(() => {
     telemetry.logSummary("periodic");
     void telemetry.save();
@@ -503,6 +524,10 @@ async function main(): Promise<void> {
     }
   };
   await seedTelemetry();
+  await resyncServerView();
+  setInterval(() => {
+    void resyncServerView();
+  }, 60_000).unref();
   const logCurrentChannel = async (reason: string): Promise<void> => {
     const currentChannel = await connection.getCurrentChannel();
     logger.info(
@@ -538,9 +563,15 @@ async function main(): Promise<void> {
       groupIds: event.groups,
       channelId: event.cid,
     });
+    serverSnapshot.applyEnter({
+      clid: event.clid,
+      name: event.name,
+      cid: event.cid,
+    });
   });
   connection.onClientLeave((clid) => {
     telemetry.clientLeft(clid);
+    serverSnapshot.applyLeave(clid);
   });
   connection.onClientMoved((event) => {
     if (event.self) {
@@ -570,6 +601,7 @@ async function main(): Promise<void> {
         "User joined the bot's channel",
       );
     }
+    serverSnapshot.applyMove(event.movedClid, event.targetCid);
   });
 
   const listConnectedClientUids = async (): Promise<readonly string[]> => {
@@ -617,6 +649,7 @@ async function main(): Promise<void> {
             "Reconnect attempt timed out",
           );
           logger.info({ attempt }, "Reconnected to TeamSpeak 3");
+          await resyncServerView();
           await logCurrentChannel("reconnect");
           reconnecting = false;
           await checkTalkPower("reconnect");
@@ -705,6 +738,11 @@ async function main(): Promise<void> {
         errors: () => metrics.errorSummary(20),
         chat: () => chatLog.snapshot(),
         sendChat: (text: string) => connection.sendChannelMessage(text),
+        serverView: () => ({
+          ...serverSnapshot.toJSON(),
+          botChannelId: connection.getCurrentChannelId(),
+        }),
+        moveBot: (cid: number) => connection.moveToChannel(cid),
         youtubeHealth: createYoutubeHealthCheck((url, signal) =>
           ytDlpResolver.getAudioUrlFromUrl(url, signal),
         ),

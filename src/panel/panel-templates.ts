@@ -412,6 +412,7 @@ export function renderDashboard(
     <div class="nb">RHAPSOD<b>.</b></div>
     <div class="nl">
       <a class="nk a" href="/" id="nd">Consola</a>
+      <a class="nk" href="/server" id="nv2">Servidor</a>
       <a class="nk" href="/settings" id="ns">Config</a>
       <a class="nk" href="/commands" id="nc">Comandos</a>
     </div>
@@ -819,6 +820,7 @@ export function renderSettingsPage(
     <div class="nb">RHAPSOD<b>.</b></div>
     <div class="nl">
       <a class="nk" href="/">Consola</a>
+      <a class="nk" href="/server">Servidor</a>
       <a class="nk a" href="/settings">Config</a>
       <a class="nk" href="/commands">Comandos</a>
     </div>
@@ -912,6 +914,7 @@ export function renderCommandsPage(
     <div class="nb">RHAPSOD<b>.</b></div>
     <div class="nl">
       <a class="nk" href="/">Consola</a>
+      <a class="nk" href="/server">Servidor</a>
       <a class="nk" href="/settings">Config</a>
       <a class="nk a" href="/commands">Comandos</a>
     </div>
@@ -961,6 +964,175 @@ export function renderCommandsPage(
     }
 
     load();
+  </script>
+</body>
+</html>`;
+}
+
+export function renderServerPage(
+  panelUser: string,
+  panelPassword: string,
+): string {
+  const cred = js(`${panelUser}:${panelPassword}`);
+  return `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rhapsod - Servidor</title>
+  <style>${CHROME_CSS}
+    .mn{max-width:720px;margin:0 auto;padding:1.5rem}
+    .liveb{font-family:var(--mn);font-size:.62rem;letter-spacing:.22em;padding:.32rem .6rem;border:1px solid #3a3a40;border-radius:4px;color:var(--ft);white-space:nowrap}
+    .liveb.on{color:var(--gn);border-color:var(--gn)}
+    .liveb.fb{color:var(--am);border-color:var(--am)}
+    .chrow{border:1px solid var(--ln);border-radius:10px;padding:.7rem .9rem;margin-bottom:.5rem;background:#0f0f12;cursor:pointer;transition:border-color .15s,transform .15s}
+    .chrow:hover{border-color:var(--am)}
+    .chrow:active{transform:translateY(1px)}
+    .chrow.here{border-color:var(--am);background:#141207}
+    .chhead{display:flex;align-items:center;gap:.6rem}
+    .chnm{font-weight:650;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .chct{font-family:var(--mn);font-size:.72rem;color:var(--dm)}
+    .botpill{font-family:var(--mn);font-size:.62rem;letter-spacing:.18em;background:var(--am);color:#0b0b0d;border-radius:4px;padding:.15rem .45rem;font-weight:700}
+    .spacer{text-align:center;color:var(--ft);font-size:.72rem;letter-spacing:.3em;text-transform:uppercase;padding:.9rem 0 .4rem}
+    .users{margin:.5rem 0 0 1.2rem;padding:0;list-style:none}
+    .users li{font-size:.82rem;color:var(--dm);padding:.12rem 0;display:flex;gap:.45rem;align-items:center}
+    .users li::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--bl);flex-shrink:0}
+  </style>
+</head>
+<body>
+  <nav class="nv">
+    <div class="nb">RHAPSOD<b>.</b></div>
+    <div class="nl">
+      <a class="nk" href="/">Consola</a>
+      <a class="nk a" href="/server">Servidor</a>
+      <a class="nk" href="/settings">Config</a>
+      <a class="nk" href="/commands">Comandos</a>
+    </div>
+    <div class="nr">
+      <div class="liveb" id="live">···</div>
+    </div>
+  </nav>
+  <div class="mn">
+    <div class="cd">
+      <div class="ct"><span>Canales</span><span class="rv" id="ucount"></span></div>
+      <div id="tree"><div class="em">Conectando…</div></div>
+      <div class="em" style="font-size:.75rem">Click en un canal para mover el bot ahí</div>
+    </div>
+  </div>
+  <div class="toast" id="toast"></div>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js" defer></script>
+  <script>
+    var A='Basic '+btoa('${cred}');
+    var H={authorization:A};
+    var RM=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    function gs(){return (window.gsap&&!RM)?window.gsap:null;}
+    var lastV=-1;
+
+    function esc(s){
+      return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function toast(m){
+      var el=document.getElementById('toast');
+      el.textContent=m;el.classList.add('show');
+      setTimeout(function(){el.classList.remove('show');},3000);
+    }
+
+    function spacerName(name){
+      var m=/^\\[\\*?(cspacer\\d*)\\](.*)$/.exec(name||'');
+      if(!m)return null;
+      var rest=(m[2]||'').trim();
+      return rest.length>0?rest:'···';
+    }
+
+    function render(view){
+      var box=document.getElementById('tree');
+      var chs=view.channels||[];
+      var cls=view.clients||[];
+      var bot=view.botChannelId||0;
+      if(chs.length===0){box.innerHTML='<div class="em">Sin datos — ¿bot conectado?</div>';return;}
+      var byParent={};
+      for(var i=0;i<chs.length;i++){
+        var c=chs[i];
+        var p=c.parentCid||0;
+        if(!byParent[p])byParent[p]=[];
+        byParent[p].push(c);
+      }
+      var names=Object.keys(byParent);
+      for(var k=0;k<names.length;k++){
+        byParent[names[k]].sort(function(a,b){return String(a.name).localeCompare(String(b.name),'es');});
+      }
+      var byChannel={};
+      var total=0;
+      for(var j=0;j<cls.length;j++){
+        var u=cls[j];
+        if(!byChannel[u.cid])byChannel[u.cid]=[];
+        byChannel[u.cid].push(u);
+        total++;
+      }
+      document.getElementById('ucount').textContent=total+(total===1?' usuario':' usuarios');
+      var seen={};
+      var h='';
+      var walk=function(pid,depth){
+        var kids=byParent[pid]||[];
+        for(var q=0;q<kids.length;q++){
+          var ch=kids[q];
+          if(seen[ch.cid])continue;
+          seen[ch.cid]=true;
+          if(depth>8)continue;
+          var sp=spacerName(ch.name);
+          if(sp!==null){
+            h+='<div class="spacer">'+esc(sp)+'</div>';
+          }else{
+            var us=byChannel[ch.cid]||[];
+            var here=ch.cid===bot;
+            h+='<div class="chrow'+(here?' here':'')+'" onclick="moveBot('+ch.cid+')"><div class="chhead"><span class="chnm">'+esc(ch.name)+'</span>'+(here?'<span class="botpill">BOT</span>':'')+'<span class="chct">'+us.length+'</span></div>';
+            if(us.length>0){
+              h+='<ul class="users">';
+              for(var u=0;u<us.length;u++){h+='<li>'+esc(us[u].name)+'</li>';}
+              h+='</ul>';
+            }
+            h+='</div>';
+          }
+          walk(ch.cid,depth+1);
+        }
+      };
+      walk(0,0);
+      box.innerHTML=h;
+      var g=gs();
+      if(g&&lastV===-1)g.from('#tree .chrow',{y:10,opacity:0,duration:.4,stagger:.03,ease:'power2.out',clearProps:'all'});
+      lastV=view.version;
+    }
+
+    function moveBot(cid){
+      fetch('/api/move',{method:'POST',headers:Object.assign({},H,{'content-type':'application/json'}),body:JSON.stringify({cid:cid})})
+        .then(function(r){return r.json();})
+        .then(function(d){toast(d.ok?'Bot en movimiento':'Error: '+(d.error||'desconocido'));if(d.ok)setTimeout(poll,800);})
+        .catch(function(){toast('Error de conexion');});
+    }
+
+    function poll(){
+      fetch('/api/server',{headers:H}).then(function(r){return r.json();}).then(function(d){render(d);}).catch(function(){});
+    }
+
+    function live(){
+      var badge=document.getElementById('live');
+      var go=function(){
+        fetch('/api/server',{headers:H}).then(function(r){return r.json();}).then(function(d){
+          badge.textContent='EN VIVO';badge.className='liveb on';
+          render(d);
+        }).catch(function(){
+          badge.textContent='···';badge.className='liveb';
+        });
+      };
+      go();
+      setInterval(go,2500);
+    }
+
+    (function init(){
+      if(document.readyState==='complete')live();
+      else window.addEventListener('load',live);
+    })();
   </script>
 </body>
 </html>`;
