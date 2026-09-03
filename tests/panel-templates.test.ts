@@ -55,6 +55,8 @@ describe("renderDashboard console", () => {
     for (const id of [
       "loopSeg",
       "fxRow",
+      "srvTree",
+      "srvCount",
       "chat",
       "chatIn",
       "chatEmpty",
@@ -191,6 +193,16 @@ describe("renderDashboard console", () => {
         { ts: 1_700_000_000_000, from: "Ana", text: "hola!", outgoing: false },
         { ts: 1_700_000_001_000, from: "Bot", text: "OK", outgoing: true },
       ],
+      server: {
+        version: 1,
+        botChannelId: 20,
+        channels: [
+          { cid: 30, name: "Zulu", parentCid: 10, order: 2 },
+          { cid: 10, name: "Lobby", order: 1 },
+          { cid: 20, name: "Alpha", parentCid: 10, order: 1 },
+        ],
+        clients: [{ clid: 7, name: "Ana", cid: 20 }],
+      },
     };
     const fetchedUrls: string[] = [];
     const fakeFetch = (url: string): Promise<{ json: () => unknown }> => {
@@ -257,6 +269,13 @@ describe("renderDashboard console", () => {
     expect(getEl("chat").innerHTML).toContain("hola!");
     expect(getEl("chat").innerHTML).toContain("BOT");
     expect(getEl("chat").innerHTML).toContain("Ana");
+    const srv = getEl("srvTree").innerHTML;
+    expect(srv).toContain("Lobby");
+    expect(srv).toContain("BOT");
+    // TS order: Alpha (order 1) before Zulu (order 2) under Lobby.
+    expect(srv.indexOf("Alpha")).toBeLessThan(srv.indexOf("Zulu"));
+    expect(srv).toContain('onclick="moveBot(20)"');
+    expect(getEl("srvCount").textContent).toBe("1 usuario");
   });
 
   it("shares the console design system across pages", () => {
