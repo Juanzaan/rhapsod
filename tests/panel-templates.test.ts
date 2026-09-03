@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { renderDashboard } from "../src/panel/panel-templates.js";
+import {
+  renderCommandsPage,
+  renderDashboard,
+  renderSettingsPage,
+  renderSetupWizard,
+} from "../src/panel/panel-templates.js";
 import type { PanelStatus } from "../src/panel/panel-server.js";
 
 function render(status: Partial<PanelStatus> = {}): string {
@@ -232,6 +237,29 @@ describe("renderDashboard console", () => {
     expect(getEl("uptime").textContent).toBe("up 1 h");
     expect(getEl("ql").innerHTML).toContain("rmQ(1)");
     expect(getEl("ql").innerHTML).toContain("rmQ(2)");
+  });
+
+  it("shares the console design system across pages", () => {
+    const pages = [
+      renderDashboard(
+        { connected: true, queueLength: 0, version: "2.2.0" },
+        "admin",
+        "secret",
+      ),
+      renderSettingsPage("admin", "secret"),
+      renderCommandsPage("admin", "secret"),
+      renderSetupWizard("admin", "secret"),
+    ];
+    for (const html of pages) {
+      // Same tokens everywhere: no leftover slate-blue theme.
+      expect(html).toContain("--am:#ffb000");
+      expect(html).not.toContain("#38bdf8");
+      expect(html).not.toContain("#0f172a");
+    }
+    // Same brand on every nav.
+    for (const html of pages.slice(0, 3)) {
+      expect(html).toContain("RHAPSOD<b>.</b>");
+    }
   });
 
   it("escapes the current title", () => {

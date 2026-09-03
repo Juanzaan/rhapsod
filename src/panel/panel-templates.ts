@@ -1,5 +1,24 @@
 import type { PanelStatus } from "./panel-server.js";
 
+// Shared ON AIR console chrome: dotted charcoal backdrop, amber signal
+// accents, tabular mono readouts. Every page interpolates this so the whole
+// panel looks like one instrument instead of four themes.
+const CHROME_CSS = `
+:root{--bg:#101012;--pn:#17171a;--ln:#2b2b30;--tx:#ececec;--dm:#8e8e93;--am:#ffb000;--rd:#ff453a;--gn:#3ddc84;--mn:ui-monospace,'SF Mono','Cascadia Mono',Menlo,Consolas,monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);background-image:radial-gradient(#1d1d21 1px,transparent 1.2px);background-size:22px 22px;color:var(--tx);min-height:100vh}
+.nv{background:#0b0b0d;border-bottom:1px solid var(--ln);padding:0 1.5rem;display:flex;align-items:center;height:52px;gap:1.5rem;position:sticky;top:0;z-index:10}
+.nb{font-weight:800;font-size:.9rem;letter-spacing:.35em;color:var(--tx);text-decoration:none}
+.nb b{color:var(--am);font-weight:800}
+.nl{display:flex;gap:.25rem}
+.nk{padding:.4rem .75rem;border-radius:6px;color:var(--dm);text-decoration:none;font-size:.85rem}
+.nk:hover,.nk.a{background:#1e1e22;color:var(--tx)}
+.cd{background:var(--pn);border:1px solid var(--ln);border-radius:12px;padding:1.25rem;box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
+.ct{font-size:.7rem;color:var(--dm);text-transform:uppercase;letter-spacing:.22em;margin-bottom:1rem}
+.em{color:#55555c;font-size:.85rem;text-align:center;padding:1rem}
+.toast{position:fixed;bottom:1.5rem;right:1.5rem;background:#0b0b0d;border:1px solid var(--ln);border-left:3px solid var(--am);color:var(--tx);padding:.75rem 1rem;border-radius:8px;font-size:.85rem;opacity:0;transition:opacity .3s;pointer-events:none;z-index:99;max-width:min(420px,90vw)}
+.toast.show{opacity:1}`;
+
 function esc(s: string): string {
   return s
     .replace(/&/g, "&amp;")
@@ -23,49 +42,47 @@ export function renderSetupWizard(
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Rhapsod - Configuracion</title>
-  <style>
-    *{margin:0;padding:0;box-sizing:border-box}
-    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh;display:flex;align-items:center;justify-content:center}
-    .w{background:#1e293b;border-radius:12px;padding:2rem;width:100%;max-width:520px;box-shadow:0 25px 50px -12px rgba(0,0,0,.5)}
+  <style>${CHROME_CSS}
+    body{min-height:100vh;display:flex;align-items:center;justify-content:center}
+    .w{background:var(--pn);border:1px solid var(--ln);border-radius:12px;padding:2rem;width:100%;max-width:520px;box-shadow:0 25px 50px -12px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.04)}
     .p{display:flex;gap:4px;margin-bottom:1.5rem}
-    .p .s{flex:1;height:3px;background:#334155;border-radius:2px}
-    .p .s.d{background:#38bdf8}
-    .p .s.c{background:#38bdf8;animation:p 1.5s infinite}
+    .p .s{flex:1;height:3px;background:#2b2b30;border-radius:2px}
+    .p .s.d{background:var(--am)}
+    .p .s.c{background:var(--am);animation:p 1.5s infinite}
     @keyframes p{0%,100%{opacity:1}50%{opacity:.5}}
     h1{font-size:1.5rem;margin-bottom:.5rem}
-    .sub{color:#94a3b8;margin-bottom:1.5rem;font-size:.9rem}
+    .sub{color:var(--dm);margin-bottom:1.5rem;font-size:.9rem}
     .f{margin-bottom:1rem}
-    .f label{display:block;font-size:.85rem;color:#94a3b8;margin-bottom:.3rem}
-    .f input,.f select{width:100%;padding:.6rem .8rem;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;font-size:.95rem}
-    .f input:focus{outline:none;border-color:#38bdf8}
-    .f .h{font-size:.75rem;color:#64748b;margin-top:.2rem}
-    .f .e{font-size:.75rem;color:#ef4444;margin-top:.2rem;display:none}
+    .f label{display:block;font-size:.85rem;color:var(--dm);margin-bottom:.3rem}
+    .f input,.f select{width:100%;padding:.6rem .8rem;background:#0b0b0d;border:1px solid var(--ln);border-radius:6px;color:var(--tx);font-size:.95rem}
+    .f input:focus{outline:none;border-color:var(--am)}
+    .f .h{font-size:.75rem;color:#55555c;margin-top:.2rem}
+    .f .e{font-size:.75rem;color:var(--rd);margin-top:.2rem;display:none}
     .f.i .e{display:block}
-    .f.i input{border-color:#ef4444}
+    .f.i input{border-color:var(--rd)}
     .a{display:flex;gap:.75rem;margin-top:1.5rem}
     .b{flex:1;padding:.7rem;border:none;border-radius:6px;font-size:.95rem;font-weight:600;cursor:pointer}
-    .bp{background:#38bdf8;color:#0f172a}
-    .bp:hover{background:#7dd3fc}
-    .bs{background:#334155;color:#e2e8f0}
-    .bs:hover{background:#475569}
+    .bp{background:var(--am);color:#0b0b0d}
+    .bp:active{transform:translateY(1px)}
+    .bs{background:#232327;color:var(--tx);border:1px solid #3a3a40}
     .b:disabled{opacity:.5;cursor:not-allowed}
     .sk{text-align:center;margin-top:.75rem}
-    .sk a{color:#64748b;font-size:.8rem;cursor:pointer;text-decoration:none}
+    .sk a{color:#55555c;font-size:.8rem;cursor:pointer;text-decoration:none}
     .tr{margin-top:.5rem;padding:.5rem .75rem;border-radius:6px;font-size:.8rem;display:none}
-    .tr.ok{display:block;background:#052e16;color:#22c55e;border:1px solid #166534}
-    .tr.fl{display:block;background:#450a0a;color:#ef4444;border:1px solid #991b1b}
-    .tr.ld{display:block;background:#1e293b;color:#94a3b8;border:1px solid #334155}
-    .ob{display:inline-block;background:#334155;color:#94a3b8;font-size:.7rem;padding:.1rem .4rem;border-radius:4px;margin-left:.3rem}
+    .tr.ok{display:block;background:#0b1f14;color:var(--gn);border:1px solid #14532d}
+    .tr.fl{display:block;background:#220d0d;color:var(--rd);border:1px solid #7f1d1d}
+    .tr.ld{display:block;background:#0b0b0d;color:var(--dm);border:1px solid var(--ln)}
+    .ob{display:inline-block;background:#0f0f12;color:var(--dm);border:1px solid var(--ln);font-size:.7rem;padding:.1rem .4rem;border-radius:4px;margin-left:.3rem}
     .wi{font-size:3rem;text-align:center;margin-bottom:1rem}
     .wt{text-align:center;margin-bottom:1.5rem}
     .wt h1{font-size:1.8rem;margin-bottom:.5rem}
-    .wt p{color:#94a3b8;font-size:.9rem;line-height:1.5}
+    .wt p{color:var(--dm);font-size:.9rem;line-height:1.5}
     .fe{display:flex;align-items:center;gap:.75rem;padding:.5rem 0}
-    .fi{width:32px;height:32px;background:#334155;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0}
+    .fi{width:32px;height:32px;background:#0f0f12;border:1px solid var(--ln);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0}
     .ft{font-size:.85rem}
-    .ft strong{color:#e2e8f0}
-    .ft span{color:#94a3b8}
-    .dv{height:1px;background:#334155;margin:1rem 0}
+    .ft strong{color:var(--tx)}
+    .ft span{color:var(--dm)}
+    .dv{height:1px;background:var(--ln);margin:1rem 0}
   </style>
 </head>
 <body>
@@ -136,7 +153,7 @@ export function renderSetupWizard(
       var st=vals._ytOk===true?'<div class="tr ok">YouTube OK'+(vals._ytMs?' ('+vals._ytMs+' ms)':'')+'</div>':(vals._ytOk===false?'<div class="tr fl">Fallo: '+escJs(vals._ytErr||'desconocido')+'</div>':'<div class="tr ld">Probando YouTube...</div>');
       return '<h1>YouTube</h1><p class="sub">Sin esto el bot no reproduce musica de YouTube</p>'+
         '<div id="yh">'+st+'</div>'+
-        '<div class="f"><label>Cookies de YouTube (cookies.txt) <span class="ob">recomendado</span></label><textarea id="ick2" rows="4" style="width:100%;padding:.6rem .8rem;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;font-size:.8rem" placeholder="Pega aca el contenido de tu cookies.txt"></textarea><div class="h">En tu navegador: extension Get cookies.txt LOCALLY, exportar estando logueado en youtube.com, pegar el contenido</div></div>'+
+        '<div class="f"><label>Cookies de YouTube (cookies.txt) <span class="ob">recomendado</span></label><textarea id="ick2" rows="4" style="width:100%;padding:.6rem .8rem;background:#0b0b0d;border:1px solid #2b2b30;border-radius:6px;color:#ececec;font-size:.8rem" placeholder="Pega aca el contenido de tu cookies.txt"></textarea><div class="h">En tu navegador: extension Get cookies.txt LOCALLY, exportar estando logueado en youtube.com, pegar el contenido</div></div>'+
         '<div id="yts" class="tr"></div>'+
         '<div class="a"><button class="b bs" onclick="prev()">Atras</button><button class="b bs" onclick="saveCookies()">Guardar cookies</button><button class="b bp" onclick="next()">Siguiente</button></div>';
     }
@@ -196,7 +213,7 @@ export function renderSetupWizard(
       ];
       var h='<h1>Resumen</h1><p class="sub">Revisa la configuracion antes de guardar</p>';
       for(var i=0;i<rows.length;i++){
-        h+='<div style="display:flex;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid #334155;font-size:.85rem"><span style="color:#94a3b8">'+rows[i][0]+'</span><span>'+rows[i][1]+'</span></div>';
+        h+='<div style="display:flex;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid #2b2b30;font-size:.85rem"><span style="color:#8e8e93">'+rows[i][0]+'</span><span>'+rows[i][1]+'</span></div>';
       }
       h+='<div class="a"><button class="b bs" onclick="prev()">Atras</button><button class="b bp" onclick="save()">Guardar y reiniciar</button></div>';
       return h;
@@ -308,16 +325,7 @@ export function renderDashboard(
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Rhapsod</title>
-  <style>
-    :root{--bg:#101012;--pn:#17171a;--ln:#2b2b30;--tx:#ececec;--dm:#8e8e93;--am:#ffb000;--rd:#ff453a;--gn:#3ddc84;--mn:ui-monospace,'SF Mono','Cascadia Mono',Menlo,Consolas,monospace}
-    *{margin:0;padding:0;box-sizing:border-box}
-    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);background-image:radial-gradient(#1d1d21 1px,transparent 1.2px);background-size:22px 22px;color:var(--tx);min-height:100vh}
-    .nv{background:#0b0b0d;border-bottom:1px solid var(--ln);padding:0 1.5rem;display:flex;align-items:center;height:52px;gap:1.5rem;position:sticky;top:0;z-index:10}
-    .nb{font-weight:800;font-size:.9rem;letter-spacing:.35em;color:var(--tx);text-decoration:none}
-    .nb b{color:var(--am);font-weight:800}
-    .nl{display:flex;gap:.25rem}
-    .nk{padding:.4rem .75rem;border-radius:6px;color:var(--dm);text-decoration:none;font-size:.85rem}
-    .nk:hover,.nk.a{background:#1e1e22;color:var(--tx)}
+  <style>${CHROME_CSS}
     .nr{margin-left:auto;display:flex;align-items:center;gap:.6rem}
     .lamp{font-family:var(--mn);font-size:.62rem;letter-spacing:.22em;padding:.32rem .6rem;border:1px solid #3a3a40;border-radius:4px;color:#55555c;white-space:nowrap}
     .lamp.on{color:#0b0b0d;background:var(--am);border-color:var(--am);box-shadow:0 0 12px rgba(255,176,0,.45)}
@@ -330,9 +338,8 @@ export function renderDashboard(
     .mn{max-width:980px;margin:0 auto;padding:1.5rem}
     .g{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem}
     @media(max-width:680px){.g{grid-template-columns:1fr}}
-    .cd{background:var(--pn);border:1px solid var(--ln);border-radius:12px;padding:1.25rem;box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
     .fw{grid-column:1/-1}
-    .ct{font-size:.7rem;color:var(--dm);text-transform:uppercase;letter-spacing:.22em;margin-bottom:1rem;display:flex;justify-content:space-between;align-items:center}
+    .ct{display:flex;justify-content:space-between;align-items:center}
     .ct .rv{color:#55555c;letter-spacing:.05em;text-transform:none}
     .deck{background:#0b0b0d;border:1px solid var(--ln);border-radius:8px;padding:1rem 1.1rem;margin-bottom:1rem;box-shadow:inset 0 2px 10px rgba(0,0,0,.65)}
     .nt{font-size:1.35rem;font-weight:650;margin-bottom:.25rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -366,7 +373,6 @@ export function renderDashboard(
     .qt{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
     .qx{background:none;border:1px solid #3a3a40;color:var(--dm);border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:.8rem;line-height:1;flex-shrink:0}
     .qx:hover{color:var(--rd);border-color:var(--rd)}
-    .em{color:#55555c;font-size:.85rem;text-align:center;padding:1rem}
     .ir{display:flex;gap:.5rem;margin-bottom:.6rem}
     .ir input{flex:1;padding:.6rem .8rem;background:#0b0b0d;border:1px solid var(--ln);border-radius:6px;color:var(--tx);font-size:.9rem;min-width:0}
     .ir input:focus{outline:none;border-color:var(--am)}
@@ -386,8 +392,6 @@ export function renderDashboard(
     .fc:last-child{margin-bottom:0}
     .ch{padding:.32rem .65rem;border-radius:6px;font-size:.75rem;background:#0f0f12;color:var(--dm);border:1px solid var(--ln);cursor:pointer}
     .ch:hover{color:var(--tx);border-color:#3a3a40}
-    .toast{position:fixed;bottom:1.5rem;right:1.5rem;background:#0b0b0d;border:1px solid var(--ln);border-left:3px solid var(--am);color:var(--tx);padding:.75rem 1rem;border-radius:8px;font-size:.85rem;opacity:0;transition:opacity .3s;pointer-events:none;z-index:99;max-width:min(420px,90vw)}
-    .toast.show{opacity:1}
   </style>
 </head>
 <body>
@@ -739,33 +743,23 @@ export function renderSettingsPage(
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Rhapsod - Config</title>
-  <style>
-    *{margin:0;padding:0;box-sizing:border-box}
-    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0}
-    .nv{background:#1e293b;border-bottom:1px solid #334155;padding:0 1.5rem;display:flex;align-items:center;height:48px;gap:1.5rem}
-    .nb{font-weight:700;font-size:1rem;color:#38bdf8}
-    .nl{display:flex;gap:.25rem}
-    .nk{padding:.4rem .75rem;border-radius:6px;color:#94a3b8;text-decoration:none;font-size:.85rem}
-    .nk:hover,.nk.a{background:#334155;color:#e2e8f0}
-    .mn{max-width:600px;margin:0 auto;padding:1.5rem}
-    .cd{background:#1e293b;border-radius:10px;padding:1.25rem;margin-bottom:1rem}
-    .ct{font-size:.8rem;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:1rem}
+  <style>${CHROME_CSS}
+    .mn{max-width:640px;margin:0 auto;padding:1.5rem}
+    .cd{margin-bottom:1rem}
     .f{margin-bottom:.75rem}
-    .f label{display:block;font-size:.85rem;color:#94a3b8;margin-bottom:.2rem}
-    .f input{width:100%;padding:.5rem .7rem;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;font-size:.9rem}
-    .f input:focus{outline:none;border-color:#38bdf8}
-    .f .h{font-size:.75rem;color:#64748b;margin-top:.15rem}
-    .btn{padding:.6rem 1.5rem;background:#38bdf8;color:#0f172a;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:.9rem}
-    .btn:hover{background:#7dd3fc}
-    .toast{position:fixed;bottom:1.5rem;right:1.5rem;background:#334155;color:#e2e8f0;padding:.75rem 1rem;border-radius:8px;font-size:.85rem;opacity:0;transition:opacity .3s;pointer-events:none;z-index:99}
-    .toast.show{opacity:1}
+    .f label{display:block;font-size:.85rem;color:var(--dm);margin-bottom:.2rem}
+    .f input{width:100%;padding:.5rem .7rem;background:#0b0b0d;border:1px solid var(--ln);border-radius:6px;color:var(--tx);font-size:.9rem}
+    .f input:focus{outline:none;border-color:var(--am)}
+    .f .h{font-size:.75rem;color:#55555c;margin-top:.15rem}
+    .btn{padding:.6rem 1.5rem;background:var(--am);color:#0b0b0d;border:none;border-radius:6px;font-weight:700;cursor:pointer;font-size:.9rem}
+    .btn:active{transform:translateY(1px)}
   </style>
 </head>
 <body>
   <nav class="nv">
-    <div class="nb">Rhapsod</div>
+    <div class="nb">RHAPSOD<b>.</b></div>
     <div class="nl">
-      <a class="nk" href="/">Dashboard</a>
+      <a class="nk" href="/">Consola</a>
       <a class="nk a" href="/settings">Config</a>
       <a class="nk" href="/commands">Comandos</a>
     </div>
@@ -837,33 +831,24 @@ export function renderCommandsPage(
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Rhapsod - Comandos</title>
-  <style>
-    *{margin:0;padding:0;box-sizing:border-box}
-    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0}
-    .nv{background:#1e293b;border-bottom:1px solid #334155;padding:0 1.5rem;display:flex;align-items:center;height:48px;gap:1.5rem}
-    .nb{font-weight:700;font-size:1rem;color:#38bdf8}
-    .nl{display:flex;gap:.25rem}
-    .nk{padding:.4rem .75rem;border-radius:6px;color:#94a3b8;text-decoration:none;font-size:.85rem}
-    .nk:hover,.nk.a{background:#334155;color:#e2e8f0}
-    .mn{max-width:600px;margin:0 auto;padding:1.5rem}
-    .cd{background:#1e293b;border-radius:10px;padding:1.25rem;margin-bottom:1rem}
-    .ct{font-size:.8rem;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:1rem}
-    .sr{width:100%;padding:.6rem .8rem;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;font-size:.9rem;margin-bottom:1rem}
-    .sr:focus{outline:none;border-color:#38bdf8}
-    .ci{padding:.5rem 0;border-bottom:1px solid #334155}
+  <style>${CHROME_CSS}
+    .mn{max-width:640px;margin:0 auto;padding:1.5rem}
+    .cd{margin-bottom:1rem}
+    .sr{width:100%;padding:.6rem .8rem;background:#0b0b0d;border:1px solid var(--ln);border-radius:6px;color:var(--tx);font-size:.9rem;margin-bottom:1rem}
+    .sr:focus{outline:none;border-color:var(--am)}
+    .ci{padding:.5rem 0;border-bottom:1px solid #232327}
     .ci:last-child{border-bottom:none}
-    .cn{color:#38bdf8;font-family:monospace;font-size:.9rem;font-weight:600}
-    .ca{color:#64748b;font-size:.8rem;font-family:monospace}
-    .cd2{color:#94a3b8;font-size:.85rem;margin-top:.15rem}
-    .cg{font-size:.7rem;background:#334155;color:#94a3b8;padding:.1rem .4rem;border-radius:4px;margin-left:.5rem}
-    .em{color:#64748b;font-size:.85rem;text-align:center;padding:1rem}
+    .cn{color:var(--am);font-family:var(--mn);font-size:.9rem;font-weight:600}
+    .ca{color:#55555c;font-size:.8rem;font-family:var(--mn)}
+    .cd2{color:var(--dm);font-size:.85rem;margin-top:.15rem}
+    .cg{font-size:.65rem;background:#0f0f12;color:var(--dm);border:1px solid var(--ln);padding:.1rem .4rem;border-radius:4px;margin-left:.5rem;letter-spacing:.1em}
   </style>
 </head>
 <body>
   <nav class="nv">
-    <div class="nb">Rhapsod</div>
+    <div class="nb">RHAPSOD<b>.</b></div>
     <div class="nl">
-      <a class="nk" href="/">Dashboard</a>
+      <a class="nk" href="/">Consola</a>
       <a class="nk" href="/settings">Config</a>
       <a class="nk a" href="/commands">Comandos</a>
     </div>
