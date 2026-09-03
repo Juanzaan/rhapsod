@@ -695,7 +695,9 @@ export function renderDashboard(
         }
         if(typeof d.uptimeMs==='number'){
           var m=Math.floor(d.uptimeMs/60000);
-          document.getElementById('uptime').textContent=m<60?('up '+m+' min'):('up '+Math.floor(m/60)+' h');
+          var up=m<60?('up '+m+' min'):('up '+Math.floor(m/60)+' h');
+          var dc=(d.disconnects&&typeof d.disconnects.count==='number')?d.disconnects.count:0;
+          document.getElementById('uptime').textContent=dc>0?(up+' · '+dc+(dc===1?' corte':' cortes')):up;
         }
         var dot=document.getElementById('dot');
         var txt=document.getElementById('stxt');

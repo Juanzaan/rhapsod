@@ -6,7 +6,10 @@ import type { Logger } from "pino";
 
 import type { AppConfig } from "../config.js";
 import type { ChatEntry } from "../application/chat-log.js";
-import type { ErrorSummary } from "../observability/metrics.js";
+import type {
+  DisconnectSummary,
+  ErrorSummary,
+} from "../observability/metrics.js";
 import { COMMAND_SPECS } from "../commands/command-registry.js";
 import { loadEnvFile, maskSecret, saveEnvFile } from "./env-file.js";
 import {
@@ -38,6 +41,7 @@ export interface PanelStatus {
   readonly currentFilter?: string;
   readonly tracksPlayed?: number;
   readonly uptimeMs?: number;
+  readonly disconnects?: DisconnectSummary;
   readonly version: string;
   readonly uptime?: number;
   readonly hostname?: string;

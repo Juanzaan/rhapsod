@@ -182,6 +182,7 @@ describe("renderDashboard console", () => {
       currentFilter: "bassboost",
       tracksPlayed: 7,
       uptimeMs: 3_600_000,
+      disconnects: { count: 2 },
       connected: true,
       version: "2.2.0",
       queue: [{ title: "A", requestedBy: "Dj" }, { title: "B" }],
@@ -247,7 +248,7 @@ describe("renderDashboard console", () => {
         ?.classList.set.has("on"),
     ).toBe(true);
     expect(getEl("stTracks").textContent).toBe("7");
-    expect(getEl("uptime").textContent).toBe("up 1 h");
+    expect(getEl("uptime").textContent).toBe("up 1 h · 2 cortes");
     expect(getEl("ql").innerHTML).toContain("rmQ(1)");
     expect(getEl("ql").innerHTML).toContain("rmQ(2)");
     expect(getEl("ql").innerHTML).toContain('class="qr"');
