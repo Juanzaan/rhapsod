@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ChatLog } from "../src/application/chat-log.js";
+import { ChatLog, isOwnEcho } from "../src/application/chat-log.js";
 
 describe("ChatLog", () => {
   it("keeps insertion order", () => {
@@ -35,6 +35,19 @@ describe("ChatLog", () => {
     expect(entry?.from).toBe("?");
     expect(entry?.text).not.toContain("\n");
     expect(entry?.text.length).toBeLessThanOrEqual(500);
+  });
+
+  it("detects the server echo of our own message", () => {
+    const marker = { text: "hola", ts: 1_000 };
+    expect(isOwnEcho("Bot", "Bot", "hola", marker, 2_000)).toBe(true);
+  });
+
+  it("keeps messages that only look similar", () => {
+    const marker = { text: "hola", ts: 1_000 };
+    expect(isOwnEcho("Ana", "Bot", "hola", marker, 2_000)).toBe(false);
+    expect(isOwnEcho("Bot", "Bot", "chau", marker, 2_000)).toBe(false);
+    expect(isOwnEcho("Bot", "Bot", "hola", marker, 10_000)).toBe(false);
+    expect(isOwnEcho("Bot", "Bot", "hola", undefined, 2_000)).toBe(false);
   });
 
   it("snapshot returns a copy", () => {
