@@ -14,7 +14,9 @@ const STOPWORD_TERMS =
 const MEDIAN_DURATION_BONUS = 10;
 const CHANNEL_MATCH_BONUS = 12;
 const MAX_CHANNEL_MATCH_BONUS = 24;
-const FUZZY_MIN_TERM_LENGTH = 4;
+const FUZZY_MIN_TERM_LENGTH = 3;
+const FUZZY_MAX_DISTANCE_SHORT = 1;
+const FUZZY_MAX_DISTANCE_LONG = 2;
 const DURATION_TOLERANCE = 0.25;
 const DURATION_MISMATCH_PENALTY = 40;
 const VERSION_PENALTY = 35;
@@ -65,6 +67,7 @@ export function rankYoutubeCandidatesScored(
     ? normalize(expectedTitle)
     : undefined;
   const medianDuration = expectedDurationSeconds ?? median(candidates);
+  const maxViews = maxViewCount(candidates);
   return candidates
     .map((candidate) => {
       const { score, breakdown } = scoreCandidate(
@@ -74,6 +77,7 @@ export function rankYoutubeCandidatesScored(
         expectedDurationSeconds,
         medianDuration,
         normalizedExpectedTitle,
+        maxViews,
       );
       return { candidate, score, breakdown };
     })
@@ -88,6 +92,7 @@ function scoreCandidate(
   expectedDurationSeconds?: number,
   medianDurationSeconds?: number,
   normalizedExpectedTitle?: string,
+  maxViews?: number,
 ): { score: number; breakdown: Record<string, number> } {
   const title = normalize(candidate.title);
   const rawQueryTerms = normalizedQuery
@@ -98,9 +103,14 @@ function scoreCandidate(
   // Use title part only for termMatch, artist handled via channelMatch/expectedTitleMatch.
   let queryTerms = rawQueryTerms;
   if (normalizedExpectedTitle) {
-    const artistTermsForFilter = normalizedExpectedTitle.split(" ").filter(Boolean);
+    const artistTermsForFilter = normalizedExpectedTitle
+      .split(" ")
+      .filter(Boolean);
     const filtered = rawQueryTerms.filter(
-      (term) => !artistTermsForFilter.some((a) => termMatches(a, term) || termMatches(term, a)),
+      (term) =>
+        !artistTermsForFilter.some(
+          (a) => termMatches(a, term) || termMatches(term, a),
+        ),
     );
     if (filtered.length > 0) queryTerms = filtered;
   }
@@ -116,9 +126,7 @@ function scoreCandidate(
     const allArtistTermsMatchTitle = artistTerms.every((artistTerm) =>
       titleTerms.some((titleTerm) => termMatches(artistTerm, titleTerm)),
     );
-    const channelNorm = candidate.channel
-      ? normalize(candidate.channel)
-      : "";
+    const channelNorm = candidate.channel ? normalize(candidate.channel) : "";
     const channelTermsForArtist = channelNorm.split(" ").filter(Boolean);
     const allArtistTermsMatchChannel = artistTerms.every((artistTerm) =>
       channelTermsForArtist.some((ch) => termMatches(artistTerm, ch)),
@@ -177,11 +185,11 @@ function scoreCandidate(
     }
   }
   if (candidate.viewCount !== undefined && candidate.viewCount > 0) {
-    const logViews = Math.log10(candidate.viewCount);
-    const viewBonus = Math.min(
-      Math.round((logViews / 10) * VIEW_COUNT_LOG_BONUS * 10) / 10,
-      VIEW_COUNT_LOG_BONUS,
-    );
+    const viewBonus = maxViews
+      ? Math.round(
+          (candidate.viewCount / maxViews) * VIEW_COUNT_LOG_BONUS * 10,
+        ) / 10
+      : 0;
     if (viewBonus > 0) {
       score += viewBonus;
       breakdown.viewCount = viewBonus;
@@ -210,8 +218,7 @@ function scoreCandidate(
   ) {
     // For single-term queries like "poland", lyric videos are often the only
     // music result - penalize less to avoid filtering them out entirely.
-    const penalty =
-      queryTerms.length === 1 ? 3 : MINOR_VERSION_PENALTY;
+    const penalty = queryTerms.length === 1 ? 3 : MINOR_VERSION_PENALTY;
     score -= penalty;
     breakdown.minorVersionPenalty = -penalty;
   }
@@ -266,6 +273,16 @@ function scoreCandidate(
   return { score, breakdown };
 }
 
+function maxViewCount(
+  candidates: readonly YoutubeSearchCandidate[],
+): number | undefined {
+  const views = candidates
+    .map((c) => c.viewCount)
+    .filter((v): v is number => v !== undefined && v > 0);
+  if (views.length === 0) return undefined;
+  return Math.max(...views);
+}
+
 function median(
   candidates: readonly YoutubeSearchCandidate[],
 ): number | undefined {
@@ -286,7 +303,8 @@ function termMatches(queryTerm: string, candidateTerm: string): boolean {
   if (candidateTerm.includes(queryTerm) || queryTerm.includes(candidateTerm))
     return true;
   if (queryTerm.length < FUZZY_MIN_TERM_LENGTH) return false;
-  const maxDistance = queryTerm.length >= 6 ? 2 : 1;
+  const maxDistance =
+    queryTerm.length >= 6 ? FUZZY_MAX_DISTANCE_LONG : FUZZY_MAX_DISTANCE_SHORT;
   return levenshteinDistance(queryTerm, candidateTerm) <= maxDistance;
 }
 
