@@ -1,0 +1,22 @@
+[Unit]
+Description=Rhapsod TeamSpeak music bot
+After=network-online.target rhapsod-ytdlp-daemon.service
+Wants=network-online.target
+Requires=rhapsod-ytdlp-daemon.service
+
+[Service]
+Type=simple
+User=rhapsod
+WorkingDirectory=/home/rhapsod/rhapsod
+ExecStart=/usr/bin/node dist/main.js
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+MemoryMax=2G
+MemorySwapMax=2G
+
+[Install]
+WantedBy=multi-user.target

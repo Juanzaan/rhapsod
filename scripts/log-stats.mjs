@@ -315,8 +315,12 @@ export function formatStats(stats, options = {}) {
   lines.push(`Errores level:50: ${JSON.stringify(stats.errorLevel50)}`);
   lines.push("");
   lines.push("--- Guía rápida (qué significa cada tipo de error) ---");
-  lines.push("  auth: YouTube pide login → revisar cookies y POT provider (:4416)");
-  lines.push("  rate-limit: IP limitada por YouTube → esperar; WARP lo absorbe");
+  lines.push(
+    "  auth: YouTube pide login → revisar cookies y POT provider (:4416)",
+  );
+  lines.push(
+    "  rate-limit: IP limitada por YouTube → esperar; WARP lo absorbe",
+  );
   lines.push("  not-found: video borrado, privado o con restricción");
   lines.push("  playback: falló la reproducción (típico: 403 del CDN)");
   lines.push("  timeout: red lenta o request colgado");
