@@ -175,7 +175,7 @@ describe("renderDashboard console", () => {
       uptimeMs: 3_600_000,
       connected: true,
       version: "2.2.0",
-      queue: [{ title: "A" }, { title: "B" }],
+      queue: [{ title: "A", requestedBy: "Dj" }, { title: "B" }],
     };
     const fetchedUrls: string[] = [];
     const fakeFetch = (url: string): Promise<{ json: () => unknown }> => {
@@ -237,6 +237,8 @@ describe("renderDashboard console", () => {
     expect(getEl("uptime").textContent).toBe("up 1 h");
     expect(getEl("ql").innerHTML).toContain("rmQ(1)");
     expect(getEl("ql").innerHTML).toContain("rmQ(2)");
+    expect(getEl("ql").innerHTML).toContain('class="qr"');
+    expect(getEl("ql").innerHTML).toContain("Dj");
   });
 
   it("shares the console design system across pages", () => {
@@ -252,9 +254,16 @@ describe("renderDashboard console", () => {
     ];
     for (const html of pages) {
       // Same tokens everywhere: no leftover slate-blue theme.
-      expect(html).toContain("--am:#ffb000");
+      expect(html).toContain("--am:#FBBF24");
+      expect(html).toContain("--bl:#60A5FA");
+      expect(html).toContain("--gn:#4ADE80");
+      expect(html).toContain("--rd:#F87171");
       expect(html).not.toContain("#38bdf8");
       expect(html).not.toContain("#0f172a");
+      expect(html).not.toContain("#FFB000");
+      expect(html).not.toContain("#ff453a");
+      expect(html).not.toContain("#3ddc84");
+      expect(html).not.toContain("#8e8e93");
     }
     // Same brand on every nav.
     for (const html of pages.slice(0, 3)) {
