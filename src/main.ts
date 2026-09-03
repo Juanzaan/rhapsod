@@ -42,7 +42,10 @@ import { getTimeoutConfig } from "./lib/timeout-config.js";
 import { UserError } from "./lib/user-error.js";
 import { createPanelServer, type QueueEntry } from "./panel/panel-server.js";
 import { ChatLog, isOwnEcho } from "./application/chat-log.js";
-import { ServerSnapshot } from "./application/server-snapshot.js";
+import {
+  ChannelDirectory,
+  ServerSnapshot,
+} from "./application/server-snapshot.js";
 import {
   createCookieSaver,
   createYoutubeHealthCheck,
@@ -172,21 +175,39 @@ async function main(): Promise<void> {
   );
   telemetry.load();
   const serverSnapshot = new ServerSnapshot();
+  const channelDirectory = new ChannelDirectory(async (cid) => {
+    try {
+      const info = await connection.getChannelInfo(cid);
+      const name = info["channel_name"];
+      const pid = Number(info["pid"] ?? Number.NaN);
+      return {
+        ...(name === undefined || name.length === 0 ? {} : { name }),
+        ...(Number.isSafeInteger(pid) && pid > 0 ? { parentCid: pid } : {}),
+      };
+    } catch {
+      return undefined;
+    }
+  });
+  const ensureChannel = async (cid: number): Promise<void> => {
+    await channelDirectory.resolve(cid);
+    serverSnapshot.setChannels(channelDirectory.snapshot());
+  };
   const resyncServerView = async (): Promise<void> => {
     try {
-      const [channels, clients] = await Promise.all([
-        connection.listChannels(),
-        connection.listClients(),
-      ]);
+      const clients = await connection.listClients();
       // Map explicitly: uids and groups must never reach the panel payload.
-      serverSnapshot.fullResync(
-        channels,
-        clients.map((client) => ({
-          clid: client.clid,
-          name: client.name,
-          cid: client.cid,
-        })),
+      const mapped = clients.map((client) => ({
+        clid: client.clid,
+        name: client.name,
+        cid: client.cid,
+      }));
+      // Channels come from the cids of visible clients (channellist is
+      // restricted on some servers) enriched via channelinfo with caching.
+      const cids = [...new Set(mapped.map((client) => client.cid))];
+      const channels = await Promise.all(
+        cids.map((cid) => channelDirectory.resolve(cid)),
       );
+      serverSnapshot.fullResync(channels, mapped);
     } catch (error) {
       logger.debug({ err: error }, "Server view resync failed");
     }
@@ -568,6 +589,7 @@ async function main(): Promise<void> {
       name: event.name,
       cid: event.cid,
     });
+    void ensureChannel(event.cid).catch(() => undefined);
   });
   connection.onClientLeave((clid) => {
     telemetry.clientLeft(clid);
@@ -602,6 +624,7 @@ async function main(): Promise<void> {
       );
     }
     serverSnapshot.applyMove(event.movedClid, event.targetCid);
+    void ensureChannel(event.targetCid).catch(() => undefined);
   });
 
   const listConnectedClientUids = async (): Promise<readonly string[]> => {
