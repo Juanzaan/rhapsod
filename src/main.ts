@@ -12,7 +12,11 @@ import { YoutubePlaybackService } from "./application/youtube-playback-service.j
 import { AudioUrlCache } from "./application/audio-url-cache.js";
 import { PlaylistStore } from "./application/playlist-store.js";
 import { UserTelemetry } from "./application/user-telemetry.js";
-import { parseChatCommand } from "./commands/chat-command.js";
+import {
+  normalizeCommandInput,
+  parseChatCommand,
+} from "./commands/chat-command.js";
+import { probeTs3Server } from "./adapters/ts3/probe.js";
 import {
   dispatchCommand,
   type CommandContext,
@@ -671,7 +675,7 @@ async function main(): Promise<void> {
             join(config.RHAPSOD_DATA_DIR, "youtube-cookies.txt"),
         ),
         executeCommand: async (raw: string): Promise<string> => {
-          const parsed = parseChatCommand(raw);
+          const parsed = parseChatCommand(normalizeCommandInput(raw));
           if (parsed === undefined) {
             throw new Error("Comando no valido");
           }
@@ -688,6 +692,8 @@ async function main(): Promise<void> {
           logger.info("Panel requested restart");
           process.exit(1);
         },
+        testConnection: (host: string, port: number) =>
+          probeTs3Server(host, port),
       })
     : undefined;
 

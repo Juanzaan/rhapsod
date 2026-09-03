@@ -774,6 +774,10 @@ export function renderSettingsPage(
 
     function load(){
       fetch('/api/env',{headers:H}).then(function(r){return r.json();}).then(function(d){
+        if(!d.entries||d.entries.length===0){
+          document.getElementById('ct').innerHTML='<div class="cd"><div class="em">El bot no puede leer su archivo de entorno. Revisá que el usuario del servicio tenga permiso de lectura sobre RHAPSOD_ENV_FILE.</div></div>';
+          return;
+        }
         var groups={};
         var order=['TeamSpeak 3','Audio','Spotify','Panel','General'];
         for(var i=0;i<d.entries.length;i++){
