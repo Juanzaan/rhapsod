@@ -260,8 +260,7 @@ function parseMusicResponsiveListItem(
       Record<string, unknown> | undefined;
     const playWatch = playNav?.watchEndpoint as
       Record<string, unknown> | undefined;
-    if (typeof playWatch?.videoId === "string")
-      videoId = playWatch.videoId;
+    if (typeof playWatch?.videoId === "string") videoId = playWatch.videoId;
   }
 
   if (!videoId && Array.isArray(renderer.flexColumns)) {
