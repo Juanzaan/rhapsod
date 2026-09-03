@@ -78,6 +78,7 @@ export function renderSetupWizard(
       {id:'ts3',r:rT},
       {id:'channel',r:rC},
       {id:'audio',r:rA},
+      {id:'youtube',r:rY},
       {id:'optional',r:rO},
       {id:'review',r:rR}
     ];
@@ -130,6 +131,43 @@ export function renderSetupWizard(
         '<div class="a"><button class="b bs" onclick="prev()">Atras</button><button class="b bp" onclick="next()">Siguiente</button></div>';
     }
 
+    function rY(){
+      setTimeout(checkYt,50);
+      var st=vals._ytOk===true?'<div class="tr ok">YouTube OK'+(vals._ytMs?' ('+vals._ytMs+' ms)':'')+'</div>':(vals._ytOk===false?'<div class="tr fl">Fallo: '+escJs(vals._ytErr||'desconocido')+'</div>':'<div class="tr ld">Probando YouTube...</div>');
+      return '<h1>YouTube</h1><p class="sub">Sin esto el bot no reproduce musica de YouTube</p>'+
+        '<div id="yh">'+st+'</div>'+
+        '<div class="f"><label>Cookies de YouTube (cookies.txt) <span class="ob">recomendado</span></label><textarea id="ick2" rows="4" style="width:100%;padding:.6rem .8rem;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#e2e8f0;font-size:.8rem" placeholder="Pega aca el contenido de tu cookies.txt"></textarea><div class="h">En tu navegador: extension Get cookies.txt LOCALLY, exportar estando logueado en youtube.com, pegar el contenido</div></div>'+
+        '<div id="yts" class="tr"></div>'+
+        '<div class="a"><button class="b bs" onclick="prev()">Atras</button><button class="b bs" onclick="saveCookies()">Guardar cookies</button><button class="b bp" onclick="next()">Siguiente</button></div>';
+    }
+
+    function escJs(s){
+      return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    function checkYt(){
+      var el=document.getElementById('yh');
+      if(!el)return;
+      el.innerHTML='<div class="tr ld">Probando YouTube...</div>';
+      fetch('/api/youtube-health',{headers:H}).then(function(r){return r.json();}).then(function(d){
+        if(d.ok){vals._ytOk=true;vals._ytMs=d.ms;el.innerHTML='<div class="tr ok">YouTube OK ('+d.ms+' ms)</div>';}
+        else{vals._ytOk=false;vals._ytErr=d.error;el.innerHTML='<div class="tr fl">Fallo: '+escJs(d.error||'desconocido')+'. Pega tus cookies abajo y proba de nuevo.</div>';}
+      }).catch(function(e){vals._ytOk=false;vals._ytErr=e.message;el.innerHTML='<div class="tr fl">No se pudo probar: '+escJs(e.message)+'</div>';});
+    }
+
+    function saveCookies(){
+      var t=document.getElementById('ick2');
+      var body=t?t.value.trim():'';
+      if(!body){toast('Pega el contenido de cookies.txt primero');return;}
+      var el=document.getElementById('yts');
+      el.className='tr ld';el.textContent='Guardando...';
+      fetch('/api/cookies',{method:'PUT',headers:Object.assign({},H,{'content-type':'application/json'}),body:JSON.stringify({content:body})})
+        .then(function(r){return r.json();}).then(function(d){
+          if(d.ok){el.className='tr ok';el.textContent='Cookies guardadas. Probando de nuevo...';vals.RHAPSOD_YTDLP_COOKIES_PATH=d.path;checkYt();}
+          else{el.className='tr fl';el.textContent='Error: '+(d.error||'desconocido');}
+        }).catch(function(e){el.className='tr fl';el.textContent='No se pudo guardar: '+e.message;});
+    }
+
     function rO(){
       return '<h1>Opcional</h1><p class="sub">Funciones adicionales</p>'+
         '<div class="f"><label>Spotify Client ID <span class="ob">opcional</span></label><input id="isi" placeholder="Para playlists de Spotify" value="'+(vals.RHAPSOD_SPOTIFY_CLIENT_ID||'')+'"></div>'+
@@ -151,6 +189,7 @@ export function renderSetupWizard(
         ['Bitrate',((vals.RHAPSOD_OPUS_BITRATE||'96000')/1000)+' kbps'],
         ['Normalizacion',(vals.RHAPSOD_LOUDNESS_TARGET_LUFS||'-14')+' LUFS'],
         ['Spotify',vals.RHAPSOD_SPOTIFY_CLIENT_ID?'Configurado':'No'],
+        ['YouTube',vals._ytOk===true?'OK':(vals._ytOk===false?'Falla (ver paso YouTube)':'Sin probar')],
         ['Cookies',vals.RHAPSOD_YTDLP_COOKIES_PATH?'Configurado':'No'],
         ['Daemon',vals.RHAPSOD_YTDLP_DAEMON_URL?'Configurado':'No'],
         ['Admins',vals.RHAPSOD_ADMIN_UIDS||'(ninguno)']

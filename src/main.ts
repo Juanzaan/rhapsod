@@ -34,6 +34,10 @@ import {
 import { getTimeoutConfig } from "./lib/timeout-config.js";
 import { UserError } from "./lib/user-error.js";
 import { createPanelServer, type QueueEntry } from "./panel/panel-server.js";
+import {
+  createCookieSaver,
+  createYoutubeHealthCheck,
+} from "./panel/youtube-setup.js";
 import type { YoutubePlaybackResolver } from "./media/youtube/youtube-resolver.js";
 import { RedirectResolver } from "./media/redirect-resolver.js";
 import { SongLinkClient } from "./media/song-link.js";
@@ -649,6 +653,13 @@ async function main(): Promise<void> {
             requestedBy: track.requestedBy,
           })),
         errors: () => metrics.errorSummary(20),
+        youtubeHealth: createYoutubeHealthCheck((url, signal) =>
+          ytDlpResolver.getAudioUrlFromUrl(url, signal),
+        ),
+        saveCookies: createCookieSaver(
+          config.RHAPSOD_YTDLP_COOKIES_PATH ??
+            join(config.RHAPSOD_DATA_DIR, "youtube-cookies.txt"),
+        ),
         executeCommand: async (raw: string): Promise<string> => {
           const parsed = parseChatCommand(raw);
           if (parsed === undefined) {
