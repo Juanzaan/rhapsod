@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   renderCommandsPage,
   renderDashboard,
+  renderServerPage,
   renderSettingsPage,
   renderSetupWizard,
 } from "../src/panel/panel-templates.js";
@@ -286,6 +287,115 @@ describe("renderDashboard console", () => {
     for (const html of pages.slice(0, 3)) {
       expect(html).toContain("RHAPSOD<b>.</b>");
     }
+  });
+
+  it("server page has live tree markers", () => {
+    const html = renderServerPage("admin", "secret");
+    for (const id of ["tree", "live", "ucount"]) {
+      expect(html).toContain(`id="${id}"`);
+    }
+    expect(html).toContain("/api/server");
+    expect(html).toContain("moveBot(");
+  });
+
+  it("server script renders nested tree with bot pill", async () => {
+    interface FakeEl {
+      textContent: string;
+      innerHTML: string;
+      classList: { add(text: string): void; remove(text: string): void };
+    }
+    const els = new Map<string, FakeEl>();
+    const getEl = (id: string): FakeEl => {
+      let el = els.get(id);
+      if (!el) {
+        el = {
+          textContent: "",
+          innerHTML: "",
+          classList: { add: () => {}, remove: () => {} },
+        };
+        els.set(id, el);
+      }
+      return el;
+    };
+    const calls: { url: string; options?: unknown }[] = [];
+    const fakeFetch = (url: string, options?: unknown) =>
+      Promise.resolve({
+        json: () =>
+          Promise.resolve(
+            String(url).includes("/api/move") ? { ok: true } : {},
+          ),
+      }).then((res) => {
+        calls.push({ url: String(url), options });
+        return res;
+      });
+    const html = renderServerPage("admin", "secret");
+    const code = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
+      .map((m) => m[1] ?? "")
+      .join("\n");
+    // Intentional: executes generated template JS against fake DOM globals.
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval
+    const factory = new Function(
+      "document",
+      "window",
+      "fetch",
+      "setInterval",
+      "setTimeout",
+      "btoa",
+      `${code};return {render:render,poll:poll,moveBot:moveBot};`,
+    ) as (...args: unknown[]) => {
+      render: (view: unknown) => void;
+      poll: () => void;
+      moveBot: (cid: number) => void;
+    };
+    const api = factory(
+      { getElementById: getEl, readyState: "loading" },
+      {
+        matchMedia: () => ({ matches: true }),
+        addEventListener: () => {},
+      },
+      fakeFetch,
+      () => 0,
+      () => 0,
+      () => "eA==",
+    );
+    api.render({
+      version: 1,
+      botChannelId: 2,
+      channels: [
+        { cid: 1, name: "Lobby" },
+        { cid: 2, name: "Music", parentCid: 1 },
+        { cid: 3, name: "Sub", parentCid: 2 },
+        { cid: 4, name: "[cspacer01]Hub" },
+        { cid: 5, name: "<b>x</b>" },
+      ],
+      clients: [
+        { clid: 7, name: "Ana", cid: 2 },
+        { clid: 8, name: "Beto", cid: 2 },
+        { clid: 9, name: "Cid", cid: 3 },
+      ],
+    });
+    const tree = getEl("tree").innerHTML;
+    expect(tree).toContain("BOT");
+    expect(tree).toContain("Hub");
+    expect(tree).not.toContain("[cspacer01]");
+    expect(tree).not.toContain("<b>x</b>");
+    expect(tree).toContain("&lt;b&gt;x&lt;/b&gt;");
+    expect(tree.indexOf("Music")).toBeLessThan(tree.indexOf("Sub"));
+    expect(getEl("ucount").textContent).toBe("3 usuarios");
+    expect(tree.match(/onclick="moveBot\(2\)"/)).not.toBeNull();
+
+    api.poll();
+    api.moveBot(3);
+    for (let i = 0; i < 5; i++) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    const urls = calls.map((c) => c.url);
+    expect(urls).toContain("/api/server");
+    const moveCall = calls.find((c) => c.url === "/api/move");
+    expect(moveCall).toBeDefined();
+    expect(
+      (moveCall?.options as { body?: string } | undefined)?.body,
+    ).toContain('"cid":3');
   });
 
   it("escapes the current title", () => {

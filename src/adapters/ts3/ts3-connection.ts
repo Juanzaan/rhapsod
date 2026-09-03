@@ -58,7 +58,9 @@ export function withTimeout<T>(
 export interface Ts3Connection {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
-  listChannels(): Promise<readonly { cid: number; name: string }[]>;
+  listChannels(): Promise<
+    readonly { cid: number; name: string; parentCid?: number }[]
+  >;
   getCurrentChannel(): Promise<{
     readonly cid: number;
     readonly name?: string;
@@ -229,9 +231,23 @@ export function createTs3Connection(
     },
     disconnect: () => client.disconnect(),
     listChannels: async () => {
+      const parentOf = (pid: bigint | undefined): number | undefined => {
+        if (pid === undefined) return undefined;
+        const parentCid = Number(pid);
+        return Number.isSafeInteger(parentCid) && parentCid > 0
+          ? parentCid
+          : undefined;
+      };
       try {
         const entries = await listChannels(client);
-        return entries.map((e) => ({ cid: Number(e.id), name: e.name }));
+        return entries.map((e) => {
+          const parentCid = parentOf(
+            typeof e.parentID === "bigint" ? e.parentID : undefined,
+          );
+          return parentCid === undefined
+            ? { cid: Number(e.id), name: e.name }
+            : { cid: Number(e.id), name: e.name, parentCid };
+        });
       } catch (error) {
         logger.debug({ err: error }, "listChannels failed, using raw command");
         try {
@@ -245,7 +261,16 @@ export function createTs3Connection(
                 name: string;
               } => typeof row.cid === "string" && typeof row.name === "string",
             )
-            .map((row) => ({ cid: Number(row.cid), name: row.name }));
+            .map((row) => {
+              const pid = Number(
+                (row as Record<string, string>).pid ?? Number.NaN,
+              );
+              const parentCid =
+                Number.isSafeInteger(pid) && pid > 0 ? pid : undefined;
+              return parentCid === undefined
+                ? { cid: Number(row.cid), name: row.name }
+                : { cid: Number(row.cid), name: row.name, parentCid };
+            });
         } catch {
           return [];
         }
