@@ -20,7 +20,107 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .em{color:var(--ft);font-size:.85rem;text-align:center;padding:1rem}
 .lk{color:var(--bl);text-decoration:none}
 .toast{position:fixed;bottom:1.5rem;right:1.5rem;background:#0b0b0d;border:1px solid var(--ln);border-left:3px solid var(--am);color:var(--tx);padding:.75rem 1rem;border-radius:8px;font-size:.85rem;opacity:0;transform:translateY(8px);transition:opacity .25s,transform .25s;pointer-events:none;z-index:99;max-width:min(420px,90vw)}
-.toast.show{opacity:1;transform:none}`;
+.toast.show{opacity:1;transform:none}
+.chrow{border:1px solid var(--ln);border-radius:10px;padding:.7rem .9rem;margin-bottom:.5rem;background:#0f0f12;cursor:pointer;transition:border-color .15s,transform .15s}
+.chrow:hover{border-color:var(--am)}
+.chrow:active{transform:translateY(1px)}
+.chrow.here{border-color:var(--am);background:#141207}
+.chhead{display:flex;align-items:center;gap:.6rem}
+.chnm{font-weight:650;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chct{font-family:var(--mn);font-size:.72rem;color:var(--dm)}
+.botpill{font-family:var(--mn);font-size:.62rem;letter-spacing:.18em;background:var(--am);color:#0b0b0d;border-radius:4px;padding:.15rem .45rem;font-weight:700}
+.spacer{text-align:center;color:var(--ft);font-size:.72rem;letter-spacing:.3em;text-transform:uppercase;padding:.9rem 0 .4rem}
+.users{margin:.5rem 0 0 1.2rem;padding:0;list-style:none}
+.users li{font-size:.82rem;color:var(--dm);padding:.12rem 0;display:flex;gap:.45rem;align-items:center}
+.users li::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--bl);flex-shrink:0}
+.kids{margin-left:.85rem;border-left:1px solid var(--ln);padding-left:.65rem;margin-top:.5rem}
+.chev{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:4px;color:var(--ft);font-size:.75rem;flex-shrink:0;cursor:pointer}
+.chev:hover{color:var(--tx);background:#1e1e22}
+.chev.closed{transform:rotate(-90deg)}
+.chev.leaf{visibility:hidden}`;
+
+// Shared server-tree renderer (dashboard card + server page): nested
+// channels ordered like TeamSpeak (channel_order, then name), users,
+// BOT pill, spacers. opts.interactive adds collapse chevrons + click-move.
+const SERVER_TREE_JS = `
+function spacerName(name){
+  var m=/^\\[\\*?(cspacer\\d*)\\](.*)$/.exec(name||'');
+  if(!m)return null;
+  var rest=(m[2]||'').trim();
+  return rest.length>0?rest:'···';
+}
+function serverTreeHtml(view,opts){
+  opts=opts||{};
+  var interactive=opts.interactive!==false;
+  var collapsed=opts.collapsed||{};
+  var chs=(view&&view.channels)||[];
+  var cls=(view&&view.clients)||[];
+  var bot=(view&&view.botChannelId)||0;
+  var byParent={};
+  for(var i=0;i<chs.length;i++){
+    var c=chs[i];
+    var p=c.parentCid||0;
+    if(!byParent[p])byParent[p]=[];
+    byParent[p].push(c);
+  }
+  var names=Object.keys(byParent);
+  for(var k=0;k<names.length;k++){
+    byParent[names[k]].sort(function(a,b){
+      var ao=(typeof a.order==='number'&&isFinite(a.order))?a.order:2147483647;
+      var bo=(typeof b.order==='number'&&isFinite(b.order))?b.order:2147483647;
+      if(ao!==bo)return ao-bo;
+      var an=String(a.name||''),bn=String(b.name||'');
+      var cmp=an.localeCompare(bn,'es');
+      if(cmp!==0)return cmp;
+      return (a.cid||0)-(b.cid||0);
+    });
+  }
+  var byChannel={};
+  var total=0;
+  for(var j=0;j<cls.length;j++){
+    var u=cls[j];
+    if(!byChannel[u.cid])byChannel[u.cid]=[];
+    byChannel[u.cid].push(u);
+    total++;
+  }
+  var seen={};
+  var rowHtml=function(ch,us,here,hasKids){
+    var h='<div class="chrow'+(here?' here':'')+'" onclick="moveBot('+ch.cid+')">';
+    h+='<div class="chhead">';
+    if(interactive){
+      h+='<span class="chev'+(hasKids?(collapsed[ch.cid]?' closed':''):' leaf')+'" onclick="toggleCh(event,'+ch.cid+')">›</span>';
+    }
+    h+='<span class="chnm">'+esc(ch.name)+'</span>'+(here?'<span class="botpill">BOT</span>':'')+'<span class="chct">'+us.length+'</span></div>';
+    if(us.length>0){
+      h+='<ul class="users">';
+      for(var u=0;u<us.length;u++){h+='<li>'+esc(us[u].name)+'</li>';}
+      h+='</ul>';
+    }
+    return h+'</div>';
+  };
+  var walk=function(pid,depth){
+    var out='';
+    var kids=byParent[pid]||[];
+    for(var q=0;q<kids.length;q++){
+      var ch=kids[q];
+      if(seen[ch.cid])continue;
+      seen[ch.cid]=true;
+      if(depth>8)continue;
+      var sp=spacerName(ch.name);
+      if(sp!==null){
+        out+='<div class="spacer">'+esc(sp)+'</div>';
+      }else{
+        out+=rowHtml(ch,byChannel[ch.cid]||[],ch.cid===bot,(byParent[ch.cid]||[]).length>0);
+      }
+      var inner=walk(ch.cid,depth+1);
+      if(inner!==''){
+        out+='<div class="kids" data-kids="'+ch.cid+'"'+(collapsed[ch.cid]?' style="display:none"':'')+'>'+inner+'</div>';
+      }
+    }
+    return out;
+  };
+  return {html:walk(0,0),total:total};
+}`;
 
 function esc(s: string): string {
   return s
@@ -985,23 +1085,6 @@ export function renderServerPage(
     .liveb{font-family:var(--mn);font-size:.62rem;letter-spacing:.22em;padding:.32rem .6rem;border:1px solid #3a3a40;border-radius:4px;color:var(--ft);white-space:nowrap}
     .liveb.on{color:var(--gn);border-color:var(--gn)}
     .liveb.fb{color:var(--am);border-color:var(--am)}
-    .chrow{border:1px solid var(--ln);border-radius:10px;padding:.7rem .9rem;margin-bottom:.5rem;background:#0f0f12;cursor:pointer;transition:border-color .15s,transform .15s}
-    .chrow:hover{border-color:var(--am)}
-    .chrow:active{transform:translateY(1px)}
-    .chrow.here{border-color:var(--am);background:#141207}
-    .chhead{display:flex;align-items:center;gap:.6rem}
-    .chnm{font-weight:650;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .chct{font-family:var(--mn);font-size:.72rem;color:var(--dm)}
-    .botpill{font-family:var(--mn);font-size:.62rem;letter-spacing:.18em;background:var(--am);color:#0b0b0d;border-radius:4px;padding:.15rem .45rem;font-weight:700}
-    .spacer{text-align:center;color:var(--ft);font-size:.72rem;letter-spacing:.3em;text-transform:uppercase;padding:.9rem 0 .4rem}
-    .users{margin:.5rem 0 0 1.2rem;padding:0;list-style:none}
-    .users li{font-size:.82rem;color:var(--dm);padding:.12rem 0;display:flex;gap:.45rem;align-items:center}
-    .users li::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--bl);flex-shrink:0}
-    .kids{margin-left:.85rem;border-left:1px solid var(--ln);padding-left:.65rem;margin-top:.5rem}
-    .chev{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:4px;color:var(--ft);font-size:.75rem;flex-shrink:0;cursor:pointer}
-    .chev:hover{color:var(--tx);background:#1e1e22}
-    .chev.closed{transform:rotate(-90deg)}
-    .chev.leaf{visibility:hidden}
   </style>
 </head>
 <body>
@@ -1026,7 +1109,7 @@ export function renderServerPage(
   </div>
   <div class="toast" id="toast"></div>
   <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js" defer></script>
-  <script>
+  <script>${SERVER_TREE_JS}
     var A='Basic '+btoa('${cred}');
     var H={authorization:A};
     var RM=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -1045,76 +1128,20 @@ export function renderServerPage(
       setTimeout(function(){el.classList.remove('show');},3000);
     }
 
-    function spacerName(name){
-      var m=/^\\[\\*?(cspacer\\d*)\\](.*)$/.exec(name||'');
-      if(!m)return null;
-      var rest=(m[2]||'').trim();
-      return rest.length>0?rest:'···';
-    }
-
     function render(view){
       var box=document.getElementById('tree');
-      var chs=view.channels||[];
-      var cls=view.clients||[];
-      var bot=view.botChannelId||0;
+      var built=serverTreeHtml(view||{},{interactive:true,collapsed:collapsed});
+      var chs=(view&&view.channels)||[];
       if(chs.length===0){box.innerHTML='<div class="em">Sin datos — ¿bot conectado?</div>';return;}
-      var byParent={};
-      for(var i=0;i<chs.length;i++){
-        var c=chs[i];
-        var p=c.parentCid||0;
-        if(!byParent[p])byParent[p]=[];
-        byParent[p].push(c);
-      }
-      var names=Object.keys(byParent);
-      for(var k=0;k<names.length;k++){
-        byParent[names[k]].sort(function(a,b){return String(a.name).localeCompare(String(b.name),'es');});
-      }
-      var byChannel={};
       var total=0;
-      for(var j=0;j<cls.length;j++){
-        var u=cls[j];
-        if(!byChannel[u.cid])byChannel[u.cid]=[];
-        byChannel[u.cid].push(u);
-        total++;
-      }
+      var cls=(view&&view.clients)||[];
+      for(var j=0;j<cls.length;j++){total++;}
       document.getElementById('ucount').textContent=total+(total===1?' usuario':' usuarios');
       document.getElementById('treeHint').textContent=(view.mode==='full')
         ? 'Click en un canal para mover el bot ahí'
         : 'Solo canales con gente (permisos limitados) · click para mover el bot';
       lastView=view;
-      var seen={};
-      var rowHtml=function(ch,us,bot,hasKids){
-        var here=ch.cid===bot;
-        var h='<div class="chrow'+(here?' here':'')+'" onclick="moveBot('+ch.cid+')"><div class="chhead"><span class="chev'+(hasKids?(collapsed[ch.cid]?' closed':''):' leaf')+'" onclick="toggleCh(event,'+ch.cid+')">›</span><span class="chnm">'+esc(ch.name)+'</span>'+(here?'<span class="botpill">BOT</span>':'')+'<span class="chct">'+us.length+'</span></div>';
-        if(us.length>0){
-          h+='<ul class="users">';
-          for(var u=0;u<us.length;u++){h+='<li>'+esc(us[u].name)+'</li>';}
-          h+='</ul>';
-        }
-        return h+'</div>';
-      };
-      var walk=function(pid,depth){
-        var out='';
-        var kids=byParent[pid]||[];
-        for(var q=0;q<kids.length;q++){
-          var ch=kids[q];
-          if(seen[ch.cid])continue;
-          seen[ch.cid]=true;
-          if(depth>8)continue;
-          var sp=spacerName(ch.name);
-          if(sp!==null){
-            out+='<div class="spacer">'+esc(sp)+'</div>';
-          }else{
-            out+=rowHtml(ch,byChannel[ch.cid]||[],bot,(byParent[ch.cid]||[]).length>0);
-          }
-          var inner=walk(ch.cid,depth+1);
-          if(inner!==''){
-            out+='<div class="kids" data-kids="'+ch.cid+'"'+(collapsed[ch.cid]?' style="display:none"':'')+'>'+inner+'</div>';
-          }
-        }
-        return out;
-      };
-      box.innerHTML=walk(0,0);
+      box.innerHTML=built.html;
       var g=gs();
       if(g&&lastV===-1)g.from('#tree .chrow',{y:10,opacity:0,duration:.4,stagger:.03,ease:'power2.out',clearProps:'all'});
       lastV=view.version;
