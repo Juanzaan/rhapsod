@@ -383,6 +383,9 @@ export function renderDashboard(
     .qr{color:var(--bl);font-size:.72rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px;flex-shrink:0}
     .qx{background:none;border:1px solid #3a3a40;color:var(--dm);border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:.8rem;line-height:1;flex-shrink:0}
     .qx:hover{color:var(--rd);border-color:var(--rd)}
+    .cnm{color:var(--bl);font-weight:600;white-space:nowrap;flex-shrink:0}
+    .cmB{color:var(--am);font-weight:600;white-space:nowrap;flex-shrink:0}
+    .cmt{flex:1;word-break:break-word;white-space:pre-wrap;min-width:0}
     .ir{display:flex;gap:.5rem;margin-bottom:.6rem}
     .ir input{flex:1;padding:.6rem .8rem;background:#0b0b0d;border:1px solid var(--ln);border-radius:6px;color:var(--tx);font-size:.9rem;min-width:0}
     .ir input:focus{outline:none;border-color:var(--am)}
@@ -478,6 +481,15 @@ export function renderDashboard(
         </div>
       </div>
       <div class="cd fw">
+        <div class="ct"><span>Chat del canal</span><span class="rv">en vivo</span></div>
+        <ul class="ql" id="chat" style="max-height:240px"></ul>
+        <div class="em" id="chatEmpty">Sin mensajes todavía</div>
+        <div class="ir" style="margin-top:.75rem;margin-bottom:0">
+          <input id="chatIn" placeholder="Escribir como el bot..." onkeydown="if(event.key==='Enter')sendChat()">
+          <button class="go" onclick="sendChat()">Enviar</button>
+        </div>
+      </div>
+      <div class="cd fw">
         <div class="ct"><span>Sistema</span><span class="rv" id="uptime">${uptimeInit}</span></div>
         <div class="sg3">
           <div class="stt"><div class="sv am" id="stTracks">${tracksInit}</div><div class="sl">Temas</div></div>
@@ -507,7 +519,7 @@ export function renderDashboard(
     var H={authorization:A};
     var RM=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     function gs(){return (window.gsap&&!RM)?window.gsap:null;}
-    var PP='idle',POS=0,DUR=0,volDrag=false,lastTracks=-1,lastQ='',lastE='',lastQLen=0;
+    var PP='idle',POS=0,DUR=0,volDrag=false,lastTracks=-1,lastQ='',lastE='',lastQLen=0,lastC='';
 
     function fmtT(ms){
       if(ms==null||!isFinite(ms)||ms<0)return '--:--';
@@ -548,6 +560,33 @@ export function renderDashboard(
 
     function rmQ(n){
       cmd('remove '+n);
+    }
+
+    function sendChat(){
+      var el=document.getElementById('chatIn');
+      var q=el.value.trim();
+      if(!q)return;
+      el.value='';
+      fetch('/api/chat',{method:'POST',headers:Object.assign({},H,{'content-type':'application/json'}),body:JSON.stringify({text:q})})
+        .then(function(r){return r.json();})
+        .then(function(d){if(!d.ok)toast('Error: '+(d.error||'desconocido'));else setTimeout(refresh,500);})
+        .catch(function(){toast('Error de conexion');});
+    }
+
+    function renderChat(msgs){
+      var list=document.getElementById('chat');
+      var empty=document.getElementById('chatEmpty');
+      if(!msgs||msgs.length===0){list.innerHTML='';empty.style.display='block';return;}
+      empty.style.display='none';
+      var nearBottom=list.scrollHeight-list.scrollTop-list.clientHeight<60;
+      var h='';
+      for(var i=0;i<msgs.length;i++){
+        var m=msgs[i];
+        var who=m.outgoing?'BOT':(m.from||'?');
+        h+='<li class="qi"><span class="qn">'+esc(new Date(m.ts).toLocaleTimeString())+'</span><span class="'+(m.outgoing?'cmB':'cnm')+'">'+esc(who)+'</span><span class="cmt">'+esc(m.text)+'</span></li>';
+      }
+      list.innerHTML=h;
+      if(nearBottom)list.scrollTop=list.scrollHeight;
     }
 
     function seekEv(e){
@@ -684,6 +723,8 @@ export function renderDashboard(
           }
         }
         renderErrors(d.errors||{totalErrors:0,byCategory:{},recent:[]});
+        var cj=JSON.stringify(d.chat||[]);
+        if(cj!==lastC){lastC=cj;renderChat(d.chat||[]);}
       }).catch(function(){});
     }
 

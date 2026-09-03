@@ -5,6 +5,7 @@ import { serve } from "@hono/node-server";
 import type { Logger } from "pino";
 
 import type { AppConfig } from "../config.js";
+import type { ChatEntry } from "../application/chat-log.js";
 import type { ErrorSummary } from "../observability/metrics.js";
 import { COMMAND_SPECS } from "../commands/command-registry.js";
 import { loadEnvFile, maskSecret, saveEnvFile } from "./env-file.js";
@@ -48,6 +49,8 @@ export interface PanelOptions {
   readonly logger: Logger;
   readonly status: () => PanelStatus;
   readonly queue: () => QueueEntry[];
+  readonly chat?: () => readonly ChatEntry[];
+  readonly sendChat?: (text: string) => Promise<void>;
   readonly errors?: () => ErrorSummary;
   readonly youtubeHealth?: () => Promise<{
     readonly ok: boolean;
@@ -200,13 +203,39 @@ export function createPanelServer(options: PanelOptions): {
   app.get("/api/state", (c) => {
     const status = options.status();
     const queue = options.queue();
-    // Single round trip per poll: queue + errors ride along with status so
-    // the dashboard needs only one request per refresh interval.
+    // Single round trip per poll: queue + errors + chat ride along with
+    // status so the dashboard needs only one request per refresh interval.
     const errors =
       options.errors === undefined
         ? { totalErrors: 0, byCategory: {}, recent: [] }
         : options.errors();
-    return c.json({ ...status, queue, errors });
+    const chat = options.chat === undefined ? [] : options.chat();
+    return c.json({ ...status, queue, errors, chat });
+  });
+
+  app.post("/api/chat", async (c) => {
+    if (options.sendChat === undefined) {
+      return c.json({ ok: false, error: "Envío no disponible" }, 501);
+    }
+    const body: unknown = await c.req.json().catch(() => undefined);
+    const text =
+      typeof body === "object" && body !== null
+        ? (body as Record<string, unknown>).text
+        : undefined;
+    if (typeof text !== "string" || text.trim().length === 0) {
+      return c.json({ ok: false, error: "Mensaje vacío" }, 400);
+    }
+    if (text.trim().length > 500) {
+      return c.json({ ok: false, error: "Mensaje demasiado largo" }, 400);
+    }
+    try {
+      await options.sendChat(text.trim());
+      return c.json({ ok: true });
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "No se pudo enviar";
+      return c.json({ ok: false, error: message }, 400);
+    }
   });
 
   app.get("/api/queue", (c) => {

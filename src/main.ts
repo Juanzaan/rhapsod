@@ -38,6 +38,7 @@ import {
 import { getTimeoutConfig } from "./lib/timeout-config.js";
 import { UserError } from "./lib/user-error.js";
 import { createPanelServer, type QueueEntry } from "./panel/panel-server.js";
+import { ChatLog } from "./application/chat-log.js";
 import {
   createCookieSaver,
   createYoutubeHealthCheck,
@@ -153,6 +154,12 @@ async function main(): Promise<void> {
     });
   }
   const connection = createTs3Connection(config, identity, logger);
+  const chatLog = new ChatLog();
+  const rawSendChannelMessage = connection.sendChannelMessage.bind(connection);
+  connection.sendChannelMessage = async (text: string): Promise<void> => {
+    chatLog.push(config.RHAPSOD_TS3_NICKNAME, text, true);
+    return rawSendChannelMessage(text);
+  };
   const telemetry = new UserTelemetry(
     join(config.RHAPSOD_DATA_DIR, "user-telemetry.json"),
     logger,
@@ -431,6 +438,7 @@ async function main(): Promise<void> {
   };
   connection.onTextMessage(
     (message, senderUid, senderName, senderGroups, isPrivate, invokerClid) => {
+      if (!isPrivate) chatLog.push(senderName, message, false);
       const privateAllowed = isPrivate && privateCommandUids.has(senderUid);
       const respond = privateAllowed
         ? (text: string) => connection.sendPrivateMessage(invokerClid, text)
@@ -667,6 +675,8 @@ async function main(): Promise<void> {
             requestedBy: track.requestedBy,
           })),
         errors: () => metrics.errorSummary(20),
+        chat: () => chatLog.snapshot(),
+        sendChat: (text: string) => connection.sendChannelMessage(text),
         youtubeHealth: createYoutubeHealthCheck((url, signal) =>
           ytDlpResolver.getAudioUrlFromUrl(url, signal),
         ),

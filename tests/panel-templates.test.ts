@@ -54,6 +54,9 @@ describe("renderDashboard console", () => {
     for (const id of [
       "loopSeg",
       "fxRow",
+      "chat",
+      "chatIn",
+      "chatEmpty",
       "ql",
       "qc",
       "dwCard",
@@ -99,6 +102,9 @@ describe("renderDashboard console", () => {
       innerHTML: string;
       title: string;
       value: string | number;
+      scrollHeight: number;
+      scrollTop: number;
+      clientHeight: number;
       style: Record<string, string>;
       className: string;
       classList: Classes;
@@ -114,6 +120,9 @@ describe("renderDashboard console", () => {
       innerHTML: "",
       title: "",
       value: "",
+      scrollHeight: 0,
+      scrollTop: 0,
+      clientHeight: 0,
       style: {},
       className: "",
       classList: new Classes(),
@@ -176,6 +185,10 @@ describe("renderDashboard console", () => {
       connected: true,
       version: "2.2.0",
       queue: [{ title: "A", requestedBy: "Dj" }, { title: "B" }],
+      chat: [
+        { ts: 1_700_000_000_000, from: "Ana", text: "hola!", outgoing: false },
+        { ts: 1_700_000_001_000, from: "Bot", text: "OK", outgoing: true },
+      ],
     };
     const fetchedUrls: string[] = [];
     const fakeFetch = (url: string): Promise<{ json: () => unknown }> => {
@@ -239,6 +252,9 @@ describe("renderDashboard console", () => {
     expect(getEl("ql").innerHTML).toContain("rmQ(2)");
     expect(getEl("ql").innerHTML).toContain('class="qr"');
     expect(getEl("ql").innerHTML).toContain("Dj");
+    expect(getEl("chat").innerHTML).toContain("hola!");
+    expect(getEl("chat").innerHTML).toContain("BOT");
+    expect(getEl("chat").innerHTML).toContain("Ana");
   });
 
   it("shares the console design system across pages", () => {
