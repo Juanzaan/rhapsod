@@ -582,6 +582,10 @@ export function renderDashboard(
         </div>
       </div>
       <div class="cd fw">
+        <div class="ct"><span>Servidor</span><span class="rv" id="srvCount"></span></div>
+        <div id="srvTree"><div class="em">Conectando…</div></div>
+      </div>
+      <div class="cd fw">
         <div class="ct"><span>Chat del canal</span><span class="rv">en vivo</span></div>
         <ul class="ql" id="chat" style="max-height:240px"></ul>
         <div class="em" id="chatEmpty">Sin mensajes todavía</div>
@@ -615,12 +619,12 @@ export function renderDashboard(
   </div>
   <div class="toast" id="toast"></div>
   <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js" defer></script>
-  <script>
+  <script>${SERVER_TREE_JS}
     var A='Basic '+btoa('${cred}');
     var H={authorization:A};
     var RM=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     function gs(){return (window.gsap&&!RM)?window.gsap:null;}
-    var PP='idle',POS=0,DUR=0,volDrag=false,lastTracks=-1,lastQ='',lastE='',lastQLen=0,lastC='';
+    var PP='idle',POS=0,DUR=0,volDrag=false,lastTracks=-1,lastQ='',lastE='',lastQLen=0,lastC='',lastS='';
 
     function fmtT(ms){
       if(ms==null||!isFinite(ms)||ms<0)return '--:--';
@@ -661,6 +665,28 @@ export function renderDashboard(
 
     function rmQ(n){
       cmd('remove '+n);
+    }
+
+    function moveBot(cid){
+      fetch('/api/move',{method:'POST',headers:Object.assign({},H,{'content-type':'application/json'}),body:JSON.stringify({cid:cid})})
+        .then(function(r){return r.json();})
+        .then(function(d){toast(d.ok?'Bot en movimiento':'Error: '+(d.error||'desconocido'));if(d.ok)setTimeout(refresh,800);})
+        .catch(function(){toast('Error de conexion');});
+    }
+
+    function renderServerCard(view){
+      var box=document.getElementById('srvTree');
+      if(!view||!view.channels||view.channels.length===0){
+        box.innerHTML='<div class="em">Sin datos — ¿bot conectado?</div>';
+        document.getElementById('srvCount').textContent='';
+        return;
+      }
+      var built=serverTreeHtml(view,{interactive:false,collapsed:{}});
+      var n=0;
+      var cls=view.clients||[];
+      for(var i=0;i<cls.length;i++){n++;}
+      document.getElementById('srvCount').textContent=n+(n===1?' usuario':' usuarios');
+      box.innerHTML=built.html;
     }
 
     function sendChat(){
@@ -828,6 +854,8 @@ export function renderDashboard(
         renderErrors(d.errors||{totalErrors:0,byCategory:{},recent:[]});
         var cj=JSON.stringify(d.chat||[]);
         if(cj!==lastC){lastC=cj;renderChat(d.chat||[]);}
+        var sj=JSON.stringify(d.server||null);
+        if(sj!==lastS){lastS=sj;renderServerCard(d.server);}
       }).catch(function(){});
     }
 
