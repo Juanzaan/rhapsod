@@ -149,6 +149,7 @@ describe("renderDashboard console", () => {
     const fakeDocument = {
       activeElement: null,
       getElementById: (id: string) => getEl(id),
+      addEventListener: () => {},
     };
     const fakeWindow = {
       gsap: undefined,
@@ -171,13 +172,10 @@ describe("renderDashboard console", () => {
       version: "2.2.0",
       queue: [{ title: "A" }, { title: "B" }],
     };
+    const fetchedUrls: string[] = [];
     const fakeFetch = (url: string): Promise<{ json: () => unknown }> => {
-      if (String(url).includes("/api/state")) {
-        return Promise.resolve({ json: () => state });
-      }
-      return Promise.resolve({
-        json: () => ({ totalErrors: 0, byCategory: {}, recent: [] }),
-      });
+      fetchedUrls.push(String(url));
+      return Promise.resolve({ json: () => state });
     };
     const html = render();
     const code = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
@@ -204,11 +202,14 @@ describe("renderDashboard console", () => {
       () => 0,
       () => "eA==",
     );
+    fetchedUrls.length = 0;
     api.refresh();
     for (let i = 0; i < 5; i++) {
       await new Promise((resolve) => setImmediate(resolve));
     }
 
+    // Single round trip per refresh: state carries queue + errors.
+    expect(fetchedUrls).toEqual(["/api/state"]);
     expect(getEl("nt").textContent).toBe("Test Song");
     expect(getEl("tcur").textContent).toBe("0:30");
     expect(getEl("tdur").textContent).toBe("3:20");
