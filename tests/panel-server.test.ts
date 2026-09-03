@@ -20,6 +20,7 @@ const logger = {
 function baseConfig(overrides: Partial<AppConfig> = {}): AppConfig {
   return {
     RHAPSOD_ADMIN_UIDS: "",
+    RHAPSOD_ENV_FILE: ".env",
     RHAPSOD_PRIVATE_COMMAND_UIDS: "",
     RHAPSOD_DATA_DIR: "./data",
     RHAPSOD_FFMPEG_PATH: undefined,
@@ -62,6 +63,7 @@ function baseConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     RHAPSOD_YTDLP_EXTRACTOR_ARGS: undefined,
     RHAPSOD_YTDLP_DAEMON_URL: undefined,
     RHAPSOD_PANEL_ENABLED: true,
+    RHAPSOD_PANEL_HOST: "127.0.0.1",
     RHAPSOD_PANEL_PORT: 0,
     RHAPSOD_PANEL_USER: "admin",
     RHAPSOD_PANEL_PASSWORD: "secret",

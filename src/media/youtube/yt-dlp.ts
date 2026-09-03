@@ -567,7 +567,9 @@ export class YoutubeResolver {
             ...(result.durationSeconds === undefined
               ? {}
               : { durationSeconds: result.durationSeconds }),
-            ...(result.channel === undefined ? {} : { channel: result.channel }),
+            ...(result.channel === undefined
+              ? {}
+              : { channel: result.channel }),
             id: result.id,
             title: result.title,
             webpageUrl: `https://www.youtube.com/watch?v=${result.id}`,
@@ -760,7 +762,9 @@ export class YoutubeResolver {
         `${this.#daemonUrl}/invalidate?url=${encodeURIComponent(url)}`,
       );
       if (!response.ok) return false;
-      const body = (await response.json()) as { readonly invalidated?: boolean };
+      const body = (await response.json()) as {
+        readonly invalidated?: boolean;
+      };
       return body.invalidated === true;
     } catch {
       return false;
