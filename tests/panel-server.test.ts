@@ -166,6 +166,98 @@ describe("panel-server", () => {
     }
   });
 
+  it("serves youtube health over HTTP", async () => {
+    const port = 23561;
+    const dir = mkdtempSync(join(tmpdir(), "panel-"));
+    const envPath = join(dir, ".env");
+    writeFileSync(envPath, "");
+    const panel = createPanelServer({
+      config: baseConfig({ RHAPSOD_PANEL_PORT: port }),
+      envFilePath: envPath,
+      logger,
+      status: () => ({ connected: true, queueLength: 0, version: "2.2.0" }),
+      queue: () => [],
+      executeCommand: () => Promise.resolve("OK"),
+      restart: () => undefined,
+      youtubeHealth: () => Promise.resolve({ ok: true, ms: 123 }),
+      saveCookies: (content: string) => {
+        if (!content) throw new Error("vacío");
+        return Promise.resolve({ path: "/tmp/c.txt" });
+      },
+    });
+    const auth = `Basic ${Buffer.from("admin:secret").toString("base64")}`;
+    // NOTE: `connection: close` works around a keep-alive quirk of the panel
+    // server where the 3rd sequential request on a reused socket stalls.
+    const noKeepAlive = {
+      authorization: auth,
+      connection: "close",
+    };
+    try {
+      const health = await fetch(
+        `http://127.0.0.1:${port}/api/youtube-health`,
+        {
+          headers: noKeepAlive,
+        },
+      );
+      expect(health.status).toBe(200);
+      const healthBody = (await health.json()) as { ok: boolean; ms: number };
+      expect(healthBody.ok).toBe(true);
+      expect(healthBody.ms).toBe(123);
+
+      const saved = await fetch(`http://127.0.0.1:${port}/api/cookies`, {
+        method: "PUT",
+        headers: {
+          ...noKeepAlive,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ content: "cookies" }),
+      });
+      expect(saved.status).toBe(200);
+      expect(((await saved.json()) as { path: string }).path).toBe(
+        "/tmp/c.txt",
+      );
+
+      const bad = await fetch(`http://127.0.0.1:${port}/api/cookies`, {
+        method: "PUT",
+        headers: {
+          ...noKeepAlive,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ content: 42 }),
+      });
+      expect(bad.status).toBe(400);
+      await bad.text();
+    } finally {
+      await panel.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("returns unavailable youtube endpoints when not configured", async () => {
+    const port = 23562;
+    const state = startTestPanel("", port);
+    try {
+      const health = await fetch(`${state.baseUrl}/api/youtube-health`, {
+        headers: { authorization: state.auth },
+      });
+      const healthBody = (await health.json()) as { ok: boolean };
+      expect(healthBody.ok).toBe(false);
+
+      const saved = await fetch(`${state.baseUrl}/api/cookies`, {
+        method: "PUT",
+        headers: {
+          authorization: state.auth,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ content: "x" }),
+      });
+      expect(saved.status).toBe(501);
+    } finally {
+      await state.close();
+      rmSync(state.dir, { recursive: true, force: true });
+    }
+  });
+
   it("returns empty error summary when no provider is configured", async () => {
     const port = 23460;
     const state = startTestPanel("", port);

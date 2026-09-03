@@ -23,6 +23,20 @@ npm run build && npm start
 
 For development, `npm run dev` runs without a build step.
 
+## One-command install (VPS)
+
+On a fresh Ubuntu 20.04+ / Debian 11+ / RHEL 9+ (x86_64) server:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Juanzaan/rhapsod/main/install.sh | sudo bash
+```
+
+This installs Node 22, yt-dlp, FFmpeg, Cloudflare WARP (proxy mode),
+the POT provider, the bot + daemon as systemd services, and a weekly
+yt-dlp updater. At the end it prints the panel password — then open the
+setup wizard (`/setup`) to connect TeamSpeak and YouTube. See
+[docs/install.md](docs/install.md) for details.
+
 ## Release profiles
 
 - **1.x** (`v1.2.1`): tuned for low-end VPS deployments (1 vCPU / 1 GB RAM).

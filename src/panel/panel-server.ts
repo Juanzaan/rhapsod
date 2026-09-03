@@ -42,6 +42,12 @@ export interface PanelOptions {
   readonly status: () => PanelStatus;
   readonly queue: () => QueueEntry[];
   readonly errors?: () => ErrorSummary;
+  readonly youtubeHealth?: () => Promise<{
+    readonly ok: boolean;
+    readonly ms?: number;
+    readonly error?: string;
+  }>;
+  readonly saveCookies?: (content: string) => Promise<{ path: string }>;
   readonly executeCommand: (command: string) => Promise<string>;
   readonly restart: () => void;
   readonly testConnection?: (
@@ -175,6 +181,37 @@ export function createPanelServer(options: PanelOptions): {
       return c.json({ totalErrors: 0, byCategory: {}, recent: [] });
     }
     return c.json(options.errors());
+  });
+
+  app.get("/api/youtube-health", async (c) => {
+    if (options.youtubeHealth === undefined) {
+      return c.json({ ok: false, error: "Chequeo no disponible" });
+    }
+    return c.json(await options.youtubeHealth());
+  });
+
+  app.put("/api/cookies", async (c) => {
+    if (options.saveCookies === undefined) {
+      return c.json({ ok: false, error: "Guardado no disponible" }, 501);
+    }
+    const body: unknown = await c.req.json().catch(() => undefined);
+    if (
+      typeof body !== "object" ||
+      body === null ||
+      typeof (body as Record<string, unknown>).content !== "string"
+    ) {
+      return c.json({ ok: false, error: "Contenido inválido" }, 400);
+    }
+    try {
+      const result = await options.saveCookies(
+        (body as { content: string }).content,
+      );
+      return c.json({ ok: true, path: result.path });
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "No se pudo guardar";
+      return c.json({ ok: false, error: message }, 400);
+    }
   });
 
   app.get("/api/commands", (c) => {
