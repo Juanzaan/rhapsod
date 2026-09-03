@@ -280,7 +280,7 @@ async function main(): Promise<void> {
       logger.info(timing, "Playback timing");
     },
     onPlaybackError: async (track, error) => {
-      metrics.recordError(track.id, error);
+      metrics.recordError(track.id, error, track.title);
       logger.error(
         { err: error, trackId: track.id },
         "YouTube playback failed",
@@ -648,6 +648,7 @@ async function main(): Promise<void> {
             source: track.source,
             requestedBy: track.requestedBy,
           })),
+        errors: () => metrics.errorSummary(20),
         executeCommand: async (raw: string): Promise<string> => {
           const parsed = parseChatCommand(raw);
           if (parsed === undefined) {

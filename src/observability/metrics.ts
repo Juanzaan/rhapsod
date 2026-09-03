@@ -138,7 +138,22 @@ export interface MetricsCounters {
 interface MetricsError {
   readonly ts: number;
   readonly trackId: string;
+  readonly trackTitle?: string;
   readonly normalized: NormalizedError;
+}
+
+export interface ErrorSummaryEntry {
+  readonly ts: number;
+  readonly trackId: string;
+  readonly trackTitle?: string;
+  readonly category: ErrorCategory;
+  readonly message: string;
+}
+
+export interface ErrorSummary {
+  readonly totalErrors: number;
+  readonly byCategory: Partial<Record<ErrorCategory, number>>;
+  readonly recent: readonly ErrorSummaryEntry[];
 }
 
 export class MetricsCollector {
@@ -168,10 +183,13 @@ export class MetricsCollector {
     }
   }
 
-  recordError(trackId: string, error: unknown): void {
+  recordError(trackId: string, error: unknown, trackTitle?: string): void {
     this.#errors.push({
       ts: this.#clock(),
       trackId,
+      ...(trackTitle === undefined || trackTitle.length === 0
+        ? {}
+        : { trackTitle }),
       normalized: normalizeError(error),
     });
     if (this.#errors.length > this.#maxErrors) {
@@ -231,6 +249,27 @@ export class MetricsCollector {
 
   recentErrors(count = 20): readonly MetricsError[] {
     return this.#errors.slice(-count);
+  }
+
+  errorSummary(count = 20): ErrorSummary {
+    const byCategory: Partial<Record<ErrorCategory, number>> = {};
+    for (const entry of this.#errors) {
+      const category = entry.normalized.category;
+      byCategory[category] = (byCategory[category] ?? 0) + 1;
+    }
+    return {
+      totalErrors: this.#counters.get("totalErrors") ?? 0,
+      byCategory,
+      recent: this.#errors.slice(-count).map((entry) => ({
+        ts: entry.ts,
+        trackId: entry.trackId,
+        ...(entry.trackTitle === undefined
+          ? {}
+          : { trackTitle: entry.trackTitle }),
+        category: entry.normalized.category,
+        message: entry.normalized.message,
+      })),
+    };
   }
 
   formatStats(args: {

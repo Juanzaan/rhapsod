@@ -314,6 +314,14 @@ export function formatStats(stats, options = {}) {
   lines.push(`Reintentos (yt-dlp client fallback): ${stats.retries}`);
   lines.push(`Errores level:50: ${JSON.stringify(stats.errorLevel50)}`);
   lines.push("");
+  lines.push("--- Guía rápida (qué significa cada tipo de error) ---");
+  lines.push("  auth: YouTube pide login → revisar cookies y POT provider (:4416)");
+  lines.push("  rate-limit: IP limitada por YouTube → esperar; WARP lo absorbe");
+  lines.push("  not-found: video borrado, privado o con restricción");
+  lines.push("  playback: falló la reproducción (típico: 403 del CDN)");
+  lines.push("  timeout: red lenta o request colgado");
+  lines.push("  unknown: sin clasificar (ver mensaje completo en el log)");
+  lines.push("");
   lines.push("--- Prefetch (por prefetchStatus, latencia de resolución) ---");
   lines.push(
     `Timings audio-url: ${stats.prefetch.audioUrlTimings} | con status: ${stats.prefetch.withStatus} | sin status: ${stats.prefetch.missingStatus}`,
