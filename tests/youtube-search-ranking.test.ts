@@ -493,4 +493,64 @@ describe("rankYoutubeCandidates", () => {
 
     expect(selected?.id).toBe("video");
   });
+
+  it("prefers the candidate with higher view count when scores are close", () => {
+    const selected = rankYoutubeCandidates("the weeknd starboy", [
+      {
+        id: "low-views",
+        title: "The Weeknd - Starboy",
+        viewCount: 100,
+        webpageUrl: "https://youtube.com/watch?v=low",
+      },
+      {
+        id: "high-views",
+        title: "The Weeknd - Starboy",
+        viewCount: 1000000,
+        webpageUrl: "https://youtube.com/watch?v=high",
+      },
+    ]);
+
+    expect(selected?.id).toBe("high-views");
+  });
+
+  it("matches short artist name via fuzzy (Duki matches Dukie)", () => {
+    const ranked = rankYoutubeCandidatesAll("duki", [
+      {
+        id: "misspelled",
+        title: "Dukie - Song",
+        webpageUrl: "https://youtube.com/watch?v=misspelled",
+      },
+      {
+        id: "exact",
+        title: "Duki - Song",
+        webpageUrl: "https://youtube.com/watch?v=exact",
+      },
+      {
+        id: "wrong",
+        title: "Random Artist - Song",
+        webpageUrl: "https://youtube.com/watch?v=wrong",
+      },
+    ]);
+
+    // Both Duki and Dukie match; exact match should be present
+    expect(ranked.map((c) => c.id)).toContain("exact");
+    expect(ranked.map((c) => c.id)).toContain("misspelled");
+  });
+
+  it("matches 4-char term via fuzzy distance 1", () => {
+    const ranked = rankYoutubeCandidatesAll("blin", [
+      {
+        id: "fuzzy-match",
+        title: "Blinding Lights",
+        webpageUrl: "https://youtube.com/watch?v=fuzzy",
+      },
+      {
+        id: "wrong",
+        title: "Random Song",
+        webpageUrl: "https://youtube.com/watch?v=wrong",
+      },
+    ]);
+
+    expect(ranked.map((c) => c.id)).toEqual(["fuzzy-match"]);
+  });
 });

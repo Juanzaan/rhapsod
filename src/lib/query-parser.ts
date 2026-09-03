@@ -60,6 +60,47 @@ function cleanCruft(input: string): string {
   return result.replace(/\s{2,}/g, " ").trim();
 }
 
+const UNIVERSAL_FILLER_WORDS = new Set([
+  // Articles across Romance and Germanic languages (NOT English "the/a/an" — commonly part of artist names)
+  "el",
+  "la",
+  "los",
+  "las",
+  "lo",
+  "un",
+  "una",
+  "unos",
+  "unas",
+  "der",
+  "die",
+  "das",
+  "den",
+  "dem",
+  "des",
+  "ein",
+  "eine",
+  "il",
+  "lo",
+  "i",
+  "un",
+  "uno",
+  "una",
+  "um",
+  "ein",
+  "un",
+  "une",
+  "le",
+  "les",
+]);
+
+function stripFillerWords(input: string): string {
+  const words = input.split(/\s+/);
+  const filtered = words.filter(
+    (w) => !UNIVERSAL_FILLER_WORDS.has(w.toLowerCase()),
+  );
+  return filtered.join(" ").trim();
+}
+
 function tryParseSeparator(cleaned: string): ParsedQuery | null {
   const parts = cleaned.split(SEPARATOR_PATTERN);
   if (parts.length >= 2 && parts[0] !== undefined && parts[1] !== undefined) {
@@ -175,14 +216,15 @@ export function parseMusicQuery(query: string): ParsedQuery {
   }
 
   const cleaned = cleanCruft(trimmed);
+  const stripped = stripFillerWords(cleaned);
 
   return (
-    tryParseSeparator(cleaned) ||
-    tryParseColon(cleaned) ||
-    tryParseFeat(cleaned) ||
-    tryParseTwoWords(cleaned) ||
-    tryParseTrailingArtist(cleaned) || {
-      title: cleaned,
+    tryParseSeparator(stripped) ||
+    tryParseColon(stripped) ||
+    tryParseFeat(stripped) ||
+    tryParseTwoWords(stripped) ||
+    tryParseTrailingArtist(stripped) || {
+      title: stripped,
       original: trimmed,
       confidence: "low",
     }

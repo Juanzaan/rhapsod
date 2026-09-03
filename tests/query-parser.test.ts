@@ -96,4 +96,57 @@ describe("parseMusicQuery", () => {
     const result = parseMusicQuery(input);
     expect(result.original).toBe(input);
   });
+
+  it("strips leading Spanish article 'el'", () => {
+    const result = parseMusicQuery("el que se fue");
+    // After stripping "el": "que se fue" (3 words) → no 2-word parser → fallback
+    expect(result.title).toBe("que se fue");
+  });
+
+  it("strips leading Spanish article 'la'", () => {
+    const result = parseMusicQuery("la casa de papel");
+    expect(result.title).toBe("casa de papel");
+  });
+
+  it("strips leading German article 'der'", () => {
+    const result = parseMusicQuery("der künstler");
+    expect(result.title).toBe("künstler");
+  });
+
+  it("strips leading French article 'le'", () => {
+    const result = parseMusicQuery("le chanteur");
+    expect(result.title).toBe("chanteur");
+  });
+
+  it("strips leading Italian article 'il'", () => {
+    const result = parseMusicQuery("il cantante");
+    expect(result.title).toBe("cantante");
+  });
+
+  it("strips leading Portuguese article 'um'", () => {
+    const result = parseMusicQuery("um dia normal");
+    // After stripping "um": "dia normal" → tryParseTwoWords: artist="dia", title="normal"
+    expect(result.artist).toBe("dia");
+    expect(result.title).toBe("normal");
+  });
+
+  it("does NOT strip words that are content (sin is not a stopword)", () => {
+    const result = parseMusicQuery("sin ti");
+    // tryParseTwoWords splits 2-word queries: artist="sin", title="ti"
+    expect(result.artist).toBe("sin");
+    expect(result.title).toBe("ti");
+  });
+
+  it("strips non-leading stopword 'el' and re-parses remaining", () => {
+    const result = parseMusicQuery("mi vida el");
+    // "el" is stripped → "mi vida" → tryParseTwoWords splits into artist="mi", title="vida"
+    expect(result.artist).toBe("mi");
+    expect(result.title).toBe("vida");
+  });
+
+  it("does NOT strip English 'the' (part of artist names like The Weeknd)", () => {
+    const result = parseMusicQuery("The Weeknd - Blinding Lights");
+    expect(result.artist).toBe("The Weeknd");
+    expect(result.title).toBe("Blinding Lights");
+  });
 });
