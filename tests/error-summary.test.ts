@@ -2,6 +2,35 @@ import { describe, expect, it } from "vitest";
 
 import { MetricsCollector } from "../src/observability/metrics.js";
 
+describe("disconnectSummary", () => {
+  it("empty by default", () => {
+    expect(new MetricsCollector().disconnectSummary()).toEqual({ count: 0 });
+  });
+
+  it("counts and keeps the last event", () => {
+    const m = new MetricsCollector();
+    m.recordDisconnect("kicked");
+    m.recordDisconnect("disconnected");
+    const summary = m.disconnectSummary();
+    expect(summary.count).toBe(2);
+    expect(summary.lastReason).toBe("disconnected");
+    expect(typeof summary.lastTs).toBe("number");
+  });
+
+  it("truncates long reasons", () => {
+    const m = new MetricsCollector();
+    m.recordDisconnect("x".repeat(100));
+    expect(m.disconnectSummary().lastReason?.length).toBeLessThanOrEqual(40);
+  });
+
+  it("reset clears tracking", () => {
+    const m = new MetricsCollector();
+    m.recordDisconnect("kicked");
+    m.reset();
+    expect(m.disconnectSummary()).toEqual({ count: 0 });
+  });
+});
+
 describe("errorSummary", () => {
   it("agrupa por categoría y guarda el título del track", () => {
     const m = new MetricsCollector();

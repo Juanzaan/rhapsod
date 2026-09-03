@@ -156,12 +156,21 @@ export interface ErrorSummary {
   readonly recent: readonly ErrorSummaryEntry[];
 }
 
+export interface DisconnectSummary {
+  readonly count: number;
+  readonly lastTs?: number;
+  readonly lastReason?: string;
+}
+
 export class MetricsCollector {
   readonly #timings: TrackTiming[] = [];
   readonly #errors: MetricsError[] = [];
   readonly #counters = new Map<string, number>();
   readonly #searchDurationsMs: number[] = [];
   readonly #searchScores: number[] = [];
+  #disconnectCount = 0;
+  #lastDisconnectTs: number | undefined;
+  #lastDisconnectReason: string | undefined;
   readonly #maxTimings: number;
   readonly #maxErrors: number;
   readonly #clock: () => number;
@@ -249,6 +258,25 @@ export class MetricsCollector {
 
   recentErrors(count = 20): readonly MetricsError[] {
     return this.#errors.slice(-count);
+  }
+
+  recordDisconnect(reason: string): void {
+    this.#disconnectCount++;
+    this.#lastDisconnectTs = this.#clock();
+    this.#lastDisconnectReason =
+      reason.length > 40 ? `${reason.slice(0, 39)}…` : reason;
+  }
+
+  disconnectSummary(): DisconnectSummary {
+    return {
+      count: this.#disconnectCount,
+      ...(this.#lastDisconnectTs === undefined
+        ? {}
+        : { lastTs: this.#lastDisconnectTs }),
+      ...(this.#lastDisconnectReason === undefined
+        ? {}
+        : { lastReason: this.#lastDisconnectReason }),
+    };
   }
 
   errorSummary(count = 20): ErrorSummary {
@@ -382,6 +410,9 @@ export class MetricsCollector {
   reset(): void {
     this.#timings.length = 0;
     this.#errors.length = 0;
+    this.#disconnectCount = 0;
+    this.#lastDisconnectTs = undefined;
+    this.#lastDisconnectReason = undefined;
     this.#searchDurationsMs.length = 0;
     this.#searchScores.length = 0;
     this.#counters.clear();

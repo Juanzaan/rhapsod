@@ -589,6 +589,7 @@ async function main(): Promise<void> {
   const stopHeartbeat = connection.onConnectionLost((reason) => {
     if (reconnecting || shuttingDown) return;
     reconnecting = true;
+    metrics.recordDisconnect(reason);
     playback.pause();
     void (async () => {
       for (let attempt = 1; attempt <= maxReconnectAttempts; attempt++) {
@@ -679,6 +680,7 @@ async function main(): Promise<void> {
           currentFilter: playback.filter,
           tracksPlayed: playback.tracksPlayed,
           uptimeMs: Math.round(process.uptime() * 1000),
+          disconnects: metrics.disconnectSummary(),
           version: process.env.npm_package_version ?? "2.2.0",
         }),
         queue: (): QueueEntry[] =>
