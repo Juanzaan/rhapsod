@@ -147,6 +147,15 @@ export function createPanelServer(options: PanelOptions): {
     }),
   );
 
+  // The panel is polled every few seconds at most, so keep-alive buys
+  // nothing here — and reused sockets have been observed stalling responses
+  // (server answers on a socket the client no longer reads). Close each
+  // connection after its response to avoid the whole class of races.
+  app.use("*", async (c, next) => {
+    await next();
+    c.header("Connection", "close");
+  });
+
   app.get("/", (c) => {
     const status = options.status();
     return c.html(renderDashboard(status, panelUser, panelPassword));

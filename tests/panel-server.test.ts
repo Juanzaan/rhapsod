@@ -186,17 +186,14 @@ describe("panel-server", () => {
       },
     });
     const auth = `Basic ${Buffer.from("admin:secret").toString("base64")}`;
-    // NOTE: `connection: close` works around a keep-alive quirk of the panel
-    // server where the 3rd sequential request on a reused socket stalls.
-    const noKeepAlive = {
-      authorization: auth,
-      connection: "close",
-    };
+    // NOTE: several sequential fetches on purpose — the server closes each
+    // connection (see panel-server) so pooled-socket stalls can't happen.
+    const headers = { authorization: auth };
     try {
       const health = await fetch(
         `http://127.0.0.1:${port}/api/youtube-health`,
         {
-          headers: noKeepAlive,
+          headers,
         },
       );
       expect(health.status).toBe(200);
@@ -206,10 +203,7 @@ describe("panel-server", () => {
 
       const saved = await fetch(`http://127.0.0.1:${port}/api/cookies`, {
         method: "PUT",
-        headers: {
-          ...noKeepAlive,
-          "content-type": "application/json",
-        },
+        headers: { ...headers, "content-type": "application/json" },
         body: JSON.stringify({ content: "cookies" }),
       });
       expect(saved.status).toBe(200);
@@ -219,14 +213,17 @@ describe("panel-server", () => {
 
       const bad = await fetch(`http://127.0.0.1:${port}/api/cookies`, {
         method: "PUT",
-        headers: {
-          ...noKeepAlive,
-          "content-type": "application/json",
-        },
+        headers: { ...headers, "content-type": "application/json" },
         body: JSON.stringify({ content: 42 }),
       });
       expect(bad.status).toBe(400);
       await bad.text();
+
+      const again = await fetch(`http://127.0.0.1:${port}/api/health`, {
+        headers,
+      });
+      expect(again.status).toBe(200);
+      await again.text();
     } finally {
       await panel.close();
       rmSync(dir, { recursive: true, force: true });
