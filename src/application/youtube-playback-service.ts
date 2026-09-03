@@ -82,6 +82,7 @@ interface PlaybackServiceOptions {
   readonly maxTracksPerUser?: number;
   readonly createPlayback?: typeof playFfmpegUrl;
   readonly createPcmStream?: typeof createPcmStream;
+  readonly proxyUrl?: string;
   readonly prewarmNext?: boolean;
   readonly loudnessProfiler?: LoudnessProfiler;
   readonly onPlaybackError?: (
@@ -181,6 +182,7 @@ export class YoutubePlaybackService {
   readonly #output: VoiceFrameOutput;
   readonly #createPlayback: typeof playFfmpegUrl;
   readonly #createPcmStream: typeof createPcmStream;
+  readonly #proxyUrl: string | undefined;
   readonly #prewarmEnabled: boolean;
   readonly #loudnessProfiler: LoudnessProfiler | undefined;
   #warmStream:
@@ -238,6 +240,7 @@ export class YoutubePlaybackService {
     this.#output = options.output;
     this.#createPlayback = options.createPlayback ?? playFfmpegUrl;
     this.#createPcmStream = options.createPcmStream ?? createPcmStream;
+    this.#proxyUrl = options.proxyUrl;
     this.#prewarmEnabled = options.prewarmNext ?? false;
     this.#loudnessProfiler = options.loudnessProfiler;
     this.#onPlaybackError = options.onPlaybackError ?? (() => undefined);
@@ -1933,6 +1936,7 @@ export class YoutubePlaybackService {
         }
         const stream = this.#createPcmStream(url, {
           audioFilter: { name: this.#filter, param: this.#filterParam },
+          ...(this.#proxyUrl === undefined ? {} : { proxyUrl: this.#proxyUrl }),
         });
         this.#warmStream = { source: next.source, stream };
         return stream;

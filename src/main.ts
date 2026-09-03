@@ -213,6 +213,9 @@ async function main(): Promise<void> {
         ...(ffmpegUserAgent === undefined
           ? {}
           : { userAgent: ffmpegUserAgent }),
+        ...(config.RHAPSOD_WARP_PROXY === undefined
+          ? {}
+          : { proxyUrl: config.RHAPSOD_WARP_PROXY }),
         ...(options?.seekSeconds === undefined
           ? {}
           : { seekSeconds: options.seekSeconds }),
@@ -221,6 +224,9 @@ async function main(): Promise<void> {
           : { audioFilter: options.audioFilter }),
         ...(options?.stream === undefined ? {} : { stream: options.stream }),
       }),
+    ...(config.RHAPSOD_WARP_PROXY === undefined
+      ? {}
+      : { proxyUrl: config.RHAPSOD_WARP_PROXY }),
     prewarmNext: true,
     loudnessProfiler,
     encoder,
