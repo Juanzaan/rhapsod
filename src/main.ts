@@ -3,7 +3,10 @@ import "dotenv/config";
 import { join } from "node:path";
 
 import { Ts3IdentityStore } from "./adapters/ts3/identity-store.js";
-import { createTs3Connection } from "./adapters/ts3/ts3-connection.js";
+import {
+  createTs3Connection,
+  withTimeout,
+} from "./adapters/ts3/ts3-connection.js";
 import { createRhapsodOpusEncoder } from "./audio/opus-encoder.js";
 import { playFfmpegUrl } from "./audio/ffmpeg-player.js";
 import { LoudnessProfiler } from "./audio/loudness-profiler.js";
@@ -172,6 +175,9 @@ async function main(): Promise<void> {
     void telemetry.save();
   }, 15 * 60_000).unref();
   const maxReconnectAttempts = 5;
+  // Reconnect attempts must fail fast: a stuck handshake would otherwise eat
+  // the whole startup-style timeout (minutes) before the next attempt runs.
+  const reconnectConnectTimeoutMs = 30_000;
   const encoder = await createRhapsodOpusEncoder({
     bitrate: config.RHAPSOD_OPUS_BITRATE,
     complexity: config.RHAPSOD_OPUS_COMPLEXITY,
@@ -605,7 +611,11 @@ async function main(): Promise<void> {
         );
         await new Promise((resolve) => setTimeout(resolve, delayMs));
         try {
-          await connection.connect();
+          await withTimeout(
+            connection.connect(),
+            reconnectConnectTimeoutMs,
+            "Reconnect attempt timed out",
+          );
           logger.info({ attempt }, "Reconnected to TeamSpeak 3");
           await logCurrentChannel("reconnect");
           reconnecting = false;
@@ -614,6 +624,9 @@ async function main(): Promise<void> {
           return;
         } catch (error) {
           logger.error({ attempt, error }, "TeamSpeak reconnect failed");
+          // A timed-out attempt may leave a half-open client behind;
+          // make sure the next attempt starts from a clean state.
+          await connection.disconnect().catch(() => undefined);
         }
       }
       logger.error(
