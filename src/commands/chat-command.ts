@@ -98,6 +98,17 @@ export type ChatCommand =
       readonly name: "effects";
     };
 
+/**
+ * Normalizes raw command input from non-chat callers (e.g. the web panel,
+ * which sends bare `stats` instead of `!stats`). Chat messages already
+ * carry the prefix and pass through unchanged.
+ */
+export function normalizeCommandInput(raw: string): string {
+  const trimmed = raw.trim();
+  if (trimmed.length === 0 || trimmed.startsWith("!")) return trimmed;
+  return `!${trimmed}`;
+}
+
 export function parseChatCommand(
   message: string,
   prefix = "!",

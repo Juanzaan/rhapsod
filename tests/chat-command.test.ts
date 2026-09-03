@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { parseChatCommand } from "../src/commands/chat-command.js";
+import {
+  normalizeCommandInput,
+  parseChatCommand,
+} from "../src/commands/chat-command.js";
 
 describe("parseChatCommand", () => {
   it("parses commands and aliases", () => {
@@ -315,5 +318,36 @@ describe("parseChatCommand", () => {
     expect(() => parseChatCommand("!effects 8d maybe")).toThrow(
       /Usá: !effects <efecto>/,
     );
+  });
+});
+
+describe("normalizeCommandInput", () => {
+  it("adds the prefix to bare panel input", () => {
+    expect(normalizeCommandInput("stats")).toBe("!stats");
+    expect(normalizeCommandInput("volume 25")).toBe("!volume 25");
+  });
+
+  it("keeps chat input unchanged", () => {
+    expect(normalizeCommandInput("!stats")).toBe("!stats");
+  });
+
+  it("trims before normalizing", () => {
+    expect(normalizeCommandInput("  pause  ")).toBe("!pause");
+  });
+
+  it("leaves empty input empty", () => {
+    expect(normalizeCommandInput("")).toBe("");
+    expect(normalizeCommandInput("   ")).toBe("");
+  });
+
+  it("normalized panel input parses", () => {
+    expect(parseChatCommand(normalizeCommandInput("stats"))).toEqual({
+      name: "stats",
+    });
+    expect(parseChatCommand(normalizeCommandInput("remove 99"))).toEqual({
+      name: "remove",
+      from: 99,
+      to: 99,
+    });
   });
 });

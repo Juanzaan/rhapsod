@@ -330,6 +330,50 @@ describe("panel-server", () => {
     }
   });
 
+  it("proxies test-connection to the injected probe", async () => {
+    const port = 23565;
+    const dir = mkdtempSync(join(tmpdir(), "panel-"));
+    const envPath = join(dir, ".env");
+    writeFileSync(envPath, "");
+    const panel = createPanelServer({
+      config: baseConfig({ RHAPSOD_PANEL_PORT: port }),
+      envFilePath: envPath,
+      logger,
+      status: () => ({ connected: true, queueLength: 0, version: "2.2.0" }),
+      queue: () => [],
+      executeCommand: () => Promise.resolve("OK"),
+      restart: () => undefined,
+      testConnection: (host: string) =>
+        Promise.resolve(
+          host === "good.example.com"
+            ? { ok: true, serverName: "Good Server" }
+            : { ok: false, error: "unreachable" },
+        ),
+    });
+    const auth = `Basic ${Buffer.from("admin:secret").toString("base64")}`;
+    try {
+      const good = await fetch(`http://127.0.0.1:${port}/api/test-connection`, {
+        method: "POST",
+        headers: { authorization: auth, "content-type": "application/json" },
+        body: JSON.stringify({ RHAPSOD_TS3_HOST: "good.example.com" }),
+      });
+      expect(good.status).toBe(200);
+      expect(((await good.json()) as { serverName: string }).serverName).toBe(
+        "Good Server",
+      );
+
+      const bad = await fetch(`http://127.0.0.1:${port}/api/test-connection`, {
+        method: "POST",
+        headers: { authorization: auth, "content-type": "application/json" },
+        body: JSON.stringify({ RHAPSOD_TS3_HOST: "bad.example.com" }),
+      });
+      expect(((await bad.json()) as { ok: boolean }).ok).toBe(false);
+    } finally {
+      await panel.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("rejects unauthenticated requests", async () => {
     const port = 23457;
     const state = startTestPanel("", port);
