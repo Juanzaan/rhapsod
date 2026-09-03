@@ -271,6 +271,65 @@ describe("panel-server", () => {
     }
   });
 
+  it("gzips the dashboard HTML and preserves content-type", async () => {
+    const port = 23563;
+    const state = startTestPanel("", port);
+    try {
+      const res = await fetch(`${state.baseUrl}/`, {
+        headers: {
+          authorization: state.auth,
+          "accept-encoding": "gzip",
+        },
+      });
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-encoding")).toBe("gzip");
+      expect(res.headers.get("content-type")).toContain("text/html");
+      const html = await res.text();
+      expect(html).toContain("RHAPSOD");
+    } finally {
+      await state.close();
+      rmSync(state.dir, { recursive: true, force: true });
+    }
+  });
+
+  it("includes queue and errors in /api/state", async () => {
+    const port = 23564;
+    const dir = mkdtempSync(join(tmpdir(), "panel-"));
+    const envPath = join(dir, ".env");
+    writeFileSync(envPath, "");
+    const panel = createPanelServer({
+      config: baseConfig({ RHAPSOD_PANEL_PORT: port }),
+      envFilePath: envPath,
+      logger,
+      status: () => ({ connected: true, queueLength: 1, version: "2.2.0" }),
+      queue: () => [{ title: "Song", source: "youtube" }],
+      executeCommand: () => Promise.resolve("OK"),
+      restart: () => undefined,
+      errors: () => ({
+        totalErrors: 1,
+        byCategory: { playback: 1 },
+        recent: [],
+      }),
+    });
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/api/state`, {
+        headers: {
+          authorization: `Basic ${Buffer.from("admin:secret").toString("base64")}`,
+        },
+      });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        queue: { title: string }[];
+        errors: { totalErrors: number };
+      };
+      expect(body.queue).toHaveLength(1);
+      expect(body.errors.totalErrors).toBe(1);
+    } finally {
+      await panel.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("rejects unauthenticated requests", async () => {
     const port = 23457;
     const state = startTestPanel("", port);
