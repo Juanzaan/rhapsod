@@ -374,6 +374,69 @@ describe("panel-server", () => {
     }
   });
 
+  it("sends chat through the injected sender", async () => {
+    const port = 23566;
+    const dir = mkdtempSync(join(tmpdir(), "panel-"));
+    const envPath = join(dir, ".env");
+    writeFileSync(envPath, "");
+    const sent: string[] = [];
+    const panel = createPanelServer({
+      config: baseConfig({ RHAPSOD_PANEL_PORT: port }),
+      envFilePath: envPath,
+      logger,
+      status: () => ({ connected: true, queueLength: 0, version: "2.2.0" }),
+      queue: () => [],
+      executeCommand: () => Promise.resolve("OK"),
+      restart: () => undefined,
+      chat: () => [
+        { ts: 1_700_000_000_000, from: "Ana", text: "hola", outgoing: false },
+      ],
+      sendChat: (text: string) => {
+        sent.push(text);
+        return Promise.resolve();
+      },
+    });
+    const auth = `Basic ${Buffer.from("admin:secret").toString("base64")}`;
+    try {
+      const state = await fetch(`http://127.0.0.1:${port}/api/state`, {
+        headers: { authorization: auth },
+      });
+      const stateBody = (await state.json()) as {
+        chat: { from: string }[];
+      };
+      expect(stateBody.chat).toHaveLength(1);
+      expect(stateBody.chat[0]?.from).toBe("Ana");
+
+      const ok = await fetch(`http://127.0.0.1:${port}/api/chat`, {
+        method: "POST",
+        headers: { authorization: auth, "content-type": "application/json" },
+        body: JSON.stringify({ text: "  hola a todos  " }),
+      });
+      expect(ok.status).toBe(200);
+      expect(sent).toEqual(["hola a todos"]);
+      await ok.text();
+
+      const empty = await fetch(`http://127.0.0.1:${port}/api/chat`, {
+        method: "POST",
+        headers: { authorization: auth, "content-type": "application/json" },
+        body: JSON.stringify({ text: "   " }),
+      });
+      expect(empty.status).toBe(400);
+      await empty.text();
+
+      const long = await fetch(`http://127.0.0.1:${port}/api/chat`, {
+        method: "POST",
+        headers: { authorization: auth, "content-type": "application/json" },
+        body: JSON.stringify({ text: "x".repeat(501) }),
+      });
+      expect(long.status).toBe(400);
+      await long.text();
+    } finally {
+      await panel.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("rejects unauthenticated requests", async () => {
     const port = 23457;
     const state = startTestPanel("", port);
