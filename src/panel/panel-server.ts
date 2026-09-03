@@ -41,6 +41,7 @@ export interface ServerViewClient {
 export interface ServerView {
   readonly version: number;
   readonly botChannelId: number;
+  readonly mode?: "full" | "partial";
   readonly channels: readonly ServerViewChannel[];
   readonly clients: readonly ServerViewClient[];
 }

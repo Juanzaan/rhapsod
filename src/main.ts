@@ -45,6 +45,8 @@ import { ChatLog, isOwnEcho } from "./application/chat-log.js";
 import {
   ChannelDirectory,
   ServerSnapshot,
+  pickChannels,
+  type ServerViewMode,
 } from "./application/server-snapshot.js";
 import {
   createCookieSaver,
@@ -192,6 +194,7 @@ async function main(): Promise<void> {
     await channelDirectory.resolve(cid);
     serverSnapshot.setChannels(channelDirectory.snapshot());
   };
+  let serverViewMode: ServerViewMode = "partial";
   const resyncServerView = async (): Promise<void> => {
     try {
       const clients = await connection.listClients();
@@ -201,13 +204,25 @@ async function main(): Promise<void> {
         name: client.name,
         cid: client.cid,
       }));
-      // Channels come from the cids of visible clients (channellist is
-      // restricted on some servers) enriched via channelinfo with caching.
+      // Prefer the full channellist when the server allows it; otherwise
+      // resolve only the channels of visible clients via channelinfo.
+      let full: readonly { cid: number; name: string; parentCid?: number }[] =
+        [];
+      try {
+        full = await connection.listChannels();
+      } catch {
+        full = [];
+      }
+      for (const channel of full) {
+        channelDirectory.prime(channel);
+      }
       const cids = [...new Set(mapped.map((client) => client.cid))];
-      const channels = await Promise.all(
+      const visible = await Promise.all(
         cids.map((cid) => channelDirectory.resolve(cid)),
       );
-      serverSnapshot.fullResync(channels, mapped);
+      const picked = pickChannels(full, visible);
+      serverViewMode = picked.mode;
+      serverSnapshot.fullResync(picked.channels, mapped);
     } catch (error) {
       logger.debug({ err: error }, "Server view resync failed");
     }
@@ -764,6 +779,7 @@ async function main(): Promise<void> {
         serverView: () => ({
           ...serverSnapshot.toJSON(),
           botChannelId: connection.getCurrentChannelId(),
+          mode: serverViewMode,
         }),
         moveBot: (cid: number) => connection.moveToChannel(cid),
         youtubeHealth: createYoutubeHealthCheck((url, signal) =>

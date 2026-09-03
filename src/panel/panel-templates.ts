@@ -997,6 +997,11 @@ export function renderServerPage(
     .users{margin:.5rem 0 0 1.2rem;padding:0;list-style:none}
     .users li{font-size:.82rem;color:var(--dm);padding:.12rem 0;display:flex;gap:.45rem;align-items:center}
     .users li::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--bl);flex-shrink:0}
+    .kids{margin-left:.85rem;border-left:1px solid var(--ln);padding-left:.65rem;margin-top:.5rem}
+    .chev{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:4px;color:var(--ft);font-size:.75rem;flex-shrink:0;cursor:pointer}
+    .chev:hover{color:var(--tx);background:#1e1e22}
+    .chev.closed{transform:rotate(-90deg)}
+    .chev.leaf{visibility:hidden}
   </style>
 </head>
 <body>
@@ -1016,7 +1021,7 @@ export function renderServerPage(
     <div class="cd">
       <div class="ct"><span>Canales</span><span class="rv" id="ucount"></span></div>
       <div id="tree"><div class="em">Conectando…</div></div>
-      <div class="em" style="font-size:.75rem">Click en un canal para mover el bot ahí</div>
+      <div class="em" id="treeHint" style="font-size:.75rem">Click en un canal para mover el bot ahí</div>
     </div>
   </div>
   <div class="toast" id="toast"></div>
@@ -1027,6 +1032,8 @@ export function renderServerPage(
     var RM=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     function gs(){return (window.gsap&&!RM)?window.gsap:null;}
     var lastV=-1;
+    var lastView=null;
+    var collapsed={};
 
     function esc(s){
       return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -1071,9 +1078,23 @@ export function renderServerPage(
         total++;
       }
       document.getElementById('ucount').textContent=total+(total===1?' usuario':' usuarios');
+      document.getElementById('treeHint').textContent=(view.mode==='full')
+        ? 'Click en un canal para mover el bot ahí'
+        : 'Solo canales con gente (permisos limitados) · click para mover el bot';
+      lastView=view;
       var seen={};
-      var h='';
+      var rowHtml=function(ch,us,bot,hasKids){
+        var here=ch.cid===bot;
+        var h='<div class="chrow'+(here?' here':'')+'" onclick="moveBot('+ch.cid+')"><div class="chhead"><span class="chev'+(hasKids?(collapsed[ch.cid]?' closed':''):' leaf')+'" onclick="toggleCh(event,'+ch.cid+')">›</span><span class="chnm">'+esc(ch.name)+'</span>'+(here?'<span class="botpill">BOT</span>':'')+'<span class="chct">'+us.length+'</span></div>';
+        if(us.length>0){
+          h+='<ul class="users">';
+          for(var u=0;u<us.length;u++){h+='<li>'+esc(us[u].name)+'</li>';}
+          h+='</ul>';
+        }
+        return h+'</div>';
+      };
       var walk=function(pid,depth){
+        var out='';
         var kids=byParent[pid]||[];
         for(var q=0;q<kids.length;q++){
           var ch=kids[q];
@@ -1082,26 +1103,27 @@ export function renderServerPage(
           if(depth>8)continue;
           var sp=spacerName(ch.name);
           if(sp!==null){
-            h+='<div class="spacer">'+esc(sp)+'</div>';
+            out+='<div class="spacer">'+esc(sp)+'</div>';
           }else{
-            var us=byChannel[ch.cid]||[];
-            var here=ch.cid===bot;
-            h+='<div class="chrow'+(here?' here':'')+'" onclick="moveBot('+ch.cid+')"><div class="chhead"><span class="chnm">'+esc(ch.name)+'</span>'+(here?'<span class="botpill">BOT</span>':'')+'<span class="chct">'+us.length+'</span></div>';
-            if(us.length>0){
-              h+='<ul class="users">';
-              for(var u=0;u<us.length;u++){h+='<li>'+esc(us[u].name)+'</li>';}
-              h+='</ul>';
-            }
-            h+='</div>';
+            out+=rowHtml(ch,byChannel[ch.cid]||[],bot,(byParent[ch.cid]||[]).length>0);
           }
-          walk(ch.cid,depth+1);
+          var inner=walk(ch.cid,depth+1);
+          if(inner!==''){
+            out+='<div class="kids" data-kids="'+ch.cid+'"'+(collapsed[ch.cid]?' style="display:none"':'')+'>'+inner+'</div>';
+          }
         }
+        return out;
       };
-      walk(0,0);
-      box.innerHTML=h;
+      box.innerHTML=walk(0,0);
       var g=gs();
       if(g&&lastV===-1)g.from('#tree .chrow',{y:10,opacity:0,duration:.4,stagger:.03,ease:'power2.out',clearProps:'all'});
       lastV=view.version;
+    }
+
+    function toggleCh(e,cid){
+      if(e&&e.stopPropagation)e.stopPropagation();
+      collapsed[cid]=!collapsed[cid];
+      if(lastView)render(lastView);
     }
 
     function moveBot(cid){
