@@ -65,3 +65,24 @@ sudo systemctl restart rhapsod-ytdlp-daemon rhapsod
 ```
 
 The installer cronjob already keeps yt-dlp fresh weekly.
+
+## Troubleshooting
+
+**Config page empty / saving fails.** The panel reads and writes
+`RHAPSOD_ENV_FILE` as the service user. If that file lives under a
+read-only path (e.g. `/etc/*.env` combined with `ProtectSystem=full`),
+grant access explicitly:
+
+```ini
+# /etc/systemd/system/rhapsod.service
+ReadWritePaths=/etc/rhapsod.env
+```
+
+```bash
+sudo chown root:rhapsod /etc/rhapsod.env
+sudo chmod 660 /etc/rhapsod.env
+sudo systemctl daemon-reload
+sudo systemctl restart rhapsod
+```
+
+(The installer avoids this entirely by keeping `.env` inside the app dir.)
