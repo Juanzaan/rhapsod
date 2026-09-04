@@ -2,25 +2,18 @@ name: CI
 
 on:
   push:
-    branches:
-      - main
-      - "next/*"
-      - "feat/*"
-      - "fix/*"
-      - "perf/*"
-      - "refactor/*"
-      - "chore/*"
-      - "docs/*"
-      - "test/*"
+    branches: [main]
   pull_request:
     branches: [main]
+  # Lets you run the gates on a branch that has no PR open yet.
+  workflow_dispatch:
 
 permissions:
   contents: read
 
-# A branch push and its open PR would otherwise run the same commit twice.
+# Successive pushes to the same ref supersede each other.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
