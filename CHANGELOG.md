@@ -589,3 +589,12 @@ preserving low-end fallbacks where practical.
   (`docs/deployment.md`), including `MemoryMax`/`MemorySwapMax` limits.
 - Removed dead `src/ports` contracts and superseded abstractions; the TS3
   adapter now exposes the only connection contract the application needs.
+
+[unreleased]: https://github.com/Juanzaan/rhapsod/compare/v2.3.0...HEAD
+[2.3.0]: https://github.com/Juanzaan/rhapsod/compare/v2.2.0...v2.3.0
+[2.2.0]: https://github.com/Juanzaan/rhapsod/compare/v2.1.0...v2.2.0
+[2.1.0]: https://github.com/Juanzaan/rhapsod/compare/v2.0.0...v2.1.0
+[2.0.0]: https://github.com/Juanzaan/rhapsod/compare/v1.2.1...v2.0.0
+[1.2.0]: https://github.com/Juanzaan/rhapsod/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/Juanzaan/rhapsod/compare/v1.0.0...v1.1.0
+[1.0.0]: https://github.com/Juanzaan/rhapsod/releases/tag/v1.0.0
