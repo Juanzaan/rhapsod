@@ -6,6 +6,93 @@ for [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-09-03
+
+The release that gives Rhapsod an owner-facing surface: a web console for
+control and diagnosis, a one-command installer, and hardening against the
+intermittent YouTube 403s seen from datacenter IPs.
+
+### Added
+
+- **Setup panel** (`RHAPSOD_PANEL_ENABLED`, default off): a Hono web console on
+  `127.0.0.1:8080`, basic-auth protected, never meant to face the internet
+  (reach it through an SSH tunnel). Bind address is configurable via
+  `RHAPSOD_PANEL_HOST`, and the env file it reads/writes via
+  `RHAPSOD_ENV_FILE`.
+- **ON AIR console**: program deck with live state readout, seek bar,
+  transport, and volume / loop / filter synced to the bot; queue rows with
+  remove and play-next; an output drawer for lyrics, stats, and history; and a
+  system rack with stat count-ups and a YouTube health check. GSAP is a
+  progressive enhancement, not a requirement.
+- **Server tab**: a TeamSpeak-style nested channel tree with click-to-move,
+  patched live from TS3 events. Falls back to an occupied-channels-only view
+  on servers that restrict `channellist`. No client UIDs or group ids ever
+  leave the server.
+- **Bidirectional channel chat**: read the bot's channel traffic and send as
+  the bot from the dashboard. Private messages are never captured.
+- **Owner-facing error visibility**: `GET /api/errors` and a dashboard card
+  with totals per category and recent sanitized errors, including the track
+  that failed. `scripts/log-stats.mjs` prints a per-category guide.
+- **Disconnect tracking**: TeamSpeak disconnects are counted with their last
+  timestamp and reason, surfaced next to uptime.
+- **One-command installer** (`install.sh`): distro-aware VPS setup covering
+  Node 22, yt-dlp, FFmpeg, the WARP proxy, the POT provider, systemd units, a
+  weekly update cron, and a generated panel password.
+- **Guided YouTube wizard step**: live auth health check, paste-and-save for
+  `cookies.txt` (written `0600`), and a re-test button, backed by
+  `GET /api/youtube-health` and `PUT /api/cookies`.
+- **POT provider integration**: the yt-dlp daemon now uses
+  bgutil-ytdlp-pot-provider to get past YouTube's bot check.
+- **WARP fallback egress** (`RHAPSOD_WARP_PROXY`, empty = disabled): FFmpeg
+  retries 403s through the proxy after exhausting direct retries, and the
+  daemon retries extraction and validation through it, tagging the result
+  `egress: warp`. Fallback only, never the primary path.
+- **Docker distribution**: `Dockerfile` and `docker-compose.yml`.
+- **Gapless prewarm**: the N+1 track is resolved and warmed ahead of time,
+  with per-track loudness profiling and a larger audio URL cache.
+- **Two-level `!help`**: command metadata is centralized in
+  `src/commands/command-registry.ts` and the help menu is generated from it.
+
+### Changed
+
+- Search now uses `ytsearch` as the primary path. Query parsing strips leading
+  articles across ES/DE/FR/IT/PT, fuzzy matching starts at 3-character terms
+  with named distance constants, and the view-count bonus is normalized against
+  the batch maximum instead of a log scale.
+- `/api/state` carries queue, errors, chat, and server tree in a single round
+  trip: one fetch per refresh. The dashboard diff-renders, pauses polling on
+  hidden tabs, and ships gzipped inline (21.9 KB to 6.8 KB).
+- Unified visual language across dashboard, settings, commands, and wizard
+  through shared `CHROME_CSS` tokens, with dark-tuned semantic accents.
+- SSRF protection pins DNS at connect time instead of re-resolving.
+
+### Fixed
+
+- **Silent and zero-byte playback**: removed the FFmpeg reconnect flags
+  (`-reconnect_max_retries`, `-reconnect_on_network_error`,
+  `-reconnect_on_http_error`) that are unsupported for this input and crashed
+  playback instantly, raised probesize from 32k to 320k, and stopped the PCM
+  pipe from ending the destination stream.
+- **Intermittent YouTube 403s**: FFmpeg retries in place (twice direct, once
+  through WARP) and the playback service retries up to
+  `MAX_AUDIO_URL_403_RETRIES` by invalidating the cached URL through the
+  daemon's `/invalidate` endpoint. The daemon validates URLs with a `HEAD`
+  request before caching and tries `web_embedded` before `web_safari`.
+- **Panel request stalls**: responses now close their connection instead of
+  returning a pooled keep-alive socket, which intermittently stalled
+  server-side. For a low-traffic admin panel the extra handshake costs
+  nothing.
+- **Dashboard buttons**: `/api/command` accepts bare commands and normalizes
+  the `!` prefix server-side; the wizard test step runs a real TS3 connection
+  probe; settings shows a permission hint when the env file is unreadable.
+- Reconnect attempts fail fast with a capped 30-second backoff instead of
+  hanging, and clean up after themselves.
+- The chat log no longer echoes the bot's own messages back from the server.
+- Skip counting, per-UID limits, daemon SSRF guard, and message rate limiting
+  corrected after a re-audit.
+- Observability callbacks are isolated, seeks are tied to their own track, and
+  stale prefetches are cancelled with prepared entries drained.
+
 ## [2.2.0] - 2026-08-28
 
 ### Added
