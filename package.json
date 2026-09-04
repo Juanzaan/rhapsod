@@ -1,6 +1,6 @@
 {
   "name": "rhapsod",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "A self-hosted music bot for TeamSpeak 3, designed for future TeamSpeak 6 support.",
   "license": "MIT",
   "private": true,
