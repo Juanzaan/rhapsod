@@ -7,7 +7,20 @@ updates:
     groups:
       development-dependencies:
         dependency-type: development
+    ignore:
+      # typescript-eslint pins its TypeScript peer to a supported range
+      # (currently >=4.8.4 <6.1.0). A major TypeScript bump lands before
+      # typescript-eslint accepts it and produces a lockfile npm refuses to
+      # install with ERESOLVE, so majors are bumped by hand once the peer
+      # range catches up. See PR #25.
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
+
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    groups:
+      # One PR for all action bumps instead of one per action.
+      github-actions:
+        patterns: ["*"]
