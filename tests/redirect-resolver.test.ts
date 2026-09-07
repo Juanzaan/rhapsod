@@ -116,4 +116,55 @@ describe("RedirectResolver", () => {
     );
     expect(calls).toBe(callsAfterFirst);
   });
+
+  it("falls back to a ranged GET when HEAD is rejected with 405", async () => {
+    // Several CDNs answer HEAD with 405; resolution used to fail for them.
+    const calls: { url: string; method: string }[] = [];
+    const fetchImpl = ((input: string | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      const method = init?.method ?? "GET";
+      calls.push({ url, method });
+      if (method === "HEAD") {
+        return Promise.resolve(response(405) as unknown as Response);
+      }
+      return Promise.resolve(response(200) as unknown as Response);
+    }) as unknown as typeof fetch;
+    const resolver = new RedirectResolver({ fetch: fetchImpl });
+    expect(await resolver.resolve("https://1.1.1.1/a")).toBe(
+      "https://1.1.1.1/a",
+    );
+    expect(calls.map((c) => c.method)).toEqual(["HEAD", "GET"]);
+  });
+
+  it("falls back through a redirect chain when HEAD is rejected", async () => {
+    const fetchImpl = ((input: string | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      const method = init?.method ?? "GET";
+      if (method === "HEAD") {
+        return Promise.resolve(response(405) as unknown as Response);
+      }
+      if (url === "https://1.1.1.1/a") {
+        return Promise.resolve(
+          response(302, "https://2.2.2.2/b") as unknown as Response,
+        );
+      }
+      return Promise.resolve(response(200) as unknown as Response);
+    }) as unknown as typeof fetch;
+    const resolver = new RedirectResolver({ fetch: fetchImpl });
+    expect(await resolver.resolve("https://1.1.1.1/a")).toBe(
+      "https://2.2.2.2/b",
+    );
+  });
+
+  it("does not paper over genuine client errors in the GET fallback", async () => {
+    const fetchImpl = ((_input: string | URL, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      if (method === "HEAD") {
+        return Promise.resolve(response(405) as unknown as Response);
+      }
+      return Promise.resolve(response(404) as unknown as Response);
+    }) as unknown as typeof fetch;
+    const resolver = new RedirectResolver({ fetch: fetchImpl });
+    expect(await resolver.resolve("https://1.1.1.1/a")).toBeUndefined();
+  });
 });

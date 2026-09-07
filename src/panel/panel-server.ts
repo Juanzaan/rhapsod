@@ -160,6 +160,10 @@ function describeEnvKey(key: string): string {
   return ENV_DESCRIPTIONS[key] ?? "";
 }
 
+function isKnownEnvKey(key: string): boolean {
+  return Object.hasOwn(ENV_DESCRIPTIONS, key);
+}
+
 function isSecret(key: string): boolean {
   return SECRET_KEYS.has(key);
 }
@@ -187,9 +191,19 @@ export function createPanelServer(options: PanelOptions): {
   // nothing here — and reused sockets have been observed stalling responses
   // (server answers on a socket the client no longer reads). Close each
   // connection after its response to avoid the whole class of races.
+  // The same pass sets the browser-facing security headers: everything here
+  // is same-origin HTML/JSON with inline scripts, so the CSP allows inline
+  // styles/scripts and denies everything else that matters.
   app.use("*", async (c, next) => {
     await next();
     c.header("Connection", "close");
+    c.header("X-Frame-Options", "DENY");
+    c.header("X-Content-Type-Options", "nosniff");
+    c.header("Referrer-Policy", "no-referrer");
+    c.header(
+      "Content-Security-Policy",
+      "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+    );
   });
 
   app.get("/", (c) => {
@@ -387,6 +401,16 @@ export function createPanelServer(options: PanelOptions): {
     }
     const env = loadEnvFile(options.envFilePath);
     const incoming = body as Record<string, unknown>;
+    // Only known RHAPSOD_* keys are writable. The env file is also read by the
+    // wider system, so an unrestricted write would let the panel overwrite or
+    // inject arbitrary variables (e.g. PATH-adjacent or future config).
+    const unknown = Object.keys(incoming).filter((key) => !isKnownEnvKey(key));
+    if (unknown.length > 0) {
+      return c.json(
+        { ok: false, error: "Clave desconocida: " + unknown.join(", ") },
+        400,
+      );
+    }
     for (const [key, raw] of Object.entries(incoming)) {
       const value = typeof raw === "string" ? raw : "";
       if (value === "") {

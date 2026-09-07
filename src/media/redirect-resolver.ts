@@ -39,7 +39,14 @@ export class RedirectResolver {
       }
       if (parsed.protocol !== "https:") return undefined;
       if (!(await isPublicHostname(parsed.hostname))) return undefined;
-      const response = await this.#head(current);
+      const head = await this.#head(current);
+      // A HEAD that answered with 405/400 means the host rejects the method,
+      // not that the URL is bad — retry with a ranged GET before giving up.
+      const methodRejected = head !== undefined && head.status >= 400;
+      const response =
+        head === undefined || methodRejected
+          ? await this.#rangedGet(current)
+          : head;
       if (response === undefined) return undefined;
       if (response.status >= 300 && response.status < 400) {
         const location = response.headers.get("location");
@@ -67,6 +74,34 @@ export class RedirectResolver {
         redirect: "manual",
         signal: controller.signal,
       });
+    } catch {
+      return undefined;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  // Some hosts (notably several CDNs) reject HEAD with 405/400, which used to
+  // make resolution fail for perfectly playable URLs. Retry with a 1-byte
+  // ranged GET: same headers, negligible transfer, and the redirect chain and
+  // SSRF checks still apply because this.#fetch is the same guarded function.
+  async #rangedGet(url: string): Promise<Response | undefined> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.#timeoutMs);
+    try {
+      const response = await this.#fetch(url, {
+        headers: {
+          "user-agent": "Rhapsod/1 (redirect-resolver)",
+          range: "bytes=0-0",
+        },
+        method: "GET",
+        redirect: "manual",
+        signal: controller.signal,
+      });
+      // HEAD-rejecting hosts answer ranged GETs with 200/206; a genuine
+      // client error (404, 403...) should not be papered over.
+      if (response.status >= 400 && response.status !== 416) return undefined;
+      return response;
     } catch {
       return undefined;
     } finally {
