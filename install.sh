@@ -299,7 +299,10 @@ Requires=rhapsod-ytdlp-daemon.service
 Type=simple
 User=$APP_USER
 WorkingDirectory=$APP_DIR
-EnvironmentFile=$APP_DIR/.env
+# No EnvironmentFile here: the app loads .env itself (dotenv) from the
+# working directory. On SELinux-enforcing distros (RHEL 9 family) PID 1
+# (init_t) is denied reading files labeled user_home_t, so an
+# EnvironmentFile under /home fails the whole unit with "Permission denied".
 ExecStart=/usr/bin/node dist/main.js
 Restart=on-failure
 RestartSec=5
