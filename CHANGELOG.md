@@ -6,6 +6,29 @@ for [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Panel dashboard hung forever in browsers and re-prompted for the password:
+  the gzip path declared `content-length` from the compressed buffer while the
+  runtime wrote the uncompressed bytes, so browsers waited for a response they
+  already considered complete. The dashboard is now served uncompressed
+  (#37).
+- `PUT /api/env` accepted any key/value pair, letting the panel write
+  arbitrary variables into the env file the whole process reads. Writes are
+  now restricted to known `RHAPSOD_*` settings (#38).
+- The panel always reported version "2.2.0" under systemd because
+  `npm_package_version` is only set when Node launches via npm; the version is
+  now read from `package.json` at startup (#38).
+- URL resolution failed for hosts that reject HEAD requests (405): the
+  redirect resolver now falls back to a 1-byte ranged GET without masking
+  genuine client errors (#38).
+
+### Added
+
+- Security headers on every panel response: `X-Frame-Options: DENY`,
+  `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, and a
+  same-origin Content-Security-Policy (#38).
+
 ## [2.3.0] - 2026-09-03
 
 The release that gives Rhapsod an owner-facing surface: a web console for
