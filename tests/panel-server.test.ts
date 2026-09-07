@@ -563,4 +563,58 @@ describe("panel-server", () => {
       rmSync(state.dir, { recursive: true, force: true });
     }
   });
+
+  it("rejects PUTs of unknown env keys", async () => {
+    // The env file feeds the whole process, so an unrestricted write would
+    // let the panel set arbitrary variables. Only known RHAPSOD_* keys pass.
+    const port = 23459;
+    const state = startTestPanel("RHAPSOD_TS3_HOST=keep.example.com\n", port);
+    try {
+      const res = await fetch(`${state.baseUrl}/api/env`, {
+        method: "PUT",
+        headers: {
+          authorization: state.auth,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          RHAPSOD_TS3_HOST: "changed.example.com",
+          PATH: "/usr/bin:.",
+          RHAPSOD_MADE_UP_KEY: "whatever",
+        }),
+      });
+      expect(res.status).toBe(400);
+      const payload = (await res.json()) as { error?: string };
+      expect(payload.error).toContain("RHAPSOD_MADE_UP_KEY");
+      expect(payload.error).toContain("PATH");
+      const content = await import("node:fs").then((fs) =>
+        fs.readFileSync(state.envPath, "utf8"),
+      );
+      expect(content).toContain("RHAPSOD_TS3_HOST=keep.example.com");
+      expect(content).not.toContain("changed.example.com");
+    } finally {
+      await state.close();
+      rmSync(state.dir, { recursive: true, force: true });
+    }
+  });
+
+  it("sets security headers on every response", async () => {
+    const port = 23460;
+    const state = startTestPanel("", port);
+    try {
+      for (const path of ["/", "/api/state"]) {
+        const res = await fetch(`${state.baseUrl}${path}`, {
+          headers: { authorization: state.auth },
+        });
+        expect(res.headers.get("x-frame-options")).toBe("DENY");
+        expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+        expect(res.headers.get("referrer-policy")).toBe("no-referrer");
+        const csp = res.headers.get("content-security-policy") ?? "";
+        expect(csp).toContain("frame-ancestors 'none'");
+        expect(csp).toContain("default-src 'none'");
+      }
+    } finally {
+      await state.close();
+      rmSync(state.dir, { recursive: true, force: true });
+    }
+  });
 });
