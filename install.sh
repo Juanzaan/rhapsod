@@ -156,6 +156,9 @@ else
   # Order matters: proxy mode BEFORE connect, so routing/SSH stay direct.
   systemctl start warp-svc
   warp-cli --accept-tos mode proxy
+  # Re-runs (repair, update) find the previous registration still registered;
+  # without clearing it, `registration new` fails and -e aborts the install.
+  warp-cli --accept-tos registration delete >/dev/null 2>&1 || true
   warp-cli --accept-tos registration new
   warp-cli --accept-tos connect
   warp-cli --accept-tos status
