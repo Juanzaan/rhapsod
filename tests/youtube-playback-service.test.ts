@@ -778,6 +778,8 @@ describe("YoutubePlaybackService", () => {
     await service.enqueue("https://youtu.be/first", "user-1");
     await service.enqueue("https://youtu.be/second", "user-1");
     await service.enqueue("https://youtu.be/third", "user-1");
+    await service.enqueue("https://youtu.be/fourth", "user-1");
+    await service.enqueue("https://youtu.be/fifth", "user-1");
     await new Promise((resolve) => setImmediate(resolve));
 
     expect(service.current?.id).toBe("first");
@@ -791,6 +793,14 @@ describe("YoutubePlaybackService", () => {
     );
     expect(resolver.getAudioUrlFromUrl).toHaveBeenCalledWith(
       "https://www.youtube.com/watch?v=third",
+      expect.any(AbortSignal),
+    );
+    expect(resolver.getAudioUrlFromUrl).toHaveBeenCalledWith(
+      "https://www.youtube.com/watch?v=fourth",
+      expect.any(AbortSignal),
+    );
+    expect(resolver.getAudioUrlFromUrl).toHaveBeenCalledWith(
+      "https://www.youtube.com/watch?v=fifth",
       expect.any(AbortSignal),
     );
   });
