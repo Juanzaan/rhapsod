@@ -1,5 +1,4 @@
 import { basicAuth } from "hono/basic-auth";
-import { gzipSync } from "node:zlib";
 import { Hono } from "hono";
 import { serve } from "@hono/node-server";
 import type { Logger } from "pino";
@@ -195,22 +194,14 @@ export function createPanelServer(options: PanelOptions): {
 
   app.get("/", (c) => {
     const status = options.status();
-    const html = renderDashboard(status, panelUser, panelPassword);
-    // The dashboard HTML (~22KB) is the only large response; gzip it inline.
-    // (hono/compress hangs responses with this node-server version, so the
-    // hot path compresses explicitly instead of via middleware.)
-    const acceptEncoding = c.req.header("accept-encoding") ?? "";
-    if (!/\bgzip\b/.test(acceptEncoding)) {
-      return c.html(html);
-    }
-    const body = gzipSync(html);
-    return new Response(body, {
-      headers: {
-        "content-type": "text/html; charset=UTF-8",
-        "content-encoding": "gzip",
-        "content-length": String(body.length),
-      },
-    });
+    // Served uncompressed on purpose. Compressing here used to set
+    // content-length from the gzip buffer while the runtime still wrote the
+    // original bytes to the socket, so browsers read content-length bytes and
+    // then waited forever for a response they already considered complete —
+    // an endless spinner, and a re-prompt for basic auth on every retry.
+    // The dashboard is ~31KB of localhost traffic behind an SSH tunnel, so
+    // compression buys little and cost a hang.
+    return c.html(renderDashboard(status, panelUser, panelPassword));
   });
 
   app.get("/setup", (c) => {

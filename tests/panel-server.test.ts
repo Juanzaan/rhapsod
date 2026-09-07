@@ -273,7 +273,12 @@ describe("panel-server", () => {
     }
   });
 
-  it("gzips the dashboard HTML and preserves content-type", async () => {
+  it("serves the dashboard with a content-length matching the body", async () => {
+    // Regression: the dashboard used to be gzipped inline with content-length
+    // taken from the gzip buffer, while the runtime wrote the uncompressed
+    // bytes. Browsers read content-length bytes, considered the response done,
+    // and hung forever waiting on the rest — re-prompting for basic auth on
+    // each retry. Any content-length must describe the bytes actually sent.
     const port = 23563;
     const state = startTestPanel("", port);
     try {
@@ -284,8 +289,30 @@ describe("panel-server", () => {
         },
       });
       expect(res.status).toBe(200);
-      expect(res.headers.get("content-encoding")).toBe("gzip");
       expect(res.headers.get("content-type")).toContain("text/html");
+
+      const bytes = (await res.arrayBuffer()).byteLength;
+      const declared = res.headers.get("content-length");
+      if (declared !== null) {
+        expect(Number(declared)).toBe(bytes);
+      }
+    } finally {
+      await state.close();
+      rmSync(state.dir, { recursive: true, force: true });
+    }
+  });
+
+  it("still renders the dashboard when the client accepts gzip", async () => {
+    const port = 23573;
+    const state = startTestPanel("", port);
+    try {
+      const res = await fetch(`${state.baseUrl}/`, {
+        headers: {
+          authorization: state.auth,
+          "accept-encoding": "gzip, deflate, br",
+        },
+      });
+      expect(res.status).toBe(200);
       const html = await res.text();
       expect(html).toContain("RHAPSOD");
     } finally {
