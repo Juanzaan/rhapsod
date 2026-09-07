@@ -238,6 +238,38 @@ describe("YoutubeResolver", () => {
     expect(executor.calls).toHaveLength(1);
   });
 
+  it("does not cache empty search results", async () => {
+    // A transient innertube/yt-dlp failure returns no candidates — caching
+    // that for a full hour would keep failing the query long after the
+    // network recovered. The next identical query must retry the executor.
+    // (The first search() consumes two outputs: the full query and its
+    // shortened retry, both failing while the network is down.)
+    const outputs = [
+      JSON.stringify({ entries: [] }),
+      JSON.stringify({ entries: [] }),
+      JSON.stringify({
+        entries: [{ id: "a", title: "Duki Rockstar", duration: 180 }],
+      }),
+    ];
+    let call = 0;
+    const run = vi.fn((): Promise<string> => {
+      const output = outputs[call];
+      call++;
+      return Promise.resolve(output as string);
+    }) as unknown as YtDlpExecutor["run"];
+    const resolver = new YoutubeResolver({ run });
+
+    await expect(resolver.search("duki rockstar")).rejects.toThrow(
+      "No encontré una coincidencia confiable en YouTube",
+    );
+    expect(run).toHaveBeenCalledTimes(2);
+
+    await expect(resolver.search("duki rockstar")).resolves.toMatchObject({
+      id: "a",
+    });
+    expect(run).toHaveBeenCalledTimes(3);
+  });
+
   it("shares an in-flight search between concurrent callers", async () => {
     let resolveOutput!: (output: string) => void;
     const runMock = vi.fn(
