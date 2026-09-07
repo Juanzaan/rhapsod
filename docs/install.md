@@ -25,18 +25,21 @@ What it does, in order:
 4. Clones the bot at the latest stable tag, installs dependencies,
    and builds it.
 5. Writes systemd units (`rhapsod`, `rhapsod-ytdlp-daemon`,
-   `bgutil-pot-provider`), an empty `.env` with a **generated panel
-   password**, an empty cookies placeholder, and a weekly yt-dlp
-   updater cronjob.
-6. Enables everything and prints next steps, including the panel login.
+   `bgutil-pot-provider`), a `.env` with a placeholder TeamSpeak host,
+   `RHAPSOD_TS3_AUTO_CONNECT=false` and a **generated panel password**, an
+   empty cookies placeholder, and a weekly yt-dlp updater cronjob.
+6. Enables everything and starts it. The bot boots in **setup mode**:
+   panel-only, no TeamSpeak connection, so the wizard is reachable
+   immediately.
 
 Then finish in the browser: open an SSH tunnel
 (`ssh -L 8080:127.0.0.1:8080 user@host`), go to
 `http://127.0.0.1:8080/setup`, and follow the wizard (TeamSpeak →
-channel → audio → **YouTube** → review). The YouTube step tests
-playback resolution live and lets you paste `cookies.txt` without
-touching the server: export it with the "Get cookies.txt LOCALLY"
-browser extension while logged in to youtube.com.
+channel → audio → **YouTube** → review). The TeamSpeak step probes the
+server with a throwaway identity, and completing it re-enables
+auto-connect. The YouTube step tests playback resolution live and lets you
+paste `cookies.txt` without touching the server: export it with the
+"Get cookies.txt LOCALLY" browser extension while logged in to youtube.com.
 
 ## Manual install
 
