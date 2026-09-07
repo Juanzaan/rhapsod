@@ -1,6 +1,20 @@
 import "dotenv/config";
 
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { join } from "node:path";
+
+// Read at startup: under systemd Node runs `dist/main.js` directly, so
+// npm_package_version is never set and the panel used to report a stale
+// hardcoded version. package.json sits next to the compiled entrypoint.
+const packageVersion = (
+  JSON.parse(
+    readFileSync(
+      join(fileURLToPath(new URL(".", import.meta.url)), "../package.json"),
+      "utf8",
+    ),
+  ) as { version: string }
+).version;
 
 import { Ts3IdentityStore } from "./adapters/ts3/identity-store.js";
 import {
@@ -768,7 +782,7 @@ async function main(): Promise<void> {
           tracksPlayed: playback.tracksPlayed,
           uptimeMs: Math.round(process.uptime() * 1000),
           disconnects: metrics.disconnectSummary(),
-          version: process.env.npm_package_version ?? "2.2.0",
+          version: packageVersion,
         }),
         queue: (): QueueEntry[] =>
           playback.queue().map((track) => ({
