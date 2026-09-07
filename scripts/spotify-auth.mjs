@@ -37,9 +37,11 @@ const server = createServer((request, response) => {
   const code = url.searchParams.get("code");
   const error = url.searchParams.get("error");
   if (!code) {
-    response.writeHead(400);
-    response.end(`Authorization failed: ${error ?? "missing code"}`);
+    // The error query param is attacker-controllable; reflect it only in the
+    // terminal, never in the HTTP response body.
     console.error(`Authorization failed: ${error ?? "missing code"}`);
+    response.writeHead(400, { "content-type": "text/plain" });
+    response.end("Authorization failed; see the terminal for details");
     process.exit(1);
   }
   void exchange(code, response);
