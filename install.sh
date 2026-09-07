@@ -202,7 +202,11 @@ install -o "$APP_USER" -g "$APP_USER" -m 0600 /dev/null "$APP_DIR/.env"
 install -o "$APP_USER" -g "$APP_USER" -m 0600 /dev/null "/home/$APP_USER/youtube-cookies.txt"
 PANEL_PASSWORD="$(openssl rand -hex 12)"
 sudo -u "$APP_USER" tee "$APP_DIR/.env" >/dev/null <<ENV
-RHAPSOD_TS3_HOST=
+# Placeholder until the wizard saves a real host; the bot boots panel-only
+# (AUTO_CONNECT=false) so /setup is reachable out of the box. Completing the
+# wizard's TeamSpeak step writes the real host and flips AUTO_CONNECT=true.
+RHAPSOD_TS3_HOST=setup.invalid
+RHAPSOD_TS3_AUTO_CONNECT=false
 RHAPSOD_DATA_DIR=./data
 RHAPSOD_YTDLP_PATH=/usr/local/bin/yt-dlp
 RHAPSOD_YTDLP_COOKIES_PATH=/home/$APP_USER/youtube-cookies.txt
@@ -269,7 +273,9 @@ RuntimeMaxSec=86400
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ProtectHome=true
+# read-only, not true: the daemon's script, PYTHONPATH deps and cookies all
+# live under /home, and ProtectHome=true makes them invisible to it.
+ProtectHome=read-only
 MemoryHigh=512M
 MemoryMax=768M
 MemorySwapMax=0
@@ -320,7 +326,9 @@ chmod 0755 /etc/cron.weekly/rhapsod-ytdlp-update
 
 systemctl daemon-reload
 systemctl enable bgutil-pot-provider rhapsod-ytdlp-daemon rhapsod
-systemctl start bgutil-pot-provider rhapsod-ytdlp-daemon
+# rhapsod starts too: with the placeholder host it boots panel-only, which
+# is what makes the setup wizard reachable.
+systemctl start bgutil-pot-provider rhapsod-ytdlp-daemon rhapsod
 
 log "Setup complete"
 printf '%s\n' \

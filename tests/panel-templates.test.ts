@@ -442,4 +442,90 @@ describe("renderDashboard console", () => {
     expect(html).not.toContain('<script>alert("x")</script>');
     expect(html).toContain("&lt;script&gt;");
   });
+
+  it("wizard save enables auto-connect only when a host is set", () => {
+    // The installer ships AUTO_CONNECT=false so the bot boots panel-only for
+    // the wizard; completing the wizard must flip it back — but only together
+    // with a real host, never on its own. Executed like the server-script
+    // test: run the generated wizard JS against fake DOM globals.
+    interface FakeInput {
+      textContent: string;
+      innerHTML: string;
+      value: string;
+      disabled: boolean;
+      classList: { add(): void; remove(): void };
+    }
+    const runSave = (
+      hostValue: string,
+    ): { url: string; body: string | undefined }[] => {
+      const els = new Map<string, FakeInput>();
+      const getEl = (id: string): FakeInput => {
+        let el = els.get(id);
+        if (!el) {
+          el = {
+            textContent: "",
+            innerHTML: "",
+            value: "",
+            disabled: false,
+            classList: { add: () => {}, remove: () => {} },
+          };
+          els.set(id, el);
+        }
+        return el;
+      };
+      els.set("ih", {
+        textContent: "",
+        innerHTML: "",
+        value: hostValue,
+        disabled: false,
+        classList: { add: () => {}, remove: () => {} },
+      });
+      const puts: { url: string; body: string | undefined }[] = [];
+      const fakeFetch = (url: unknown, options?: unknown) => {
+        const opts = options as { method?: string; body?: string } | undefined;
+        if (opts?.method === "PUT") {
+          puts.push({ url: String(url), body: opts.body });
+        }
+        return Promise.resolve({ json: () => Promise.resolve({ ok: true }) });
+      };
+      const html = renderSetupWizard("admin", "secret");
+      const code = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
+        .map((m) => m[1] ?? "")
+        .join("\n");
+      // eslint-disable-next-line @typescript-eslint/no-implied-eval
+      const factory = new Function(
+        "document",
+        "window",
+        "fetch",
+        "setTimeout",
+        "btoa",
+        `${code};return {save:save};`,
+      ) as (...args: unknown[]) => { save: () => void };
+      const fakeDocument = {
+        getElementById: getEl,
+        querySelector: () => getEl("bp"),
+      };
+      const api = factory(
+        fakeDocument,
+        { location: { href: "" } },
+        fakeFetch,
+        () => 0,
+        () => "eA==",
+      );
+      api.save();
+      return puts;
+    };
+
+    const withHost = runSave("ts.example.com");
+    const envPut = withHost.find((p) => p.url === "/api/env");
+    expect(envPut).toBeDefined();
+    expect(envPut?.body).toContain('"RHAPSOD_TS3_AUTO_CONNECT":"true"');
+    expect(envPut?.body).toContain('"RHAPSOD_TS3_HOST":"ts.example.com"');
+
+    const withoutHost = runSave("");
+    const barePut = withoutHost.find((p) => p.url === "/api/env");
+    expect(barePut).toBeDefined();
+    const parsed = JSON.parse(barePut?.body ?? "{}") as Record<string, unknown>;
+    expect(parsed.RHAPSOD_TS3_AUTO_CONNECT).toBeUndefined();
+  });
 });
