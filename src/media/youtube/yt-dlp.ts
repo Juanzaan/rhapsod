@@ -537,10 +537,14 @@ export class YoutubeResolver {
       });
     }
     const ranked = scored.map((item) => item.candidate);
-    this.#searchCache.set(cacheKey, {
-      candidates: ranked,
-      expiresAt: Date.now() + SEARCH_CACHE_TTL_MS,
-    });
+    // Cache only successful searches: a transient innertube/yt-dlp failure
+    // returns [] and would otherwise poison that query for a full hour.
+    if (ranked.length > 0) {
+      this.#searchCache.set(cacheKey, {
+        candidates: ranked,
+        expiresAt: Date.now() + SEARCH_CACHE_TTL_MS,
+      });
+    }
     if (this.#searchCache.size > SEARCH_CACHE_MAX_ENTRIES) {
       const oldest = this.#searchCache.keys().next().value;
       if (oldest !== undefined) this.#searchCache.delete(oldest);
