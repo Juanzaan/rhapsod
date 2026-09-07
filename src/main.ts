@@ -134,6 +134,59 @@ async function main(): Promise<void> {
   );
   if (!config.RHAPSOD_TS3_AUTO_CONNECT) {
     logger.info("TeamSpeak 3 auto-connect is disabled");
+    // Setup mode. The installer ships AUTO_CONNECT=false so the bot can boot
+    // before any TeamSpeak host is configured — the wizard that collects it
+    // is served by the panel, so the panel must come up here. Without this,
+    // the process exited immediately and the wizard was unreachable
+    // out of the box.
+    if (config.RHAPSOD_PANEL_ENABLED) {
+      const setupExecutor = new SystemYtDlpExecutor(
+        config.RHAPSOD_YTDLP_PATH,
+        config.RHAPSOD_YTDLP_COOKIES_PATH,
+        {},
+        logger,
+        config.RHAPSOD_YTDLP_EXTRACTOR_ARGS,
+      );
+      const setupResolver = new YoutubeResolver(setupExecutor, logger, {
+        timeouts: getTimeoutConfig(),
+        ...(config.RHAPSOD_YTDLP_DAEMON_URL === undefined
+          ? {}
+          : { daemonUrl: config.RHAPSOD_YTDLP_DAEMON_URL }),
+      });
+      createPanelServer({
+        config,
+        envFilePath: config.RHAPSOD_ENV_FILE,
+        logger,
+        status: () => ({
+          connected: false,
+          queueLength: 0,
+          playerState: "idle" as const,
+          uptimeMs: Math.round(process.uptime() * 1000),
+          version: packageVersion,
+        }),
+        queue: (): QueueEntry[] => [],
+        executeCommand: (): Promise<string> =>
+          Promise.reject(
+            new Error("El bot no esta conectado a TeamSpeak todavia"),
+          ),
+        youtubeHealth: createYoutubeHealthCheck((url, signal) =>
+          setupResolver.getAudioUrlFromUrl(url, signal),
+        ),
+        saveCookies: createCookieSaver(
+          config.RHAPSOD_YTDLP_COOKIES_PATH ??
+            join(config.RHAPSOD_DATA_DIR, "youtube-cookies.txt"),
+        ),
+        restart: (): void => {
+          logger.info("Panel requested restart");
+          process.exit(1);
+        },
+        testConnection: (host: string, port: number) =>
+          probeTs3Server(host, port),
+      });
+      logger.info(
+        "Setup mode: panel running without TeamSpeak; complete the wizard and restart",
+      );
+    }
     return;
   }
 
