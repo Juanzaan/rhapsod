@@ -365,6 +365,10 @@ export function renderSetupWizard(
 
     function save(){
       collect();
+      // Completing the wizard with a real host re-enables auto-connect: the
+      // installer ships AUTO_CONNECT=false so the bot boots panel-only for
+      // this wizard. Saving without a host leaves that untouched.
+      if(vals.RHAPSOD_TS3_HOST)vals.RHAPSOD_TS3_AUTO_CONNECT='true';
       var btn=document.querySelector('.bp');
       btn.disabled=true;btn.textContent='Guardando...';
       fetch('/api/env',{method:'PUT',headers:Object.assign({},H,{'content-type':'application/json'}),body:JSON.stringify(vals)})

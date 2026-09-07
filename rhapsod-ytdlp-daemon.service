@@ -15,7 +15,9 @@ RuntimeMaxSec=86400
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ProtectHome=true
+# read-only, not true: the daemon's script, PYTHONPATH deps and cookies all
+# live under /home, and ProtectHome=true makes them invisible to it.
+ProtectHome=read-only
 MemoryHigh=512M
 MemoryMax=768M
 MemorySwapMax=0
