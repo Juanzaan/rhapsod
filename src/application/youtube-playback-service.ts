@@ -46,6 +46,7 @@ import type {
 } from "../observability/metrics.js";
 import { parseMusicQuery } from "../lib/query-parser.js";
 import { UserError } from "../lib/user-error.js";
+import { PreparedAudioStore } from "./prepared-audio-store.js";
 import {
   MAX_TRACKS_PER_PLAYLIST,
   type PlaylistAddResult,
@@ -137,8 +138,6 @@ interface PlaylistEnqueueResult {
   readonly remaining?: number;
 }
 
-const AUDIO_URL_FALLBACK_TTL_MS = 10 * 60_000;
-const AUDIO_URL_EXPIRY_MARGIN_MS = 60_000;
 const AUDIO_URL_REFRESH_AHEAD_MS = 3 * 60_000;
 const AUTH_REQUIRED_RE =
   /sign in to confirm|cookies for the authentication|request you to sign in|login required/i;
@@ -156,18 +155,9 @@ const HISTORY_LIMIT = 20;
 
 class QueueLimitError extends UserError {}
 
-interface PreparedAudio {
-  readonly url: string;
-  readonly expiresAt: number;
-}
-
-interface PreparedAudioEntry {
-  readonly abort?: AbortController;
-  readonly promise: Promise<PreparedAudio>;
-  expiresAt: number;
-  readonly origin: AudioUrlSource;
-  status: "pending" | "ready";
-}
+// Kept here so existing importers (tests) keep working; the implementation
+// lives with the store that uses it.
+export { audioUrlExpiresAt } from "./prepared-audio-store.js";
 
 export class YoutubePlaybackService {
   readonly #queue = new PlaybackQueue();
@@ -199,7 +189,6 @@ export class YoutubePlaybackService {
     reason: PlaybackEndReason,
   ) => void;
   readonly #onTiming: (timing: PlaybackTiming) => void;
-  readonly #audioUrlCache: AudioUrlCache | undefined;
   readonly #redirectResolver: RedirectResolver | undefined;
   readonly #playlistStore: PlaylistStore | undefined;
   readonly #playlistMaxTracks: number;
@@ -220,7 +209,7 @@ export class YoutubePlaybackService {
   #loopMode: LoopMode = "off";
   #loopPool: Track[] = [];
   #persistenceSuppressed = false;
-  readonly #prepared = new Map<string, PreparedAudioEntry>();
+  readonly #preparedStore: PreparedAudioStore;
   readonly #sessionEndReasons = new WeakMap<
     FfmpegPlaybackSession,
     PlaybackEndReason
@@ -248,17 +237,13 @@ export class YoutubePlaybackService {
     this.#onPlaybackStarted = options.onPlaybackStarted ?? (() => undefined);
     this.#onPlaybackFinished = options.onPlaybackFinished ?? (() => undefined);
     this.#onTiming = options.onTiming ?? (() => undefined);
-    this.#audioUrlCache = options.audioUrlCache;
+    this.#preparedStore = new PreparedAudioStore({
+      ...(options.audioUrlCache === undefined
+        ? {}
+        : { cache: options.audioUrlCache }),
+    });
     this.#redirectResolver = options.redirectResolver;
     this.#playlistStore = options.playlistStore;
-    for (const [source, entry] of this.#audioUrlCache?.entries() ?? []) {
-      this.#prepared.set(source, {
-        expiresAt: entry.expiresAt,
-        origin: "cache-load",
-        promise: Promise.resolve(entry),
-        status: "ready",
-      });
-    }
     this.#playlistMaxTracks =
       options.playlistMaxTracks ?? DEFAULT_PLAYLIST_MAX_TRACKS;
     this.#maxQueueTracks = options.maxQueueTracks ?? DEFAULT_MAX_QUEUE_TRACKS;
@@ -667,7 +652,7 @@ export class YoutubePlaybackService {
 
   removeQueuedRange(fromPosition: number, toPosition: number): Track[] {
     const removed = this.#queue.removeRange(fromPosition, toPosition);
-    for (const track of removed) this.#invalidatePrepared(track.source);
+    for (const track of removed) this.#preparedStore.invalidate(track.source);
     this.#persistState();
     return removed;
   }
@@ -1204,23 +1189,14 @@ export class YoutubePlaybackService {
         `Límite de ${this.#maxTracksPerUser} pistas por usuario en la cola.`,
       );
     }
-    if (metadata.audioUrl) this.#cacheAudioUrl(track, metadata.audioUrl);
+    if (metadata.audioUrl)
+      this.#preparedStore.setReady(track, metadata.audioUrl);
     this.#queue.add(track);
     if (!this.#current) this.#prefetchNext();
     this.#requestNext();
     this.#persistState();
     if (this.#current && this.#isSessionStable()) this.#prefetchNext();
     return track;
-  }
-
-  #invalidatePrepared(source: string): void {
-    this.#prepared.get(source)?.abort?.abort();
-    this.#prepared.delete(source);
-  }
-
-  #abortAllPrepared(): void {
-    for (const entry of this.#prepared.values()) entry.abort?.abort();
-    this.#prepared.clear();
   }
 
   skip(): void {
@@ -1230,7 +1206,7 @@ export class YoutubePlaybackService {
     // Keep a warm stream that matches the next queue head: a skip is exactly
     // the moment the prewarmed stream pays off. #takeWarmStream discards it
     // safely at handoff time if the head changed instead.
-    if (this.#current) this.#invalidatePrepared(this.#current.source);
+    if (this.#current) this.#preparedStore.invalidate(this.#current.source);
     if (this.#session) this.#sessionEndReasons.set(this.#session, "skipped");
     this.#session?.stop();
     this.#session = undefined;
@@ -1251,7 +1227,7 @@ export class YoutubePlaybackService {
     this.#queue.clear();
     this.#loopMode = "off";
     this.#loopPool = [];
-    this.#abortAllPrepared();
+    this.#preparedStore.invalidateAll();
     if (persistState) this.#persistState();
   }
 
@@ -1306,7 +1282,7 @@ export class YoutubePlaybackService {
   removeQueued(position: number): Track | undefined {
     const track = this.#queue.snapshot()[position - 1];
     const removed = track ? this.#queue.remove(track.id) : undefined;
-    if (removed) this.#invalidatePrepared(removed.source);
+    if (removed) this.#preparedStore.invalidate(removed.source);
     if (removed) this.#persistState();
     return removed;
   }
@@ -1321,7 +1297,7 @@ export class YoutubePlaybackService {
     this.#queue.clear();
     this.#loopMode = "off";
     this.#loopPool = [];
-    this.#abortAllPrepared();
+    this.#preparedStore.invalidateAll();
     this.#persistState();
     return count;
   }
@@ -1395,7 +1371,7 @@ export class YoutubePlaybackService {
           this.#pendingSkips = 0;
           for (let i = 0; i < toDrop; i++) {
             const dropped = this.#queue.next();
-            if (dropped) this.#invalidatePrepared(dropped.source);
+            if (dropped) this.#preparedStore.invalidate(dropped.source);
           }
         }
         if (this.#queue.length === 0 && this.#loopPool.length > 0) {
@@ -1496,7 +1472,7 @@ export class YoutubePlaybackService {
           }
         } catch (error) {
           this.#reportPlaybackError(track, error);
-          this.#prepared.delete(track.source);
+          this.#preparedStore.drop(track.source);
           continue;
         }
         session.player.setVolume(volumeToGain(this.#volumePercent));
@@ -1529,7 +1505,7 @@ export class YoutubePlaybackService {
             if (retries < MAX_AUDIO_URL_403_RETRIES) {
               this.#retries.set(track, retries + 1);
               // Invalidate stale URL (daemon may have cached a 403'd host)
-              this.#prepared.delete(track.source);
+              this.#preparedStore.drop(track.source);
               void this.#resolver
                 .invalidateAudioUrl?.(track.source)
                 .catch(() => undefined);
@@ -1551,7 +1527,7 @@ export class YoutubePlaybackService {
         if (generation !== this.#generation || this.#current !== track) {
           continue;
         }
-        this.#prepared.delete(track.source);
+        this.#preparedStore.drop(track.source);
         this.#retries.delete(track);
         this.#session = undefined;
         this.#current = undefined;
@@ -1584,14 +1560,18 @@ export class YoutubePlaybackService {
     | undefined
   > {
     const discardInFlight = (): undefined => {
-      this.#invalidatePrepared(track.source);
+      this.#preparedStore.invalidate(track.source);
       // A skip that landed while this track was resolving consumed this track.
       // Do not let that same skip drop an extra queued track in the next loop.
       if (this.#pendingSkips > 0) this.#pendingSkips--;
       return undefined;
     };
     try {
-      const resolved = await this.#getAudioUrl(track);
+      const resolved = await this.#preparedStore.getOrResolve(
+        track,
+        "inline-resolve",
+        (t, signal) => this.#resolvePlayableAudio(t, signal),
+      );
       if (generation !== this.#generation || this.#current !== track) {
         return discardInFlight();
       }
@@ -1603,7 +1583,7 @@ export class YoutubePlaybackService {
       const playbackError =
         error instanceof Error ? error : new Error(String(error));
       this.#reportPlaybackError(track, playbackError);
-      this.#invalidatePrepared(track.source);
+      this.#preparedStore.invalidate(track.source);
       return undefined;
     }
   }
@@ -1625,90 +1605,6 @@ export class YoutubePlaybackService {
     } catch {
       // Observability callbacks must never break the playback chain.
     }
-  }
-
-  #cacheAudioUrl(track: Track, url: string): void {
-    const expiresAt = audioUrlExpiresAt(url);
-    this.#prepared.set(track.source, {
-      expiresAt,
-      origin: "inline-resolve",
-      promise: Promise.resolve({ expiresAt, url }),
-      status: "ready",
-    });
-  }
-
-  #getAudioUrl(track: Track): Promise<{
-    audioUrlSource: AudioUrlSource;
-    cacheHit: boolean;
-    prefetchStatus: PrefetchStatus;
-    url: string;
-  }> {
-    const cached = this.#prepared.get(track.source);
-    if (cached) {
-      if (cached.expiresAt > Date.now()) {
-        const prefetchStatus =
-          cached.origin === "prefetch"
-            ? cached.status === "pending"
-              ? ("in-flight" as const)
-              : ("hit" as const)
-            : ("not-applicable" as const);
-        return cached.promise.then((prepared) => ({
-          audioUrlSource: cached.origin,
-          cacheHit: true,
-          prefetchStatus,
-          url: prepared.url,
-        }));
-      }
-      this.#invalidatePrepared(track.source);
-      return this.#resolveAudioUrl(track).then((url) => ({
-        audioUrlSource: "inline-resolve" as const,
-        cacheHit: false,
-        prefetchStatus: "miss" as const,
-        url,
-      }));
-    }
-    return this.#resolveAudioUrl(track).then((url) => ({
-      audioUrlSource: "inline-resolve" as const,
-      cacheHit: false,
-      prefetchStatus: "miss" as const,
-      url,
-    }));
-  }
-
-  #resolveAudioUrl(
-    track: Track,
-    origin: AudioUrlSource = "inline-resolve",
-  ): Promise<string> {
-    const existing = this.#prepared.get(track.source);
-    if (existing !== undefined) {
-      return existing.promise.then((prepared) => prepared.url);
-    }
-    const abort = new AbortController();
-    const pending = this.#resolvePlayableAudio(track, abort.signal).then(
-      (url) => {
-        const expiresAt = audioUrlExpiresAt(url);
-        const entry = this.#prepared.get(track.source);
-        if (entry) entry.expiresAt = expiresAt;
-        return { expiresAt, url };
-      },
-    );
-    const entry: PreparedAudioEntry = {
-      abort,
-      expiresAt: Number.POSITIVE_INFINITY,
-      origin,
-      promise: pending,
-      status: "pending",
-    };
-    pending.catch(() => {
-      if (this.#prepared.get(track.source) === entry) {
-        this.#prepared.delete(track.source);
-      }
-    });
-    this.#prepared.set(track.source, entry);
-    return pending.then((prepared) => {
-      entry.status = "ready";
-      return prepared.url;
-    });
   }
 
   async #resolvePlayableAudio(
@@ -1755,7 +1651,7 @@ export class YoutubePlaybackService {
     let lastError: unknown;
     try {
       const url = await this.#resolver.getAudioUrlFromUrl(track.source, signal);
-      this.#audioUrlCache?.set(track.source, url, audioUrlExpiresAt(url));
+      this.#preparedStore.persist(track.source, url);
       return url;
     } catch (error) {
       lastError = error;
@@ -1814,11 +1710,7 @@ export class YoutubePlaybackService {
         return undefined;
       });
       if (fallbackResult !== undefined) {
-        this.#audioUrlCache?.set(
-          fallbackResult.source,
-          fallbackResult.url,
-          audioUrlExpiresAt(fallbackResult.url),
-        );
+        this.#preparedStore.persist(fallbackResult.source, fallbackResult.url);
         return fallbackResult.url;
       }
     }
@@ -1841,12 +1733,12 @@ export class YoutubePlaybackService {
 
     const toResolve: Array<{ track: Track; index: number }> = [];
     for (const [index, next] of prefetchSlice.entries()) {
-      const existing = this.#prepared.get(next.source);
+      const existing = this.#preparedStore.peek(next.source);
       if (existing !== undefined) {
         if (existing.expiresAt > Date.now() + AUDIO_URL_REFRESH_AHEAD_MS) {
           continue;
         }
-        this.#invalidatePrepared(next.source);
+        this.#preparedStore.invalidate(next.source);
       }
       toResolve.push({ track: next, index });
     }
@@ -1859,30 +1751,42 @@ export class YoutubePlaybackService {
         queueSnapshot.map((queued) => queued.id),
       );
       for (const { track } of immediate) {
-        void this.#resolveAudioUrl(track, "prefetch").catch(() => {
-          this.#invalidatePrepared(track.source);
-        });
+        void this.#preparedStore
+          .resolve(track, "prefetch", (t, signal) =>
+            this.#resolvePlayableAudio(t, signal),
+          )
+          .catch(() => {
+            this.#preparedStore.invalidate(track.source);
+          });
       }
       setTimeout(() => {
         if (stopEpoch !== this.#stopEpoch) return;
         for (const { track } of deferred) {
           if (!queueSnapshotIds.has(track.id)) continue;
-          const stillPrepared = this.#prepared.get(track.source);
+          const stillPrepared = this.#preparedStore.peek(track.source);
           if (
             stillPrepared === undefined ||
             stillPrepared.expiresAt <= Date.now() + AUDIO_URL_REFRESH_AHEAD_MS
           ) {
-            void this.#resolveAudioUrl(track, "prefetch").catch(() => {
-              this.#invalidatePrepared(track.source);
-            });
+            void this.#preparedStore
+              .resolve(track, "prefetch", (t, signal) =>
+                this.#resolvePlayableAudio(t, signal),
+              )
+              .catch(() => {
+                this.#preparedStore.invalidate(track.source);
+              });
           }
         }
       }, 2_000);
     } else {
       for (const { track } of toResolve) {
-        void this.#resolveAudioUrl(track, "prefetch").catch(() => {
-          this.#invalidatePrepared(track.source);
-        });
+        void this.#preparedStore
+          .resolve(track, "prefetch", (t, signal) =>
+            this.#resolvePlayableAudio(t, signal),
+          )
+          .catch(() => {
+            this.#preparedStore.invalidate(track.source);
+          });
       }
     }
   }
@@ -1955,7 +1859,10 @@ export class YoutubePlaybackService {
   #startPrewarm(next: Track): void {
     const stopEpoch = this.#stopEpoch;
     const generation = this.#generation;
-    void this.#resolveAudioUrl(next)
+    void this.#preparedStore
+      .resolve(next, "inline-resolve", (t, signal) =>
+        this.#resolvePlayableAudio(t, signal),
+      )
       .then((url) => {
         if (stopEpoch !== this.#stopEpoch || generation !== this.#generation) {
           return undefined;
@@ -2041,21 +1948,4 @@ export class YoutubePlaybackService {
 
 function isDrmError(error: unknown): boolean {
   return error instanceof Error && /DRM protected/i.test(error.message);
-}
-
-export function audioUrlExpiresAt(url: string): number {
-  try {
-    const parsed = new URL(url);
-    const queryExpire = Number(parsed.searchParams.get("expire"));
-    if (Number.isFinite(queryExpire) && queryExpire > 0) {
-      return queryExpire * 1_000 - AUDIO_URL_EXPIRY_MARGIN_MS;
-    }
-    const pathExpire = Number(/\/expire\/(\d+)/.exec(parsed.pathname)?.[1]);
-    if (Number.isFinite(pathExpire) && pathExpire > 0) {
-      return pathExpire * 1_000 - AUDIO_URL_EXPIRY_MARGIN_MS;
-    }
-  } catch {
-    // The resolver already validates URLs; use a conservative TTL if parsing fails.
-  }
-  return Date.now() + AUDIO_URL_FALLBACK_TTL_MS;
 }
