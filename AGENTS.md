@@ -58,7 +58,8 @@ Useful subsets: `npx vitest run tests/<file>.test.ts` for one suite,
 - **Neutral Spanish, no demonyms.** No voseo, no regional slang, no
   country-specific references: nothing in the text may reveal where the
   author is from. Prefer the infinitive in instructions ("Pegar el
-  archivo", never "Pega/Pegá el archivo").
+  archivo", never "Pega/Pegá el archivo"). Panel UI is excepted: it keeps
+  its existing voice (voseo); docs never copy panel strings as examples.
 - **Write like a developer, not a model.** Hard bans, enforced in review:
   - Slop vocabulary: delve, leverage, utilize, robust, seamless, ecosystem,
     holistic, groundbreaking, cutting-edge, empower, unlock, realm,
