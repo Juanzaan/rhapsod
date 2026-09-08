@@ -158,8 +158,10 @@ It does not download or cache music files, and it does not bypass DRM or geo-blo
 - [Architecture](docs/architecture.md)
 - [Commands](docs/commands.md)
 - [Deployment](docs/deployment.md)
+- [Install](docs/install.md)
 - [Roadmap](docs/roadmap.md)
 - [TS3 bot research](docs/research-ts3-bots.md)
+- [WARP voice egress](docs/warp-voice-egress.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
 
