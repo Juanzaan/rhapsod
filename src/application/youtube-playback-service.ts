@@ -154,6 +154,16 @@ const DEFAULT_MAX_QUEUE_TRACKS = 200;
 const DEFAULT_MAX_TRACKS_PER_USER = 30;
 const HISTORY_LIMIT = 20;
 
+// Last-resort bound on a single track's URL resolution. Worst-case
+// legitimate budget: innertube ~5s + daemon 15s + two local yt-dlp passes
+// ~24s + API calls and fallbacks — comfortably under a minute. Past 90s
+// something is wedged (a promise that will never settle), and without this
+// the driver loop parks forever with the chain claimed: nothing plays until
+// the process restarts.
+const RESOLVE_WATCHDOG_MS = 90_000;
+
+export type PlaybackDriverState = "idle" | "resolving" | "playing";
+
 class QueueLimitError extends UserError {}
 
 // Kept here so existing importers (tests) keep working; the implementation
@@ -200,6 +210,11 @@ export class YoutubePlaybackService {
   #current: Track | undefined;
   #session: FfmpegPlaybackSession | undefined;
   #chainActive = false;
+  // Explicit driver state for observability and the resolve watchdog.
+  // Deliberately coarse: idle (parked or stopped), resolving (track claimed,
+  // URL not yet in hand), playing (live session). Transient windows (a skip
+  // landing between sessions) resolve themselves within one loop turn.
+  #driverState: PlaybackDriverState = "idle";
   #pendingSeek:
     { readonly seconds: number; readonly trackId: string } | undefined;
   #pendingSkips = 0;
@@ -293,7 +308,14 @@ export class YoutubePlaybackService {
   }
 
   get playerState(): "idle" | "buffering" | "playing" | "paused" {
+    // No session yet means the driver is resolving: previously reported as
+    // idle, which told owners "nothing happening" during long resolutions.
+    if (this.#driverState === "resolving") return "buffering";
     return this.#session?.player.state ?? "idle";
+  }
+
+  get driverState(): PlaybackDriverState {
+    return this.#driverState;
   }
 
   get playbackPositionMs(): number {
@@ -1223,6 +1245,7 @@ export class YoutubePlaybackService {
     this.#session?.stop();
     this.#session = undefined;
     this.#current = undefined;
+    this.#driverState = "idle";
     this.#queue.clear();
     this.#loopMode = "off";
     this.#loopPool = [];
@@ -1385,14 +1408,39 @@ export class YoutubePlaybackService {
         const track = this.#queue.next();
         if (!track) {
           this.#current = undefined;
+          this.#driverState = "idle";
           this.#persistState();
           return;
         }
         const generation = this.#epochs.nextGeneration();
         this.#current = track;
+        this.#driverState = "resolving";
         this.#persistState();
         const audioResolutionStartedAt = Date.now();
-        const resolved = await this.#resolveOrSkip(track, generation);
+        // A resolution that never settles wedges the whole driver loop:
+        // chainActive stays claimed, requestNext() no-ops, and nothing plays
+        // until the process restarts. Race it against a last-resort bound and
+        // treat a wedged track like a failed one. Promise.race subscribes to
+        // the abandoned promise, so its eventual settlement is safely ignored.
+        const resolved = await Promise.race([
+          this.#resolveOrSkip(track, generation),
+          new Promise<undefined>((_, reject) => {
+            const timer = setTimeout(() => {
+              reject(
+                new Error(
+                  `Audio resolution timed out after ${RESOLVE_WATCHDOG_MS / 1_000}s; skipping track`,
+                ),
+              );
+            }, RESOLVE_WATCHDOG_MS);
+            timer.unref();
+          }),
+        ]).catch((error: unknown) => {
+          // Only the watchdog above can reject here: #resolveOrSkip never
+          // throws by contract (it reports and returns undefined instead).
+          this.#reportPlaybackError(track, error);
+          this.#preparedStore.drop(track.source);
+          return undefined;
+        });
         if (resolved === undefined) {
           if (this.#pendingSeek?.trackId === track.id) {
             this.#pendingSeek = undefined;
@@ -1475,6 +1523,7 @@ export class YoutubePlaybackService {
         }
         session.player.setVolume(volumeToGain(this.#volumePercent));
         this.#session = session;
+        this.#driverState = "playing";
         this.#tracksPlayed++;
         this.#recordHistory(track);
         this.#safeObserver(() => this.#onPlaybackStarted(track));
