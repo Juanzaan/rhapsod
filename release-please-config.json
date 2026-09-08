@@ -4,7 +4,7 @@
       "release-type": "node",
       "changelog-path": "CHANGELOG.md",
       "skip-changelog": true,
-      "draft": true,
+      "draft": false,
       "include-component-in-tag": false
     }
   }
