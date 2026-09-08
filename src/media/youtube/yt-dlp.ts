@@ -26,7 +26,6 @@ const SEARCH_CACHE_TTL_MS = 60 * 60 * 1000;
 const SEARCH_CACHE_MAX_ENTRIES = 500;
 const ABORT_GRACE_MS = 3_000;
 const AUDIO_FORMAT_SELECTOR = "251/bestaudio[acodec!=none]/bestaudio";
-const PREFETCH_BATCH_SIZE = 10;
 
 export const YTDLP_ABORT_ERROR = "yt-dlp job aborted";
 
@@ -784,33 +783,6 @@ export class YoutubeResolver {
     } finally {
       clearTimeout(timer);
     }
-  }
-
-  async prefetchAudioUrls(
-    urls: readonly string[],
-    signal?: AbortSignal,
-  ): Promise<readonly (string | undefined)[]> {
-    const batchSize = PREFETCH_BATCH_SIZE;
-    const results: Array<string | undefined> = [];
-    for (let i = 0; i < urls.length; i++) {
-      results.push(undefined);
-    }
-    for (let i = 0; i < urls.length; i += batchSize) {
-      if (signal?.aborted) break;
-      const batch = urls.slice(i, i + batchSize);
-      const batchResults = await Promise.allSettled(
-        batch.map((url) =>
-          this.getAudioUrlFromUrl(url, signal).catch(() => undefined),
-        ),
-      );
-      for (let j = 0; j < batchResults.length; j++) {
-        const result = batchResults[j]!;
-        if (result.status === "fulfilled" && result.value !== undefined) {
-          results[i + j] = result.value;
-        }
-      }
-    }
-    return results;
   }
 
   async #getTrackFromUrl(url: string): Promise<YoutubeTrackMetadata> {
