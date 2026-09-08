@@ -801,6 +801,56 @@ export class YoutubeResolver {
   }
 }
 
+export interface YtDlpResolverStackOptions {
+  readonly ytdlpPath: string;
+  readonly cookiesPath?: string;
+  readonly extractorArgs?: string;
+  readonly daemonUrl?: string;
+  readonly daemonFetch?: typeof fetch;
+  readonly maxConcurrentJobs?: number;
+  readonly timeouts?: TimeoutConfig;
+  readonly onSearchMetrics?: (metrics: SearchMetrics) => void;
+}
+
+export interface YtDlpResolverStack {
+  readonly executor: SystemYtDlpExecutor;
+  readonly resolver: YoutubeResolver;
+}
+
+/**
+ * Builds the executor + resolver pair with identical wiring everywhere it is
+ * needed (the connected bot and the panel-only setup mode). Centralizing this
+ * keeps optionals — daemon URL, job caps, search metrics — from drifting
+ * between the two boot paths again.
+ */
+export function createYtDlpResolverStack(
+  logger: MinimalLogger | undefined,
+  options: YtDlpResolverStackOptions,
+): YtDlpResolverStack {
+  const executor = new SystemYtDlpExecutor(
+    options.ytdlpPath,
+    options.cookiesPath,
+    options.maxConcurrentJobs === undefined
+      ? {}
+      : { maxConcurrentJobs: options.maxConcurrentJobs },
+    logger,
+    options.extractorArgs,
+  );
+  const resolver = new YoutubeResolver(executor, logger, {
+    ...(options.timeouts === undefined ? {} : { timeouts: options.timeouts }),
+    ...(options.daemonUrl === undefined
+      ? {}
+      : { daemonUrl: options.daemonUrl }),
+    ...(options.daemonFetch === undefined
+      ? {}
+      : { daemonFetch: options.daemonFetch }),
+    ...(options.onSearchMetrics === undefined
+      ? {}
+      : { onSearchMetrics: options.onSearchMetrics }),
+  });
+  return { executor, resolver };
+}
+
 export function buildYtDlpArguments(
   argumentsList: readonly string[],
   cookiesPath?: string,
