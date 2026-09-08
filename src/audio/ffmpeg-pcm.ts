@@ -141,8 +141,10 @@ export function createFfmpegPcmStream(
   let stderr = "";
   let retries = 0;
   let usedProxy = false;
+  let retryTimer: ReturnType<typeof setTimeout> | undefined;
 
   const start = (useProxy = false): void => {
+    if (stopped) return;
     usedProxy = useProxy;
     const args = buildFfmpegPcmArguments(url, options, useProxy);
     stderr = "";
@@ -192,8 +194,8 @@ export function createFfmpegPcmStream(
       // the configured proxy egress (e.g. Cloudflare WARP) when available.
       if (/403|Forbidden/i.test(stderr) && retries < FFMPEG_403_RETRY_COUNT) {
         retries++;
-        const timer = setTimeout(() => start(false), FFMPEG_403_RETRY_DELAY_MS);
-        timer.unref();
+        retryTimer = setTimeout(() => start(false), FFMPEG_403_RETRY_DELAY_MS);
+        retryTimer.unref();
         return;
       }
       if (
@@ -202,8 +204,8 @@ export function createFfmpegPcmStream(
         options.proxyUrl !== undefined &&
         options.proxyUrl.length > 0
       ) {
-        const timer = setTimeout(() => start(true), FFMPEG_403_RETRY_DELAY_MS);
-        timer.unref();
+        retryTimer = setTimeout(() => start(true), FFMPEG_403_RETRY_DELAY_MS);
+        retryTimer.unref();
         return;
       }
       const detail = stderr.trim();
@@ -220,6 +222,9 @@ export function createFfmpegPcmStream(
   const stop = (): void => {
     if (stopped) return;
     stopped = true;
+    // A 403-retry timer pending when playback is skipped would spawn a fresh
+    // ffmpeg into an already-ended stream with nothing left to kill it.
+    if (retryTimer !== undefined) clearTimeout(retryTimer);
     child.stdout.unpipe(stream);
     stream.end();
     if (child.exitCode !== null || child.signalCode !== null) {

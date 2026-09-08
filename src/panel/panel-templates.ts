@@ -243,9 +243,9 @@ export function renderSetupWizard(
     }
 
     function rA(){
-      var br=vals.RHAPSOD_OPUS_BITRATE||'96000';
+      var br=vals.RHAPSOD_OPUS_BITRATE||'128000';
       return '<h1>Audio</h1><p class="sub">Configuracion de calidad de audio</p>'+
-        '<div class="f"><label>Bitrate (kbps)</label><select id="ibr"><option value="64000"'+(br==='64000'?' selected':'')+'>64 kbps</option><option value="96000"'+(br==='96000'?' selected':'')+'>96 kbps (default)</option><option value="128000"'+(br==='128000'?' selected':'')+'>128 kbps</option></select><div class="h">Mas alto = mejor calidad, mas ancho de banda</div></div>'+
+        '<div class="f"><label>Bitrate (kbps)</label><select id="ibr"><option value="64000"'+(br==='64000'?' selected':'')+'>64 kbps</option><option value="96000"'+(br==='96000'?' selected':'')+'>96 kbps</option><option value="128000"'+(br==='128000'?' selected':'')+'>128 kbps (default)</option></select><div class="h">Mas alto = mejor calidad, mas ancho de banda</div></div>'+
         '<div class="f"><label>Volumen normalizado (LUFS)</label><input id="il" type="number" min="-30" max="0" step="1" placeholder="-14" value="'+(vals.RHAPSOD_LOUDNESS_TARGET_LUFS||'-14')+'"><div class="h">-14 es estandar de streaming. -16 es mas conservador.</div></div>'+
         '<div class="f"><label>Modo verbose</label><select id="iv"><option value="false"'+(vals.RHAPSOD_VERBOSE!=='true'?' selected':'')+'>No (minimalista)</option><option value="true"'+(vals.RHAPSOD_VERBOSE==='true'?' selected':'')+'>Si (mensajes detallados)</option></select><div class="h">Verbose muestra mensajes de progreso</div></div>'+
         '<div class="a"><button class="b bs" onclick="prev()">Atras</button><button class="b bp" onclick="next()">Siguiente</button></div>';
@@ -306,7 +306,7 @@ export function renderSetupWizard(
         ['Puerto',vals.RHAPSOD_TS3_PORT||'9987'],
         ['Nombre',vals.RHAPSOD_TS3_NICKNAME||'Rhapsod'],
         ['Canal',vals.RHAPSOD_TS3_CHANNEL_NAME||vals.RHAPSOD_TS3_CHANNEL_ID||'(default)'],
-        ['Bitrate',((vals.RHAPSOD_OPUS_BITRATE||'96000')/1000)+' kbps'],
+        ['Bitrate',((vals.RHAPSOD_OPUS_BITRATE||'128000')/1000)+' kbps'],
         ['Normalizacion',(vals.RHAPSOD_LOUDNESS_TARGET_LUFS||'-14')+' LUFS'],
         ['Spotify',vals.RHAPSOD_SPOTIFY_CLIENT_ID?'Configurado':'No'],
         ['YouTube',vals._ytOk===true?'OK':(vals._ytOk===false?'Falla (ver paso YouTube)':'Sin probar')],
@@ -336,7 +336,7 @@ export function renderSetupWizard(
       vals.RHAPSOD_TS3_CHANNEL_NAME=g('ic');
       if(g('icid'))vals.RHAPSOD_TS3_CHANNEL_ID=g('icid');
       if(g('icp'))vals.RHAPSOD_TS3_CHANNEL_PASSWORD=g('icp');
-      vals.RHAPSOD_OPUS_BITRATE=g('ibr')||'96000';
+      vals.RHAPSOD_OPUS_BITRATE=g('ibr')||'128000';
       vals.RHAPSOD_LOUDNESS_TARGET_LUFS=g('il')||'-14';
       vals.RHAPSOD_VERBOSE=g('iv')||'false';
       if(g('isi'))vals.RHAPSOD_SPOTIFY_CLIENT_ID=g('isi');

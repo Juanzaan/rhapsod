@@ -289,6 +289,62 @@ describe("FFmpeg PCM source", () => {
     }
   });
 
+  it("cancels a pending 403 retry when stopped, so no orphan spawns", async () => {
+    // A skip inside the 1.5s retry window used to leave a timer that spawned
+    // a fresh ffmpeg into an ended stream with nothing left to kill it.
+    vi.useFakeTimers();
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const spawns: number[] = [];
+      const closeHandlers: Array<
+        (code: number | null, signal: string | null) => void
+      > = [];
+      const stderrHandlers: Array<(chunk: Buffer) => void> = [];
+      const makeChild = () => ({
+        exitCode: null,
+        signalCode: null,
+        kill: vi.fn(() => true),
+        on: vi.fn(
+          (
+            event: string,
+            handler: (code: number | null, signal: string | null) => void,
+          ) => {
+            if (event === "close") closeHandlers.push(handler);
+          },
+        ),
+        once: vi.fn(),
+        stderr: {
+          on: vi.fn((event: string, handler: (chunk: Buffer) => void) => {
+            if (event === "data") stderrHandlers.push(handler);
+          }),
+        },
+        stdout: { pipe: vi.fn(), unpipe: vi.fn() },
+      });
+      const child = makeChild();
+      const spawnProcess = vi.fn(() => {
+        spawns.push(1);
+        return child;
+      }) as never;
+      const ffmpeg = createFfmpegPcmStream("https://cdn.example.test/audio", {
+        binary: "ffmpeg",
+        spawnProcess,
+      });
+      ffmpeg.stream.on("error", () => {});
+
+      expect(spawns).toHaveLength(1);
+      // 403 fires a retry on a timer...
+      stderrHandlers[0]?.(Buffer.from("HTTP error 403 Forbidden"));
+      closeHandlers[0]?.(1, null);
+      // ...but the track is skipped before the timer fires.
+      ffmpeg.stop();
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(spawns).toHaveLength(1);
+    } finally {
+      errorSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
   it("escalates to SIGKILL when SIGTERM does not stop the process", async () => {
     vi.useFakeTimers();
     try {

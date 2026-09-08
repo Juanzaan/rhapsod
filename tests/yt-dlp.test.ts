@@ -1,7 +1,10 @@
 import { describe, expect, it, vi, type Mock } from "vitest";
 
 import { fetchInnertubePlayerAudioUrl } from "../src/media/youtube/innertube-player.js";
-import { searchInnertubeVideos } from "../src/media/youtube/innertube-search.js";
+import {
+  searchInnertubeMusicVideos,
+  searchInnertubeVideos,
+} from "../src/media/youtube/innertube-search.js";
 import {
   buildYtDlpArguments,
   buildYtDlpCommand,
@@ -20,6 +23,7 @@ vi.mock("../src/media/youtube/innertube-player.js", () => ({
 
 vi.mock("../src/media/youtube/innertube-search.js", () => ({
   searchInnertubeVideos: vi.fn(() => Promise.resolve([])),
+  searchInnertubeMusicVideos: vi.fn(() => Promise.resolve([])),
 }));
 
 class FakeExecutor implements YtDlpExecutor {
@@ -491,6 +495,30 @@ describe("YoutubeResolver", () => {
       id: "yt1",
     });
     expect(executor.calls[0]).toContain("ytsearch5:duki rockstar");
+  });
+
+  it("prefers music results when generic search returns nothing music-like", async () => {
+    // The "poland" case: generic search returns travel vlogs, and the music
+    // index has the actual track. Both branches now run in parallel.
+    (searchInnertubeVideos as Mock).mockResolvedValueOnce([
+      { durationSeconds: 600, id: "travel1", title: "Poland travel guide" },
+    ]);
+    (searchInnertubeMusicVideos as Mock).mockResolvedValueOnce([
+      {
+        durationSeconds: 184,
+        id: "music1",
+        title: "POLAND (Official Music Video)",
+        channel: "Lil Yachty - Topic",
+      },
+    ]);
+    const executor = new FakeExecutor("{}");
+    const resolver = new YoutubeResolver(executor);
+
+    await expect(resolver.search("poland")).resolves.toMatchObject({
+      id: "music1",
+    });
+    expect(executor.calls).toHaveLength(0);
+    expect(searchInnertubeMusicVideos).toHaveBeenCalledWith("poland");
   });
 
   it("skips web_safari when web_embedded succeeds on first try", async () => {

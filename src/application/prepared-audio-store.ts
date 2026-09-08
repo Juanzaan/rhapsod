@@ -5,8 +5,11 @@ import type {
   PrefetchStatus,
 } from "../observability/metrics.js";
 
-const AUDIO_URL_FALLBACK_TTL_MS = 10 * 60_000;
 const AUDIO_URL_EXPIRY_MARGIN_MS = 60_000;
+// URLs without an expire parameter (SoundCloud CDN, direct/radio streams)
+// are typically valid much longer than YouTube's ~6h signed URLs;
+// re-resolving them every 10 minutes was pure waste on repeat plays.
+const AUDIO_URL_FALLBACK_TTL_MS = 60 * 60_000;
 
 export function audioUrlExpiresAt(url: string): number {
   try {

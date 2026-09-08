@@ -1504,9 +1504,13 @@ export class YoutubePlaybackService {
             const retries = this.#retries.get(track) ?? 0;
             if (retries < MAX_AUDIO_URL_403_RETRIES) {
               this.#retries.set(track, retries + 1);
-              // Invalidate stale URL (daemon may have cached a 403'd host)
+              // Invalidate stale URL (daemon may have cached a 403'd host).
+              // Awaited on purpose: the requeued track's re-resolve can reach
+              // the daemon before a fire-and-forget invalidate lands, and the
+              // daemon would serve the same dead URL again — burning ~10-25s
+              // of dead air and a retry on a URL already known bad.
               this.#preparedStore.drop(track.source);
-              void this.#resolver
+              await this.#resolver
                 .invalidateAudioUrl?.(track.source)
                 .catch(() => undefined);
               if (generation === this.#generation && this.#current === track) {
@@ -1643,10 +1647,15 @@ export class YoutubePlaybackService {
       this.#directUrlResolver &&
       (await this.#directUrlResolver.match(track.source))
     ) {
-      return this.#directUrlResolver.getAudioUrl(track.source);
+      const url = await this.#directUrlResolver.getAudioUrl(track.source);
+      // Persisted so a restart (and the runtime re-seed) skips re-resolution.
+      this.#preparedStore.persist(track.source, url);
+      return url;
     }
     if (this.#soundcloudResolver?.match(track.source)) {
-      return this.#soundcloudResolver.getAudioUrl(track.source);
+      const url = await this.#soundcloudResolver.getAudioUrl(track.source);
+      this.#preparedStore.persist(track.source, url);
+      return url;
     }
     let lastError: unknown;
     try {
