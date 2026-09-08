@@ -6,6 +6,14 @@ for [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Startup refuses to run as a second copy of the bot: if this identity or
+  nickname is already connected, the new instance logs which one it saw,
+  disconnects, and exits with code 42 instead of joining as a duplicate.
+  The systemd unit exempts that code from restart; reconnects skip the check
+  so a lingering ghost after a network drop cannot keep a live bot down.
+
 ## [2.4.0] - 2026-09-08
 
 The release that makes playback transitions actually gapless and the driver

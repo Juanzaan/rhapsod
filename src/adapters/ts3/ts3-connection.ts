@@ -13,6 +13,25 @@ const MESSAGE_SEND_TIMEOUT_MS = 10_000;
 const MESSAGE_RATE_INTERVAL_MS = 1_100;
 const MESSAGE_QUEUE_MAX = 50;
 
+/**
+ * Exit code for a refused duplicate start. The systemd unit lists it in
+ * `RestartPreventExitStatus` so a second instance exits instead of
+ * flap-restarting a duplicate onto the server every few seconds.
+ */
+export const DUPLICATE_INSTANCE_EXIT_CODE = 42;
+
+export class DuplicateBotInstanceError extends Error {
+  constructor(nickname: string) {
+    super(
+      `Another bot with this identity or nickname ("${nickname}") is already ` +
+        `connected; refusing to join as a duplicate. Stop the other instance ` +
+        `first — or, if none is running, wait a minute for its ghost to time ` +
+        `out and start again.`,
+    );
+    this.name = "DuplicateBotInstanceError";
+  }
+}
+
 function createMessageGate() {
   let lastSendAt = 0;
   let queue = 0;
@@ -56,7 +75,14 @@ export function withTimeout<T>(
 }
 
 export interface Ts3Connection {
-  connect(): Promise<void>;
+  /**
+   * Connects to the server. Unless `skipDuplicateCheck` is set, refuses to
+   * stay connected when this bot's identity or nickname is already online
+   * (see `DuplicateBotInstanceError`). Reconnects must skip the check: our
+   * own ghost can linger on the server right after a dropped connection,
+   * and failing there would keep a live bot down.
+   */
+  connect(options?: { skipDuplicateCheck?: boolean }): Promise<void>;
   disconnect(): Promise<void>;
   listChannels(): Promise<
     readonly { cid: number; name: string; parentCid?: number }[]
@@ -167,6 +193,41 @@ export function createHeartbeat(
   return () => clearInterval(timer);
 }
 
+interface ClientListEntry {
+  readonly id: number;
+  readonly nickname: string;
+  readonly uid: string;
+}
+
+/**
+ * Refuses to stay connected when this bot is already online. Matches by
+ * identity UID (same data dir started twice) or by configured nickname (a
+ * second machine with its own identity, the classic staging-vs-production
+ * accident). Runs before anything visible happens — no description set, no
+ * channel move — so a rejected start leaves almost no footprint.
+ *
+ * Fail-open by design: if the client list cannot be read, or our own entry
+ * is missing from it, the bot connects anyway with a warning. This is
+ * duplicate prevention, not a security boundary, and must never brick the
+ * bot on a permission-restricted server.
+ */
+export function rejectDuplicateInstance(
+  entries: readonly ClientListEntry[],
+  selfId: number,
+  nickname: string,
+): void {
+  const self = entries.find((entry) => entry.id === selfId);
+  if (self === undefined) return;
+  const duplicate = entries.find(
+    (entry) =>
+      entry.id !== selfId &&
+      (entry.uid === self.uid || entry.nickname === nickname),
+  );
+  if (duplicate !== undefined) {
+    throw new DuplicateBotInstanceError(nickname);
+  }
+}
+
 export function createTs3Connection(
   config: AppConfig,
   identity: Identity,
@@ -191,7 +252,7 @@ export function createTs3Connection(
   const messageGate = createMessageGate();
 
   return {
-    connect: async () => {
+    connect: async (options?: { skipDuplicateCheck?: boolean }) => {
       try {
         await client.connect();
         await client.waitConnected(
@@ -202,6 +263,39 @@ export function createTs3Connection(
       } catch (error) {
         await client.disconnect().catch(() => undefined);
         throw error;
+      }
+      if (!options?.skipDuplicateCheck) {
+        let entries;
+        try {
+          entries = await listClients(client);
+        } catch (error) {
+          logger.warn(
+            {
+              errorMessage:
+                error instanceof Error ? error.message : String(error),
+            },
+            "Could not list clients to check for a duplicate bot instance; connecting anyway",
+          );
+          entries = undefined;
+        }
+        if (entries !== undefined) {
+          try {
+            rejectDuplicateInstance(
+              entries,
+              client.clientID(),
+              config.RHAPSOD_TS3_NICKNAME,
+            );
+          } catch (error) {
+            if (error instanceof DuplicateBotInstanceError) {
+              logger.error(
+                { nickname: config.RHAPSOD_TS3_NICKNAME },
+                "Duplicate bot instance detected; disconnecting",
+              );
+            }
+            await client.disconnect().catch(() => undefined);
+            throw error;
+          }
+        }
       }
       if (config.RHAPSOD_TS3_CLIENT_DESCRIPTION !== undefined) {
         try {

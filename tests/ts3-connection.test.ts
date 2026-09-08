@@ -60,7 +60,11 @@ vi.mock("@honeybbq/teamspeak-client", () => {
 import type { AppConfig } from "../src/config.js";
 import type { Logger } from "pino";
 import type { Identity } from "@honeybbq/teamspeak-client";
-import { createTs3Connection } from "../src/adapters/ts3/ts3-connection.js";
+import {
+  createTs3Connection,
+  DUPLICATE_INSTANCE_EXIT_CODE,
+  DuplicateBotInstanceError,
+} from "../src/adapters/ts3/ts3-connection.js";
 
 interface Ts3ClientMock {
   connect: ReturnType<typeof vi.fn>;
@@ -358,5 +362,110 @@ describe("createTs3Connection queries", () => {
       ]);
     const connection = createTs3Connection(testConfig(), identity, logger);
     await expect(connection.canTalkInCurrentChannel()).resolves.toBe(false);
+  });
+});
+
+describe("duplicate instance guard", () => {
+  const selfEntry = {
+    id: 42,
+    nickname: "Bot",
+    uid: "uid-self",
+    type: 0,
+    channelID: 7n,
+    serverGroups: [],
+  };
+
+  it("refuses to stay connected when our UID is already online", async () => {
+    const m = await ts3Mock();
+    m.listClients.mockResolvedValueOnce([
+      selfEntry,
+      {
+        id: 7,
+        nickname: "Bot",
+        uid: "uid-self",
+        type: 0,
+        channelID: 9n,
+        serverGroups: [],
+      },
+    ]);
+    const connection = createTs3Connection(testConfig(), identity, logger);
+    await expect(connection.connect()).rejects.toThrow(
+      DuplicateBotInstanceError,
+    );
+    expect(m.__client.disconnect).toHaveBeenCalled();
+    // Rejected before anything visible: no description, no channel move.
+    expect(m.__client.execCommand).not.toHaveBeenCalled();
+  });
+
+  it("refuses when the nickname matches with a different UID", async () => {
+    const m = await ts3Mock();
+    m.listClients.mockResolvedValueOnce([
+      selfEntry,
+      {
+        id: 7,
+        nickname: "Bot",
+        uid: "uid-other",
+        type: 0,
+        channelID: 9n,
+        serverGroups: [],
+      },
+    ]);
+    const connection = createTs3Connection(testConfig(), identity, logger);
+    await expect(connection.connect()).rejects.toThrow(
+      DuplicateBotInstanceError,
+    );
+    expect(m.__client.disconnect).toHaveBeenCalled();
+  });
+
+  it("connects when neither UID nor nickname matches", async () => {
+    const m = await ts3Mock();
+    m.listClients.mockResolvedValueOnce([
+      selfEntry,
+      {
+        id: 7,
+        nickname: "Other",
+        uid: "uid-other",
+        type: 0,
+        channelID: 9n,
+        serverGroups: [],
+      },
+    ]);
+    const connection = createTs3Connection(testConfig(), identity, logger);
+    await expect(connection.connect()).resolves.toBeUndefined();
+    expect(m.__client.disconnect).not.toHaveBeenCalled();
+  });
+
+  it("connects with a warning when the client list is unavailable", async () => {
+    const m = await ts3Mock();
+    m.listClients.mockRejectedValueOnce(new Error("no permission"));
+    const connection = createTs3Connection(testConfig(), identity, logger);
+    await expect(connection.connect()).resolves.toBeUndefined();
+    expect(m.__client.disconnect).not.toHaveBeenCalled();
+  });
+
+  it("skips the check when asked, for the reconnect path", async () => {
+    const m = await ts3Mock();
+    m.listClients.mockResolvedValueOnce([
+      selfEntry,
+      {
+        id: 7,
+        nickname: "Bot",
+        uid: "uid-self",
+        type: 0,
+        channelID: 9n,
+        serverGroups: [],
+      },
+    ]);
+    const connection = createTs3Connection(testConfig(), identity, logger);
+    await expect(
+      connection.connect({ skipDuplicateCheck: true }),
+    ).resolves.toBeUndefined();
+    expect(m.__client.disconnect).not.toHaveBeenCalled();
+  });
+
+  it("pins the exit code the systemd unit exempts from restart", () => {
+    // deploy/systemd/rhapsod.service lists this value in
+    // RestartPreventExitStatus; changing one requires changing the other.
+    expect(DUPLICATE_INSTANCE_EXIT_CODE).toBe(42);
   });
 });
