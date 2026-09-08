@@ -118,6 +118,8 @@ const ENV_DESCRIPTIONS: Record<string, string> = {
   RHAPSOD_TS3_CONNECT_TIMEOUT_SECONDS: "Timeout de conexion (15-300s)",
   RHAPSOD_TS3_CLIENT_DESCRIPTION: "Descripcion del bot en el servidor",
   RHAPSOD_ADMIN_UIDS: "UIDs de admin separados por coma",
+  RHAPSOD_DATA_DIR: "Directorio de datos (identidad TS3, estado)",
+  RHAPSOD_ENV_FILE: "Ruta del archivo .env (solo desde el entorno real)",
   RHAPSOD_PRIVATE_COMMAND_UIDS: "UIDs con acceso a comandos privados",
   RHAPSOD_YTDLP_PATH: "Ruta del binario yt-dlp",
   RHAPSOD_YTDLP_COOKIES_PATH: "Ruta a cookies.txt de YouTube",
