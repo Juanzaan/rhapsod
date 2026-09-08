@@ -90,12 +90,13 @@ When these variables are missing, Spotify links fail with a clear message.
 
 Rhapsod runs as two systemd services: the bot itself and a persistent yt-dlp
 daemon that resolves YouTube audio URLs fast (a single warm `YoutubeDL` process
-instead of a per-call Python startup). The repo ships both unit files,
-`rhapsod.service` and `rhapsod-ytdlp-daemon.service`, plus a
-`deploy-rhapsod.sh` script that rebuilds from the stable tag and restarts both.
+instead of a per-call Python startup). The repo ships the unit files under
+`deploy/systemd/` (`rhapsod.service`, `rhapsod-ytdlp-daemon.service`,
+`bgutil-pot-provider.service`); `install.sh` writes them to
+`/etc/systemd/system/` during setup.
 
 The daemon needs the `yt-dlp[default]` Python package installed into its
-`PYTHONPATH` (see `oci-cloud-init.sh` for the reference setup). It listens on
+`PYTHONPATH` (installed by `install.sh` into `~/ytdlp-deps`). It listens on
 `127.0.0.1:8765` and reads the bot's cookies file, so the bot can reach it via
 `RHAPSOD_YTDLP_DAEMON_URL=http://127.0.0.1:8765`.
 
@@ -137,7 +138,7 @@ MemorySwapMax=1G
 WantedBy=multi-user.target
 ```
 
-Example daemon unit (shipped as `rhapsod-ytdlp-daemon.service`):
+Example daemon unit (shipped as `deploy/systemd/rhapsod-ytdlp-daemon.service`):
 
 ```ini
 [Unit]
@@ -157,7 +158,9 @@ RuntimeMaxSec=86400
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ProtectHome=true
+# read-only, not true: the daemon's script, PYTHONPATH deps and cookies all
+# live under /home, and ProtectHome=true makes them invisible to it.
+ProtectHome=read-only
 MemoryHigh=512M
 MemoryMax=768M
 MemorySwapMax=0
