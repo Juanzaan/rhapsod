@@ -3,29 +3,41 @@
 Rhapsod commands use `!` by default. Commands are processed in TeamSpeak text
 chat once the TS3 adapter is connected.
 
-| Command                     | Alias                 | Description                                                                                         |
-| --------------------------- | --------------------- | --------------------------------------------------------------------------------------------------- |
-| `!play <URL or search>`     | `!p`                  | Resolve a YouTube video/playlist, SoundCloud, Spotify, Apple Music or Amazon Music link, or search. |
-| `!playnext <URL or search>` | `!pn`, `!next`        | Add a single track or search result at the front of the pending queue.                              |
-| `!yt [n] <search terms>`    | `!search`, `!youtube` | Add a matching YouTube video; a leading number picks the n-th ranked result.                        |
-| `!pause`                    | -                     | Pause the current track.                                                                            |
-| `!resume`                   | -                     | Resume the current track.                                                                           |
-| `!skip`                     | `!s`                  | Skip the current track.                                                                             |
-| `!stop`                     | -                     | Stop playback and disconnect the player from the current track.                                     |
-| `!queue [page]`             | `!q`                  | Show 10 pending tracks per page with per-track durations.                                           |
-| `!history`                  | `!hist`               | Show the 10 most recently started tracks (up to 20 are kept in memory).                             |
-| `!now-playing`              | `!np`, `!now`         | Show the current track, duration and requester.                                                     |
-| `!stats`                    | `!st`                 | Show uptime, tracks played since start, current track, queue length and volume/loop state.          |
-| `!volume <0-100>`           | `!vol`, `!v`          | Adjust the bot output volume (default `50`; persists in `state.json`).                              |
-| `!move <from> <to>`         | `!mv`                 | Move a pending track between one-based positions.                                                   |
-| `!channel-move <channel>`   | `!ch`                 | Move the bot to a matching TeamSpeak channel (configured admins only).                              |
-| `!remove <n\|from-to>`      | `!rm`                 | Remove one position or an inclusive range (requesters may remove only their own tracks).            |
-| `!clear`                    | `!c`                  | Clear pending tracks.                                                                               |
-| `!shuffle`                  | -                     | Shuffle the pending queue (the current track keeps playing).                                        |
-| `!loop [off\|track\|queue]` | -                     | Repeat the current track (`track`) or the whole queue (`queue`); persists in `state.json`.          |
-| `!lyrics`                   | `!ly`                 | Show the lyrics of the current track, found via LRCLIB (best-effort, no account).                   |
-| `!test-tone`                | `!tone`               | Play a 3-second test tone (rate-limited).                                                           |
-| `!help`                     | `!h`                  | Show the command summary.                                                                           |
+| Command                       | Alias                 | Description                                                                                         |
+| ----------------------------- | --------------------- | --------------------------------------------------------------------------------------------------- |
+| `!play <URL or search>`       | `!p`                  | Resolve a YouTube video/playlist, SoundCloud, Spotify, Apple Music or Amazon Music link, or search. |
+| `!playnext <URL or search>`   | `!pn`, `!next`        | Add a single track or search result at the front of the pending queue.                              |
+| `!yt [n] <search terms>`      | `!search`, `!youtube` | Add a matching YouTube video; a leading number picks the n-th ranked result.                        |
+| `!pause`                      | -                     | Pause the current track.                                                                            |
+| `!resume`                     | -                     | Resume the current track.                                                                           |
+| `!skip`                       | `!s`                  | Skip the current track.                                                                             |
+| `!previous`                   | `!prev`               | Replay the last finished track.                                                                     |
+| `!seek <seconds>`             | -                     | Jump to a position in seconds within the current track.                                             |
+| `!stop`                       | -                     | Stop playback and disconnect the player from the current track.                                     |
+| `!queue [page]`               | `!q`                  | Show 10 pending tracks per page with per-track durations.                                           |
+| `!history`                    | `!hist`               | Show the 10 most recently started tracks (up to 20 are kept in memory).                             |
+| `!now-playing`                | `!np`, `!now`         | Show the current track, duration and requester.                                                     |
+| `!stats`                      | `!st`                 | Show uptime, tracks played since start, current track, queue length and volume/loop state.          |
+| `!volume <0-100>`             | `!vol`, `!v`          | Adjust the bot output volume (default `50`; persists in `state.json`).                              |
+| `!move <from> <to>`           | `!mv`                 | Move a pending track between one-based positions.                                                   |
+| `!channel-move <channel>`     | `!ch`                 | Move the bot to a matching TeamSpeak channel (configured admins only).                              |
+| `!diag`                       | -                     | Internal diagnostics (admins only).                                                                 |
+| `!debug-server`               | `!ds`                 | TeamSpeak server info (admins only).                                                                |
+| `!chart`                      | -                     | User telemetry chart (admins only).                                                                 |
+| `!remove <n\|from-to>`        | `!rm`                 | Remove one position or an inclusive range (requesters may remove only their own tracks).            |
+| `!clear`                      | `!c`                  | Clear pending tracks.                                                                               |
+| `!shuffle`                    | -                     | Shuffle the pending queue (the current track keeps playing).                                        |
+| `!loop [off\|track\|queue]`   | -                     | Repeat the current track (`track`) or the whole queue (`queue`); persists in `state.json`.          |
+| `!lyrics`                     | `!ly`                 | Show the lyrics of the current track, found via LRCLIB (best-effort, no account).                   |
+| `!bassboost [1-5]`            | `!bb`                 | Apply the bassboost filter (level 1-5).                                                             |
+| `!nightcore [1.05-1.35]`      | `!nc`                 | Apply the nightcore filter (playback speed).                                                        |
+| `!vaporwave [0.80-0.95]`      | `!vw`                 | Apply the vaporwave filter (playback speed).                                                        |
+| `!8d`                         | -                     | Apply the 8D spatial audio filter.                                                                  |
+| `!filter [off]`               | -                     | Show the current audio filter, or `off` to disable it.                                              |
+| `!effects <effect> [on\|off]` | -                     | Control audio effects (`8d`, `nightcore`, `bassboost`, `vaporwave`, `list`, `reset`).               |
+| `!playlist <subcommand>`      | `!pl`                 | Saved playlists: `save\|load\|list\|show\|delete\|add\|remove\|rename\|info`.                       |
+| `!test-tone`                  | `!tone`               | Play a 3-second test tone (rate-limited).                                                           |
+| `!help`                       | `!h`                  | Show the command summary.                                                                           |
 
 ## Source behavior
 
@@ -41,9 +53,10 @@ chat once the TS3 adapter is connected.
   source/destination positions. `!remove a-b` removes an inclusive range and
   caps ranges that extend beyond the queue end.
 - **YouTube:** Rhapsod uses a local `yt-dlp` executable to obtain metadata and
-  a temporary audio URL immediately before playback. Search returns the first
-  matching video; playlists add up to 20 tracks per `!play` (duplicates already
-  in the queue are skipped) and report how many were added.
+  a temporary audio URL immediately before playback. Search returns the
+  ranked match (or the n-th pick); playlists add up to 100 tracks per `!play`
+  (duplicates already in the queue are skipped) and report how many were
+  added.
 - **SoundCloud:** individual tracks first use SoundCloud's public web API with
   a dynamically discovered, cached client identifier. The identifier refreshes
   after authorization failures; yt-dlp and YouTube alternatives remain
@@ -52,7 +65,7 @@ chat once the TS3 adapter is connected.
   when available; blocked/DRM tracks are never bypassed.
 - **Spotify:** tracks are resolved through the official Web API (client
   credentials flow, no user login) and the matching "artist title" is searched
-  on YouTube for playback. Playlists and albums expand up to 20 tracks per
+  on YouTube for playback. Playlists and albums expand up to 100 tracks per
   `!play` (paged requests with 429 backoff, duplicates skipped).
 - **Apple Music / Amazon Music:** these services have no public audio API, so
   links are resolved through SongLink (Odesli), preferring the YouTube
@@ -61,8 +74,9 @@ chat once the TS3 adapter is connected.
 - **Search text:** `!play` accepts free text and runs the same YouTube search
   as `!yt` (fuzzy term matching, channel credits, and a shortened retry when
   nothing is reliable).
-- **Other sources:** local files and direct HTTPS audio URLs are rejected with
-  a clear message.
+- **Other sources:** local files are rejected with a clear message. Direct
+  HTTPS audio URLs (files, HLS, icecast-style streams) play through
+  `!play <audio-url>` via FFmpeg; `http:` is rejected, only `https:`.
 
 No command may accept shell syntax. Rhapsod passes provider arguments directly
 to child processes and never invokes a shell.

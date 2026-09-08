@@ -63,9 +63,10 @@ underruns by sending silence frames, recovering as soon as real audio is
 available. Playback metrics include the delay until the first real audio frame
 and whether the session completed, was skipped, was stopped, or failed.
 
-Media resolver jobs are serialized so CPU-heavy `yt-dlp` processes cannot run
-in parallel and interfere with real-time audio. Playback URL jobs take priority
-over metadata jobs that are still waiting in the resolver queue.
+Media resolver jobs run with bounded concurrency (1-4 workers via
+`RHAPSOD_MAX_CONCURRENT_YTDLP_JOBS`, CPU-adaptive default) so CPU-heavy
+`yt-dlp` processes stay off the real-time audio path. Playback URL jobs take
+priority over metadata jobs that are still waiting in the resolver queue.
 
 SoundCloud uses an isolated public-web adapter. It follows `on.soundcloud.com`
 redirects, discovers and caches the current web client identifier, resolves
