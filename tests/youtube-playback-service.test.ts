@@ -16,6 +16,7 @@ import type {
 import { SoundCloudDrmError } from "../src/media/soundcloud/public-api.js";
 import type { AlternativeSourceResolver } from "../src/media/song-link.js";
 import type { FfmpegPlaybackSession } from "../src/audio/ffmpeg-player.js";
+import { LoudnessProfiler } from "../src/audio/loudness-profiler.js";
 import type { SpotifyResolver } from "../src/media/spotify/api.js";
 import type { LyricsResolver } from "../src/media/lyrics.js";
 import type { AudioPlayer } from "../src/audio/audio-player.js";
@@ -42,6 +43,14 @@ function setup(
     lyricsResolver?: boolean;
     maxQueueTracks?: number;
     maxTracksPerUser?: number;
+    metrics?: {
+      bufferedBytes: number;
+      framesSent: number;
+      maxBufferedBytes: number;
+      rebufferEvents: number;
+      underruns: number;
+    };
+    loudnessProfiler?: LoudnessProfiler;
     prewarmNext?: boolean;
     restoredState?: {
       loopMode?: "off" | "queue" | "track";
@@ -69,7 +78,7 @@ function setup(
       return {
         done: new Promise<void>((resolve) => playbackResolvers.push(resolve)),
         player: {
-          metrics: {
+          metrics: options.metrics ?? {
             bufferedBytes: 0,
             framesSent: options.framesSent ?? 1,
             maxBufferedBytes: 3_840,
@@ -219,8 +228,8 @@ function setup(
         flush: vi.fn(() => Promise.resolve()),
       }
     : undefined;
-  const createPcmStreamMock = options.prewarmNext
-    ? vi.fn(() => ({
+  const createPcmStreamMock: Mock | undefined = options.prewarmNext
+    ? vi.fn((): unknown => ({
         process: {
           exitCode: null,
           signalCode: null,
@@ -271,6 +280,9 @@ function setup(
       ? { maxTracksPerUser: options.maxTracksPerUser }
       : {}),
     ...(options.prewarmNext ? { prewarmNext: true } : {}),
+    ...(options.loudnessProfiler
+      ? { loudnessProfiler: options.loudnessProfiler }
+      : {}),
     ...(options.proxyUrl === undefined ? {} : { proxyUrl: options.proxyUrl }),
   });
   return {
@@ -2755,8 +2767,18 @@ describe("YoutubePlaybackService", () => {
   });
 
   it("prewarms the next track after the midpoint and reuses its stream", async () => {
+    // Real sessions start with framesSent 0 and flip once the prebuffer
+    // drains; the mock must do the same or the prewarm trigger's stability
+    // poll (the production path) never runs in tests.
+    const metrics = {
+      bufferedBytes: 0,
+      framesSent: 0,
+      maxBufferedBytes: 3_840,
+      rebufferEvents: 0,
+      underruns: 0,
+    };
     const { createPlayback, playbackResolvers, resolver, service } = setup({
-      framesSent: 4000,
+      metrics,
       prewarmNext: true,
     });
     resolver.getTrack.mockImplementation((resource: { id: string }) =>
@@ -2777,7 +2799,12 @@ describe("YoutubePlaybackService", () => {
 
     expect(service.current?.id).toBe("first");
     expect(createPlayback).toHaveBeenCalledTimes(1);
-    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // First frame arrives before the stability poll's first 100ms tick: the
+    // poll fires, and the prewarm check runs with playedMs already past the
+    // 60s midpoint of the 120s track, arming the warm stream immediately.
+    metrics.framesSent = Math.ceil(65_000 / 20);
+    await new Promise((resolve) => setTimeout(resolve, 180));
 
     const next = service.queue()[0];
     expect(next?.id).toBe("second");
@@ -2795,8 +2822,15 @@ describe("YoutubePlaybackService", () => {
   });
 
   it("does not prewarm before the midpoint", async () => {
+    const metrics = {
+      bufferedBytes: 0,
+      framesSent: 0,
+      maxBufferedBytes: 3_840,
+      rebufferEvents: 0,
+      underruns: 0,
+    };
     const { createPlayback, playbackResolvers, resolver, service } = setup({
-      framesSent: 1000,
+      metrics,
       prewarmNext: true,
     });
     resolver.getTrack.mockImplementation((resource: { id: string }) =>
@@ -2811,7 +2845,9 @@ describe("YoutubePlaybackService", () => {
     await service.enqueue("https://youtu.be/first", "user-1");
     await service.enqueue("https://youtu.be/second", "user-1");
     await new Promise((resolve) => setImmediate(resolve));
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    // First frame only: 20s into a 120s track, far from the midpoint.
+    metrics.framesSent = Math.ceil(20_000 / 20);
+    await new Promise((resolve) => setTimeout(resolve, 60));
 
     playbackResolvers[0]?.();
     await new Promise((resolve) => setImmediate(resolve));
@@ -2848,5 +2884,93 @@ describe("YoutubePlaybackService", () => {
 
     expect(service.current?.id).toBe("second");
     expect(createPlayback).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps the warm stream through a skip when it matches the next head", async () => {
+    // A skip is the moment the prewarmed stream pays off most; it used to be
+    // discarded unconditionally even when the next track was exactly the one
+    // that had been prewarmed.
+    const metrics = {
+      bufferedBytes: 0,
+      framesSent: 0,
+      maxBufferedBytes: 3_840,
+      rebufferEvents: 0,
+      underruns: 0,
+    };
+    const { createPlayback, playbackResolvers, resolver, service } = setup({
+      metrics,
+      prewarmNext: true,
+    });
+    resolver.getTrack.mockImplementation((resource: { id: string }) =>
+      Promise.resolve({
+        durationSeconds: 120,
+        ...(resource.id === "first"
+          ? { audioUrl: "https://media.example/first" }
+          : {}),
+        id: resource.id,
+        title: `Track ${resource.id}`,
+        webpageUrl: `https://www.youtube.com/watch?v=${resource.id}`,
+      }),
+    );
+
+    await service.enqueue("https://youtu.be/first", "user-1");
+    await service.enqueue("https://youtu.be/second", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+    metrics.framesSent = Math.ceil(65_000 / 20);
+    await new Promise((resolve) => setTimeout(resolve, 180));
+    expect(createPlayback).toHaveBeenCalledTimes(1);
+
+    service.skip();
+    await new Promise((resolve) => setImmediate(resolve));
+    // The skip stops the session; resolve its done promise so the serialized
+    // chain moves on to the next track (the mock stop() does not do that).
+    playbackResolvers[0]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(service.current?.id).toBe("second");
+    expect(createPlayback).toHaveBeenCalledTimes(2);
+    expect((createPlayback as Mock).mock.calls.at(-1)?.[3]).toHaveProperty(
+      "stream",
+    );
+  });
+
+  it("bakes loudness options into the prewarm stream", async () => {
+    // Warm-started tracks must sound identical to cold-started ones; the
+    // prewarm stream used to omit loudness entirely.
+    const metrics = {
+      bufferedBytes: 0,
+      framesSent: 0,
+      maxBufferedBytes: 3_840,
+      rebufferEvents: 0,
+      underruns: 0,
+    };
+    const { createPcmStreamMock, resolver, service } = setup({
+      metrics,
+      prewarmNext: true,
+      loudnessProfiler: new LoudnessProfiler({ targetLufs: -16 }),
+    });
+    resolver.getTrack.mockImplementation((resource: { id: string }) =>
+      Promise.resolve({
+        durationSeconds: 120,
+        ...(resource.id === "first"
+          ? { audioUrl: "https://media.example/first" }
+          : {}),
+        id: resource.id,
+        title: `Track ${resource.id}`,
+        webpageUrl: `https://www.youtube.com/watch?v=${resource.id}`,
+      }),
+    );
+
+    await service.enqueue("https://youtu.be/first", "user-1");
+    await service.enqueue("https://youtu.be/second", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+    metrics.framesSent = Math.ceil(65_000 / 20);
+    await new Promise((resolve) => setTimeout(resolve, 180));
+
+    expect(createPcmStreamMock).toHaveBeenCalled();
+    const options = createPcmStreamMock?.mock.calls.at(-1)?.[1] as
+      Record<string, unknown> | undefined;
+    expect(options).toMatchObject({ loudnessTargetLufs: -16 });
   });
 });

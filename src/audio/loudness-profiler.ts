@@ -83,6 +83,11 @@ export class LoudnessProfiler {
     this.#execFile = options.execFile ?? execFileAsync;
   }
 
+  /** The LUFS target handed to ffmpeg; used for prewarm option parity. */
+  get targetLufs(): number {
+    return this.#targetLufs;
+  }
+
   cached(source: string): LoudnessProfile | undefined {
     const entry = this.#profiles.get(source);
     if (entry === undefined) return undefined;

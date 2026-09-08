@@ -372,6 +372,9 @@ async function main(): Promise<void> {
         ...(options?.audioFilter === undefined
           ? {}
           : { audioFilter: options.audioFilter }),
+        ...(options?.loudnessProfile === undefined
+          ? {}
+          : { loudnessProfile: options.loudnessProfile }),
         ...(options?.stream === undefined ? {} : { stream: options.stream }),
       }),
     ...(config.RHAPSOD_WARP_PROXY === undefined
