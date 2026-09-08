@@ -14,13 +14,33 @@ happens on 2.x.
 ### 2.x — active line
 
 Production runs on OCI (4 vCPUs, 3 GB RAM) and is deployed from `main` on
-every release. The current release is **v2.3.0** (see
+every release. The current release is **v2.4.0** (see
 [CHANGELOG.md](../CHANGELOG.md)). History: v2.0.0 rebuilt the playback stack
-for the OCI profile, v2.1.0–v2.2.0 added gapless playback and hardening, and
+for the OCI profile, v2.1.0–v2.2.0 added gapless playback and hardening,
 v2.3.0 shipped the owner-facing surface (web panel, one-command installer,
-YouTube 403 resilience).
+YouTube 403 resilience), v2.3.1 fixed the dashboard hang and hardened the
+panel, and v2.4.0 made handoffs actually gapless with an observable driver.
 
 ## Released highlights
+
+### v2.4.0 (2026-09-08) — gapless playback, observable driver
+
+The prewarm machinery that had never fired in production now drives track
+handoffs (~0.7–2 s gaps → ~20–50 ms), two-pass loudness normalization reaches
+ffmpeg, and a 90 s watchdog guarantees a wedged resolution can no longer
+silence the bot. The panel reports `buffering` while resolving instead of a
+misleading `idle`. Underneath: the prepared-URL layer extracted from the
+playback service, an explicit `PlaybackEpoch` staleness protocol, Opus 128
+kbps default, parallel music-aware search, SoundCloud/direct-URL cache
+persistence, and an installer that survives a fresh VPS end to end (panel-only
+setup mode with a guided wizard).
+
+### v2.3.1 (2026-09-07) — panel hang fix
+
+The dashboard no longer hangs behind a wrong `content-length` (gzip path
+removed); `/api/env` writes restricted to known settings; the version string
+comes from `package.json`; HEAD-rejecting hosts get a ranged-GET fallback;
+security headers on every panel response.
 
 ### v2.3.0 (2026-09-03) — owner-facing surface
 
@@ -57,8 +77,9 @@ logs clean (0 underruns / 0 zombies over multi-hour sessions).
 
 Implement a TS6 voice adapter behind the same connection contract the TS3
 adapter exposes and run the shared behavior suite against both protocols.
-Prerequisite in progress: pin the TS3 connection contract with tests
-(`src/adapters/ts3` is the least-covered layer at ~38% lines). See
+Prerequisite advanced: the TS3 connection contract is pinned behind a mocked
+client (#40), and the playback staleness protocol is an explicit tested
+value object (#51). See
 [issue #12](https://github.com/Juanzaan/rhapsod/issues/12).
 
 ### User preferences (Phase 2.7)
@@ -75,9 +96,11 @@ See [issue #21](https://github.com/Juanzaan/rhapsod/issues/21).
 ### Internal debt
 
 - Split `src/application/youtube-playback-service.ts` (~2k lines) into
-  resolver / prefetch / playback controller / persistence.
+  resolver / prefetch / playback controller / persistence. Cut 1 done: the
+  prepared-URL store is its own tested module (#49).
 - Extract `src/main.ts` wiring (~860 lines, low coverage) into tested
-  init modules.
+  init modules. First piece done: one shared yt-dlp resolver factory for
+  both boot paths (#50).
 
 ## Shipped checks from other bots
 
