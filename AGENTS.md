@@ -42,12 +42,44 @@ Useful subsets: `npx vitest run tests/<file>.test.ts` for one suite,
   (`./config.js`), because tsc emits ESM directly.
 - **Prettier is the only formatter.** Don't hand-align; run
   `npx prettier --write <file>` if `format:check` complains.
-- **No comments explaining what code does** unless it explains _why_ —
+- **No comments explaining what code does** unless it explains _why_:
   trade-offs, incidents, non-obvious decisions (see `panel-server.ts` gzip
   comment for the bar).
 - **User-facing chat strings are in Spanish** ("Reproduciendo:", "Cola:").
-  Code, identifiers, comments, docs: English. Don't translate one into the
-  other.
+  Code and identifiers: English, always. Docs: bilingual, see below.
+
+## Docs (`docs/`, `README.md`, `CHANGELOG.md`)
+
+- **Two files, two languages.** Every user-facing doc ships in English
+  (`install.md`) and neutral Spanish (`install.es.md`), cross-linked at the
+  top. Update both in the same PR; changing one without the other is an
+  incomplete PR. (`CHANGELOG.md` stays English-only: Keep-a-Changelog
+  convention, and release-please reads it.)
+- **Neutral Spanish, no demonyms.** No voseo, no regional slang, no
+  country-specific references: nothing in the text may reveal where the
+  author is from. Prefer the infinitive in instructions ("Pegar el
+  archivo", never "Pega/Pegá el archivo").
+- **Write like a developer, not a model.** Hard bans, enforced in review:
+  - Slop vocabulary: delve, leverage, utilize, robust, seamless, ecosystem,
+    holistic, groundbreaking, cutting-edge, empower, unlock, realm,
+    tapestry, paradigm, synergy, landscape, moreover, furthermore,
+    comprehensive, meticulous. Use the plain word (use, full, strong) or
+    delete the word.
+  - Padding with zero information: "it's worth noting", "needless to say",
+    "feel free to", "in today's fast-paced", "as you may know".
+  - Cliché structures: `Question? Answer.` pairs, "This isn't X, it's Y"
+    contrasts, "Whether you're X or Y" appeals, "In a world where" openers.
+  - Decorative emojis and emoji checklists. No emojis in docs, ever.
+  - Em dashes (—), en dashes (–), curly quotes (" " ' '): plain `-`, `"`,
+    `'` instead.
+  - Anthropomorphizing code ("the service wants", "ffmpeg tries hard").
+  - "Simply", "easy", "just", "quickly" in procedures. If it were simple,
+    the doc would not need to exist.
+  - Bold marks behavior, paths and commands, never whole sentences.
+- **Procedures over prose.** A doc change answers three things: what
+  changed, the exact commands/paths/versions, and how to verify. One idea
+  per paragraph. Match the formatting density around the edit; never
+  restate the diff as bullets (WHAT without WHY is the AI-copilot tell).
 
 ## Layout
 
@@ -62,7 +94,7 @@ src/
   observability/   pino logging, metrics
   lib/             query-parser, ssrf guard, shared utils
   domain/          state store
-  config.ts        zod schema — the source of truth for every RHAPSOD_* key
+  config.ts        zod schema: the source of truth for every RHAPSOD_* key
 tests/             vitest, colocated mirrors of src
 scripts/           yt-dlp daemon (python), lint-scripts, spotify-auth
 docs/              install, deployment, commands, roadmap, runbooks
@@ -89,14 +121,14 @@ docs/              install, deployment, commands, roadmap, runbooks
 
 release-please owns versions, tags and the GitHub release. Conventional
 commits on `main` accumulate in the open release PR; merging it tags and
-publishes. Manual tags/changelog edits are not needed — and
+publishes. Manual tags/changelog edits are not needed, and
 `skip-changelog: true` in `release-please-config.json` means the CHANGELOG is
 hand-written in the release PR, not generated.
 
 Deploy: production runs from `main` on OCI via systemd
 (`EnvironmentFile=/etc/rhapsod.env`, `ExecStart=node dist/main.js`). Deploy =
 `git pull --ff-only && npm ci && npm run build && systemctl restart rhapsod`.
-The bot connects to a live server with real users — never restart it without
+The bot connects to a live server with real users. Never restart it without
 checking nothing is playing (`/api/state` → `playerState`).
 
 ## Hard rules
