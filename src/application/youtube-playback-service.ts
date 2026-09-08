@@ -1504,9 +1504,13 @@ export class YoutubePlaybackService {
             const retries = this.#retries.get(track) ?? 0;
             if (retries < MAX_AUDIO_URL_403_RETRIES) {
               this.#retries.set(track, retries + 1);
-              // Invalidate stale URL (daemon may have cached a 403'd host)
+              // Invalidate stale URL (daemon may have cached a 403'd host).
+              // Awaited on purpose: the requeued track's re-resolve can reach
+              // the daemon before a fire-and-forget invalidate lands, and the
+              // daemon would serve the same dead URL again — burning ~10-25s
+              // of dead air and a retry on a URL already known bad.
               this.#preparedStore.drop(track.source);
-              void this.#resolver
+              await this.#resolver
                 .invalidateAudioUrl?.(track.source)
                 .catch(() => undefined);
               if (generation === this.#generation && this.#current === track) {

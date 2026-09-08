@@ -138,6 +138,7 @@ function setup(
     expandPlaylist: vi.fn<YoutubePlaybackResolver["expandPlaylist"]>(() =>
       Promise.resolve({ tracks: [] }),
     ),
+    invalidateAudioUrl: vi.fn(() => Promise.resolve(true)),
   };
   const encoder: RhapsodOpusEncoder = {
     close: vi.fn(),
@@ -2972,5 +2973,74 @@ describe("YoutubePlaybackService", () => {
     const options = createPcmStreamMock?.mock.calls.at(-1)?.[1] as
       Record<string, unknown> | undefined;
     expect(options).toMatchObject({ loudnessTargetLufs: -16 });
+  });
+
+  it("awaits the daemon invalidate before re-resolving a 403'd track", async () => {
+    // Fire-and-forget invalidation raced the requeued track's re-resolve to
+    // the daemon: the daemon could serve the same dead URL again, burning
+    // seconds of dead air and a retry budget on a URL already known bad.
+    const events: string[] = [];
+    let failFirstWith403 = true;
+    const metrics = {
+      bufferedBytes: 0,
+      framesSent: 0,
+      maxBufferedBytes: 3_840,
+      rebufferEvents: 0,
+      underruns: 0,
+    };
+    const playbackResolvers: Array<() => void> = [];
+    const createPlayback = vi.fn((): FfmpegPlaybackSession => ({
+      done: failFirstWith403
+        ? new Promise<void>((_, reject) => {
+            failFirstWith403 = false;
+            reject(
+              new Error("FFmpeg exited with code 1: HTTP error 403 Forbidden"),
+            );
+          })
+        : new Promise<void>((resolve) => playbackResolvers.push(resolve)),
+      player: {
+        metrics,
+        setVolume: vi.fn(),
+      } as unknown as AudioPlayer,
+      stop: vi.fn(),
+    }));
+    const { resolver, service } = setup({ createPlayback });
+    (resolver.invalidateAudioUrl as Mock).mockImplementation(() => {
+      events.push("invalidate-start");
+      return new Promise<boolean>((resolve) => {
+        setTimeout(() => {
+          events.push("invalidate-end");
+          resolve(true);
+        }, 40);
+      });
+    });
+    resolver.getAudioUrlFromUrl.mockImplementation(() => {
+      events.push("resolve");
+      return Promise.resolve("https://media.example/fresh");
+    });
+    resolver.getTrack.mockImplementation((resource: { id: string }) =>
+      Promise.resolve({
+        ...(resource.id === "first"
+          ? { audioUrl: "https://media.example/stale-403" }
+          : {}),
+        durationSeconds: 120,
+        id: resource.id,
+        title: `Track ${resource.id}`,
+        webpageUrl: `https://www.youtube.com/watch?v=${resource.id}`,
+      }),
+    );
+
+    await service.enqueue("https://youtu.be/first", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setTimeout(resolve, 120));
+
+    // The invalidate must complete before the requeued track re-resolves.
+    const invalidateStart = events.indexOf("invalidate-start");
+    const invalidateEnd = events.indexOf("invalidate-end");
+    const resolveAfter = events.indexOf("resolve", invalidateEnd);
+    expect(invalidateStart).toBeGreaterThanOrEqual(0);
+    expect(invalidateEnd).toBeGreaterThan(invalidateStart);
+    expect(resolveAfter).toBeGreaterThan(invalidateEnd);
+    expect(service.current?.id).toBe("first");
   });
 });
