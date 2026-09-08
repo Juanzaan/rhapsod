@@ -19,6 +19,8 @@ const packageVersion = (
 import { Ts3IdentityStore } from "./adapters/ts3/identity-store.js";
 import {
   createTs3Connection,
+  DUPLICATE_INSTANCE_EXIT_CODE,
+  DuplicateBotInstanceError,
   withTimeout,
 } from "./adapters/ts3/ts3-connection.js";
 import { createRhapsodOpusEncoder } from "./audio/opus-encoder.js";
@@ -752,7 +754,10 @@ async function main(): Promise<void> {
         await new Promise((resolve) => setTimeout(resolve, delayMs));
         try {
           await withTimeout(
-            connection.connect(),
+            // Skip the duplicate check here: our own ghost can still be
+            // listed right after a dropped connection, and refusing there
+            // would keep a live bot down on every network blip.
+            connection.connect({ skipDuplicateCheck: true }),
             reconnectConnectTimeoutMs,
             "Reconnect attempt timed out",
           );
@@ -918,6 +923,11 @@ export function userFacingError(error: Error): string {
 }
 
 void main().catch((error: unknown) => {
+  if (error instanceof DuplicateBotInstanceError) {
+    process.stderr.write(`Rhapsod refused to start: ${error.message}\n`);
+    process.exitCode = DUPLICATE_INSTANCE_EXIT_CODE;
+    return;
+  }
   const message =
     error instanceof Error ? error.message : "Unknown startup error";
   process.stderr.write(`Rhapsod failed to start: ${message}\n`);
