@@ -40,8 +40,15 @@ for (const entry of readdirSync(scriptDir)) {
   if (entry.endsWith(".py")) checkPython(file);
 }
 
-for (const unit of ["rhapsod.service", "rhapsod-ytdlp-daemon.service"]) {
-  const content = readFileSync(join(scriptDir, "..", unit), "utf8");
+for (const unit of [
+  "rhapsod.service",
+  "rhapsod-ytdlp-daemon.service",
+  "bgutil-pot-provider.service",
+]) {
+  const content = readFileSync(
+    join(scriptDir, "..", "deploy", "systemd", unit),
+    "utf8",
+  );
   if (!content.includes("[Unit]") || !content.includes("[Service]")) {
     failures.push(unit);
     console.error(`FAIL ${unit}: missing [Unit] or [Service] section`);

@@ -98,6 +98,7 @@ src/
   config.ts        zod schema: the source of truth for every RHAPSOD_* key
 tests/             vitest, colocated mirrors of src
 scripts/           yt-dlp daemon (python), lint-scripts, spotify-auth
+deploy/systemd/    unit files for manual installs (install.sh generates its own)
 docs/              install, deployment, commands, roadmap, runbooks
 ```
 
