@@ -3074,3 +3074,78 @@ describe("YoutubePlaybackService", () => {
     expect(service.current?.id).toBe("first");
   });
 });
+
+describe("driver state machine", () => {
+  it("reports buffering while resolving and plays the next track after a wedged resolution", async () => {
+    // A resolution that never settles used to wedge the driver loop forever:
+    // chainActive stayed claimed and nothing played until restart. The
+    // watchdog bounds it; the chain must survive and move on.
+    vi.useFakeTimers();
+    try {
+      const { onPlaybackError, resolver, service } = setup();
+      resolver.getTrack.mockImplementation((resource: { id: string }) =>
+        Promise.resolve({
+          id: resource.id,
+          title: `Track ${resource.id}`,
+          webpageUrl: `https://www.youtube.com/watch?v=${resource.id}`,
+        }),
+      );
+      resolver.getAudioUrlFromUrl.mockImplementation((url?: string) =>
+        url !== undefined && url.includes("v=first")
+          ? new Promise<string>(() => {})
+          : Promise.resolve("https://media.example/audio"),
+      );
+
+      await service.enqueue("https://youtu.be/first", "user-1");
+      await service.enqueue("https://youtu.be/second", "user-1");
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(service.driverState).toBe("resolving");
+      expect(service.playerState).toBe("buffering");
+
+      await vi.advanceTimersByTimeAsync(90_000);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(onPlaybackError).toHaveBeenCalledTimes(1);
+      const [failedTrack, failure] = onPlaybackError.mock.calls[0] as [
+        { id: string },
+        Error,
+      ];
+      expect(failedTrack.id).toBe("first");
+      expect(failure.message).toMatch(/timed out/);
+      // The chain survived: the wedged track was dropped and the next one
+      // resolved normally and started playing.
+      expect(service.current?.id).toBe("second");
+      expect(service.driverState).toBe("playing");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("parks idle with no session when the queue drains", async () => {
+    const { playbackResolvers, resolver, service } = setup();
+    resolver.getTrack.mockImplementation((resource: { id: string }) =>
+      Promise.resolve({
+        ...(resource.id === "first"
+          ? { audioUrl: "https://media.example/first" }
+          : {}),
+        id: resource.id,
+        title: `Track ${resource.id}`,
+        webpageUrl: `https://www.youtube.com/watch?v=${resource.id}`,
+      }),
+    );
+
+    await service.enqueue("https://youtu.be/first", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(service.driverState).toBe("playing");
+    expect(service.playerState).toBe("idle");
+
+    playbackResolvers[0]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(service.current).toBeUndefined();
+    expect(service.driverState).toBe("idle");
+    expect(service.playerState).toBe("idle");
+  });
+});
