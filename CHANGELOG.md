@@ -6,6 +6,69 @@ for [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-09-08
+
+The release that makes playback transitions actually gapless and the driver
+observable: the prewarm machinery that had never fired in production now
+drives track handoffs, loudness normalization finally reaches ffmpeg, and a
+watchdog guarantees a wedged resolution can no longer silence the bot.
+
+### Added
+
+- **Gapless handoffs that work**: the prewarm system (warm ffmpeg stream for
+  the next track) was fully built and enabled but never ran — its only call
+  site executed when every real session still had zero frames sent. The
+  stability poll now schedules the prewarm check, and skips preserve a
+  matching warm stream. Gap between tracks: ~0.7–2 s → ~20–50 ms (#47).
+- **Two-pass loudness, for real**: profiles are measured during prewarm and
+  `main.ts` no longer drops them before ffmpeg, so warm- and cold-started
+  tracks normalize identically (#47).
+- **Resolve watchdog**: a URL resolution that never settles used to wedge the
+  whole driver loop forever (nothing played until restart). Past 90 s the
+  track is reported and skipped like a failed one, and the chain moves on.
+  The panel reports `buffering` instead of `idle` while resolving (#52).
+- **Explicit staleness protocol**: the `generation`/`stopEpoch` counters that
+  coordinated skip/stop/seek/expansion races are now a named `PlaybackEpoch`
+  value object with unit tests — a skip abandons the handoff but spares an
+  in-flight playlist expansion, a stop parks everything (#51).
+- **Prepared-URL store**: the resolved-URL layer (in-memory entries, in-flight
+  dedupe, per-entry abort, persistent-cache seeding) extracted from the
+  2k-line playback service into its own tested module (#49).
+- **Shared yt-dlp resolver factory**: the connected bot and panel-only setup
+  mode built the executor/resolver pair twice with drifting optionals; one
+  factory wires both, and it is the first unit-tested piece of `main.ts`
+  wiring (#50).
+- **Opus 128 kbps default** (was 96): the TS3 packet ceiling is ~199 kbps and
+  the encoder already clamps VBR peaks, so 128 k fits with headroom;
+  complexity was already maxed at 10. New deployments only (#48).
+- **Parallel music-aware search**: the music index now runs alongside generic
+  search instead of only behind it, and the pool grew from 15 to 30
+  candidates. Queries like "poland" stop paying up to 5 s extra (#48).
+- **One-command install survives a fresh VPS**: the installer had never been
+  run end-to-end and broke three ways (daemon `ProtectHome` hid its own
+  script, empty `TS3_HOST` failed validation so the wizard was unreachable,
+  the bot was never started). Fresh installs now boot panel-only into a
+  setup-mode wizard that re-enables auto-connect on save (#45).
+
+### Fixed
+
+- 403-retry timers leaked an orphaned ffmpeg when a skip landed inside the
+  retry window; the pending timer is now cancelled in `stop()` (#48).
+- The 403 path invalidated the daemon cache fire-and-forget, so the requeue
+  could re-fetch the same dead URL — burning a retry on a known-bad host.
+  The invalidate is awaited before requeueing (#48).
+- SoundCloud and direct-URL resolutions skipped the persistent cache, so
+  every repeat play re-resolved; both now persist, and the no-expire TTL
+  went from 10 to 60 minutes (#48).
+- Empty search results were cached for the full 60-minute TTL, so one
+  transient failure poisoned the query for an hour. Only successful searches
+  are cached now (#42).
+- The OAuth helper reflected an attacker-controllable query param into its
+  HTTP response body (CodeQL high). It now answers static text as
+  `text/plain` (#46).
+
+## [2.3.1] - 2026-09-07
+
 ### Fixed
 
 - Panel dashboard hung forever in browsers and re-prompted for the password:
@@ -613,7 +676,9 @@ preserving low-end fallbacks where practical.
 - Removed dead `src/ports` contracts and superseded abstractions; the TS3
   adapter now exposes the only connection contract the application needs.
 
-[unreleased]: https://github.com/Juanzaan/rhapsod/compare/v2.3.0...HEAD
+[unreleased]: https://github.com/Juanzaan/rhapsod/compare/v2.4.0...HEAD
+[2.4.0]: https://github.com/Juanzaan/rhapsod/compare/v2.3.1...v2.4.0
+[2.3.1]: https://github.com/Juanzaan/rhapsod/compare/v2.3.0...v2.3.1
 [2.3.0]: https://github.com/Juanzaan/rhapsod/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/Juanzaan/rhapsod/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/Juanzaan/rhapsod/compare/v2.0.0...v2.1.0
