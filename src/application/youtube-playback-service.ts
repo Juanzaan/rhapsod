@@ -145,6 +145,7 @@ const AUTH_REQUIRED_RE =
 const MAX_AUDIO_URL_403_RETRIES = 3;
 const PREFETCH_STABILITY_TIMEOUT_MS = 8_000;
 const PREFETCH_STABILITY_POLL_MS = 100;
+const PREWARM_CHECK_INTERVAL_MS = 2_000;
 const PREFETCH_DEPTH = 6;
 const PLAYLIST_PREFETCH_DEPTH = 8;
 const PLAYLIST_PREFETCH_BATCH = 3;
@@ -1226,7 +1227,9 @@ export class YoutubePlaybackService {
     this.#generation++;
     this.#pendingSkips++;
     this.#pendingSeek = undefined;
-    this.#discardWarmStream();
+    // Keep a warm stream that matches the next queue head: a skip is exactly
+    // the moment the prewarmed stream pays off. #takeWarmStream discards it
+    // safely at handoff time if the head changed instead.
     if (this.#current) this.#invalidatePrepared(this.#current.source);
     if (this.#session) this.#sessionEndReasons.set(this.#session, "skipped");
     this.#session?.stop();
@@ -1502,7 +1505,6 @@ export class YoutubePlaybackService {
         this.#recordHistory(track);
         this.#safeObserver(() => this.#onPlaybackStarted(track));
         this.#prefetchWhenStable();
-        this.#prewarmNext();
         let playbackError: unknown;
         try {
           await session.done;
@@ -1901,9 +1903,31 @@ export class YoutubePlaybackService {
         Date.now() - startedAt >= PREFETCH_STABILITY_TIMEOUT_MS
       ) {
         this.#prefetchNext();
+        // The first frame is the earliest moment #prewarmNext's
+        // framesSent === 0 guard can pass; the midpoint check inside still
+        // decides when the warm stream actually starts. Re-checking on a
+        // short timer keeps the handoff armed through the whole track
+        // without prewarming long before it is needed.
+        this.#schedulePrewarmCheck();
         return;
       }
       setTimeout(check, PREFETCH_STABILITY_POLL_MS);
+    };
+    check();
+  }
+
+  #schedulePrewarmCheck(): void {
+    const session = this.#session;
+    const current = this.#current;
+    if (!session || !current) return;
+    const check = (): void => {
+      if (this.#session !== session || this.#current !== current) return;
+      this.#prewarmNext();
+      // Re-arm until the warm stream exists or the track changes; the
+      // midpoint guard inside #prewarmNext does the actual gating.
+      if (this.#warmStream === undefined) {
+        setTimeout(check, PREWARM_CHECK_INTERVAL_MS);
+      }
     };
     check();
   }
@@ -1943,9 +1967,19 @@ export class YoutubePlaybackService {
         ) {
           return undefined;
         }
+        // Option parity with the cold path (#createPlayback's playbackOptions
+        // + main.ts wiring): without loudness here, warm-started tracks would
+        // sound different from cold-started ones.
+        const loudnessProfile = this.#loudnessProfiler?.cached(next.source);
         const stream = this.#createPcmStream(url, {
           audioFilter: { name: this.#filter, param: this.#filterParam },
           ...(this.#proxyUrl === undefined ? {} : { proxyUrl: this.#proxyUrl }),
+          ...(this.#loudnessProfiler === undefined
+            ? {}
+            : {
+                loudnessTargetLufs: this.#loudnessProfiler.targetLufs,
+                ...(loudnessProfile === undefined ? {} : { loudnessProfile }),
+              }),
         });
         this.#warmStream = { source: next.source, stream };
         return stream;
