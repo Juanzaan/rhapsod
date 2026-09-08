@@ -69,7 +69,7 @@ const configSchema = z.object({
     .int()
     .min(64_000)
     .max(160_000)
-    .default(96_000),
+    .default(128_000),
   RHAPSOD_OPUS_COMPLEXITY: z.coerce.number().int().min(0).max(10).default(10),
   RHAPSOD_OPUS_PACKET_LOSS_PERCENT: z.coerce
     .number()

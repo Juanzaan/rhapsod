@@ -138,6 +138,7 @@ function setup(
     expandPlaylist: vi.fn<YoutubePlaybackResolver["expandPlaylist"]>(() =>
       Promise.resolve({ tracks: [] }),
     ),
+    invalidateAudioUrl: vi.fn(() => Promise.resolve(true)),
   };
   const encoder: RhapsodOpusEncoder = {
     close: vi.fn(),
@@ -321,11 +322,13 @@ describe("audioUrlExpiresAt", () => {
     expect(expiresAt).toBe(2_000_000_000_000 - 60_000);
   });
 
-  it("falls back to a conservative TTL without an expire value", () => {
+  it("falls back to an hour TTL without an expire value", () => {
+    // URLs without an expire parameter (SoundCloud CDN, direct streams)
+    // typically outlive the old 10-minute fallback by far.
     const before = Date.now();
     const expiresAt = audioUrlExpiresAt("https://media.example/audio");
     expect(expiresAt).toBeGreaterThan(before);
-    expect(expiresAt).toBeLessThan(before + 11 * 60_000);
+    expect(expiresAt).toBeLessThan(before + 61 * 60_000);
   });
 });
 
@@ -2239,6 +2242,34 @@ describe("YoutubePlaybackService", () => {
     expect(service.current?.id).toBe("cached");
   });
 
+  it("persists SoundCloud audio URLs so restarts skip re-resolution", async () => {
+    // SoundCloud resolutions used to skip the persistent cache entirely, so
+    // every repeat play after a restart paid the full resolution again.
+    const cache = AudioUrlCache.memoryOnly();
+    const { service, soundcloudResolver } = setup({
+      audioUrlCache: cache,
+      soundcloudResolver: true,
+    });
+    // The default SoundCloud mock rejects getTrack (API down); this test
+    // needs the happy path. No inline audioUrl: real SoundCloud metadata does
+    // not carry one, so audio resolution goes through getAudioUrl later.
+    soundcloudResolver.getTrack.mockImplementation((url?: string) =>
+      Promise.resolve({
+        id: "soundcloud-track",
+        title: "SoundCloud Track",
+        webpageUrl: url ?? "https://soundcloud.com/artist/track",
+      }),
+    );
+
+    await service.enqueue("https://soundcloud.com/artist/track", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(soundcloudResolver.getAudioUrl).toHaveBeenCalledTimes(1);
+    const persisted = cache.get("https://soundcloud.com/artist/track");
+    expect(persisted?.url).toBe("https://media.example/soundcloud-api");
+    expect(persisted?.expiresAt).toBeGreaterThan(Date.now() + 30 * 60_000);
+  });
+
   it("rejects seek when nothing is playing", () => {
     const { service } = setup();
 
@@ -2972,5 +3003,74 @@ describe("YoutubePlaybackService", () => {
     const options = createPcmStreamMock?.mock.calls.at(-1)?.[1] as
       Record<string, unknown> | undefined;
     expect(options).toMatchObject({ loudnessTargetLufs: -16 });
+  });
+
+  it("awaits the daemon invalidate before re-resolving a 403'd track", async () => {
+    // Fire-and-forget invalidation raced the requeued track's re-resolve to
+    // the daemon: the daemon could serve the same dead URL again, burning
+    // seconds of dead air and a retry budget on a URL already known bad.
+    const events: string[] = [];
+    let failFirstWith403 = true;
+    const metrics = {
+      bufferedBytes: 0,
+      framesSent: 0,
+      maxBufferedBytes: 3_840,
+      rebufferEvents: 0,
+      underruns: 0,
+    };
+    const playbackResolvers: Array<() => void> = [];
+    const createPlayback = vi.fn((): FfmpegPlaybackSession => ({
+      done: failFirstWith403
+        ? new Promise<void>((_, reject) => {
+            failFirstWith403 = false;
+            reject(
+              new Error("FFmpeg exited with code 1: HTTP error 403 Forbidden"),
+            );
+          })
+        : new Promise<void>((resolve) => playbackResolvers.push(resolve)),
+      player: {
+        metrics,
+        setVolume: vi.fn(),
+      } as unknown as AudioPlayer,
+      stop: vi.fn(),
+    }));
+    const { resolver, service } = setup({ createPlayback });
+    (resolver.invalidateAudioUrl as Mock).mockImplementation(() => {
+      events.push("invalidate-start");
+      return new Promise<boolean>((resolve) => {
+        setTimeout(() => {
+          events.push("invalidate-end");
+          resolve(true);
+        }, 40);
+      });
+    });
+    resolver.getAudioUrlFromUrl.mockImplementation(() => {
+      events.push("resolve");
+      return Promise.resolve("https://media.example/fresh");
+    });
+    resolver.getTrack.mockImplementation((resource: { id: string }) =>
+      Promise.resolve({
+        ...(resource.id === "first"
+          ? { audioUrl: "https://media.example/stale-403" }
+          : {}),
+        durationSeconds: 120,
+        id: resource.id,
+        title: `Track ${resource.id}`,
+        webpageUrl: `https://www.youtube.com/watch?v=${resource.id}`,
+      }),
+    );
+
+    await service.enqueue("https://youtu.be/first", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setTimeout(resolve, 120));
+
+    // The invalidate must complete before the requeued track re-resolves.
+    const invalidateStart = events.indexOf("invalidate-start");
+    const invalidateEnd = events.indexOf("invalidate-end");
+    const resolveAfter = events.indexOf("resolve", invalidateEnd);
+    expect(invalidateStart).toBeGreaterThanOrEqual(0);
+    expect(invalidateEnd).toBeGreaterThan(invalidateStart);
+    expect(resolveAfter).toBeGreaterThan(invalidateEnd);
+    expect(service.current?.id).toBe("first");
   });
 });

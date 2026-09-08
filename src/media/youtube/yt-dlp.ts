@@ -12,15 +12,20 @@ import { fetchInnertubePlayerAudioUrl } from "./innertube-player.js";
 import {
   searchInnertubeMusicVideos,
   searchInnertubeVideos,
+  type InnertubeSearchResult,
 } from "./innertube-search.js";
 
 const MAX_BUFFER_BYTES = 8 * 1024 * 1024;
-const DAEMON_TIMEOUT_MS = 8_000;
+// The daemon serializes extractions behind one lock (by design: YouTube
+// rate-limits the datacenter IP, parallel extraction degrades everything).
+// 8s false-timed-out whenever one pathological video queued several
+// extraction attempts; 15s absorbs that while callers still fail fast
+// enough to try the local yt-dlp fallback.
+const DAEMON_TIMEOUT_MS = 15_000;
 const SEARCH_CACHE_TTL_MS = 60 * 60 * 1000;
 const SEARCH_CACHE_MAX_ENTRIES = 500;
 const ABORT_GRACE_MS = 3_000;
 const AUDIO_FORMAT_SELECTOR = "251/bestaudio[acodec!=none]/bestaudio";
-const PREFETCH_BATCH_SIZE = 10;
 
 export const YTDLP_ABORT_ERROR = "yt-dlp job aborted";
 
@@ -555,40 +560,38 @@ export class YoutubeResolver {
   async #searchViaInnertube(
     query: string,
   ): Promise<readonly YoutubeSearchCandidate[] | undefined> {
-    // Generic YouTube search is more reliable for 403 (datacenter IP)
-    // Music search is kept as fallback for queries like "poland" where generic returns travel
-    const results = await searchInnertubeVideos(query);
+    // Generic search is more reliable for 403 (datacenter IP); music search
+    // rescues queries like "poland" where generic returns travel vlogs. Both
+    // run in parallel - the music branch used to wait behind the generic one,
+    // adding its full latency (up to 5s) whenever it was needed. Ranking is
+    // pure CPU over a handful of candidates, so the wider pool (30 results)
+    // costs nothing measurable and improves fallback choices.
+    const [results, musicResults] = await Promise.all([
+      searchInnertubeVideos(query).catch(() => []),
+      searchInnertubeMusicVideos(query).catch(() => []),
+    ]);
+    const toCandidate = (result: InnertubeSearchResult) => ({
+      ...(result.durationSeconds === undefined
+        ? {}
+        : { durationSeconds: result.durationSeconds }),
+      ...(result.channel === undefined ? {} : { channel: result.channel }),
+      id: result.id,
+      title: result.title,
+      webpageUrl: `https://www.youtube.com/watch?v=${result.id}`,
+    });
     if (results.length > 0) {
       const hasMusicLike = results.some(
         (r) =>
           /official|audio|lyrics|topic/i.test(r.title) ||
           /topic|official/i.test(r.channel ?? ""),
       );
-      if (!hasMusicLike) {
-        const musicResults = await searchInnertubeMusicVideos(query);
-        if (musicResults.length > 0) {
-          return musicResults.map((result) => ({
-            ...(result.durationSeconds === undefined
-              ? {}
-              : { durationSeconds: result.durationSeconds }),
-            ...(result.channel === undefined
-              ? {}
-              : { channel: result.channel }),
-            id: result.id,
-            title: result.title,
-            webpageUrl: `https://www.youtube.com/watch?v=${result.id}`,
-          }));
-        }
+      if (!hasMusicLike && musicResults.length > 0) {
+        return musicResults.map(toCandidate);
       }
-      return results.map((result) => ({
-        ...(result.durationSeconds === undefined
-          ? {}
-          : { durationSeconds: result.durationSeconds }),
-        ...(result.channel === undefined ? {} : { channel: result.channel }),
-        id: result.id,
-        title: result.title,
-        webpageUrl: `https://www.youtube.com/watch?v=${result.id}`,
-      }));
+      return results.map(toCandidate);
+    }
+    if (musicResults.length > 0) {
+      return musicResults.map(toCandidate);
     }
     return undefined;
   }
@@ -761,9 +764,14 @@ export class YoutubeResolver {
 
   async invalidateAudioUrl(url: string): Promise<boolean> {
     if (this.#daemonUrl === undefined) return false;
+    // Bounded now that the playback chain awaits this before requeueing a
+    // 403'd track: a hung localhost call must not stall the queue forever.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), DAEMON_TIMEOUT_MS);
     try {
       const response = await this.#daemonFetch(
         `${this.#daemonUrl}/invalidate?url=${encodeURIComponent(url)}`,
+        { signal: controller.signal },
       );
       if (!response.ok) return false;
       const body = (await response.json()) as {
@@ -772,34 +780,9 @@ export class YoutubeResolver {
       return body.invalidated === true;
     } catch {
       return false;
+    } finally {
+      clearTimeout(timer);
     }
-  }
-
-  async prefetchAudioUrls(
-    urls: readonly string[],
-    signal?: AbortSignal,
-  ): Promise<readonly (string | undefined)[]> {
-    const batchSize = PREFETCH_BATCH_SIZE;
-    const results: Array<string | undefined> = [];
-    for (let i = 0; i < urls.length; i++) {
-      results.push(undefined);
-    }
-    for (let i = 0; i < urls.length; i += batchSize) {
-      if (signal?.aborted) break;
-      const batch = urls.slice(i, i + batchSize);
-      const batchResults = await Promise.allSettled(
-        batch.map((url) =>
-          this.getAudioUrlFromUrl(url, signal).catch(() => undefined),
-        ),
-      );
-      for (let j = 0; j < batchResults.length; j++) {
-        const result = batchResults[j]!;
-        if (result.status === "fulfilled" && result.value !== undefined) {
-          results[i + j] = result.value;
-        }
-      }
-    }
-    return results;
   }
 
   async #getTrackFromUrl(url: string): Promise<YoutubeTrackMetadata> {
