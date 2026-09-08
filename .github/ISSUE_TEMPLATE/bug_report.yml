@@ -44,7 +44,7 @@ body:
       placeholder: |
         - Node: v22.x
         - OS: Linux / Windows / macOS
-        - Rhapsod: v2.0.0
+        - Rhapsod: v2.4.0
     validations:
       required: true
   - type: textarea

@@ -18,7 +18,7 @@ npm run check
 
 Runs, in order: `format:check` (prettier) → `lint` (eslint, zero warnings
 allowed) → `lint:scripts` (custom checker for shell/systemd files) →
-`typecheck` (tsc --noEmit) → `test` (vitest, ~750 tests) → `build`
+`typecheck` (tsc --noEmit) → `test` (vitest, ~790 tests) → `build`
 (tsc -p tsconfig.build.json).
 
 **Never report work done without this passing.** CI runs the same gates plus
@@ -87,7 +87,8 @@ Useful subsets: `npx vitest run tests/<file>.test.ts` for one suite,
 ```
 src/
   adapters/ts3/    TeamSpeak connection, identity, probe (LEAST tested — be careful)
-  application/     Playback service, queue, playlists, telemetry (best tested)
+  application/     Playback service, queue, playlists, telemetry (best tested);
+                   prepared-URL store and epoch protocol live here too
   audio/           Opus encoder, FFmpeg PCM, loudness, filters
   commands/        Command registry + handlers (!help is auto-generated)
   media/youtube/   yt-dlp wrapper, innertube search, ranking
@@ -107,7 +108,8 @@ docs/              install, deployment, commands, roadmap, runbooks
 - `src/application/youtube-playback-service.ts` is ~2k lines and everything
   playback-related routes through it. Changes there need the full suite, not
   a subset.
-- `src/adapters/ts3/` is at ~38% coverage. Recurring production bugs
+- `src/adapters/ts3/` is at ~68% coverage (was ~38%; pinned behind a mocked
+  client in #40). Recurring production bugs
   (reconnect, talk power) live here. Test before you trust.
 - The panel must stay bound to `127.0.0.1` (`RHAPSOD_PANEL_HOST`); it is
   reached through SSH tunnels, never exposed. Any change that weakens the

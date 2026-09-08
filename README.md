@@ -61,6 +61,9 @@ setup wizard (`/setup`) to connect TeamSpeak and YouTube. See
 | `!volume <0-100>`                                                       | `!vol`, `!v`          | Adjust output volume (default `50`; persists across restarts)                                                     |
 | `!move <from> <to>`                                                     | `!mv`                 | Move a pending track                                                                                              |
 | `!channel-move <channel>`                                               | `!ch`                 | Move the bot to a matching channel (admins only)                                                                  |
+| `!diag`                                                                 | -                     | Internal diagnostics (admins only)                                                                                |
+| `!debug-server`                                                         | `!ds`                 | TeamSpeak server info (admins only)                                                                               |
+| `!chart`                                                                | -                     | User telemetry chart (admins only)                                                                                |
 | `!remove <n\|from-to>`                                                  | `!rm`                 | Remove a queue position or range (requester or admin)                                                             |
 | `!clear`                                                                | `!c`                  | Clear pending tracks                                                                                              |
 | `!shuffle`                                                              | -                     | Shuffle the pending queue                                                                                         |
@@ -77,42 +80,49 @@ See [docs/commands.md](docs/commands.md) for details.
 
 All settings are environment variables read from `.env`. Defaults are shown; a variable with no default is optional and left unset unless you need it.
 
-| Variable                              | Default   | Purpose                                                                                                                              |
-| ------------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `RHAPSOD_TS3_HOST`                    | required  | TeamSpeak 3 server address                                                                                                           |
-| `RHAPSOD_TS3_PORT`                    | `9987`    | Voice port                                                                                                                           |
-| `RHAPSOD_TS3_NICKNAME`                | `Rhapsod` | Bot nickname                                                                                                                         |
-| `RHAPSOD_TS3_PASSWORD`                | -         | Server password                                                                                                                      |
-| `RHAPSOD_TS3_CHANNEL_NAME`            | -         | Channel to join; the server default channel if unset                                                                                 |
-| `RHAPSOD_TS3_CHANNEL_ID`              | -         | Channel to join by ID, overrides `RHAPSOD_TS3_CHANNEL_NAME`                                                                          |
-| `RHAPSOD_TS3_CLIENT_DESCRIPTION`      | -         | Client description shown in TeamSpeak (BBCode allowed)                                                                               |
-| `RHAPSOD_TS3_CONNECT_TIMEOUT_SECONDS` | `180`     | Connect timeout                                                                                                                      |
-| `RHAPSOD_TS3_AUTO_CONNECT`            | `true`    | Connect at startup                                                                                                                   |
-| `RHAPSOD_ADMIN_UIDS`                  | -         | Comma-separated TeamSpeak UIDs with bot-admin rights                                                                                 |
-| `RHAPSOD_DATA_DIR`                    | `./data`  | TS3 identity and `state.json`                                                                                                        |
-| `RHAPSOD_YTDLP_PATH`                  | `yt-dlp`  | yt-dlp binary path                                                                                                                   |
-| `RHAPSOD_YTDLP_COOKIES_PATH`          | -         | Cookie file for datacenter extraction                                                                                                |
-| `RHAPSOD_YTDLP_DAEMON_URL`            | -         | Persistent yt-dlp daemon (`scripts/yt-dlp-daemon.py`); the bot asks it for audio URLs before spawning yt-dlp                         |
-| `RHAPSOD_FFMPEG_PATH`                 | -         | FFmpeg binary; falls back to the system lookup                                                                                       |
-| `RHAPSOD_FFMPEG_USER_AGENT`           | -         | User-Agent FFmpeg sends when opening audio URLs (some CDNs reject `Lavf/…`)                                                          |
-| `RHAPSOD_FFPROBE_PATH`                | `ffprobe` | Used to probe direct audio URLs                                                                                                      |
-| `RHAPSOD_OPUS_BITRATE`                | `96000`   | Opus bitrate in bits/s; keep under the TeamSpeak 497-byte packet ceiling                                                             |
-| `RHAPSOD_OPUS_COMPLEXITY`             | `10`      | Opus encoder complexity 0-10                                                                                                         |
-| `RHAPSOD_OPUS_PACKET_LOSS_PERCENT`    | `0`       | Expected loss for in-band FEC; `0` disables FEC                                                                                      |
-| `RHAPSOD_LOUDNESS_TARGET_LUFS`        | `-14`     | EBU R128 loudness target; `0` disables                                                                                               |
-| `RHAPSOD_AUDIO_TEST_TONE_SECONDS`     | `0`       | Play a test tone for N seconds to validate voice setup                                                                               |
-| `RHAPSOD_SPOTIFY_CLIENT_ID`           | -         | Spotify app credentials (enables Spotify links)                                                                                      |
-| `RHAPSOD_SPOTIFY_CLIENT_SECRET`       | -         | Same app's secret (client-credentials flow)                                                                                          |
-| `RHAPSOD_SPOTIFY_REFRESH_TOKEN`       | -         | OAuth token for Web API playlist reads; playlists otherwise read the public embed page. Get one with `node scripts/spotify-auth.mjs` |
-| `RHAPSOD_LOG_LEVEL`                   | `info`    | pino log level                                                                                                                       |
-| `RHAPSOD_LOG_RETENTION_DAYS`          | `14`      | Days of log files kept under `data/logs`                                                                                             |
-| `RHAPSOD_METRICS_INTERVAL_MINUTES`    | `15`      | Log RSS/heap every N minutes; `0` disables                                                                                           |
-| `RHAPSOD_WATCHDOG_INTERVAL_MINUTES`   | `15`      | Restart the process if the event loop stalls; `0` disables                                                                           |
-| `RHAPSOD_MAX_CONCURRENT_COMMANDS`     | `3`       | Commands handled at once; extra ones get a busy reply                                                                                |
-| `RHAPSOD_MAX_CONCURRENT_YTDLP_JOBS`   | auto      | 1-4; unset uses a CPU-adaptive default                                                                                               |
-| `RHAPSOD_MAX_QUEUE_TRACKS`            | `200`     | Maximum pending tracks                                                                                                               |
-| `RHAPSOD_MAX_TRACKS_PER_USER`         | `30`      | Maximum pending tracks per user                                                                                                      |
-| `RHAPSOD_VERBOSE`                     | `false`   | Send intermediate "Preparando… / Buscando…" messages                                                                                 |
+| Variable                              | Default     | Purpose                                                                                                                              |
+| ------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `RHAPSOD_TS3_HOST`                    | required    | TeamSpeak 3 server address                                                                                                           |
+| `RHAPSOD_TS3_PORT`                    | `9987`      | Voice port                                                                                                                           |
+| `RHAPSOD_TS3_NICKNAME`                | `Rhapsod`   | Bot nickname                                                                                                                         |
+| `RHAPSOD_TS3_PASSWORD`                | -           | Server password                                                                                                                      |
+| `RHAPSOD_TS3_CHANNEL_NAME`            | -           | Channel to join; the server default channel if unset                                                                                 |
+| `RHAPSOD_TS3_CHANNEL_ID`              | -           | Channel to join by ID, overrides `RHAPSOD_TS3_CHANNEL_NAME`                                                                          |
+| `RHAPSOD_TS3_CLIENT_DESCRIPTION`      | -           | Client description shown in TeamSpeak (BBCode allowed)                                                                               |
+| `RHAPSOD_TS3_CONNECT_TIMEOUT_SECONDS` | `180`       | Connect timeout                                                                                                                      |
+| `RHAPSOD_TS3_AUTO_CONNECT`            | `true`      | Connect at startup                                                                                                                   |
+| `RHAPSOD_TS3_HEARTBEAT_SECONDS`       | `60`        | Seconds between TeamSpeak heartbeat probes; `0` disables                                                                             |
+| `RHAPSOD_ADMIN_UIDS`                  | -           | Comma-separated TeamSpeak UIDs with bot-admin rights                                                                                 |
+| `RHAPSOD_PRIVATE_COMMAND_UIDS`        | -           | Comma-separated UIDs allowed to use commands via private message                                                                     |
+| `RHAPSOD_DATA_DIR`                    | `./data`    | TS3 identity and `state.json`                                                                                                        |
+| `RHAPSOD_YTDLP_PATH`                  | `yt-dlp`    | yt-dlp binary path                                                                                                                   |
+| `RHAPSOD_YTDLP_COOKIES_PATH`          | -           | Cookie file for datacenter extraction                                                                                                |
+| `RHAPSOD_YTDLP_DAEMON_URL`            | -           | Persistent yt-dlp daemon (`scripts/yt-dlp-daemon.py`); the bot asks it for audio URLs before spawning yt-dlp                         |
+| `RHAPSOD_FFMPEG_PATH`                 | -           | FFmpeg binary; falls back to the system lookup                                                                                       |
+| `RHAPSOD_FFMPEG_USER_AGENT`           | -           | User-Agent FFmpeg sends when opening audio URLs (some CDNs reject `Lavf/…`)                                                          |
+| `RHAPSOD_FFPROBE_PATH`                | `ffprobe`   | Used to probe direct audio URLs                                                                                                      |
+| `RHAPSOD_OPUS_BITRATE`                | `128000`    | Opus bitrate in bits/s; keep under the TeamSpeak 497-byte packet ceiling                                                             |
+| `RHAPSOD_OPUS_COMPLEXITY`             | `10`        | Opus encoder complexity 0-10                                                                                                         |
+| `RHAPSOD_OPUS_PACKET_LOSS_PERCENT`    | `0`         | Expected loss for in-band FEC; `0` disables FEC                                                                                      |
+| `RHAPSOD_LOUDNESS_TARGET_LUFS`        | `-14`       | EBU R128 loudness target; `0` disables                                                                                               |
+| `RHAPSOD_AUDIO_TEST_TONE_SECONDS`     | `0`         | Play a test tone for N seconds to validate voice setup                                                                               |
+| `RHAPSOD_SPOTIFY_CLIENT_ID`           | -           | Spotify app credentials (enables Spotify links)                                                                                      |
+| `RHAPSOD_SPOTIFY_CLIENT_SECRET`       | -           | Same app's secret (client-credentials flow)                                                                                          |
+| `RHAPSOD_SPOTIFY_REFRESH_TOKEN`       | -           | OAuth token for Web API playlist reads; playlists otherwise read the public embed page. Get one with `node scripts/spotify-auth.mjs` |
+| `RHAPSOD_LOG_LEVEL`                   | `info`      | pino log level                                                                                                                       |
+| `RHAPSOD_LOG_RETENTION_DAYS`          | `14`        | Days of log files kept under `data/logs`                                                                                             |
+| `RHAPSOD_METRICS_INTERVAL_MINUTES`    | `15`        | Log RSS/heap every N minutes; `0` disables                                                                                           |
+| `RHAPSOD_WATCHDOG_INTERVAL_MINUTES`   | `15`        | Restart the process if the event loop stalls; `0` disables                                                                           |
+| `RHAPSOD_MAX_CONCURRENT_COMMANDS`     | `3`         | Commands handled at once; extra ones get a busy reply                                                                                |
+| `RHAPSOD_MAX_CONCURRENT_YTDLP_JOBS`   | auto        | 1-4; unset uses a CPU-adaptive default                                                                                               |
+| `RHAPSOD_MAX_QUEUE_TRACKS`            | `200`       | Maximum pending tracks                                                                                                               |
+| `RHAPSOD_MAX_TRACKS_PER_USER`         | `30`        | Maximum pending tracks per user                                                                                                      |
+| `RHAPSOD_VERBOSE`                     | `false`     | Send intermediate "Preparando… / Buscando…" messages                                                                                 |
+| `RHAPSOD_PANEL_ENABLED`               | `false`     | Serve the owner web panel (setup wizard, dashboard, server tree)                                                                     |
+| `RHAPSOD_PANEL_HOST`                  | `127.0.0.1` | Panel bind address; keep localhost and reach it over SSH                                                                             |
+| `RHAPSOD_PANEL_PORT`                  | `8080`      | Panel port                                                                                                                           |
+| `RHAPSOD_PANEL_USER`                  | `admin`     | Panel basic-auth username                                                                                                            |
+| `RHAPSOD_PANEL_PASSWORD`              | `rhapsod`   | Panel basic-auth password (change it)                                                                                                |
 
 Secrets (cookies, Spotify credentials, TS3 passwords) live only in `.env` or the deployment secret store, never in Git. For production under systemd see [docs/deployment.md](docs/deployment.md). The full variable list is in `.env.example`.
 
@@ -154,14 +164,25 @@ It does not download or cache music files, and it does not bypass DRM or geo-blo
 
 ## Documentation
 
-- [Changelog](CHANGELOG.md)
-- [Architecture](docs/architecture.md)
-- [Commands](docs/commands.md)
-- [Deployment](docs/deployment.md)
-- [Install](docs/install.md)
-- [Roadmap](docs/roadmap.md)
-- [TS3 bot research](docs/research-ts3-bots.md)
-- [WARP voice egress](docs/warp-voice-egress.md)
+Start here:
+
+- [Install](docs/install.md) — one-command VPS setup and the setup wizard
+- [Changelog](CHANGELOG.md) — what changed in each release
+
+Operate it:
+
+- [Deployment](docs/deployment.md) — systemd, environment, production notes
+- [WARP voice egress](docs/warp-voice-egress.md) — hide the VPS IP from TeamSpeak
+
+Reference:
+
+- [Commands](docs/commands.md) — every chat command with aliases
+- [Architecture](docs/architecture.md) — how the bot is built
+
+Understand it:
+
+- [Roadmap](docs/roadmap.md) — where the project is going
+- [TS3 bot research](docs/research-ts3-bots.md) — what was learned from other bots
 - [Contributing](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
 

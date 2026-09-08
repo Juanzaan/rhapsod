@@ -7,12 +7,12 @@ Node.js, `yt-dlp`, and FFmpeg.
 ## Release profiles
 
 The 1.x line is the low-end stable profile. `v1.0.0` through `v1.2.1` are
-intended to run on a VPS with 1 vCPU and 1 GB RAM; `v1.2.1` is the latest
-stable release in that line.
+intended to run on a VPS with 1 vCPU and 1 GB RAM; `v1.2.1` is the final
+release in that line.
 
-The 2.x line is under development for the OCI production profile with 4 vCPUs
-and 3 GB RAM. Do not treat the 2.x branch as stable until a 2.x release is
-published.
+The 2.x line is the current stable line, tuned for the OCI production profile
+with 4 vCPUs and 3 GB RAM. Production tracks `main` and deploys on every
+release (currently v2.4.0).
 
 The yt-dlp queue derives its baseline concurrency from the available CPUs, so
 the same 1.x build remains usable on smaller machines. Resource increases in

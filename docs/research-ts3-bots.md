@@ -14,27 +14,34 @@ bot projects. It is a reference for Rhapsod, not a code-copying plan.
 
 ## Lessons for Rhapsod
 
-### Short term
+### Short term (all shipped)
 
-- Add a bounded queue and reject excessive playlist expansion.
+- Add a bounded queue and reject excessive playlist expansion. Shipped as
+  `RHAPSOD_MAX_QUEUE_TRACKS` / `RHAPSOD_MAX_TRACKS_PER_USER` plus the
+  per-expansion cap.
 - Keep current-track state, queue state, and playback process state separate.
+  Shipped: the driver tracks them independently with generation guards.
 - Add `previous`/history and shuffle only after deterministic queue tests exist.
+  Shipped: `!previous`, `!history`, `!shuffle` with queue tests.
 - Add command permissions before exposing destructive commands such as `!stop`,
-  `!clear`, or a future `!exit`.
+  `!clear`, or a future `!exit`. Shipped: `RHAPSOD_ADMIN_UIDS` gates
+  destructive and admin commands.
 - Keep provider extraction behind the existing resolver boundary. Spotify links
   should resolve metadata to a playable YouTube candidate; Spotify does not
-  provide a raw audio URL for this use case.
+  provide a raw audio URL for this use case. Shipped and unchanged.
 
-### Audio and reliability
+### Audio and reliability (all shipped)
 
 - Resolve metadata when accepting a request, but resolve the signed audio URL
-  immediately before playback because provider URLs expire.
+  immediately before playback because provider URLs expire. Shipped: the
+  prepared-URL store with expiry margins.
 - Treat FFmpeg exit, broken pipes, and stalled input as playback errors and move
-  to the next queued track with a bounded retry policy.
+  to the next queued track with a bounded retry policy. Shipped, plus a resolve
+  watchdog that skips tracks whose resolution never settles.
 - Add prefetch only for metadata or validated short-lived resources; never reuse
-  an old signed URL blindly.
+  an old signed URL blindly. Shipped: depth-limited prefetch with refresh-ahead.
 - Preserve the TS3 identity and make process supervision part of deployment,
-  not an interactive SSH session.
+  not an interactive SSH session. Shipped: systemd units plus `install.sh`.
 
 ### Features deliberately deferred
 
