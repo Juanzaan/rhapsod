@@ -1647,10 +1647,15 @@ export class YoutubePlaybackService {
       this.#directUrlResolver &&
       (await this.#directUrlResolver.match(track.source))
     ) {
-      return this.#directUrlResolver.getAudioUrl(track.source);
+      const url = await this.#directUrlResolver.getAudioUrl(track.source);
+      // Persisted so a restart (and the runtime re-seed) skips re-resolution.
+      this.#preparedStore.persist(track.source, url);
+      return url;
     }
     if (this.#soundcloudResolver?.match(track.source)) {
-      return this.#soundcloudResolver.getAudioUrl(track.source);
+      const url = await this.#soundcloudResolver.getAudioUrl(track.source);
+      this.#preparedStore.persist(track.source, url);
+      return url;
     }
     let lastError: unknown;
     try {

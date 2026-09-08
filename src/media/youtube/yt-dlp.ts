@@ -16,7 +16,12 @@ import {
 } from "./innertube-search.js";
 
 const MAX_BUFFER_BYTES = 8 * 1024 * 1024;
-const DAEMON_TIMEOUT_MS = 8_000;
+// The daemon serializes extractions behind one lock (by design: YouTube
+// rate-limits the datacenter IP, parallel extraction degrades everything).
+// 8s false-timed-out whenever one pathological video queued several
+// extraction attempts; 15s absorbs that while callers still fail fast
+// enough to try the local yt-dlp fallback.
+const DAEMON_TIMEOUT_MS = 15_000;
 const SEARCH_CACHE_TTL_MS = 60 * 60 * 1000;
 const SEARCH_CACHE_MAX_ENTRIES = 500;
 const ABORT_GRACE_MS = 3_000;

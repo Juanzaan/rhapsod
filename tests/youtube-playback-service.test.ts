@@ -322,11 +322,13 @@ describe("audioUrlExpiresAt", () => {
     expect(expiresAt).toBe(2_000_000_000_000 - 60_000);
   });
 
-  it("falls back to a conservative TTL without an expire value", () => {
+  it("falls back to an hour TTL without an expire value", () => {
+    // URLs without an expire parameter (SoundCloud CDN, direct streams)
+    // typically outlive the old 10-minute fallback by far.
     const before = Date.now();
     const expiresAt = audioUrlExpiresAt("https://media.example/audio");
     expect(expiresAt).toBeGreaterThan(before);
-    expect(expiresAt).toBeLessThan(before + 11 * 60_000);
+    expect(expiresAt).toBeLessThan(before + 61 * 60_000);
   });
 });
 
@@ -2238,6 +2240,34 @@ describe("YoutubePlaybackService", () => {
 
     expect(resolver.getAudioUrlFromUrl).not.toHaveBeenCalled();
     expect(service.current?.id).toBe("cached");
+  });
+
+  it("persists SoundCloud audio URLs so restarts skip re-resolution", async () => {
+    // SoundCloud resolutions used to skip the persistent cache entirely, so
+    // every repeat play after a restart paid the full resolution again.
+    const cache = AudioUrlCache.memoryOnly();
+    const { service, soundcloudResolver } = setup({
+      audioUrlCache: cache,
+      soundcloudResolver: true,
+    });
+    // The default SoundCloud mock rejects getTrack (API down); this test
+    // needs the happy path. No inline audioUrl: real SoundCloud metadata does
+    // not carry one, so audio resolution goes through getAudioUrl later.
+    soundcloudResolver.getTrack.mockImplementation((url?: string) =>
+      Promise.resolve({
+        id: "soundcloud-track",
+        title: "SoundCloud Track",
+        webpageUrl: url ?? "https://soundcloud.com/artist/track",
+      }),
+    );
+
+    await service.enqueue("https://soundcloud.com/artist/track", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(soundcloudResolver.getAudioUrl).toHaveBeenCalledTimes(1);
+    const persisted = cache.get("https://soundcloud.com/artist/track");
+    expect(persisted?.url).toBe("https://media.example/soundcloud-api");
+    expect(persisted?.expiresAt).toBeGreaterThan(Date.now() + 30 * 60_000);
   });
 
   it("rejects seek when nothing is playing", () => {
