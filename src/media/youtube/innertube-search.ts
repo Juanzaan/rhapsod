@@ -25,7 +25,7 @@ const WEB_REMIX_CLIENT = {
   hl: "en",
 };
 const DEFAULT_TIMEOUT_MS = 5_000;
-const DEFAULT_MAX_RESULTS = 15;
+const DEFAULT_MAX_RESULTS = 30;
 
 export async function searchInnertubeVideos(
   query: string,
