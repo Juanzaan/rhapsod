@@ -47,6 +47,7 @@ import type {
 import { parseMusicQuery } from "../lib/query-parser.js";
 import { UserError } from "../lib/user-error.js";
 import { PreparedAudioStore } from "./prepared-audio-store.js";
+import { PlaybackEpoch } from "./playback-epoch.js";
 import {
   MAX_TRACKS_PER_PLAYLIST,
   type PlaylistAddResult,
@@ -195,10 +196,9 @@ export class YoutubePlaybackService {
   readonly #maxQueueTracks: number;
   readonly #maxTracksPerUser: number;
   #expansionActive = false;
-  #stopEpoch = 0;
+  readonly #epochs = new PlaybackEpoch();
   #current: Track | undefined;
   #session: FfmpegPlaybackSession | undefined;
-  #generation = 0;
   #chainActive = false;
   #pendingSeek:
     { readonly seconds: number; readonly trackId: string } | undefined;
@@ -334,7 +334,7 @@ export class YoutubePlaybackService {
     const track = this.#current;
     if (!track) return;
     this.#pendingSeek = { seconds: seekSeconds, trackId: track.id };
-    this.#generation++;
+    this.#epochs.invalidatePlayback();
     if (this.#session) {
       this.#sessionEndReasons.set(this.#session, "filter-change");
       this.#session.stop();
@@ -864,7 +864,7 @@ export class YoutubePlaybackService {
         "Solo se pueden expandir playlists de YouTube con !play.",
       );
     return this.#withExpansionSlot(async () => {
-      const stopEpoch = this.#stopEpoch;
+      const stopEpoch = this.#epochs.captureStopEpoch();
       const expansion = await this.#resolver.expandPlaylist(
         resource,
         this.#playlistMaxTracks,
@@ -884,7 +884,7 @@ export class YoutubePlaybackService {
     requestedByUid?: string,
   ): Promise<PlaylistEnqueueResult> {
     return this.#withExpansionSlot(async () => {
-      const stopEpoch = this.#stopEpoch;
+      const stopEpoch = this.#epochs.captureStopEpoch();
       if (!this.#alternativeResolver) {
         throw new UserError(
           "Este bot no tiene resolución de links de Apple Music o Amazon Music configurada.",
@@ -892,7 +892,7 @@ export class YoutubePlaybackService {
       }
       const alternative =
         await this.#alternativeResolver.findAlternative(input);
-      if (stopEpoch !== this.#stopEpoch) {
+      if (!this.#epochs.isStopEpochCurrent(stopEpoch)) {
         return { added: [] };
       }
       if (!alternative) {
@@ -972,14 +972,14 @@ export class YoutubePlaybackService {
     expansion: PlaylistExpansion,
     requestedBy: string,
     requestedByUid?: string,
-    stopEpoch = this.#stopEpoch,
+    stopEpoch = this.#epochs.captureStopEpoch(),
   ): PlaylistEnqueueResult {
     const added: Track[] = [];
     let duplicates = 0;
     let halted = false;
     const addedIds = new Set<string>();
     for (const metadata of expansion.tracks.slice(0, this.#playlistMaxTracks)) {
-      if (stopEpoch !== this.#stopEpoch) {
+      if (!this.#epochs.isStopEpochCurrent(stopEpoch)) {
         halted = true;
         break;
       }
@@ -1046,7 +1046,7 @@ export class YoutubePlaybackService {
     requestedByUid?: string,
   ): Promise<PlaylistEnqueueResult> {
     return this.#withExpansionSlot(async () => {
-      const stopEpoch = this.#stopEpoch;
+      const stopEpoch = this.#epochs.captureStopEpoch();
       if (!this.#spotifyResolver) {
         throw new UserError(
           "Spotify no está configurado en este bot: pegá un link de YouTube o SoundCloud, o buscá con !yt.",
@@ -1067,7 +1067,7 @@ export class YoutubePlaybackService {
               resource,
               this.#playlistMaxTracks,
             );
-      if (stopEpoch !== this.#stopEpoch) {
+      if (!this.#epochs.isStopEpochCurrent(stopEpoch)) {
         return {
           added: [],
           ...(expansion.total === undefined
@@ -1083,7 +1083,7 @@ export class YoutubePlaybackService {
         0,
         this.#playlistMaxTracks,
       )) {
-        if (this.#stopEpoch !== stopEpoch) {
+        if (!this.#epochs.isStopEpochCurrent(stopEpoch)) {
           halted = true;
           break;
         }
@@ -1200,7 +1200,7 @@ export class YoutubePlaybackService {
   }
 
   skip(): void {
-    this.#generation++;
+    this.#epochs.invalidatePlayback();
     this.#pendingSkips++;
     this.#pendingSeek = undefined;
     // Keep a warm stream that matches the next queue head: a skip is exactly
@@ -1215,8 +1215,7 @@ export class YoutubePlaybackService {
 
   stop(persistState = true): void {
     this.#persistenceSuppressed = !persistState;
-    this.#generation++;
-    this.#stopEpoch++;
+    this.#epochs.resetAll();
     this.#pendingSkips = 0;
     this.#pendingSeek = undefined;
     this.#discardWarmStream();
@@ -1242,7 +1241,7 @@ export class YoutubePlaybackService {
       target = Math.min(target, Math.max(0, this.#current.durationSeconds - 1));
     }
     this.#pendingSeek = { seconds: target, trackId: this.#current.id };
-    this.#generation++;
+    this.#epochs.invalidatePlayback();
     if (this.#session) this.#sessionEndReasons.set(this.#session, "skipped");
     this.#session?.stop();
     this.#session = undefined;
@@ -1289,8 +1288,7 @@ export class YoutubePlaybackService {
 
   clearQueued(): number {
     const count = this.#queue.length;
-    this.#generation++;
-    this.#stopEpoch++;
+    this.#epochs.resetAll();
     this.#pendingSkips = 0;
     this.#pendingSeek = undefined;
     this.#discardWarmStream();
@@ -1390,7 +1388,7 @@ export class YoutubePlaybackService {
           this.#persistState();
           return;
         }
-        const generation = ++this.#generation;
+        const generation = this.#epochs.nextGeneration();
         this.#current = track;
         this.#persistState();
         const audioResolutionStartedAt = Date.now();
@@ -1513,7 +1511,10 @@ export class YoutubePlaybackService {
               await this.#resolver
                 .invalidateAudioUrl?.(track.source)
                 .catch(() => undefined);
-              if (generation === this.#generation && this.#current === track) {
+              if (
+                this.#epochs.isGenerationCurrent(generation) &&
+                this.#current === track
+              ) {
                 try {
                   this.#queue.add(track);
                   this.#queue.moveToHead(track.id);
@@ -1528,7 +1529,10 @@ export class YoutubePlaybackService {
             }
           }
         }
-        if (generation !== this.#generation || this.#current !== track) {
+        if (
+          !this.#epochs.isGenerationCurrent(generation) ||
+          this.#current !== track
+        ) {
           continue;
         }
         this.#preparedStore.drop(track.source);
@@ -1576,12 +1580,18 @@ export class YoutubePlaybackService {
         "inline-resolve",
         (t, signal) => this.#resolvePlayableAudio(t, signal),
       );
-      if (generation !== this.#generation || this.#current !== track) {
+      if (
+        !this.#epochs.isGenerationCurrent(generation) ||
+        this.#current !== track
+      ) {
         return discardInFlight();
       }
       return resolved;
     } catch (error) {
-      if (generation !== this.#generation || this.#current !== track) {
+      if (
+        !this.#epochs.isGenerationCurrent(generation) ||
+        this.#current !== track
+      ) {
         return discardInFlight();
       }
       const playbackError =
@@ -1755,7 +1765,7 @@ export class YoutubePlaybackService {
     if (isPlaylist && toResolve.length > PLAYLIST_PREFETCH_BATCH) {
       const immediate = toResolve.slice(0, PLAYLIST_PREFETCH_BATCH);
       const deferred = toResolve.slice(PLAYLIST_PREFETCH_BATCH);
-      const stopEpoch = this.#stopEpoch;
+      const stopEpoch = this.#epochs.captureStopEpoch();
       const queueSnapshotIds = new Set(
         queueSnapshot.map((queued) => queued.id),
       );
@@ -1769,7 +1779,7 @@ export class YoutubePlaybackService {
           });
       }
       setTimeout(() => {
-        if (stopEpoch !== this.#stopEpoch) return;
+        if (!this.#epochs.isStopEpochCurrent(stopEpoch)) return;
         for (const { track } of deferred) {
           if (!queueSnapshotIds.has(track.id)) continue;
           const stillPrepared = this.#preparedStore.peek(track.source);
@@ -1866,14 +1876,13 @@ export class YoutubePlaybackService {
   }
 
   #startPrewarm(next: Track): void {
-    const stopEpoch = this.#stopEpoch;
-    const generation = this.#generation;
+    const stamp = this.#epochs.stamp();
     void this.#preparedStore
       .resolve(next, "inline-resolve", (t, signal) =>
         this.#resolvePlayableAudio(t, signal),
       )
       .then((url) => {
-        if (stopEpoch !== this.#stopEpoch || generation !== this.#generation) {
+        if (!this.#epochs.isCurrent(stamp)) {
           return undefined;
         }
         this.#loudnessProfiler?.measure(next.source, url);
