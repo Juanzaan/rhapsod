@@ -48,10 +48,7 @@ import {
   parseChannelIds,
   parseMoveGroupIds,
 } from "./commands/permissions.js";
-import {
-  SystemYtDlpExecutor,
-  YoutubeResolver,
-} from "./media/youtube/yt-dlp.js";
+import { createYtDlpResolverStack } from "./media/youtube/yt-dlp.js";
 import { getTimeoutConfig } from "./lib/timeout-config.js";
 import { UserError } from "./lib/user-error.js";
 import { createPanelServer, type QueueEntry } from "./panel/panel-server.js";
@@ -140,18 +137,18 @@ async function main(): Promise<void> {
     // the process exited immediately and the wizard was unreachable
     // out of the box.
     if (config.RHAPSOD_PANEL_ENABLED) {
-      const setupExecutor = new SystemYtDlpExecutor(
-        config.RHAPSOD_YTDLP_PATH,
-        config.RHAPSOD_YTDLP_COOKIES_PATH,
-        {},
-        logger,
-        config.RHAPSOD_YTDLP_EXTRACTOR_ARGS,
-      );
-      const setupResolver = new YoutubeResolver(setupExecutor, logger, {
-        timeouts: getTimeoutConfig(),
+      const { resolver: setupResolver } = createYtDlpResolverStack(logger, {
+        ytdlpPath: config.RHAPSOD_YTDLP_PATH,
+        ...(config.RHAPSOD_YTDLP_COOKIES_PATH === undefined
+          ? {}
+          : { cookiesPath: config.RHAPSOD_YTDLP_COOKIES_PATH }),
+        ...(config.RHAPSOD_YTDLP_EXTRACTOR_ARGS === undefined
+          ? {}
+          : { extractorArgs: config.RHAPSOD_YTDLP_EXTRACTOR_ARGS }),
         ...(config.RHAPSOD_YTDLP_DAEMON_URL === undefined
           ? {}
           : { daemonUrl: config.RHAPSOD_YTDLP_DAEMON_URL }),
+        timeouts: getTimeoutConfig(),
       });
       createPanelServer({
         config,
@@ -327,17 +324,24 @@ async function main(): Promise<void> {
     ...(ffmpegPath === undefined ? {} : { binary: ffmpegPath }),
     targetLufs: config.RHAPSOD_LOUDNESS_TARGET_LUFS,
   });
-  const ytDlpExecutor = new SystemYtDlpExecutor(
-    config.RHAPSOD_YTDLP_PATH,
-    config.RHAPSOD_YTDLP_COOKIES_PATH,
-    {
+  const { executor: ytDlpExecutor, resolver: ytDlpResolver } =
+    createYtDlpResolverStack(logger, {
+      ytdlpPath: config.RHAPSOD_YTDLP_PATH,
+      ...(config.RHAPSOD_YTDLP_COOKIES_PATH === undefined
+        ? {}
+        : { cookiesPath: config.RHAPSOD_YTDLP_COOKIES_PATH }),
+      ...(config.RHAPSOD_YTDLP_EXTRACTOR_ARGS === undefined
+        ? {}
+        : { extractorArgs: config.RHAPSOD_YTDLP_EXTRACTOR_ARGS }),
+      ...(config.RHAPSOD_YTDLP_DAEMON_URL === undefined
+        ? {}
+        : { daemonUrl: config.RHAPSOD_YTDLP_DAEMON_URL }),
       ...(config.RHAPSOD_MAX_CONCURRENT_YTDLP_JOBS === undefined
         ? {}
         : { maxConcurrentJobs: config.RHAPSOD_MAX_CONCURRENT_YTDLP_JOBS }),
-    },
-    logger,
-    config.RHAPSOD_YTDLP_EXTRACTOR_ARGS,
-  );
+      timeouts: getTimeoutConfig(),
+      onSearchMetrics: (m) => metrics.recordSearchMetrics(m),
+    });
   ytDlpMetricsRef.getMetrics = () => ytDlpExecutor.metrics();
   const audioUrlCache = AudioUrlCache.load(
     join(config.RHAPSOD_DATA_DIR, "audio-url-cache.json"),
@@ -347,13 +351,6 @@ async function main(): Promise<void> {
       onMiss: () => metrics.increment("cacheMisses"),
     },
   );
-  const ytDlpResolver = new YoutubeResolver(ytDlpExecutor, logger, {
-    onSearchMetrics: (m) => metrics.recordSearchMetrics(m),
-    timeouts: getTimeoutConfig(),
-    ...(config.RHAPSOD_YTDLP_DAEMON_URL === undefined
-      ? {}
-      : { daemonUrl: config.RHAPSOD_YTDLP_DAEMON_URL }),
-  });
   const resolver: YoutubePlaybackResolver = ytDlpResolver;
   const playback = new YoutubePlaybackService({
     createPlayback: (url, playbackEncoder, output, options) =>
