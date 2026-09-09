@@ -6,7 +6,7 @@ import type {
 } from "../media/youtube/yt-dlp.js";
 import type { YoutubeResource } from "../media/media-input.js";
 import type { Track } from "../domain/track.js";
-import { PlaybackQueue } from "../domain/playback-queue.js";
+import { QueueLimitError, TrackQueue } from "./track-queue.js";
 import {
   createPcmStream,
   playFfmpegUrl,
@@ -150,8 +150,6 @@ const PREFETCH_DEPTH = 6;
 const PLAYLIST_PREFETCH_DEPTH = 8;
 const PLAYLIST_PREFETCH_BATCH = 3;
 const DEFAULT_PLAYLIST_MAX_TRACKS = 100;
-const DEFAULT_MAX_QUEUE_TRACKS = 200;
-const DEFAULT_MAX_TRACKS_PER_USER = 30;
 const HISTORY_LIMIT = 20;
 
 // Last-resort bound on a single track's URL resolution. Worst-case
@@ -164,14 +162,12 @@ const RESOLVE_WATCHDOG_MS = 90_000;
 
 export type PlaybackDriverState = "idle" | "resolving" | "playing";
 
-class QueueLimitError extends UserError {}
-
 // Kept here so existing importers (tests) keep working; the implementation
 // lives with the store that uses it.
 export { audioUrlExpiresAt } from "./prepared-audio-store.js";
 
 export class YoutubePlaybackService {
-  readonly #queue = new PlaybackQueue();
+  readonly #queue: TrackQueue;
   readonly #encoder: RhapsodOpusEncoder;
   readonly #resolver: YoutubePlaybackResolver;
   readonly #alternativeResolver: AlternativeSourceResolver | undefined;
@@ -203,8 +199,6 @@ export class YoutubePlaybackService {
   readonly #redirectResolver: RedirectResolver | undefined;
   readonly #playlistStore: PlaylistStore | undefined;
   readonly #playlistMaxTracks: number;
-  readonly #maxQueueTracks: number;
-  readonly #maxTracksPerUser: number;
   #expansionActive = false;
   readonly #epochs = new PlaybackEpoch();
   #current: Track | undefined;
@@ -261,9 +255,14 @@ export class YoutubePlaybackService {
     this.#playlistStore = options.playlistStore;
     this.#playlistMaxTracks =
       options.playlistMaxTracks ?? DEFAULT_PLAYLIST_MAX_TRACKS;
-    this.#maxQueueTracks = options.maxQueueTracks ?? DEFAULT_MAX_QUEUE_TRACKS;
-    this.#maxTracksPerUser =
-      options.maxTracksPerUser ?? DEFAULT_MAX_TRACKS_PER_USER;
+    this.#queue = new TrackQueue({
+      ...(options.maxQueueTracks === undefined
+        ? {}
+        : { maxQueueTracks: options.maxQueueTracks }),
+      ...(options.maxTracksPerUser === undefined
+        ? {}
+        : { maxTracksPerUser: options.maxTracksPerUser }),
+    });
     const restored = this.#stateStore?.load();
     if (restored?.volumePercent !== undefined) {
       this.#volumePercent = restored.volumePercent;
@@ -363,7 +362,7 @@ export class YoutubePlaybackService {
       this.#session = undefined;
     }
     try {
-      this.#queue.add(track);
+      this.#queue.requeue(track);
       this.#queue.moveToHead(track.id);
     } catch {
       // Duplicate already queued: the filter change acts like a restart.
@@ -632,9 +631,9 @@ export class YoutubePlaybackService {
     for (const entry of this.#persistedQueue) {
       if (entry.requestedByUid === undefined) continue;
       if (!connected.has(entry.requestedByUid)) continue;
-      if (this.#queue.length >= this.#maxQueueTracks) break;
+      if (this.#queue.length >= this.#queue.maxTracks) break;
       try {
-        this.#queue.add({
+        this.#queue.requeue({
           ...(entry.durationSeconds === undefined
             ? {}
             : { durationSeconds: entry.durationSeconds }),
@@ -1184,36 +1183,9 @@ export class YoutubePlaybackService {
         ? { fallbackSources: metadata.fallbackSources }
         : {}),
     };
-    if (this.#queue.length >= this.#maxQueueTracks) {
-      throw new QueueLimitError(
-        `La cola está llena (máximo ${this.#maxQueueTracks} pistas).`,
-      );
-    }
-    const requesterCount =
-      (this.#current !== undefined &&
-      requestedByUid !== undefined &&
-      this.#current.requestedByUid === requestedByUid
-        ? 1
-        : this.#current !== undefined &&
-            requestedByUid === undefined &&
-            this.#current.requestedBy === requestedBy
-          ? 1
-          : 0) +
-      this.#queue
-        .snapshot()
-        .filter((queued) =>
-          requestedByUid !== undefined
-            ? queued.requestedByUid === requestedByUid
-            : queued.requestedBy === requestedBy,
-        ).length;
-    if (requesterCount >= this.#maxTracksPerUser) {
-      throw new QueueLimitError(
-        `Límite de ${this.#maxTracksPerUser} pistas por usuario en la cola.`,
-      );
-    }
     if (metadata.audioUrl)
       this.#preparedStore.setReady(track, metadata.audioUrl);
-    this.#queue.add(track);
+    this.#queue.add(track, this.#current);
     if (!this.#current) this.#prefetchNext();
     this.#requestNext();
     this.#persistState();
@@ -1269,7 +1241,7 @@ export class YoutubePlaybackService {
     this.#session?.stop();
     this.#session = undefined;
     try {
-      this.#queue.add(this.#current);
+      this.#queue.requeue(this.#current);
       this.#queue.moveToHead(this.#current.id);
     } catch {
       // Duplicate already queued: the seek acts like a skip.
@@ -1283,7 +1255,7 @@ export class YoutubePlaybackService {
       throw new UserError("No hay ninguna canción anterior para repetir.");
     }
     try {
-      this.#queue.add(previous);
+      this.#queue.requeue(previous);
     } catch {
       // Already queued: move it to the front instead.
     }
@@ -1302,8 +1274,7 @@ export class YoutubePlaybackService {
   }
 
   removeQueued(position: number): Track | undefined {
-    const track = this.#queue.snapshot()[position - 1];
-    const removed = track ? this.#queue.remove(track.id) : undefined;
+    const removed = this.#queue.removeAt(position);
     if (removed) this.#preparedStore.invalidate(removed.source);
     if (removed) this.#persistState();
     return removed;
@@ -1398,7 +1369,7 @@ export class YoutubePlaybackService {
         if (this.#queue.length === 0 && this.#loopPool.length > 0) {
           for (const pooled of this.#loopPool) {
             try {
-              this.#queue.add(pooled);
+              this.#queue.requeue(pooled);
             } catch {
               // already queued; skip
             }
@@ -1565,7 +1536,7 @@ export class YoutubePlaybackService {
                 this.#current === track
               ) {
                 try {
-                  this.#queue.add(track);
+                  this.#queue.requeue(track);
                   this.#queue.moveToHead(track.id);
                   this.#session = undefined;
                   this.#current = undefined;
@@ -1591,7 +1562,7 @@ export class YoutubePlaybackService {
         this.#persistState();
         if (this.#loopMode === "track") {
           try {
-            this.#queue.add(track);
+            this.#queue.requeue(track);
           } catch {
             // already queued; skip
           }
