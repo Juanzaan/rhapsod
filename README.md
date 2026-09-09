@@ -40,7 +40,7 @@ setup wizard (`/setup`) to connect TeamSpeak and YouTube. See
 ## Release profiles
 
 - **1.x** (`v1.2.1`): tuned for low-end VPS deployments (1 vCPU / 1 GB RAM).
-- **2.x** (`v2.4.0`): tuned for the OCI profile (4 vCPUs / 3 GB RAM). Both lines use the same configuration.
+- **2.x** (`v2.4.1`): tuned for the OCI profile (4 vCPUs / 3 GB RAM). Both lines use the same configuration.
 
 ## Commands
 

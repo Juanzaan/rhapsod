@@ -14,6 +14,18 @@ for [Semantic Versioning](https://semver.org/).
   The systemd unit exempts that code from restart; reconnects skip the check
   so a lingering ghost after a network drop cannot keep a live bot down.
 
+## [2.4.1] - 2026-09-08
+
+### Fixed
+
+- Release automation published phantom minors (2.5.0, proposed 2.6.0) with
+  full-history notes: draft releases create no git tag until publish, so the
+  baseline lookup never found the previous release and rescanned everything.
+  Releases now publish immediately, and the bogus 2.5.0 tag/notes were
+  removed. No runtime changes in this patch.
+
+> > > > > > > f469724 (docs: record 2.4.1 patch and refresh release pointers)
+
 ## [2.4.0] - 2026-09-08
 
 The release that makes playback transitions actually gapless and the driver
