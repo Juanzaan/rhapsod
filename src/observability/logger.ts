@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { Writable } from "node:stream";
 
 import pino, { type Logger } from "pino";
 import createRollingStream from "pino-roll";
@@ -63,6 +64,50 @@ function serializeError(err: unknown): ScrubbedErrorLog {
   };
 }
 
+interface FileLogStream {
+  write(chunk: unknown): unknown;
+  flushSync?(): void;
+}
+
+let lastFileStreamErrorAt = 0;
+
+function reportFileStreamError(error: unknown): void {
+  const now = Date.now();
+  if (now - lastFileStreamErrorAt < 60_000) return;
+  lastFileStreamErrorAt = now;
+  const message = error instanceof Error ? error.message : String(error);
+  process.stderr.write(`[rhapsod] log file stream error: ${message}\n`);
+}
+
+// A rolling file stream whose target cannot be opened keeps fd -1 and throws
+// synchronously on write; our pino forwards that throw through multistream
+// into the logging call, which took the process down as "fd out of range".
+// The wrapper degrades to dropping file lines instead of crashing.
+export function guardFileStream(stream: FileLogStream): NodeJS.WritableStream {
+  const guard = new Writable({
+    decodeStrings: false,
+    write(chunk, _encoding, callback) {
+      try {
+        stream.write(chunk);
+      } catch (error) {
+        reportFileStreamError(error);
+      }
+      callback();
+    },
+  });
+  if (typeof stream.flushSync === "function") {
+    const flushSync = stream.flushSync.bind(stream);
+    (guard as Writable & { flushSync: () => void }).flushSync = () => {
+      try {
+        flushSync();
+      } catch (error) {
+        reportFileStreamError(error);
+      }
+    };
+  }
+  return guard;
+}
+
 export async function createRhapsodLogger(
   options: RhapsodLoggerOptions,
 ): Promise<Logger> {
@@ -79,10 +124,8 @@ export async function createRhapsodLogger(
         ? {}
         : { limit: { count: options.retentionDays } }),
     });
-    roll.on("error", () => {
-      // A failing log file must never take the bot down.
-    });
-    streams.push({ stream: roll });
+    roll.on("error", reportFileStreamError);
+    streams.push({ stream: guardFileStream(roll) });
   }
   return pino(
     {

@@ -1,10 +1,15 @@
 import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Writable } from "node:stream";
 
+import pino from "pino";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { createRhapsodLogger } from "../src/observability/logger.js";
+import {
+  createRhapsodLogger,
+  guardFileStream,
+} from "../src/observability/logger.js";
 
 const tempDirs: string[] = [];
 
@@ -94,5 +99,103 @@ describe("createRhapsodLogger", () => {
     expect(content).toContain('"po_token":"[REDACTED]"');
     expect(content).not.toContain("SAPISID=SECRET");
     expect(content).not.toContain("PO-SECRET");
+  });
+});
+
+describe("guardFileStream", () => {
+  // Failure replayed from the August 2026 incident: the rolling file stream
+  // could not open its target (fd -1) and every write threw synchronously
+  // through multistream, taking the process down on a routine log line.
+  const fdError = (): Error =>
+    Object.assign(
+      new RangeError(
+        'The value of "fd" is out of range. It must be >= 0 && <= 2147483647. Received -1',
+      ),
+      { code: "ERR_OUT_OF_RANGE" },
+    );
+
+  interface FakeFileStream {
+    write(chunk: unknown): unknown;
+    flushSync?(): void;
+  }
+
+  function buildLogger(fileStream: FakeFileStream): {
+    logger: pino.Logger;
+    stdoutLines: string[];
+  } {
+    const stdoutLines: string[] = [];
+    const stdoutCapture = new Writable({
+      write(chunk, _encoding, callback) {
+        stdoutLines.push(String(chunk));
+        callback();
+      },
+    });
+    const logger = pino(
+      { level: "info" },
+      pino.multistream([
+        { stream: stdoutCapture },
+        { stream: guardFileStream(fileStream) },
+      ]),
+    );
+    return { logger, stdoutLines };
+  }
+
+  it("replays the incident without the guard: the log call throws", () => {
+    const broken = {
+      write(): unknown {
+        throw fdError();
+      },
+    };
+    const stdoutCapture = new Writable({
+      write(_chunk, _encoding, callback) {
+        callback();
+      },
+    });
+    const naked = pino(
+      { level: "info" },
+      pino.multistream([
+        { stream: stdoutCapture },
+        { stream: broken as unknown as NodeJS.WritableStream },
+      ]),
+    );
+
+    expect(() => naked.info("configuration loaded")).toThrow(/out of range/);
+  });
+
+  it("keeps serving stdout when the file stream throws like a broken fd", () => {
+    const { logger, stdoutLines } = buildLogger({
+      write(): unknown {
+        throw fdError();
+      },
+    });
+
+    expect(() => logger.info("configuration loaded")).not.toThrow();
+    expect(stdoutLines.join("")).toContain("configuration loaded");
+  });
+
+  it("forwards lines untouched to a healthy file stream", () => {
+    const fileLines: string[] = [];
+    const { logger } = buildLogger({
+      write(chunk: unknown): unknown {
+        fileLines.push(String(chunk));
+        return true;
+      },
+    });
+
+    logger.info("hello file");
+    expect(fileLines.join("")).toContain("hello file");
+  });
+
+  it("absorbs flushSync failures from a broken file stream", () => {
+    const guard = guardFileStream({
+      write(): unknown {
+        throw fdError();
+      },
+      flushSync(): void {
+        throw fdError();
+      },
+    }) as Writable & { flushSync: () => void };
+
+    expect(() => guard.flushSync()).not.toThrow();
   });
 });
