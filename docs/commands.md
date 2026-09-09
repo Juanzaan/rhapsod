@@ -10,7 +10,7 @@ chat once the TS3 adapter is connected.
 | `!yt [n] <search terms>`      | `!search`, `!youtube` | Add a matching YouTube video; a leading number picks the n-th ranked result.                        |
 | `!pause`                      | -                     | Pause the current track.                                                                            |
 | `!resume`                     | -                     | Resume the current track.                                                                           |
-| `!skip`                       | `!s`                  | Skip the current track.                                                                             |
+| `!skip`                       | `!s`                  | Skip the current track (only its requester or an admin).                                            |
 | `!previous`                   | `!prev`               | Replay the last finished track.                                                                     |
 | `!seek <seconds>`             | -                     | Jump to a position in seconds within the current track.                                             |
 | `!stop`                       | -                     | Stop playback and disconnect the player from the current track.                                     |
@@ -36,6 +36,10 @@ chat once the TS3 adapter is connected.
 | `!filter [off]`               | -                     | Show the current audio filter, or `off` to disable it.                                              |
 | `!effects <effect> [on\|off]` | -                     | Control audio effects (`8d`, `nightcore`, `bassboost`, `vaporwave`, `list`, `reset`).               |
 | `!playlist <subcommand>`      | `!pl`                 | Saved playlists: `save\|load\|list\|show\|delete\|add\|remove\|rename\|info`.                       |
+| `!fav`                        | -                     | Save the current track to your favorites (max 50 per user).                                         |
+| `!favs`                       | -                     | List your favorite tracks.                                                                          |
+| `!unfav <n>`                  | -                     | Remove a favorite by its list position.                                                             |
+| `!favplay <n>`                | `!fp`                 | Add a favorite to the queue by its list position.                                                   |
 | `!test-tone`                  | `!tone`               | Play a 3-second test tone (rate-limited).                                                           |
 | `!help`                       | `!h`                  | Show the command summary.                                                                           |
 
@@ -43,8 +47,12 @@ chat once the TS3 adapter is connected.
 
 - **Permissions:** most commands are open to everyone. `RHAPSOD_ADMIN_UIDS`
   grants admins the ability to remove tracks requested by other users with
-  `!remove` and to use `!channel-move`; requesters can always remove their own
-  tracks.
+  `!remove`, to skip anyone's current track with `!skip`, and to use
+  `!channel-move`; requesters can always remove their own tracks and skip
+  their own current track.
+- **Favorites:** `!fav` saves the current track per TS3 user id (up to 50),
+  persisted to `data/user-preferences.json` (atomic write) and replayable
+  with `!favplay <n>`.
 - **Persistence:** `!volume` (default `50`) and `!loop` are saved to
   `data/state.json` (atomic write) and restored at startup; `!stop`/`!clear`
   reset looping and persist the change.

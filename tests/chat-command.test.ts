@@ -56,6 +56,28 @@ describe("parseChatCommand", () => {
     });
   });
 
+  it("parses the favorites commands", () => {
+    expect(parseChatCommand("!fav")).toEqual({ name: "fav" });
+    expect(parseChatCommand("!favs")).toEqual({ name: "favs" });
+    expect(parseChatCommand("!unfav 2")).toEqual({
+      index: 2,
+      name: "unfav",
+    });
+    expect(parseChatCommand("!favplay 3")).toEqual({
+      index: 3,
+      name: "favplay",
+    });
+    expect(parseChatCommand("!fp 1")).toEqual({
+      index: 1,
+      name: "favplay",
+    });
+    expect(() => parseChatCommand("!unfav")).toThrow("Usá: !unfav <n>");
+    expect(() => parseChatCommand("!favplay x")).toThrow("Usá: !favplay <n>");
+    expect(() => parseChatCommand("!fav extra")).toThrow(
+      "no acepta argumentos",
+    );
+  });
+
   it("does not treat normal chat as a command", () => {
     expect(parseChatCommand("play this please")).toBeUndefined();
   });

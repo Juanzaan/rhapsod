@@ -51,6 +51,8 @@ describe("command registry", () => {
       vaporwave: " 0.9",
       loop: " off",
       playlist: " list",
+      unfav: " 1",
+      favplay: " 1",
     };
     for (const spec of COMMAND_SPECS) {
       for (const alias of spec.aliases) {

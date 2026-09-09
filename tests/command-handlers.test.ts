@@ -104,6 +104,15 @@ function makeHarness(
     recordBotMovedBy: vi.fn(),
     snapshot: vi.fn(() => []),
   };
+  const preferences = {
+    addFavorite: vi.fn((_uid: unknown, track: Record<string, unknown>) => ({
+      addedAt: 0,
+      ...track,
+    })),
+    listFavorites: vi.fn((): unknown[] => []),
+    removeFavorite: vi.fn((): unknown => undefined),
+    flush: vi.fn(() => Promise.resolve()),
+  };
   const ytDlpExecutor = {
     metrics: vi.fn(() => ({ active: 0, queued: 0, totalRuns: 0 })),
   };
@@ -117,6 +126,7 @@ function makeHarness(
     config,
     metrics,
     telemetry,
+    preferences,
     ytDlpExecutor,
     commandRateLimiter,
     encoder: {},
@@ -137,6 +147,7 @@ function makeHarness(
     connection,
     metrics,
     telemetry,
+    preferences,
     send,
     sender,
     commandRateLimiter,
@@ -179,6 +190,11 @@ describe("dispatchCommand", () => {
       ["filter", "!filter"],
       ["effects", "!effects"],
       ["playlist", "!playlist"],
+      ["fav", "!fav"],
+      ["favs", "!favs"],
+      ["unfav", "!unfav 1"],
+      ["favplay", "!favplay 1"],
+      ["favplay-alias", "!fp 1"],
     ];
     const { ctx, send, sender } = makeHarness({ current: { title: "X" } });
     for (const [name, input] of cases) {
@@ -639,5 +655,144 @@ describe("dispatchCommand error handling", () => {
     await expect(dispatchCommand(ctx, command, sender, send)).rejects.toThrow(
       "boom",
     );
+  });
+});
+
+describe("favorites and skip ownership", () => {
+  it("saves the current track with !fav", async () => {
+    const { ctx, preferences, send, sender } = makeHarness({
+      current: {
+        id: "abc",
+        requestedBy: "user",
+        requestedByUid: "uid-1",
+        source: "https://youtu.be/abc",
+        title: "Duki - Rockstar",
+      },
+    });
+    await dispatchCommand(ctx, parseChatCommand("!fav")!, sender, send);
+
+    expect(preferences.addFavorite).toHaveBeenCalledWith("uid-1", {
+      id: "abc",
+      source: "https://youtu.be/abc",
+      title: "Duki - Rockstar",
+    });
+    expect(preferences.flush).toHaveBeenCalled();
+    expect(send).toHaveBeenCalledWith(
+      "Guardada en tus favoritos: Duki - Rockstar",
+    );
+  });
+
+  it("refuses !fav with nothing playing", async () => {
+    const { ctx, preferences, send, sender } = makeHarness();
+    await dispatchCommand(ctx, parseChatCommand("!fav")!, sender, send);
+
+    expect(preferences.addFavorite).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledWith(
+      "No hay nada sonando para guardar en favoritos.",
+    );
+  });
+
+  it("lists favorites with !favs", async () => {
+    const { ctx, preferences, send, sender } = makeHarness();
+    preferences.listFavorites.mockReturnValue([
+      { id: "a", source: "s-a", title: "First" },
+      { id: "b", source: "s-b", title: "Second" },
+    ]);
+    await dispatchCommand(ctx, parseChatCommand("!favs")!, sender, send);
+
+    expect(preferences.listFavorites).toHaveBeenCalledWith("uid-1");
+    expect(send).toHaveBeenCalledWith("Tus favoritos:\n1. First\n2. Second");
+  });
+
+  it("reports an empty favorites list", async () => {
+    const { ctx, send, sender } = makeHarness();
+    await dispatchCommand(ctx, parseChatCommand("!favs")!, sender, send);
+
+    expect(send).toHaveBeenCalledWith(
+      "Todavía no tenés favoritos. Guardá la canción actual con !fav.",
+    );
+  });
+
+  it("removes a favorite with !unfav", async () => {
+    const { ctx, preferences, send, sender } = makeHarness();
+    preferences.removeFavorite.mockReturnValue({ id: "a", title: "First" });
+    await dispatchCommand(ctx, parseChatCommand("!unfav 1")!, sender, send);
+
+    expect(preferences.removeFavorite).toHaveBeenCalledWith("uid-1", 1);
+    expect(send).toHaveBeenCalledWith("Quitada de tus favoritos: First");
+  });
+
+  it("reports a missing favorite on !unfav", async () => {
+    const { ctx, send, sender } = makeHarness();
+    await dispatchCommand(ctx, parseChatCommand("!unfav 9")!, sender, send);
+
+    expect(send).toHaveBeenCalledWith(
+      "No existe ese favorito. Mirá tu lista con !favs.",
+    );
+  });
+
+  it("enqueues a favorite with !favplay", async () => {
+    const { ctx, playback, preferences, send, sender } = makeHarness();
+    preferences.listFavorites.mockReturnValue([
+      { id: "a", source: "https://youtu.be/a", title: "First" },
+    ]);
+    await dispatchCommand(ctx, parseChatCommand("!favplay 1")!, sender, send);
+
+    expect(playback.enqueue).toHaveBeenCalledWith(
+      "https://youtu.be/a",
+      "user",
+      "uid-1",
+    );
+    expect(send).toHaveBeenCalledWith("Agregada a la cola: Track");
+  });
+
+  it("reports a missing favorite on !favplay", async () => {
+    const { ctx, playback, send, sender } = makeHarness();
+    await dispatchCommand(ctx, parseChatCommand("!favplay 3")!, sender, send);
+
+    expect(playback.enqueue).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledWith(
+      "No existe ese favorito. Mirá tu lista con !favs.",
+    );
+  });
+
+  it("lets the requester skip their own track", async () => {
+    const { ctx, playback, send, sender } = makeHarness({
+      current: { requestedBy: "user", requestedByUid: "uid-1", title: "X" },
+    });
+    await dispatchCommand(ctx, parseChatCommand("!skip")!, sender, send);
+
+    expect(playback.skip).toHaveBeenCalledTimes(1);
+    expect(send).toHaveBeenCalledWith("Pista saltada.");
+  });
+
+  it("blocks strangers from skipping someone else's track", async () => {
+    const { ctx, playback, send, sender } = makeHarness({
+      current: { requestedBy: "other", requestedByUid: "uid-9", title: "X" },
+    });
+    await dispatchCommand(ctx, parseChatCommand("!skip")!, sender, send);
+
+    expect(playback.skip).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledWith(
+      "Solo quien pidió la canción (o un admin) puede saltarla.",
+    );
+  });
+
+  it("lets admins skip anyone's track", async () => {
+    const { ctx, playback, send, sender } = makeHarness({
+      adminUids: new Set(["uid-1"]),
+      current: { requestedBy: "other", requestedByUid: "uid-9", title: "X" },
+    });
+    await dispatchCommand(ctx, parseChatCommand("!skip")!, sender, send);
+
+    expect(playback.skip).toHaveBeenCalledTimes(1);
+    expect(send).toHaveBeenCalledWith("Pista saltada.");
+  });
+
+  it("keeps skipping with nothing playing", async () => {
+    const { ctx, playback, send, sender } = makeHarness();
+    await dispatchCommand(ctx, parseChatCommand("!skip")!, sender, send);
+
+    expect(playback.skip).toHaveBeenCalledTimes(1);
   });
 });
