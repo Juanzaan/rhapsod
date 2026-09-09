@@ -53,6 +53,7 @@ import {
 } from "./commands/permissions.js";
 import { createYtDlpResolverStack } from "./media/youtube/yt-dlp.js";
 import { getTimeoutConfig } from "./lib/timeout-config.js";
+import { resolveInstanceDir } from "./lib/instance-dir.js";
 import { UserError } from "./lib/user-error.js";
 import { createPanelServer, type QueueEntry } from "./panel/panel-server.js";
 import { ChatLog, isOwnEcho } from "./application/chat-log.js";
@@ -79,9 +80,13 @@ import { startWatchdog } from "./watchdog.js";
 
 async function main(): Promise<void> {
   const config = loadConfig();
+  const dataDir = resolveInstanceDir(
+    config.RHAPSOD_DATA_DIR,
+    config.RHAPSOD_INSTANCE_ID,
+  );
   const logger = await createRhapsodLogger({
     level: config.RHAPSOD_LOG_LEVEL,
-    logDir: join(config.RHAPSOD_DATA_DIR, "logs"),
+    logDir: join(dataDir, "logs"),
     retentionDays: config.RHAPSOD_LOG_RETENTION_DAYS,
   });
   const metrics = new MetricsCollector();
@@ -174,7 +179,7 @@ async function main(): Promise<void> {
         ),
         saveCookies: createCookieSaver(
           config.RHAPSOD_YTDLP_COOKIES_PATH ??
-            join(config.RHAPSOD_DATA_DIR, "youtube-cookies.txt"),
+            join(dataDir, "youtube-cookies.txt"),
         ),
         restart: (): void => {
           logger.info("Panel requested restart");
@@ -191,7 +196,7 @@ async function main(): Promise<void> {
   }
 
   const identity = await new Ts3IdentityStore(
-    join(config.RHAPSOD_DATA_DIR, "ts3-identity.txt"),
+    join(dataDir, "ts3-identity.txt"),
   ).loadOrCreate();
   const metricsIntervalMinutes = config.RHAPSOD_METRICS_INTERVAL_MINUTES;
   const ytDlpMetricsRef = {
@@ -239,12 +244,12 @@ async function main(): Promise<void> {
     return rawSendChannelMessage(text);
   };
   const telemetry = new UserTelemetry(
-    join(config.RHAPSOD_DATA_DIR, "user-telemetry.json"),
+    join(dataDir, "user-telemetry.json"),
     logger,
   );
   telemetry.load();
   const preferences = new UserPreferences(
-    join(config.RHAPSOD_DATA_DIR, "user-preferences.json"),
+    join(dataDir, "user-preferences.json"),
   );
   const serverSnapshot = new ServerSnapshot();
   const channelDirectory = new ChannelDirectory(async (cid) => {
@@ -350,7 +355,7 @@ async function main(): Promise<void> {
     });
   ytDlpMetricsRef.getMetrics = () => ytDlpExecutor.metrics();
   const audioUrlCache = AudioUrlCache.load(
-    join(config.RHAPSOD_DATA_DIR, "audio-url-cache.json"),
+    join(dataDir, "audio-url-cache.json"),
     logger,
     {
       onHit: () => metrics.increment("cacheHits"),
@@ -445,16 +450,10 @@ async function main(): Promise<void> {
     },
     output: connection,
     resolver,
-    stateStore: new FilePlaybackStateStore(
-      join(config.RHAPSOD_DATA_DIR, "state.json"),
-      logger,
-    ),
+    stateStore: new FilePlaybackStateStore(join(dataDir, "state.json"), logger),
     audioUrlCache,
     redirectResolver: new RedirectResolver(),
-    playlistStore: new PlaylistStore(
-      join(config.RHAPSOD_DATA_DIR, "playlists.json"),
-      logger,
-    ),
+    playlistStore: new PlaylistStore(join(dataDir, "playlists.json"), logger),
     maxQueueTracks: config.RHAPSOD_MAX_QUEUE_TRACKS,
     maxTracksPerUser: config.RHAPSOD_MAX_TRACKS_PER_USER,
     alternativeResolver: new SongLinkClient({ logger }),
@@ -868,7 +867,7 @@ async function main(): Promise<void> {
         ),
         saveCookies: createCookieSaver(
           config.RHAPSOD_YTDLP_COOKIES_PATH ??
-            join(config.RHAPSOD_DATA_DIR, "youtube-cookies.txt"),
+            join(dataDir, "youtube-cookies.txt"),
         ),
         executeCommand: async (raw: string): Promise<string> => {
           const parsed = parseChatCommand(normalizeCommandInput(raw));

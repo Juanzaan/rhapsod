@@ -15,6 +15,15 @@ const configSchema = z.object({
   RHAPSOD_ENV_FILE: z.string().min(1).default(".env"),
   RHAPSOD_PRIVATE_COMMAND_UIDS: z.string().default(""),
   RHAPSOD_DATA_DIR: z.string().min(1).default("./data"),
+  RHAPSOD_INSTANCE_ID: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z
+      .string()
+      .min(1)
+      .max(32)
+      .regex(/^[a-z0-9-]+$/)
+      .optional(),
+  ),
   RHAPSOD_FFMPEG_PATH: optionalSecret,
   RHAPSOD_FFMPEG_USER_AGENT: optionalSecret,
   RHAPSOD_FFPROBE_PATH: optionalSecret,

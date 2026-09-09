@@ -42,6 +42,7 @@ for (const entry of readdirSync(scriptDir)) {
 
 for (const unit of [
   "rhapsod.service",
+  "rhapsod@.service",
   "rhapsod-ytdlp-daemon.service",
   "bgutil-pot-provider.service",
 ]) {

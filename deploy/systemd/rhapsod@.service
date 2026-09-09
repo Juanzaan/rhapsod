@@ -1,0 +1,27 @@
+[Unit]
+Description=Rhapsod TeamSpeak music bot (instance %i)
+After=network-online.target rhapsod-ytdlp-daemon.service
+Wants=network-online.target
+Requires=rhapsod-ytdlp-daemon.service
+
+[Service]
+Type=simple
+User=rhapsod
+WorkingDirectory=/home/rhapsod/rhapsod
+Environment=RHAPSOD_INSTANCE_ID=%i
+EnvironmentFile=/etc/rhapsod-%i.env
+ExecStart=/usr/bin/node dist/main.js
+Restart=on-failure
+RestartSec=5
+# A refused duplicate start (exit 42) is an operator error, not a crash:
+# do not flap a duplicate onto the server every 5 seconds.
+RestartPreventExitStatus=42
+TimeoutStopSec=15
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+MemoryMax=2G
+MemorySwapMax=2G
+
+[Install]
+WantedBy=multi-user.target
