@@ -32,6 +32,27 @@ describe("loadConfig", () => {
     expect(config.RHAPSOD_DATA_DIR).toBe("./data");
   });
 
+  it("leaves the instance id unset by default and validates it", () => {
+    const bare = loadConfig({ RHAPSOD_TS3_HOST: "ts.example.com" });
+    expect(bare.RHAPSOD_INSTANCE_ID).toBeUndefined();
+    const empty = loadConfig({
+      RHAPSOD_INSTANCE_ID: "",
+      RHAPSOD_TS3_HOST: "ts.example.com",
+    });
+    expect(empty.RHAPSOD_INSTANCE_ID).toBeUndefined();
+    const named = loadConfig({
+      RHAPSOD_INSTANCE_ID: "blue-2",
+      RHAPSOD_TS3_HOST: "ts.example.com",
+    });
+    expect(named.RHAPSOD_INSTANCE_ID).toBe("blue-2");
+    expect(() =>
+      loadConfig({
+        RHAPSOD_INSTANCE_ID: "Blue Bot!",
+        RHAPSOD_TS3_HOST: "ts.example.com",
+      }),
+    ).toThrow();
+  });
+
   it("loads the optional WARP proxy egress", () => {
     const config = loadConfig({
       RHAPSOD_TS3_HOST: "ts.example.com",

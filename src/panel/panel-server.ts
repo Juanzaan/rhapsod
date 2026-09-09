@@ -119,6 +119,8 @@ const ENV_DESCRIPTIONS: Record<string, string> = {
   RHAPSOD_TS3_CLIENT_DESCRIPTION: "Descripcion del bot en el servidor",
   RHAPSOD_ADMIN_UIDS: "UIDs de admin separados por coma",
   RHAPSOD_DATA_DIR: "Directorio de datos (identidad TS3, estado)",
+  RHAPSOD_INSTANCE_ID:
+    "ID de instancia (vacio = unica; datos en instances/<id>)",
   RHAPSOD_ENV_FILE: "Ruta del archivo .env (solo desde el entorno real)",
   RHAPSOD_PRIVATE_COMMAND_UIDS: "UIDs con acceso a comandos privados",
   RHAPSOD_YTDLP_PATH: "Ruta del binario yt-dlp",

@@ -187,6 +187,31 @@ sudo systemctl enable --now rhapsod-ytdlp-daemon rhapsod
 journalctl -u rhapsod -f
 ```
 
+## Multiple instances
+
+One host can run several bots (different servers, channels or nicknames) as
+isolated processes sharing a single yt-dlp daemon. Each instance needs its own
+identity, state and panel port, so set `RHAPSOD_INSTANCE_ID`: every persistent
+path (identity, `state.json`, playlists, telemetry, favorites, caches, logs)
+moves under `data/instances/<id>/`. Without the variable the historical
+single-instance layout is used unchanged.
+
+The repo ships a template unit, `deploy/systemd/rhapsod@.service`, wired for
+this: copy it to `/etc/systemd/system/`, write one env file per instance, and
+enable each one with a distinct panel port:
+
+```bash
+sudo cp deploy/systemd/rhapsod@.service /etc/systemd/system/
+# /etc/rhapsod-blue.env: RHAPSOD_TS3_NICKNAME=..., RHAPSOD_PANEL_PORT=8081, ...
+# (no RHAPSOD_INSTANCE_ID needed there; the unit sets it from its name)
+sudo systemctl enable --now rhapsod@blue
+journalctl -u rhapsod@blue -f
+```
+
+Two instances must never share an instance id: the second process would read
+and write the same state files. The duplicate-instance guard still applies per
+connection (exit 42 when the nickname or identity is already online).
+
 The process handles `SIGINT` and `SIGTERM` by disconnecting from TeamSpeak
 cleanly. After a runtime disconnect or kick, it retries at most five times,
 with a five-second delay, then flushes its state and exits. `TimeoutStopSec=15`
