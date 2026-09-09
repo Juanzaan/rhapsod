@@ -4,6 +4,7 @@ import type { RhapsodOpusEncoder } from "../audio/opus-encoder.js";
 import { playTestTone } from "../audio/test-tone-player.js";
 import type { MetricsCollector } from "../observability/metrics.js";
 import type { UserTelemetry } from "../application/user-telemetry.js";
+import type { UserPreferences } from "../application/user-preferences.js";
 import type { SystemYtDlpExecutor } from "../media/youtube/yt-dlp.js";
 import type { YoutubePlaybackService } from "../application/youtube-playback-service.js";
 import type { ChatCommand } from "./chat-command.js";
@@ -29,6 +30,7 @@ export interface CommandContext {
   readonly seniorChannelIds: ReadonlySet<number>;
   readonly metrics: MetricsCollector;
   readonly telemetry: UserTelemetry;
+  readonly preferences: UserPreferences;
   readonly ytDlpExecutor: SystemYtDlpExecutor;
   readonly commandRateLimiter: CommandRateLimiter;
   readonly encoder: RhapsodOpusEncoder;
@@ -247,6 +249,80 @@ async function handleHistory(
   );
 }
 
+async function handleFav(
+  ctx: CommandContext,
+  _command: Extract<ChatCommand, { name: "fav" }>,
+  sender: CommandSender,
+  send: SendFn,
+): Promise<void> {
+  const current = ctx.playback.current;
+  if (!current) {
+    await send("No hay nada sonando para guardar en favoritos.");
+    return;
+  }
+  const favorite = ctx.preferences.addFavorite(sender.uid, {
+    ...(current.durationSeconds === undefined
+      ? {}
+      : { durationSeconds: current.durationSeconds }),
+    id: current.id,
+    source: current.source,
+    title: current.title,
+  });
+  await ctx.preferences.flush();
+  await send(`Guardada en tus favoritos: ${favorite.title}`);
+}
+
+async function handleFavs(
+  ctx: CommandContext,
+  _command: Extract<ChatCommand, { name: "favs" }>,
+  sender: CommandSender,
+  send: SendFn,
+): Promise<void> {
+  const favorites = ctx.preferences.listFavorites(sender.uid);
+  await send(
+    favorites.length === 0
+      ? "Todavía no tenés favoritos. Guardá la canción actual con !fav."
+      : [
+          "Tus favoritos:",
+          ...favorites.map((track, index) => `${index + 1}. ${track.title}`),
+        ].join("\n"),
+  );
+}
+
+async function handleUnfav(
+  ctx: CommandContext,
+  command: Extract<ChatCommand, { name: "unfav" }>,
+  sender: CommandSender,
+  send: SendFn,
+): Promise<void> {
+  const removed = ctx.preferences.removeFavorite(sender.uid, command.index);
+  if (!removed) {
+    await send("No existe ese favorito. Mirá tu lista con !favs.");
+    return;
+  }
+  await ctx.preferences.flush();
+  await send(`Quitada de tus favoritos: ${removed.title}`);
+}
+
+async function handleFavPlay(
+  ctx: CommandContext,
+  command: Extract<ChatCommand, { name: "favplay" }>,
+  sender: CommandSender,
+  send: SendFn,
+): Promise<void> {
+  const favorite = ctx.preferences.listFavorites(sender.uid)[command.index - 1];
+  if (!favorite) {
+    await send("No existe ese favorito. Mirá tu lista con !favs.");
+    return;
+  }
+  const track = await ctx.playback.enqueue(
+    favorite.source,
+    sender.name,
+    sender.uid,
+  );
+  await send(`Agregada a la cola: ${track.title}`);
+}
+
 async function handleMove(
   ctx: CommandContext,
   command: Extract<ChatCommand, { name: "move" }>,
@@ -423,9 +499,25 @@ async function handleNowPlaying(
 async function handleSkip(
   ctx: CommandContext,
   _command: Extract<ChatCommand, { name: "skip" }>,
-  _sender: CommandSender,
+  sender: CommandSender,
   send: SendFn,
 ): Promise<void> {
+  const current = ctx.playback.current;
+  if (
+    current !== undefined &&
+    !canRemoveTrack({
+      adminUids: ctx.adminUids,
+      requesterName: current.requestedBy,
+      ...(current.requestedByUid === undefined
+        ? {}
+        : { requesterUid: current.requestedByUid }),
+      senderName: sender.name,
+      senderUid: sender.uid,
+    })
+  ) {
+    await send("Solo quien pidió la canción (o un admin) puede saltarla.");
+    return;
+  }
   ctx.playback.skip();
   await send("Pista saltada.");
 }
@@ -1027,5 +1119,13 @@ export async function dispatchCommand(
       return handleEffects(ctx, command, sender, send);
     case "playlist":
       return handlePlaylist(ctx, command, sender, send);
+    case "fav":
+      return handleFav(ctx, command, sender, send);
+    case "favs":
+      return handleFavs(ctx, command, sender, send);
+    case "unfav":
+      return handleUnfav(ctx, command, sender, send);
+    case "favplay":
+      return handleFavPlay(ctx, command, sender, send);
   }
 }

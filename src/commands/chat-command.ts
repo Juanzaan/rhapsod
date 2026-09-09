@@ -37,6 +37,10 @@ export type ChatCommand =
   | { readonly name: "vaporwave"; readonly rate?: number }
   | { readonly name: "8d" }
   | { readonly name: "filter"; readonly off?: boolean }
+  | { readonly name: "fav" }
+  | { readonly name: "favs" }
+  | { readonly index: number; readonly name: "unfav" }
+  | { readonly index: number; readonly name: "favplay" }
   | { readonly name: "playlist"; readonly action?: undefined }
   | {
       readonly action: "delete";
@@ -182,6 +186,10 @@ export function parseChatCommand(
       if (!argument) return { name };
       if (argument === "off") return { name, off: true };
       throw new UserError("Usá: !filter [off]");
+    case "unfav":
+      return { name, index: parsePosition(argument, "!unfav <n>") };
+    case "favplay":
+      return { name, index: parsePosition(argument, "!favplay <n>") };
     case "effects": {
       const parts = argument.split(/\s+/).filter(Boolean);
       const sub = parts[0];

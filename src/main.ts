@@ -31,6 +31,7 @@ import { YoutubePlaybackService } from "./application/youtube-playback-service.j
 import { AudioUrlCache } from "./application/audio-url-cache.js";
 import { PlaylistStore } from "./application/playlist-store.js";
 import { UserTelemetry } from "./application/user-telemetry.js";
+import { UserPreferences } from "./application/user-preferences.js";
 import {
   normalizeCommandInput,
   parseChatCommand,
@@ -242,6 +243,9 @@ async function main(): Promise<void> {
     logger,
   );
   telemetry.load();
+  const preferences = new UserPreferences(
+    join(config.RHAPSOD_DATA_DIR, "user-preferences.json"),
+  );
   const serverSnapshot = new ServerSnapshot();
   const channelDirectory = new ChannelDirectory(async (cid) => {
     try {
@@ -506,6 +510,7 @@ async function main(): Promise<void> {
     seniorChannelIds,
     metrics,
     telemetry,
+    preferences,
     ytDlpExecutor,
     commandRateLimiter,
     encoder,
@@ -787,6 +792,7 @@ async function main(): Promise<void> {
         playback.flushState().catch(() => undefined),
         audioUrlCache.flush().catch(() => undefined),
         telemetry.save().catch(() => undefined),
+        preferences.flush().catch(() => undefined),
       ]);
       process.exit(1);
     })();
@@ -898,6 +904,7 @@ async function main(): Promise<void> {
       playback.flushState().catch(() => undefined),
       audioUrlCache.flush().catch(() => undefined),
       telemetry.save(),
+      preferences.flush().catch(() => undefined),
       ...(panel === undefined ? [] : [panel.close().catch(() => undefined)]),
       new Promise((resolve) => setTimeout(resolve, 5_000)),
     ]).then(() => {
