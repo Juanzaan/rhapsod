@@ -14,7 +14,7 @@ happens on 2.x.
 ### 2.x — active line
 
 Production runs on OCI (4 vCPUs, 3 GB RAM) and is deployed from `main` on
-every release. The current release is **v2.4.0** (see
+every release. The current release is **v2.4.1** (see
 [CHANGELOG.md](../CHANGELOG.md)). History: v2.0.0 rebuilt the playback stack
 for the OCI profile, v2.1.0–v2.2.0 added gapless playback and hardening,
 v2.3.0 shipped the owner-facing surface (web panel, one-command installer,
