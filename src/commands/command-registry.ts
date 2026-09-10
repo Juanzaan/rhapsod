@@ -245,6 +245,14 @@ export const COMMAND_SPECS: readonly CommandSpec[] = [
     summary: "Agregar un favorito a la cola",
   },
   {
+    name: "fuente",
+    aliases: [],
+    group: "misc",
+    adminOnly: false,
+    usage: "fuente [youtube|soundcloud|auto]",
+    summary: "Ver o fijar tu fuente preferida de búsqueda",
+  },
+  {
     name: "effects",
     aliases: [],
     group: "misc",

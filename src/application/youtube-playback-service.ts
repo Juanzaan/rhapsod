@@ -480,6 +480,37 @@ export class YoutubePlaybackService {
     );
   }
 
+  async enqueueSoundcloudSearch(
+    query: string,
+    requestedBy: string,
+    requestedByUid?: string,
+  ): Promise<Track> {
+    const startedAt = Date.now();
+    const results =
+      (await this.#soundcloudResolver?.searchTracks?.(query, 5)) ?? [];
+    const top = results[0];
+    if (!top) {
+      throw new UserError(
+        "No encontré esa búsqueda en SoundCloud. Probá con !yt para buscar en YouTube.",
+      );
+    }
+    const metadata: YoutubeTrackMetadata = {
+      ...(top.durationSeconds === undefined
+        ? {}
+        : { durationSeconds: top.durationSeconds }),
+      id: top.id,
+      title: `${top.artist} - ${top.title}`,
+      webpageUrl: top.url,
+    };
+    this.#recordMetadataTiming(metadata, startedAt);
+    return this.#enqueueMetadata(
+      metadata,
+      requestedBy,
+      "soundcloud",
+      requestedByUid,
+    );
+  }
+
   async enqueueSearchIndex(
     query: string,
     index: number,
