@@ -68,6 +68,10 @@ function setup(
     proxyUrl?: string;
     autoplayProfile?: {
       artistScores(): ReadonlyMap<string, number>;
+      tasteProfile(uid: string): {
+        artistScores: ReadonlyMap<string, number>;
+        tokenScores: ReadonlyMap<string, number>;
+      };
       recentArtists(limit: number): readonly string[];
     };
     relatedVideoId?: (seedVideoId: string) => Promise<string | undefined>;
@@ -696,7 +700,11 @@ describe("YoutubePlaybackService", () => {
     try {
       const { resolver, service } = setup({
         autoplayProfile: {
-          artistScores: () => new Map([["duki", 5]]),
+          artistScores: () => new Map(),
+          tasteProfile: (uid: string) => ({
+            artistScores: uid === "uid-1" ? new Map([["duki", 5]]) : new Map(),
+            tokenScores: new Map<string, number>(),
+          }),
           recentArtists: () => [],
         },
       });
@@ -770,6 +778,10 @@ describe("YoutubePlaybackService", () => {
       const { playbackResolvers, resolver, service } = setup({
         autoplayProfile: {
           artistScores: () => new Map(),
+          tasteProfile: () => ({
+            artistScores: new Map<string, number>(),
+            tokenScores: new Map<string, number>(),
+          }),
           recentArtists: () => [],
         },
       });
@@ -796,10 +808,58 @@ describe("YoutubePlaybackService", () => {
     }
   });
 
+  it("follows the remembered taste when autoplay picks keep playing", async () => {
+    const random = vi.spyOn(Math, "random").mockReturnValue(0.99);
+    try {
+      const tasteProfile = vi.fn(
+        (): {
+          artistScores: ReadonlyMap<string, number>;
+          tokenScores: ReadonlyMap<string, number>;
+        } => ({
+          artistScores: new Map([["duki", 5]]),
+          tokenScores: new Map(),
+        }),
+      );
+      const { playbackResolvers, resolver, service } = setup({
+        autoplayProfile: {
+          artistScores: () => new Map(),
+          tasteProfile,
+          recentArtists: () => [],
+        },
+        relatedVideoId: () => Promise.resolve(undefined),
+      });
+      service.setAutoplay(true);
+      await service.enqueue("https://youtu.be/seedvideo11", "user-7", "uid-7");
+      await new Promise((resolve) => setImmediate(resolve));
+      resolver.expandPlaylist.mockResolvedValue({
+        tracks: [
+          {
+            id: "mix11111111",
+            title: "Duki - Mix",
+            webpageUrl: "https://www.youtube.com/watch?v=mix11111111",
+          },
+        ],
+      });
+      playbackResolvers[0]?.();
+      await new Promise((resolve) => setImmediate(resolve));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(service.current?.requestedByUid).toBe("autoplay");
+
+      await service.resolveAutoplayTrack();
+      expect(tasteProfile).toHaveBeenLastCalledWith("uid-7");
+    } finally {
+      random.mockRestore();
+    }
+  });
+
   it("stays parked after stop even with autoplay on", async () => {
     const { playbackResolvers, resolver, service } = setup({
       autoplayProfile: {
         artistScores: () => new Map(),
+        tasteProfile: () => ({
+          artistScores: new Map<string, number>(),
+          tokenScores: new Map<string, number>(),
+        }),
         recentArtists: () => [],
       },
     });

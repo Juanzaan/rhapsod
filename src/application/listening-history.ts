@@ -5,6 +5,7 @@ import type { MinimalLogger } from "../observability/logger.js";
 import { noopLogger } from "../observability/logger.js";
 import { readJsonFile } from "../lib/json-file-store.js";
 import { parseArtistTitle } from "../media/lyrics.js";
+import { tokenizeTitle, type AutoplayProfile } from "./autoplay-picker.js";
 
 export interface ListeningTrackInput {
   readonly id: string;
@@ -43,6 +44,30 @@ interface StoredTrackStats {
 
 const MAX_TRACKS_PER_USER = 500;
 const MAX_GLOBAL_TRACKS = 2000;
+const MAX_RECENT_PLAYS = 100;
+const SESSION_GAP_MS = 30 * 60_000;
+const SESSION_BOOST = 2;
+const DECAY_HALF_LIFE_MS = 5 * 24 * 60 * 60_000;
+
+export interface PlayEvent {
+  readonly at: number;
+  readonly completed: boolean;
+  readonly id: string;
+}
+
+function parsePlayEvent(raw: unknown): PlayEvent | undefined {
+  if (typeof raw !== "object" || raw === null) return undefined;
+  const record = raw as Record<string, unknown>;
+  if (typeof record.id !== "string" || record.id.length === 0) return undefined;
+  if (typeof record.at !== "number" || !Number.isFinite(record.at)) {
+    return undefined;
+  }
+  return {
+    at: record.at,
+    completed: record.completed === true,
+    id: record.id,
+  };
+}
 
 function parseTrackStats(raw: unknown): StoredTrackStats | undefined {
   if (typeof raw !== "object" || raw === null) return undefined;
@@ -83,7 +108,7 @@ function parseStatsMap(raw: unknown): Map<string, StoredTrackStats> {
 function parseHistoryFile(raw: unknown):
   | {
       global: Map<string, StoredTrackStats>;
-      users: Map<string, Map<string, StoredTrackStats>>;
+      users: Map<string, StoredUserData>;
     }
   | undefined {
   if (typeof raw !== "object" || raw === null) return undefined;
@@ -93,17 +118,37 @@ function parseHistoryFile(raw: unknown):
     version?: unknown;
   };
   if (record.version !== 1) return undefined;
-  const users = new Map<string, Map<string, StoredTrackStats>>();
+  const users = new Map<string, StoredUserData>();
   if (typeof record.users === "object" && record.users !== null) {
-    for (const [uid, tracks] of Object.entries(
+    for (const [uid, data] of Object.entries(
       record.users as Record<string, unknown>,
     )) {
       if (uid.length === 0) continue;
-      const parsed = parseStatsMap(tracks);
-      if (parsed.size > 0) users.set(uid, parsed);
+      const parsed = parseUserData(data);
+      if (parsed !== undefined) users.set(uid, parsed);
     }
   }
   return { global: parseStatsMap(record.global), users };
+}
+
+interface StoredUserData {
+  plays: PlayEvent[];
+  tracks: Map<string, StoredTrackStats>;
+}
+
+function parseUserData(raw: unknown): StoredUserData | undefined {
+  if (typeof raw !== "object" || raw === null) return undefined;
+  const record = raw as { plays?: unknown; tracks?: unknown };
+  const tracks = parseStatsMap(record.tracks);
+  const plays: PlayEvent[] = [];
+  if (Array.isArray(record.plays)) {
+    for (const item of record.plays) {
+      const event = parsePlayEvent(item);
+      if (event !== undefined) plays.push(event);
+    }
+  }
+  if (tracks.size === 0 && plays.length === 0) return undefined;
+  return { plays: plays.slice(-MAX_RECENT_PLAYS), tracks };
 }
 
 function rankTracks(
@@ -131,7 +176,7 @@ export class ListeningHistory {
   readonly #logger: MinimalLogger;
   readonly #maxGlobalTracks: number;
   readonly #maxTracksPerUser: number;
-  #users = new Map<string, Map<string, StoredTrackStats>>();
+  #users = new Map<string, StoredUserData>();
   #global = new Map<string, StoredTrackStats>();
   #loaded = false;
   #writeChain: Promise<void> = Promise.resolve();
@@ -150,7 +195,7 @@ export class ListeningHistory {
   recordStart(uid: string, track: ListeningTrackInput): void {
     this.#ensureLoaded();
     const at = Date.now();
-    for (const stats of [this.#userStats(uid), this.#global]) {
+    for (const stats of [this.#userData(uid).tracks, this.#global]) {
       let entry = stats.get(track.id);
       if (entry === undefined) {
         const { artist } = parseArtistTitle(track.title);
@@ -167,6 +212,9 @@ export class ListeningHistory {
       entry.plays++;
       entry.lastPlayedAt = at;
     }
+    const plays = this.#userData(uid).plays;
+    plays.push({ at, completed: false, id: track.id });
+    while (plays.length > MAX_RECENT_PLAYS) plays.shift();
     void this.#schedulePersist();
   }
 
@@ -176,7 +224,7 @@ export class ListeningHistory {
     completed: boolean,
   ): void {
     this.#ensureLoaded();
-    for (const stats of [this.#userStats(uid), this.#global]) {
+    for (const stats of [this.#userData(uid).tracks, this.#global]) {
       let entry = stats.get(track.id);
       if (entry === undefined) {
         const { artist } = parseArtistTitle(track.title);
@@ -192,6 +240,14 @@ export class ListeningHistory {
       }
       if (completed) entry.completes++;
       else entry.skips++;
+    }
+    const plays = this.#userData(uid).plays;
+    const open = [...plays].reverse().find((event) => event.id === track.id);
+    if (open !== undefined) {
+      plays[plays.indexOf(open)] = { ...open, completed };
+    } else {
+      plays.push({ at: Date.now(), completed, id: track.id });
+      while (plays.length > MAX_RECENT_PLAYS) plays.shift();
     }
     void this.#schedulePersist();
   }
@@ -236,10 +292,11 @@ export class ListeningHistory {
 
   userSummary(uid: string): ListeningUserSummary {
     this.#ensureLoaded();
-    const stats = this.#users.get(uid);
-    if (stats === undefined) {
+    const data = this.#users.get(uid);
+    if (data === undefined) {
       return { completes: 0, plays: 0, skips: 0 };
     }
+    const stats = data.tracks;
     let completes = 0;
     let plays = 0;
     let skips = 0;
@@ -271,17 +328,56 @@ export class ListeningHistory {
     };
   }
 
+  tasteProfile(uid: string): AutoplayProfile {
+    this.#ensureLoaded();
+    const artistScores = new Map<string, number>();
+    const tokenScores = new Map<string, number>();
+    const plays = this.#users.get(uid)?.plays ?? [];
+    // Current session: chain backwards while gaps stay under 30 minutes.
+    // It dominates so today's taste wins over last week's.
+    let sessionStart = plays.length;
+    for (let i = plays.length - 1; i >= 0; i--) {
+      sessionStart = i;
+      if (i === 0) break;
+      if (plays[i]!.at - plays[i - 1]!.at > SESSION_GAP_MS) break;
+    }
+    const now = Date.now();
+    const add = (trackId: string, weight: number): void => {
+      const stats = this.#users.get(uid)?.tracks.get(trackId);
+      if (stats?.artist !== undefined) {
+        const key = stats.artist.toLowerCase();
+        artistScores.set(key, (artistScores.get(key) ?? 0) + weight);
+      }
+      if (stats?.title !== undefined) {
+        for (const token of tokenizeTitle(stats.title)) {
+          tokenScores.set(token, (tokenScores.get(token) ?? 0) + weight);
+        }
+      }
+    };
+    plays.forEach((event, index) => {
+      const decay = Math.pow(
+        0.5,
+        Math.max(0, now - event.at) / DECAY_HALF_LIFE_MS,
+      );
+      const weight =
+        decay * (1 + (event.completed ? 1 : 0)) +
+        (index >= sessionStart ? SESSION_BOOST : 0);
+      add(event.id, weight);
+    });
+    return { artistScores, tokenScores };
+  }
+
   async flush(): Promise<void> {
     await this.#schedulePersist();
   }
 
-  #userStats(uid: string): Map<string, StoredTrackStats> {
-    let stats = this.#users.get(uid);
-    if (stats === undefined) {
-      stats = new Map();
-      this.#users.set(uid, stats);
+  #userData(uid: string): StoredUserData {
+    let data = this.#users.get(uid);
+    if (data === undefined) {
+      data = { plays: [], tracks: new Map() };
+      this.#users.set(uid, data);
     }
-    return stats;
+    return data;
   }
 
   #ensureLoaded(): void {
@@ -305,9 +401,14 @@ export class ListeningHistory {
       const data = {
         global: Object.fromEntries(prune(this.#global, this.#maxGlobalTracks)),
         users: Object.fromEntries(
-          [...this.#users.entries()].map(([uid, stats]) => [
+          [...this.#users.entries()].map(([uid, data]) => [
             uid,
-            Object.fromEntries(prune(stats, this.#maxTracksPerUser)),
+            {
+              plays: data.plays.slice(-MAX_RECENT_PLAYS),
+              tracks: Object.fromEntries(
+                prune(data.tracks, this.#maxTracksPerUser),
+              ),
+            },
           ]),
         ),
         version: 1 as const,

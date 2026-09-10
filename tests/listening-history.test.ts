@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ListeningHistory } from "../src/application/listening-history.js";
 
@@ -79,6 +79,38 @@ describe("ListeningHistory", () => {
     expect(history.artistScores()).toEqual(new Map([["duki", 3]]));
     expect([...history.recentArtists(2)].sort()).toEqual(["DUKI", "Duki"]);
     expect(history.recentArtists(1)).toHaveLength(1);
+  });
+
+  it("weights the current session over older taste", () => {
+    vi.useFakeTimers();
+    try {
+      const history = new ListeningHistory(makeTempFile());
+      vi.setSystemTime(new Date("2026-01-01T20:00:00Z"));
+      history.recordStart("uid-1", { id: "e1", title: "Daft Punk - Around" });
+      history.recordFinish(
+        "uid-1",
+        { id: "e1", title: "Daft Punk - Around" },
+        true,
+      );
+      vi.setSystemTime(new Date("2026-01-02T20:00:00Z"));
+      history.recordStart("uid-1", { id: "r1", title: "Metallica - One" });
+
+      const profile = history.tasteProfile("uid-1");
+      expect(profile.artistScores.get("metallica")).toBeGreaterThan(
+        profile.artistScores.get("daft punk") ?? 0,
+      );
+      expect(profile.tokenScores.get("one")).toBeGreaterThan(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("returns an empty profile without data", () => {
+    const history = new ListeningHistory(makeTempFile());
+    const profile = history.tasteProfile("nobody");
+
+    expect(profile.artistScores.size).toBe(0);
+    expect(profile.tokenScores.size).toBe(0);
   });
 
   it("persists across instances", async () => {

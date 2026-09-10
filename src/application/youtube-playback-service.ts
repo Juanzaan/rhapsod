@@ -12,7 +12,9 @@ import {
   AUTOPLAY_UID,
   pickAutoplayTrack,
   type AutoplayCandidate,
+  type AutoplayProfile,
   type AutoplayProfileSource,
+  type LastPlayedTrack,
 } from "./autoplay-picker.js";
 import { fetchAutoplayVideoId } from "../media/youtube/innertube-related.js";
 import type { createPcmStream, playFfmpegUrl } from "../audio/ffmpeg-player.js";
@@ -152,6 +154,7 @@ export class YoutubePlaybackService {
   readonly #spotifyResolver: SpotifyResolver | undefined;
   readonly #lyricsResolver: LyricsResolver | undefined;
   readonly #autoplayProfile: AutoplayProfileSource | undefined;
+  #autoplayUid: string | undefined;
   readonly #relatedVideoId: (
     seedVideoId: string,
   ) => Promise<string | undefined>;
@@ -1146,20 +1149,43 @@ export class YoutubePlaybackService {
         seeds.push(videoId);
       if (seeds.length >= AUTOPLAY_SEED_LIMIT) break;
     }
+    const seedUid = this.#resolveAutoplayUid(history);
+    if (seedUid !== undefined) this.#autoplayUid = seedUid;
+    const profile =
+      seedUid === undefined
+        ? {
+            artistScores:
+              this.#autoplayProfile?.artistScores() ??
+              new Map<string, number>(),
+            tokenScores: new Map<string, number>(),
+          }
+        : (this.#autoplayProfile?.tasteProfile(seedUid) ?? {
+            artistScores: new Map<string, number>(),
+            tokenScores: new Map<string, number>(),
+          });
+    const last = history[0];
+    const lastArtist =
+      last === undefined ? undefined : parseArtistTitle(last.title).artist;
+    const lastTrack =
+      last === undefined
+        ? undefined
+        : {
+            ...(lastArtist === undefined ? {} : { artist: lastArtist }),
+            title: last.title,
+          };
     const recentIds = new Set<string>();
     for (const track of history) recentIds.add(track.id);
     for (const track of this.#queue.snapshot()) recentIds.add(track.id);
     const current = this.#controller.current;
     if (current !== undefined) recentIds.add(current.id);
     const recentArtists = this.#autoplayProfile?.recentArtists(10) ?? [];
-    const artistScores =
-      this.#autoplayProfile?.artistScores() ?? new Map<string, number>();
     for (const seed of seeds) {
       const mixed = await this.#expandAutoplayMix(
         seed,
         recentIds,
         recentArtists,
-        artistScores,
+        profile,
+        lastTrack,
       ).catch(() => undefined);
       if (mixed !== undefined) return mixed;
       const related = await this.#resolveRelatedVideo(
@@ -1172,11 +1198,24 @@ export class YoutubePlaybackService {
     return undefined;
   }
 
+  #resolveAutoplayUid(history: readonly Track[]): string | undefined {
+    for (const track of history) {
+      if (
+        track.requestedByUid !== undefined &&
+        track.requestedByUid !== AUTOPLAY_UID
+      ) {
+        return track.requestedByUid;
+      }
+    }
+    return this.#autoplayUid;
+  }
+
   async #expandAutoplayMix(
     seedVideoId: string,
     recentIds: ReadonlySet<string>,
     recentArtists: readonly string[],
-    artistScores: ReadonlyMap<string, number>,
+    profile: AutoplayProfile,
+    lastTrack: LastPlayedTrack | undefined,
   ): Promise<Track | undefined> {
     const expansion = await this.#resolver.expandPlaylist(
       { id: `RD${seedVideoId}`, type: "playlist" },
@@ -1199,9 +1238,10 @@ export class YoutubePlaybackService {
     }
     const pick = pickAutoplayTrack(
       candidates,
-      { artistScores: () => artistScores },
+      profile,
       recentIds,
       recentArtists,
+      lastTrack,
     );
     if (pick === undefined) return undefined;
     return {
