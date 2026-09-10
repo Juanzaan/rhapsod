@@ -45,6 +45,7 @@ export type ChatCommand =
       readonly source?: "auto" | "soundcloud" | "youtube";
       readonly name: "fuente";
     }
+  | { readonly input: string; readonly name: "radio" }
   | { readonly name: "playlist"; readonly action?: undefined }
   | {
       readonly action: "delete";
@@ -205,6 +206,9 @@ export function parseChatCommand(
       }
       return { name, source: argument };
     }
+    case "radio":
+      if (!argument) throw new UserError("Usá: !radio <nombre o género>");
+      return { input: argument, name };
     case "effects": {
       const parts = argument.split(/\s+/).filter(Boolean);
       const sub = parts[0];

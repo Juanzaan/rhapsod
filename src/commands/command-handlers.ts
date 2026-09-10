@@ -5,10 +5,12 @@ import { playTestTone } from "../audio/test-tone-player.js";
 import type { MetricsCollector } from "../observability/metrics.js";
 import type { UserTelemetry } from "../application/user-telemetry.js";
 import type { UserPreferences } from "../application/user-preferences.js";
+import type { RadioTitleCache } from "../media/radio-icy.js";
 import type { SystemYtDlpExecutor } from "../media/youtube/yt-dlp.js";
 import type { YoutubePlaybackService } from "../application/youtube-playback-service.js";
 import type { ChatCommand } from "./chat-command.js";
 import type { CommandRateLimiter } from "./command-rate-limiter.js";
+import { searchStations } from "../media/radio-directory.js";
 import { parseMediaInput } from "../media/media-input.js";
 import {
   canMoveBotToChannel,
@@ -31,6 +33,7 @@ export interface CommandContext {
   readonly metrics: MetricsCollector;
   readonly telemetry: UserTelemetry;
   readonly preferences: UserPreferences;
+  readonly radioTitles: RadioTitleCache;
   readonly ytDlpExecutor: SystemYtDlpExecutor;
   readonly commandRateLimiter: CommandRateLimiter;
   readonly encoder: RhapsodOpusEncoder;
@@ -345,6 +348,28 @@ async function handleFuente(
   );
 }
 
+async function handleRadio(
+  ctx: CommandContext,
+  command: Extract<ChatCommand, { name: "radio" }>,
+  sender: CommandSender,
+  send: SendFn,
+): Promise<void> {
+  const stations = await searchStations(command.input);
+  const station = stations.find((candidate) =>
+    candidate.url.toLowerCase().startsWith("https://"),
+  );
+  if (!station) {
+    await send(
+      `No encontré emisoras para "${command.input}". Probá con otro nombre o género.`,
+    );
+    return;
+  }
+  await ctx.playback.enqueue(station.url, sender.name, sender.uid);
+  await send(
+    `Sintonizando: ${station.name}${station.bitrate ? ` (${station.bitrate} kbps)` : ""}.`,
+  );
+}
+
 async function handleFavPlay(
   ctx: CommandContext,
   command: Extract<ChatCommand, { name: "favplay" }>,
@@ -530,10 +555,17 @@ async function handleNowPlaying(
   _sender: CommandSender,
   send: SendFn,
 ): Promise<void> {
+  const current = ctx.playback.current;
+  if (!current) {
+    await send("No hay nada reproduciéndose.");
+    return;
+  }
+  const liveTitle =
+    current.durationSeconds === undefined
+      ? await ctx.radioTitles.get(current.source)
+      : undefined;
   await send(
-    ctx.playback.current
-      ? `Reproduciendo: ${ctx.playback.current.title} (${formatDuration(ctx.playback.current.durationSeconds)} - por ${ctx.playback.current.requestedBy})`
-      : "No hay nada reproduciéndose.",
+    `Reproduciendo: ${liveTitle ?? current.title} (${formatDuration(current.durationSeconds)} - por ${current.requestedBy})`,
   );
 }
 
@@ -1170,5 +1202,7 @@ export async function dispatchCommand(
       return handleFavPlay(ctx, command, sender, send);
     case "fuente":
       return handleFuente(ctx, command, sender, send);
+    case "radio":
+      return handleRadio(ctx, command, sender, send);
   }
 }

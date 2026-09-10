@@ -253,6 +253,14 @@ export const COMMAND_SPECS: readonly CommandSpec[] = [
     summary: "Ver o fijar tu fuente preferida de búsqueda",
   },
   {
+    name: "radio",
+    aliases: ["rb"],
+    group: "misc",
+    adminOnly: false,
+    usage: "radio <nombre o género>",
+    summary: "Buscar una emisora y sintonizarla",
+  },
+  {
     name: "effects",
     aliases: [],
     group: "misc",

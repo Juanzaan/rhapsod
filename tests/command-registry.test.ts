@@ -53,6 +53,7 @@ describe("command registry", () => {
       playlist: " list",
       unfav: " 1",
       favplay: " 1",
+      radio: " jazz",
     };
     for (const spec of COMMAND_SPECS) {
       for (const alias of spec.aliases) {

@@ -93,6 +93,20 @@ describe("parseChatCommand", () => {
     );
   });
 
+  it("parses the radio command", () => {
+    expect(parseChatCommand("!radio jazz")).toEqual({
+      input: "jazz",
+      name: "radio",
+    });
+    expect(parseChatCommand("!rb groove salad")).toEqual({
+      input: "groove salad",
+      name: "radio",
+    });
+    expect(() => parseChatCommand("!radio")).toThrow(
+      "Usá: !radio <nombre o género>",
+    );
+  });
+
   it("does not treat normal chat as a command", () => {
     expect(parseChatCommand("play this please")).toBeUndefined();
   });

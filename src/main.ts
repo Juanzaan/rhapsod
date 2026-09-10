@@ -45,6 +45,7 @@ import { formatPlaybackError, formatPlaybackStarted } from "./lib/messages.js";
 import { classifyYoutubeAuthFailure } from "./lib/youtube-auth-health.js";
 import { CommandRateLimiter } from "./commands/command-rate-limiter.js";
 import { loadConfig } from "./config.js";
+import type { Track } from "./domain/track.js";
 import { FilePlaybackStateStore } from "./domain/state-store.js";
 import {
   parseAdminUids,
@@ -54,6 +55,7 @@ import {
 import { createYtDlpResolverStack } from "./media/youtube/yt-dlp.js";
 import { getTimeoutConfig } from "./lib/timeout-config.js";
 import { resolveInstanceDir } from "./lib/instance-dir.js";
+import { RadioTitleCache } from "./media/radio-icy.js";
 import { UserError } from "./lib/user-error.js";
 import { createPanelServer, type QueueEntry } from "./panel/panel-server.js";
 import { ChatLog, isOwnEcho } from "./application/chat-log.js";
@@ -251,6 +253,7 @@ async function main(): Promise<void> {
   const preferences = new UserPreferences(
     join(dataDir, "user-preferences.json"),
   );
+  const radioTitles = new RadioTitleCache();
   const serverSnapshot = new ServerSnapshot();
   const channelDirectory = new ChannelDirectory(async (cid) => {
     try {
@@ -510,6 +513,7 @@ async function main(): Promise<void> {
     metrics,
     telemetry,
     preferences,
+    radioTitles,
     ytDlpExecutor,
     commandRateLimiter,
     encoder,
@@ -820,6 +824,17 @@ async function main(): Promise<void> {
     "Rhapsod is ready",
   );
 
+  const currentDisplayTitle = (current: Track): string => {
+    if (current.durationSeconds !== undefined) return current.title;
+    return radioTitles.peek(current.source) ?? current.title;
+  };
+  setInterval(() => {
+    const live = playback.current;
+    if (live !== undefined && live.durationSeconds === undefined) {
+      void radioTitles.get(live.source).catch(() => undefined);
+    }
+  }, 30_000).unref();
+
   const panel = config.RHAPSOD_PANEL_ENABLED
     ? createPanelServer({
         config,
@@ -833,7 +848,7 @@ async function main(): Promise<void> {
           queueLength: playback.queue().length,
           ...(playback.current === undefined
             ? {}
-            : { currentTitle: playback.current.title }),
+            : { currentTitle: currentDisplayTitle(playback.current) }),
           ...(playback.current?.durationSeconds === undefined
             ? {}
             : { durationMs: playback.current.durationSeconds * 1000 }),
