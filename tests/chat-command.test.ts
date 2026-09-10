@@ -107,6 +107,16 @@ describe("parseChatCommand", () => {
     );
   });
 
+  it("parses the jump command", () => {
+    expect(parseChatCommand("!jump 3")).toEqual({
+      index: 3,
+      name: "jump",
+    });
+    expect(parseChatCommand("!j 1")).toEqual({ index: 1, name: "jump" });
+    expect(() => parseChatCommand("!jump")).toThrow("Usá: !jump <posición>");
+    expect(() => parseChatCommand("!jump x")).toThrow("Usá: !jump <posición>");
+  });
+
   it("does not treat normal chat as a command", () => {
     expect(parseChatCommand("play this please")).toBeUndefined();
   });

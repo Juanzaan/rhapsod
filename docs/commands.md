@@ -42,6 +42,7 @@ chat once the TS3 adapter is connected.
 | `!favplay <n>`                        | `!fp`                 | Add a favorite to the queue by its list position.                                                   |
 | `!fuente [youtube\|soundcloud\|auto]` | -                     | Show or set your preferred search source for `!play` and `!yt`.                                     |
 | `!radio <nombre o género>`            | `!rb`                 | Search the community radio directory and tune the top match.                                        |
+| `!jump <posición>`                    | `!j`                  | Skip to a queue position (only its requesters or an admin).                                         |
 | `!test-tone`                          | `!tone`               | Play a 3-second test tone (rate-limited).                                                           |
 | `!help`                               | `!h`                  | Show the command summary.                                                                           |
 
@@ -65,7 +66,10 @@ chat once the TS3 adapter is connected.
 - **Queue editing:** `!playnext` promotes one resolved track ahead of every
   pending track; YouTube playlists must use `!play`. `!move` rejects missing
   source/destination positions. `!remove a-b` removes an inclusive range and
-  caps ranges that extend beyond the queue end.
+  caps ranges that extend beyond the queue end. `!jump <n>` plays the n-th
+  queued track, dropping everything before it (same ownership rule as
+  `!skip`/`!remove`). `!queue` ends with the remaining time, counting only
+  tracks with a known duration.
 - **YouTube:** Rhapsod uses a local `yt-dlp` executable to obtain metadata and
   a temporary audio URL immediately before playback. Search returns the
   ranked match (or the n-th pick); playlists add up to 100 tracks per `!play`
