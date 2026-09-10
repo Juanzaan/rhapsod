@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   AUTOPLAY_REQUESTER,
   AUTOPLAY_UID,
+  energyOfTitle,
   pickAutoplayTrack,
   tokenizeTitle,
   type AutoplayCandidate,
@@ -43,6 +44,15 @@ describe("tokenizeTitle", () => {
       "official",
       "video",
     ]);
+  });
+});
+
+describe("energyOfTitle", () => {
+  it("scores energetic, calm and neutral titles", () => {
+    expect(energyOfTitle("Midnight Club Remix")).toBeGreaterThan(0.5);
+    expect(energyOfTitle("Soft Piano Morning")).toBeLessThan(-0.5);
+    expect(energyOfTitle("Duki - Rockstar")).toBe(0);
+    expect(energyOfTitle("Acoustic Club Night")).toBeCloseTo(0, 5);
   });
 });
 
@@ -109,6 +119,62 @@ describe("pickAutoplayTrack", () => {
     );
 
     expect(picks?.id).toBe("bbb22222222");
+  });
+
+  it("prefers same energy over the same name", () => {
+    const last = { artist: "Calm Guitar", title: "Evening Acoustic" };
+    const picks = pickAutoplayTrack(
+      [
+        candidate("aaa11111111", "Club Remix", "Calm Guitar"),
+        candidate("bbb22222222", "Soft Piano Morning", "Other Artist"),
+      ],
+      profile({}),
+      new Set(),
+      [],
+      last,
+      () => 0.99,
+    );
+
+    expect(picks?.id).toBe("bbb22222222");
+  });
+
+  it("rotates artists with a soft penalty instead of locking on", () => {
+    const starters: [string, string][] = [
+      ["aaa11111111", "X Song"],
+      ["bbb22222222", "Y Song"],
+    ];
+    const fresh = (recent: string[]): string | undefined =>
+      pickAutoplayTrack(
+        starters.map(([id, title]) =>
+          candidate(id, title, id === "aaa11111111" ? "X Band" : "Y Band"),
+        ),
+        profile({ "x band": 1.9, "y band": 2.0 }),
+        new Set(),
+        recent,
+        undefined,
+        () => 0.99,
+      )?.id;
+
+    expect(fresh([])).toBe("aaa11111111");
+    expect(fresh(["X Band"])).toBe("bbb22222222");
+  });
+
+  it("bounds exploration to compatible energy", () => {
+    const last = { artist: "Calm Guitar", title: "Evening Acoustic" };
+    const picks = pickAutoplayTrack(
+      [
+        candidate("aaa11111111", "Club Remix", "DJ A"),
+        candidate("bbb22222222", "Hardstyle Night", "DJ B"),
+        candidate("ccc33333333", "Soft Piano Morning", "Other Artist"),
+      ],
+      profile({}),
+      new Set(),
+      [],
+      last,
+      () => 0.01,
+    );
+
+    expect(picks?.id).toBe("ccc33333333");
   });
 
   it("rewards token overlap with the taste profile", () => {

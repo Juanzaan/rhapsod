@@ -67,10 +67,13 @@ chat once the TS3 adapter is connected.
   the bot expands the YouTube mix of recently played tracks and picks the
   best match for whoever has been requesting: artist affinity and title
   tokens from their recent sessions (today wins over last week), plus
-  continuity with the track that just played so transitions flow instead
-  of jumping genres. With no personal signal it blends the channel's
-  overall taste; with nothing to seed from it stays silent. Anyone may
-  skip an autoplay pick. The flag persists in `data/state.json`.
+  energy continuity with the track that just played so transitions flow
+  instead of jumping genres. Same-artist bridges are capped and rotation
+  is pressured so one act cannot lock the rotation; exploration stays
+  within compatible energy. With no personal signal it blends the
+  channel's overall taste; with nothing to seed from it stays silent.
+  Anyone may skip an autoplay pick. The flag persists in
+  `data/state.json`.
 - **Persistence:** `!volume` (default `50`) and `!loop` are saved to
   `data/state.json` (atomic write) and restored at startup; `!stop`/`!clear`
   reset looping and persist the change.
