@@ -365,6 +365,23 @@ export class PlaybackController {
     this.requestNext();
   }
 
+  jumpTo(position: number): void {
+    if (!Number.isSafeInteger(position) || position < 1) {
+      throw new UserError("Usá: !jump <posición>");
+    }
+    if (position > this.#queue.length) {
+      throw new UserError("No existe esa posición en la cola.");
+    }
+    this.#epochs.invalidatePlayback();
+    this.#pendingSkips += position - 1 + (this.#current === undefined ? 0 : 1);
+    this.#pendingSeek = undefined;
+    if (this.#current) this.#preparedStore.invalidate(this.#current.source);
+    if (this.#session) this.#sessionEndReasons.set(this.#session, "skipped");
+    this.#session?.stop();
+    this.#session = undefined;
+    this.requestNext();
+  }
+
   stop(): void {
     this.#epochs.resetAll();
     this.#pendingSkips = 0;

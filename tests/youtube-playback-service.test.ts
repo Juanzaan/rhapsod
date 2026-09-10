@@ -651,6 +651,34 @@ describe("YoutubePlaybackService", () => {
     );
   });
 
+  it("jumps to a queue position, dropping the tracks in between", async () => {
+    const { onPlaybackFinished, playbackResolvers, service } = setup();
+    await service.enqueue("https://youtu.be/first", "user-1");
+    await service.enqueue("https://youtu.be/second", "user-1");
+    await service.enqueue("https://youtu.be/third", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    service.jumpTo(2);
+    playbackResolvers[0]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(service.current?.id).toBe("third");
+    expect(service.queue()).toHaveLength(0);
+    expect(onPlaybackFinished).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: "first" }),
+      expect.anything(),
+      "skipped",
+    );
+  });
+
+  it("rejects jumps outside the queue", () => {
+    const { service } = setup();
+    expect(() => service.jumpTo(0)).toThrow("Usá: !jump <posición>");
+    expect(() => service.jumpTo(2)).toThrow(
+      "No existe esa posición en la cola.",
+    );
+  });
+
   it("reports skipped and stopped sessions separately", async () => {
     const { onPlaybackFinished, playbackResolvers, service } = setup();
     await service.enqueue("https://youtu.be/first", "user-1");

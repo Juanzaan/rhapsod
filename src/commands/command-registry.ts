@@ -261,6 +261,14 @@ export const COMMAND_SPECS: readonly CommandSpec[] = [
     summary: "Buscar una emisora y sintonizarla",
   },
   {
+    name: "jump",
+    aliases: ["j"],
+    group: "queue",
+    adminOnly: false,
+    usage: "jump <posición>",
+    summary: "Saltar a una posición de la cola",
+  },
+  {
     name: "effects",
     aliases: [],
     group: "misc",

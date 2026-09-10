@@ -46,6 +46,7 @@ export type ChatCommand =
       readonly name: "fuente";
     }
   | { readonly input: string; readonly name: "radio" }
+  | { readonly index: number; readonly name: "jump" }
   | { readonly name: "playlist"; readonly action?: undefined }
   | {
       readonly action: "delete";
@@ -209,6 +210,8 @@ export function parseChatCommand(
     case "radio":
       if (!argument) throw new UserError("Usá: !radio <nombre o género>");
       return { input: argument, name };
+    case "jump":
+      return { name, index: parsePosition(argument, "!jump <posición>") };
     case "effects": {
       const parts = argument.split(/\s+/).filter(Boolean);
       const sub = parts[0];

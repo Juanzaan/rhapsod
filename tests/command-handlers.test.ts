@@ -56,6 +56,7 @@ function makeHarness(
     pause: vi.fn(),
     resume: vi.fn(),
     skip: vi.fn(),
+    jumpTo: vi.fn(),
     stop: vi.fn(),
     replayPrevious: vi.fn(() => ({
       id: "x",
@@ -64,7 +65,14 @@ function makeHarness(
       title: "Track",
     })),
     seek: vi.fn(),
-    queue: vi.fn(() => []),
+    queue: vi.fn(
+      (): Array<{
+        durationSeconds?: number;
+        requestedBy: string;
+        requestedByUid?: string;
+        title: string;
+      }> => [],
+    ),
     history: vi.fn(() => []),
     moveQueued: vi.fn(),
     removeQueuedRange: vi.fn(() => []),
@@ -94,6 +102,7 @@ function makeHarness(
     getPlaylistInfo: vi.fn(() => undefined),
     audioHealth: undefined,
     current: overrides.current,
+    playbackPositionMs: 0,
     filter: "off",
     loopMode: "off",
     tracksPlayed: 0,
@@ -192,6 +201,8 @@ describe("dispatchCommand", () => {
       ["shuffle", "!shuffle"],
       ["now-playing", "!now-playing"],
       ["skip", "!skip"],
+      ["jump", "!jump 2"],
+      ["jump-alias", "!j 2"],
       ["stats", "!stats"],
       ["diag", "!diag"],
       ["debug-server", "!debug-server"],
@@ -952,6 +963,77 @@ describe("preferred source routing", () => {
 
     expect(playback.enqueueSoundcloudSearch).not.toHaveBeenCalled();
     expect(playback.enqueue).toHaveBeenCalled();
+  });
+});
+
+describe("jump and queue ETA", () => {
+  const queued = [
+    { requestedBy: "user", requestedByUid: "uid-1", title: "One" },
+    {
+      durationSeconds: 180,
+      requestedBy: "user",
+      requestedByUid: "uid-1",
+      title: "Two",
+    },
+    {
+      durationSeconds: 240,
+      requestedBy: "other",
+      requestedByUid: "uid-9",
+      title: "Three",
+    },
+  ];
+
+  it("jumps to a queue position the sender owns", async () => {
+    const { ctx, playback, send, sender } = makeHarness({
+      current: { requestedBy: "user", requestedByUid: "uid-1", title: "Now" },
+    });
+    playback.queue.mockReturnValue(queued.slice(0, 2));
+    await dispatchCommand(ctx, parseChatCommand("!jump 2")!, sender, send);
+
+    expect(playback.jumpTo).toHaveBeenCalledWith(2);
+    expect(send).toHaveBeenCalledWith("Saltando a la posición 2: Two.");
+  });
+
+  it("blocks jumping over other users' tracks", async () => {
+    const { ctx, playback, send, sender } = makeHarness({
+      current: { requestedBy: "user", requestedByUid: "uid-1", title: "Now" },
+    });
+    playback.queue.mockReturnValue([
+      { requestedBy: "other", requestedByUid: "uid-9", title: "Theirs" },
+      { requestedBy: "user", requestedByUid: "uid-1", title: "Mine" },
+    ]);
+    await dispatchCommand(ctx, parseChatCommand("!jump 2")!, sender, send);
+
+    expect(playback.jumpTo).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledWith(
+      "Solo quien pidió las pistas (o un admin) puede saltar hasta ahí.",
+    );
+  });
+
+  it("reports missing positions", async () => {
+    const { ctx, playback, send, sender } = makeHarness();
+    playback.queue.mockReturnValue(queued.slice(0, 1));
+    await dispatchCommand(ctx, parseChatCommand("!jump 5")!, sender, send);
+
+    expect(playback.jumpTo).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledWith("No existe esa posición en la cola.");
+  });
+
+  it("appends the remaining time to the queue", async () => {
+    const { ctx, send, sender } = makeHarness();
+    const playback = ctx.playback as unknown as {
+      queue: ReturnType<typeof vi.fn>;
+    };
+    playback.queue.mockReturnValue(queued);
+    await dispatchCommand(ctx, parseChatCommand("!queue")!, sender, send);
+
+    expect(send).toHaveBeenCalledWith(
+      "Cola de reproducción (página 1/1):\n" +
+        "1. One (duración desconocida - por user)\n" +
+        "2. Two (3:00 - por user)\n" +
+        "3. Three (4:00 - por other)\n" +
+        "Faltan ~7m (1 sin duración conocida).",
+    );
   });
 });
 

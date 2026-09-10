@@ -249,8 +249,32 @@ async function handleQueue(
                 (track, index) =>
                   `${(page - 1) * pageSize + index + 1}. ${track.title} (${formatDuration(track.durationSeconds)} - por ${track.requestedBy})`,
               ),
+            ...queueEtaFooter(ctx),
           ].join("\n"),
   );
+}
+
+function queueEtaFooter(ctx: CommandContext): string[] {
+  const tracks = ctx.playback.queue();
+  if (tracks.length === 0) return [];
+  let remainingMs = 0;
+  let unknown = 0;
+  for (const track of tracks) {
+    if (track.durationSeconds === undefined) unknown++;
+    else remainingMs += track.durationSeconds * 1000;
+  }
+  const current = ctx.playback.current;
+  if (
+    current?.durationSeconds !== undefined &&
+    current.durationSeconds * 1000 > ctx.playback.playbackPositionMs
+  ) {
+    remainingMs +=
+      current.durationSeconds * 1000 - ctx.playback.playbackPositionMs;
+  }
+  const total = `Faltan ~${formatLongDuration(Math.round(remainingMs / 1000))}`;
+  return [
+    unknown > 0 ? `${total} (${unknown} sin duración conocida).` : `${total}.`,
+  ];
 }
 
 async function handleHistory(
@@ -593,6 +617,44 @@ async function handleSkip(
   }
   ctx.playback.skip();
   await send("Pista saltada.");
+}
+
+async function handleJump(
+  ctx: CommandContext,
+  command: Extract<ChatCommand, { name: "jump" }>,
+  sender: CommandSender,
+  send: SendFn,
+): Promise<void> {
+  const { playback, adminUids } = ctx;
+  const current = playback.current;
+  const queued = playback.queue();
+  const target = queued[command.index - 1];
+  if (target === undefined) {
+    await send("No existe esa posición en la cola.");
+    return;
+  }
+  const victims = queued.slice(0, command.index - 1);
+  if (current !== undefined) victims.unshift(current);
+  const unauthorized = victims.some(
+    (track) =>
+      !canRemoveTrack({
+        adminUids,
+        requesterName: track.requestedBy,
+        ...(track.requestedByUid === undefined
+          ? {}
+          : { requesterUid: track.requestedByUid }),
+        senderName: sender.name,
+        senderUid: sender.uid,
+      }),
+  );
+  if (unauthorized) {
+    await send(
+      "Solo quien pidió las pistas (o un admin) puede saltar hasta ahí.",
+    );
+    return;
+  }
+  playback.jumpTo(command.index);
+  await send(`Saltando a la posición ${command.index}: ${target.title}.`);
 }
 
 async function handleStats(
@@ -1158,6 +1220,8 @@ export async function dispatchCommand(
       return handleNowPlaying(ctx, command, sender, send);
     case "skip":
       return handleSkip(ctx, command, sender, send);
+    case "jump":
+      return handleJump(ctx, command, sender, send);
     case "stats":
       return handleStats(ctx, command, sender, send);
     case "diag":
