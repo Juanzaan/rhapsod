@@ -41,6 +41,7 @@ chat once the TS3 adapter is connected.
 | `!unfav <n>`                          | -                     | Remove a favorite by its list position.                                                             |
 | `!favplay <n>`                        | `!fp`                 | Add a favorite to the queue by its list position.                                                   |
 | `!fuente [youtube\|soundcloud\|auto]` | -                     | Show or set your preferred search source for `!play` and `!yt`.                                     |
+| `!radio <nombre o género>`            | `!rb`                 | Search the community radio directory and tune the top match.                                        |
 | `!test-tone`                          | `!tone`               | Play a 3-second test tone (rate-limited).                                                           |
 | `!help`                               | `!h`                  | Show the command summary.                                                                           |
 
@@ -91,7 +92,9 @@ chat once the TS3 adapter is connected.
   HTTPS audio URLs (files, HLS, icecast-style streams) play through
   `!play <audio-url>` via FFmpeg; `http:` is rejected, only `https:`.
   Icecast/shoutcast streams show the live on-air title in `!np` and the
-  panel dashboard when the station sends ICY metadata.
+  panel dashboard when the station sends ICY metadata. Discover stations
+  by name, genre or country with `!radio` (community directory,
+  top voted match wins).
 
 No command may accept shell syntax. Rhapsod passes provider arguments directly
 to child processes and never invokes a shell.

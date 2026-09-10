@@ -10,6 +10,7 @@ import type { SystemYtDlpExecutor } from "../media/youtube/yt-dlp.js";
 import type { YoutubePlaybackService } from "../application/youtube-playback-service.js";
 import type { ChatCommand } from "./chat-command.js";
 import type { CommandRateLimiter } from "./command-rate-limiter.js";
+import { searchStations } from "../media/radio-directory.js";
 import { parseMediaInput } from "../media/media-input.js";
 import {
   canMoveBotToChannel,
@@ -344,6 +345,28 @@ async function handleFuente(
   await ctx.preferences.flush();
   await send(
     `Fuente preferida: ${command.source}. Tus búsquedas con !play y !yt van ahí.`,
+  );
+}
+
+async function handleRadio(
+  ctx: CommandContext,
+  command: Extract<ChatCommand, { name: "radio" }>,
+  sender: CommandSender,
+  send: SendFn,
+): Promise<void> {
+  const stations = await searchStations(command.input);
+  const station = stations.find((candidate) =>
+    candidate.url.toLowerCase().startsWith("https://"),
+  );
+  if (!station) {
+    await send(
+      `No encontré emisoras para "${command.input}". Probá con otro nombre o género.`,
+    );
+    return;
+  }
+  await ctx.playback.enqueue(station.url, sender.name, sender.uid);
+  await send(
+    `Sintonizando: ${station.name}${station.bitrate ? ` (${station.bitrate} kbps)` : ""}.`,
   );
 }
 
@@ -1179,5 +1202,7 @@ export async function dispatchCommand(
       return handleFavPlay(ctx, command, sender, send);
     case "fuente":
       return handleFuente(ctx, command, sender, send);
+    case "radio":
+      return handleRadio(ctx, command, sender, send);
   }
 }

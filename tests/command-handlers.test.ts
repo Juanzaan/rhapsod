@@ -6,6 +6,11 @@ import {
   type CommandContext,
   type CommandSender,
 } from "../src/commands/command-handlers.js";
+import { searchStations } from "../src/media/radio-directory.js";
+
+vi.mock("../src/media/radio-directory.js", () => ({
+  searchStations: vi.fn((): Promise<unknown[]> => Promise.resolve([])),
+}));
 
 function makeHarness(
   overrides: {
@@ -211,6 +216,8 @@ describe("dispatchCommand", () => {
       ["favplay-alias", "!fp 1"],
       ["fuente", "!fuente"],
       ["fuente-set", "!fuente soundcloud"],
+      ["radio", "!radio jazz"],
+      ["radio-alias", "!rb jazz"],
     ];
     const { ctx, send, sender } = makeHarness({ current: { title: "X" } });
     for (const [name, input] of cases) {
@@ -945,5 +952,59 @@ describe("preferred source routing", () => {
 
     expect(playback.enqueueSoundcloudSearch).not.toHaveBeenCalled();
     expect(playback.enqueue).toHaveBeenCalled();
+  });
+});
+
+describe("radio directory", () => {
+  it("tunes the top https station", async () => {
+    const { ctx, playback, send, sender } = makeHarness();
+    vi.mocked(searchStations).mockResolvedValue([
+      {
+        bitrate: 128,
+        name: "Groove Salad",
+        url: "https://ice.example/groovesalad",
+        votes: 100,
+      },
+    ]);
+    await dispatchCommand(
+      ctx,
+      parseChatCommand("!radio groove")!,
+      sender,
+      send,
+    );
+
+    expect(playback.enqueue).toHaveBeenCalledWith(
+      "https://ice.example/groovesalad",
+      "user",
+      "uid-1",
+    );
+    expect(send).toHaveBeenCalledWith("Sintonizando: Groove Salad (128 kbps).");
+  });
+
+  it("skips non-https stations", async () => {
+    const { ctx, playback, send, sender } = makeHarness();
+    vi.mocked(searchStations).mockResolvedValue([
+      { name: "Plain", url: "http://ice.example/plain", votes: 999 },
+      { name: "Secure", url: "https://ice.example/secure", votes: 1 },
+    ]);
+    await dispatchCommand(ctx, parseChatCommand("!rb jazz")!, sender, send);
+
+    expect(playback.enqueue).toHaveBeenCalledWith(
+      "https://ice.example/secure",
+      "user",
+      "uid-1",
+    );
+    expect(send).toHaveBeenCalledWith("Sintonizando: Secure.");
+  });
+
+  it("reports unknown stations", async () => {
+    const { ctx, playback, send, sender } = makeHarness();
+    vi.mocked(searchStations).mockResolvedValue([]);
+    await dispatchCommand(ctx, parseChatCommand("!radio zzz")!, sender, send);
+
+    expect(playback.enqueue).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledWith(
+      'No encontré emisoras para "zzz". Probá con otro nombre o género.',
+    );
   });
 });
