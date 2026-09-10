@@ -418,6 +418,28 @@ async function handleMyStats(
   );
 }
 
+async function handleAutoplay(
+  ctx: CommandContext,
+  command: Extract<ChatCommand, { name: "autoplay" }>,
+  _sender: CommandSender,
+  send: SendFn,
+): Promise<void> {
+  if (command.enabled === undefined) {
+    await send(
+      ctx.playback.autoplayEnabled
+        ? "Autoplay activado: cuando se vacíe la cola sigo con temas parecidos."
+        : "Autoplay desactivado. Prendelo con !autoplay on.",
+    );
+    return;
+  }
+  ctx.playback.setAutoplay(command.enabled);
+  await send(
+    command.enabled
+      ? "Autoplay activado: cuando se vacíe la cola sigo con temas parecidos."
+      : "Autoplay desactivado.",
+  );
+}
+
 async function handleRadio(
   ctx: CommandContext,
   command: Extract<ChatCommand, { name: "radio" }>,
@@ -1318,5 +1340,7 @@ export async function dispatchCommand(
       return handleTops(ctx, command, sender, send);
     case "mystats":
       return handleMyStats(ctx, command, sender, send);
+    case "autoplay":
+      return handleAutoplay(ctx, command, sender, send);
   }
 }

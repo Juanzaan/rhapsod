@@ -214,6 +214,26 @@ export class ListeningHistory {
       .slice(0, Math.max(1, limit));
   }
 
+  artistScores(): ReadonlyMap<string, number> {
+    this.#ensureLoaded();
+    const scores = new Map<string, number>();
+    for (const entry of this.#global.values()) {
+      if (entry.artist === undefined) continue;
+      const key = entry.artist.toLowerCase();
+      scores.set(key, (scores.get(key) ?? 0) + entry.plays + entry.completes);
+    }
+    return scores;
+  }
+
+  recentArtists(limit: number): readonly string[] {
+    this.#ensureLoaded();
+    return [...this.#global.values()]
+      .sort((a, b) => b.lastPlayedAt - a.lastPlayedAt)
+      .map((entry) => entry.artist)
+      .filter((artist): artist is string => artist !== undefined)
+      .slice(0, Math.max(1, limit));
+  }
+
   userSummary(uid: string): ListeningUserSummary {
     this.#ensureLoaded();
     const stats = this.#users.get(uid);

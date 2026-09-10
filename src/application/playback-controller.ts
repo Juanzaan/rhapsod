@@ -87,6 +87,8 @@ export interface PlaybackControllerOptions {
   ) => void;
   readonly onTiming?: (timing: PlaybackTiming) => void;
   readonly onStateChanged?: () => void;
+  readonly autoplayProvider?: () => Promise<Track | undefined>;
+  readonly initialAutoplay?: boolean;
   readonly initialVolumePercent?: number;
   readonly initialLoopMode?: LoopMode;
   readonly initialFilter?: string;
@@ -143,6 +145,9 @@ export class PlaybackController {
   ) => void;
   readonly #onTiming: (timing: PlaybackTiming) => void;
   readonly #onStateChanged: () => void;
+  readonly #autoplayProvider: (() => Promise<Track | undefined>) | undefined;
+  #autoplay = false;
+  #autoplayArmed = true;
   readonly #epochs = new PlaybackEpoch();
   #persistedQueue: readonly SerializedQueueTrack[];
   #current: Track | undefined;
@@ -189,6 +194,8 @@ export class PlaybackController {
     this.#onPlaybackFinished = options.onPlaybackFinished ?? (() => undefined);
     this.#onTiming = options.onTiming ?? (() => undefined);
     this.#onStateChanged = options.onStateChanged ?? (() => undefined);
+    this.#autoplayProvider = options.autoplayProvider;
+    this.#autoplay = options.initialAutoplay ?? false;
     if (options.initialVolumePercent !== undefined) {
       this.#volumePercent = options.initialVolumePercent;
     }
@@ -382,8 +389,20 @@ export class PlaybackController {
     this.requestNext();
   }
 
+  get autoplayEnabled(): boolean {
+    return this.#autoplay;
+  }
+
+  setAutoplayEnabled(enabled: boolean): void {
+    this.#autoplay = enabled;
+    if (enabled) this.#autoplayArmed = true;
+    this.#onStateChanged();
+    if (enabled) this.requestNext();
+  }
+
   stop(): void {
     this.#epochs.resetAll();
+    this.#autoplayArmed = false;
     this.#pendingSkips = 0;
     this.#pendingSeek = undefined;
     this.#discardWarmStream();
@@ -398,6 +417,7 @@ export class PlaybackController {
 
   resetQueueState(): void {
     this.#epochs.resetAll();
+    this.#autoplayArmed = false;
     this.#pendingSkips = 0;
     this.#pendingSeek = undefined;
     this.#discardWarmStream();
@@ -458,6 +478,31 @@ export class PlaybackController {
     void this.#playNext();
   }
 
+  async #maybeAutoplay(): Promise<boolean> {
+    if (
+      !this.#autoplay ||
+      !this.#autoplayArmed ||
+      this.#autoplayProvider === undefined
+    ) {
+      return false;
+    }
+    const stopEpoch = this.#epochs.captureStopEpoch();
+    const picked = await this.#autoplayProvider().catch(() => undefined);
+    if (
+      picked === undefined ||
+      !this.#autoplay ||
+      !this.#epochs.isStopEpochCurrent(stopEpoch)
+    ) {
+      return false;
+    }
+    try {
+      this.#queue.requeue(picked);
+    } catch {
+      return this.#queue.length > 0;
+    }
+    return true;
+  }
+
   async #playNext(): Promise<void> {
     if (this.#chainActive) return;
     this.#chainActive = true;
@@ -484,6 +529,10 @@ export class PlaybackController {
         }
         const track = this.#queue.next();
         if (!track) {
+          if (await this.#maybeAutoplay()) continue;
+          // Lost-wakeup guard: an enqueue that landed while the provider ran
+          // no-ops on the claimed chain, so re-check before parking.
+          if (this.#queue.length > 0) continue;
           this.#current = undefined;
           this.#driverState = "idle";
           this.#onStateChanged();
@@ -600,6 +649,7 @@ export class PlaybackController {
         }
         session.player.setVolume(volumeToGain(this.#volumePercent));
         this.#session = session;
+        this.#autoplayArmed = true;
         this.#driverState = "playing";
         this.#tracksPlayed++;
         this.#recordHistory(track);

@@ -41,6 +41,14 @@ describe("FilePlaybackStateStore", () => {
     expect(existsSync(filePath)).toBe(true);
   });
 
+  it("round-trips the autoplay flag", async () => {
+    const filePath = join(directory, "autoplay-state.json");
+    const store = new FilePlaybackStateStore(filePath);
+    store.save({ autoplay: true });
+    await store.flush();
+    expect(store.load()).toEqual({ autoplay: true });
+  });
+
   it("ignores invalid fields on load", () => {
     const filePath = join(directory, "invalid.json");
     writeFileSync(

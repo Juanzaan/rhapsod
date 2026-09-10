@@ -18,6 +18,7 @@ export interface SerializedQueueTrack {
 }
 
 export interface PlaybackState {
+  readonly autoplay?: boolean;
   readonly loopMode?: LoopMode;
   readonly queue?: readonly SerializedQueueTrack[];
   readonly volumePercent?: number;
@@ -118,6 +119,7 @@ export class FilePlaybackStateStore implements PlaybackStateStore {
       const filter = isAudioFilter(parsed.filter) ? parsed.filter : undefined;
       const queue = parseQueue(parsed.queue);
       return {
+        ...(parsed.autoplay === true ? { autoplay: true } : {}),
         ...(volumePercent === undefined ? {} : { volumePercent }),
         ...(loopMode === undefined ? {} : { loopMode }),
         ...(filter === undefined ? {} : { filter }),

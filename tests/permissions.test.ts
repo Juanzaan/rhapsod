@@ -100,6 +100,18 @@ describe("canRemoveTrack", () => {
       }),
     ).toBe(false);
   });
+
+  it("lets anyone remove communal autoplay tracks", () => {
+    expect(
+      canRemoveTrack({
+        adminUids,
+        requesterName: "Autoplay",
+        requesterUid: "autoplay",
+        senderName: "pedro",
+        senderUid: "pedro-uid",
+      }),
+    ).toBe(true);
+  });
 });
 
 describe("parseMoveGroupIds", () => {

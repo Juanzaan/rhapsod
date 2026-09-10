@@ -7,6 +7,14 @@ import type {
 import type { YoutubeResource } from "../media/media-input.js";
 import type { Track } from "../domain/track.js";
 import { QueueLimitError, TrackQueue } from "./track-queue.js";
+import {
+  AUTOPLAY_REQUESTER,
+  AUTOPLAY_UID,
+  pickAutoplayTrack,
+  type AutoplayCandidate,
+  type AutoplayProfileSource,
+} from "./autoplay-picker.js";
+import { fetchAutoplayVideoId } from "../media/youtube/innertube-related.js";
 import type { createPcmStream, playFfmpegUrl } from "../audio/ffmpeg-player.js";
 import type { LoudnessProfiler } from "../audio/loudness-profiler.js";
 import type { RhapsodOpusEncoder } from "../audio/opus-encoder.js";
@@ -60,6 +68,10 @@ interface PlaybackServiceOptions {
   readonly soundcloudResolver?: SoundCloudResolver;
   readonly spotifyResolver?: SpotifyResolver;
   readonly lyricsResolver?: LyricsResolver;
+  readonly autoplayProfile?: AutoplayProfileSource;
+  readonly relatedVideoId?: (
+    seedVideoId: string,
+  ) => Promise<string | undefined>;
   readonly stateStore?: PlaybackStateStore;
   readonly audioUrlCache?: AudioUrlCache;
   readonly redirectResolver?: RedirectResolver;
@@ -117,6 +129,14 @@ interface PlaylistEnqueueResult {
 }
 
 const DEFAULT_PLAYLIST_MAX_TRACKS = 100;
+const AUTOPLAY_MIX_LIMIT = 25;
+const AUTOPLAY_SEED_LIMIT = 3;
+const YOUTUBE_VIDEO_ID_RE =
+  /(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([\w-]{11})/;
+
+function youtubeVideoIdFromSource(source: string): string | undefined {
+  return YOUTUBE_VIDEO_ID_RE.exec(source)?.[1];
+}
 
 // Kept here so existing importers (tests) keep working; the implementation
 // lives with the store that uses it.
@@ -131,6 +151,10 @@ export class YoutubePlaybackService {
   readonly #soundcloudResolver: SoundCloudResolver | undefined;
   readonly #spotifyResolver: SpotifyResolver | undefined;
   readonly #lyricsResolver: LyricsResolver | undefined;
+  readonly #autoplayProfile: AutoplayProfileSource | undefined;
+  readonly #relatedVideoId: (
+    seedVideoId: string,
+  ) => Promise<string | undefined>;
   readonly #stateStore: PlaybackStateStore | undefined;
   readonly #onTiming: (timing: PlaybackTiming) => void;
   readonly #redirectResolver: RedirectResolver | undefined;
@@ -147,6 +171,8 @@ export class YoutubePlaybackService {
     this.#soundcloudResolver = options.soundcloudResolver;
     this.#spotifyResolver = options.spotifyResolver;
     this.#lyricsResolver = options.lyricsResolver;
+    this.#autoplayProfile = options.autoplayProfile;
+    this.#relatedVideoId = options.relatedVideoId ?? fetchAutoplayVideoId;
     this.#stateStore = options.stateStore;
     this.#onTiming = options.onTiming ?? (() => undefined);
     this.#preparedStore = new PreparedAudioStore({
@@ -168,6 +194,7 @@ export class YoutubePlaybackService {
     });
     const restored = this.#stateStore?.load();
     this.#controller = new PlaybackController({
+      autoplayProvider: () => this.resolveAutoplayTrack(),
       ...(options.createPlayback === undefined
         ? {}
         : { createPlayback: options.createPlayback }),
@@ -178,6 +205,7 @@ export class YoutubePlaybackService {
         ? {}
         : { directUrlResolver: options.directUrlResolver }),
       encoder: options.encoder,
+      ...(restored?.autoplay === true ? { initialAutoplay: true } : {}),
       ...(restored?.filter === undefined
         ? {}
         : { initialFilter: restored.filter }),
@@ -1101,6 +1129,124 @@ export class YoutubePlaybackService {
     this.#controller.jumpTo(position);
   }
 
+  get autoplayEnabled(): boolean {
+    return this.#controller.autoplayEnabled;
+  }
+
+  setAutoplay(enabled: boolean): void {
+    this.#controller.setAutoplayEnabled(enabled);
+  }
+
+  async resolveAutoplayTrack(): Promise<Track | undefined> {
+    const history = this.#controller.history();
+    const seeds: string[] = [];
+    for (const track of history) {
+      const videoId = youtubeVideoIdFromSource(track.source);
+      if (videoId !== undefined && !seeds.includes(videoId))
+        seeds.push(videoId);
+      if (seeds.length >= AUTOPLAY_SEED_LIMIT) break;
+    }
+    const recentIds = new Set<string>();
+    for (const track of history) recentIds.add(track.id);
+    for (const track of this.#queue.snapshot()) recentIds.add(track.id);
+    const current = this.#controller.current;
+    if (current !== undefined) recentIds.add(current.id);
+    const recentArtists = this.#autoplayProfile?.recentArtists(10) ?? [];
+    const artistScores =
+      this.#autoplayProfile?.artistScores() ?? new Map<string, number>();
+    for (const seed of seeds) {
+      const mixed = await this.#expandAutoplayMix(
+        seed,
+        recentIds,
+        recentArtists,
+        artistScores,
+      ).catch(() => undefined);
+      if (mixed !== undefined) return mixed;
+      const related = await this.#resolveRelatedVideo(
+        seed,
+        recentIds,
+        recentArtists,
+      ).catch(() => undefined);
+      if (related !== undefined) return related;
+    }
+    return undefined;
+  }
+
+  async #expandAutoplayMix(
+    seedVideoId: string,
+    recentIds: ReadonlySet<string>,
+    recentArtists: readonly string[],
+    artistScores: ReadonlyMap<string, number>,
+  ): Promise<Track | undefined> {
+    const expansion = await this.#resolver.expandPlaylist(
+      { id: `RD${seedVideoId}`, type: "playlist" },
+      AUTOPLAY_MIX_LIMIT,
+    );
+    const candidates: AutoplayCandidate[] = [];
+    for (const entry of expansion.tracks) {
+      if (!entry.id || !entry.title || !entry.webpageUrl) continue;
+      candidates.push({
+        ...(parseArtistTitle(entry.title).artist === undefined
+          ? {}
+          : { artist: parseArtistTitle(entry.title).artist }),
+        ...(entry.durationSeconds === undefined
+          ? {}
+          : { durationSeconds: entry.durationSeconds }),
+        id: entry.id,
+        source: entry.webpageUrl,
+        title: entry.title,
+      });
+    }
+    const pick = pickAutoplayTrack(
+      candidates,
+      { artistScores: () => artistScores },
+      recentIds,
+      recentArtists,
+    );
+    if (pick === undefined) return undefined;
+    return {
+      ...(pick.durationSeconds === undefined
+        ? {}
+        : { durationSeconds: pick.durationSeconds }),
+      id: pick.id,
+      requestedBy: AUTOPLAY_REQUESTER,
+      requestedByUid: AUTOPLAY_UID,
+      source: pick.source,
+      title: pick.title,
+    };
+  }
+
+  async #resolveRelatedVideo(
+    seedVideoId: string,
+    recentIds: ReadonlySet<string>,
+    recentArtists: readonly string[],
+  ): Promise<Track | undefined> {
+    const videoId = await this.#relatedVideoId(seedVideoId);
+    if (videoId === undefined || recentIds.has(videoId)) return undefined;
+    const metadata = await this.#resolver.getTrackFromUrl(
+      `https://www.youtube.com/watch?v=${videoId}`,
+    );
+    const artist = parseArtistTitle(metadata.title).artist;
+    if (
+      artist !== undefined &&
+      recentArtists.filter(
+        (recent) => recent.toLowerCase() === artist.toLowerCase(),
+      ).length >= 2
+    ) {
+      return undefined;
+    }
+    return {
+      ...(metadata.durationSeconds === undefined
+        ? {}
+        : { durationSeconds: metadata.durationSeconds }),
+      id: metadata.id,
+      requestedBy: AUTOPLAY_REQUESTER,
+      requestedByUid: AUTOPLAY_UID,
+      source: metadata.webpageUrl,
+      title: metadata.title,
+    };
+  }
+
   stop(persistState = true): void {
     this.#persistenceSuppressed = !persistState;
     this.#controller.stop();
@@ -1153,6 +1299,7 @@ export class YoutubePlaybackService {
     const filter = this.#controller.filter;
     this.#safeObserver(() => {
       this.#stateStore?.save({
+        ...(this.#controller.autoplayEnabled ? { autoplay: true } : {}),
         loopMode: this.#controller.loopMode,
         ...(filter === "off" ? {} : { filter }),
         queue: this.#serializedQueue(),

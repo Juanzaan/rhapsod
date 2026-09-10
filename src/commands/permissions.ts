@@ -1,3 +1,5 @@
+import { AUTOPLAY_UID } from "../application/autoplay-picker.js";
+
 export function parseAdminUids(raw: string | undefined): ReadonlySet<string> {
   return new Set(
     (raw ?? "")
@@ -91,6 +93,9 @@ export function canRemoveTrack(args: {
   readonly senderName: string;
   readonly senderUid: string;
 }): boolean {
+  // Autoplay picks are communal (server-assigned sentinel uid, unspoofable):
+  // anyone in the channel may skip them.
+  if (args.requesterUid === AUTOPLAY_UID) return true;
   if (isAdminUid(args.senderUid, args.adminUids)) return true;
   if (args.requesterUid !== undefined && args.requesterUid.length > 0) {
     return args.requesterUid === args.senderUid;
