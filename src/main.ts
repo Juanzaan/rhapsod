@@ -32,6 +32,7 @@ import { AudioUrlCache } from "./application/audio-url-cache.js";
 import { PlaylistStore } from "./application/playlist-store.js";
 import { UserTelemetry } from "./application/user-telemetry.js";
 import { UserPreferences } from "./application/user-preferences.js";
+import { ListeningHistory } from "./application/listening-history.js";
 import {
   normalizeCommandInput,
   parseChatCommand,
@@ -254,6 +255,10 @@ async function main(): Promise<void> {
     join(dataDir, "user-preferences.json"),
   );
   const radioTitles = new RadioTitleCache();
+  const listeningHistory = new ListeningHistory(
+    join(dataDir, "listening-history.json"),
+    logger,
+  );
   const serverSnapshot = new ServerSnapshot();
   const channelDirectory = new ChannelDirectory(async (cid) => {
     try {
@@ -400,6 +405,10 @@ async function main(): Promise<void> {
         { ...timings, trackId: track.id, title: track.title },
         "Playback started",
       );
+      listeningHistory.recordStart(track.requestedByUid ?? track.requestedBy, {
+        id: track.id,
+        title: track.title,
+      });
       const isFirst = !commandContext.hasStartedPlaying;
       commandContext.hasStartedPlaying = true;
       await connection.sendChannelMessage(
@@ -418,6 +427,11 @@ async function main(): Promise<void> {
           title: track.title,
         },
         "Playback session",
+      );
+      listeningHistory.recordFinish(
+        track.requestedByUid ?? track.requestedBy,
+        { id: track.id, title: track.title },
+        reason === "completed",
       );
     },
     onTiming: (timing) => {
@@ -514,6 +528,7 @@ async function main(): Promise<void> {
     telemetry,
     preferences,
     radioTitles,
+    listeningHistory,
     ytDlpExecutor,
     commandRateLimiter,
     encoder,
@@ -796,6 +811,7 @@ async function main(): Promise<void> {
         audioUrlCache.flush().catch(() => undefined),
         telemetry.save().catch(() => undefined),
         preferences.flush().catch(() => undefined),
+        listeningHistory.flush().catch(() => undefined),
       ]);
       process.exit(1);
     })();
@@ -919,6 +935,7 @@ async function main(): Promise<void> {
       audioUrlCache.flush().catch(() => undefined),
       telemetry.save(),
       preferences.flush().catch(() => undefined),
+      listeningHistory.flush().catch(() => undefined),
       ...(panel === undefined ? [] : [panel.close().catch(() => undefined)]),
       new Promise((resolve) => setTimeout(resolve, 5_000)),
     ]).then(() => {
