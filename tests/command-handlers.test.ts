@@ -6,6 +6,11 @@ import {
   type CommandContext,
   type CommandSender,
 } from "../src/commands/command-handlers.js";
+import { searchStations } from "../src/media/radio-directory.js";
+
+vi.mock("../src/media/radio-directory.js", () => ({
+  searchStations: vi.fn((): Promise<unknown[]> => Promise.resolve([])),
+}));
 
 function makeHarness(
   overrides: {
@@ -110,6 +115,10 @@ function makeHarness(
     recordBotMovedBy: vi.fn(),
     snapshot: vi.fn(() => []),
   };
+  const radioTitles = {
+    get: vi.fn((): Promise<string | undefined> => Promise.resolve(undefined)),
+    peek: vi.fn((): string | undefined => undefined),
+  };
   const preferences = {
     addFavorite: vi.fn((_uid: unknown, track: Record<string, unknown>) => ({
       addedAt: 0,
@@ -135,6 +144,7 @@ function makeHarness(
     metrics,
     telemetry,
     preferences,
+    radioTitles,
     ytDlpExecutor,
     commandRateLimiter,
     encoder: {},
@@ -156,6 +166,7 @@ function makeHarness(
     metrics,
     telemetry,
     preferences,
+    radioTitles,
     send,
     sender,
     commandRateLimiter,
@@ -205,6 +216,8 @@ describe("dispatchCommand", () => {
       ["favplay-alias", "!fp 1"],
       ["fuente", "!fuente"],
       ["fuente-set", "!fuente soundcloud"],
+      ["radio", "!radio jazz"],
+      ["radio-alias", "!rb jazz"],
     ];
     const { ctx, send, sender } = makeHarness({ current: { title: "X" } });
     for (const [name, input] of cases) {
@@ -805,7 +818,61 @@ describe("favorites and skip ownership", () => {
 
     expect(playback.skip).toHaveBeenCalledTimes(1);
   });
+});
 
+describe("now-playing live titles", () => {
+  it("shows the on-air title for live streams", async () => {
+    const { ctx, radioTitles, send, sender } = makeHarness({
+      current: {
+        requestedBy: "user",
+        source: "https://ice.example/stream",
+        title: "Radio: ice.example",
+      },
+    });
+    radioTitles.get.mockResolvedValue("Live Artist - Live Song");
+    await dispatchCommand(ctx, parseChatCommand("!np")!, sender, send);
+
+    expect(radioTitles.get).toHaveBeenCalledWith("https://ice.example/stream");
+    expect(send).toHaveBeenCalledWith(
+      "Reproduciendo: Live Artist - Live Song (duración desconocida - por user)",
+    );
+  });
+
+  it("falls back to the station title without metadata", async () => {
+    const { ctx, radioTitles, send, sender } = makeHarness({
+      current: {
+        requestedBy: "user",
+        source: "https://ice.example/stream",
+        title: "Radio: ice.example",
+      },
+    });
+    await dispatchCommand(ctx, parseChatCommand("!np")!, sender, send);
+
+    expect(radioTitles.get).toHaveBeenCalled();
+    expect(send).toHaveBeenCalledWith(
+      "Reproduciendo: Radio: ice.example (duración desconocida - por user)",
+    );
+  });
+
+  it("skips the lookup for tracks with a known duration", async () => {
+    const { ctx, radioTitles, send, sender } = makeHarness({
+      current: {
+        durationSeconds: 180,
+        requestedBy: "user",
+        source: "https://youtu.be/abc",
+        title: "Duki - Rockstar",
+      },
+    });
+    await dispatchCommand(ctx, parseChatCommand("!np")!, sender, send);
+
+    expect(radioTitles.get).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledWith(
+      "Reproduciendo: Duki - Rockstar (3:00 - por user)",
+    );
+  });
+});
+
+describe("preferred source routing", () => {
   it("shows the preferred source with !fuente", async () => {
     const { ctx, preferences, send, sender } = makeHarness();
     preferences.getPreferredSource.mockReturnValue("soundcloud");
@@ -885,5 +952,59 @@ describe("favorites and skip ownership", () => {
 
     expect(playback.enqueueSoundcloudSearch).not.toHaveBeenCalled();
     expect(playback.enqueue).toHaveBeenCalled();
+  });
+});
+
+describe("radio directory", () => {
+  it("tunes the top https station", async () => {
+    const { ctx, playback, send, sender } = makeHarness();
+    vi.mocked(searchStations).mockResolvedValue([
+      {
+        bitrate: 128,
+        name: "Groove Salad",
+        url: "https://ice.example/groovesalad",
+        votes: 100,
+      },
+    ]);
+    await dispatchCommand(
+      ctx,
+      parseChatCommand("!radio groove")!,
+      sender,
+      send,
+    );
+
+    expect(playback.enqueue).toHaveBeenCalledWith(
+      "https://ice.example/groovesalad",
+      "user",
+      "uid-1",
+    );
+    expect(send).toHaveBeenCalledWith("Sintonizando: Groove Salad (128 kbps).");
+  });
+
+  it("skips non-https stations", async () => {
+    const { ctx, playback, send, sender } = makeHarness();
+    vi.mocked(searchStations).mockResolvedValue([
+      { name: "Plain", url: "http://ice.example/plain", votes: 999 },
+      { name: "Secure", url: "https://ice.example/secure", votes: 1 },
+    ]);
+    await dispatchCommand(ctx, parseChatCommand("!rb jazz")!, sender, send);
+
+    expect(playback.enqueue).toHaveBeenCalledWith(
+      "https://ice.example/secure",
+      "user",
+      "uid-1",
+    );
+    expect(send).toHaveBeenCalledWith("Sintonizando: Secure.");
+  });
+
+  it("reports unknown stations", async () => {
+    const { ctx, playback, send, sender } = makeHarness();
+    vi.mocked(searchStations).mockResolvedValue([]);
+    await dispatchCommand(ctx, parseChatCommand("!radio zzz")!, sender, send);
+
+    expect(playback.enqueue).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledWith(
+      'No encontré emisoras para "zzz". Probá con otro nombre o género.',
+    );
   });
 });
