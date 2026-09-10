@@ -128,6 +128,18 @@ function makeHarness(
     get: vi.fn((): Promise<string | undefined> => Promise.resolve(undefined)),
     peek: vi.fn((): string | undefined => undefined),
   };
+  const listeningHistory = {
+    topArtists: vi.fn((): unknown[] => []),
+    topTracks: vi.fn((): unknown[] => []),
+    userSummary: vi.fn(
+      (): {
+        completes: number;
+        plays: number;
+        skips: number;
+        topArtist?: string;
+      } => ({ completes: 0, plays: 0, skips: 0 }),
+    ),
+  };
   const preferences = {
     addFavorite: vi.fn((_uid: unknown, track: Record<string, unknown>) => ({
       addedAt: 0,
@@ -154,6 +166,7 @@ function makeHarness(
     telemetry,
     preferences,
     radioTitles,
+    listeningHistory,
     ytDlpExecutor,
     commandRateLimiter,
     encoder: {},
@@ -176,6 +189,7 @@ function makeHarness(
     telemetry,
     preferences,
     radioTitles,
+    listeningHistory,
     send,
     sender,
     commandRateLimiter,
@@ -229,6 +243,9 @@ describe("dispatchCommand", () => {
       ["fuente-set", "!fuente soundcloud"],
       ["radio", "!radio jazz"],
       ["radio-alias", "!rb jazz"],
+      ["tops", "!tops"],
+      ["tops-alias", "!top 3"],
+      ["mystats", "!mystats"],
     ];
     const { ctx, send, sender } = makeHarness({ current: { title: "X" } });
     for (const [name, input] of cases) {
@@ -1087,6 +1104,67 @@ describe("radio directory", () => {
     expect(playback.enqueue).not.toHaveBeenCalled();
     expect(send).toHaveBeenCalledWith(
       'No encontré emisoras para "zzz". Probá con otro nombre o género.',
+    );
+  });
+});
+
+describe("listening stats", () => {
+  it("shows the global tops", async () => {
+    const { ctx, listeningHistory, send, sender } = makeHarness();
+    listeningHistory.topTracks.mockReturnValue([
+      { plays: 3, title: "Duki - Rockstar" },
+      { plays: 1, title: "Beto - Cumbia" },
+    ]);
+    await dispatchCommand(ctx, parseChatCommand("!tops")!, sender, send);
+
+    expect(listeningHistory.topTracks).toHaveBeenCalledWith(5);
+    expect(send).toHaveBeenCalledWith(
+      "Top global:\n1. Duki - Rockstar (3 reproducciones)\n2. Beto - Cumbia (1 reproducción)",
+    );
+  });
+
+  it("caps the tops page", async () => {
+    const { ctx, listeningHistory, send, sender } = makeHarness();
+    await dispatchCommand(ctx, parseChatCommand("!tops 50")!, sender, send);
+
+    expect(listeningHistory.topTracks).toHaveBeenCalledWith(10);
+  });
+
+  it("reports empty tops", async () => {
+    const { ctx, send, sender } = makeHarness();
+    await dispatchCommand(ctx, parseChatCommand("!tops")!, sender, send);
+
+    expect(send).toHaveBeenCalledWith(
+      "Todavía no hay reproducciones registradas.",
+    );
+  });
+
+  it("shows personal stats", async () => {
+    const { ctx, listeningHistory, preferences, send, sender } = makeHarness();
+    listeningHistory.userSummary.mockReturnValue({
+      completes: 8,
+      plays: 10,
+      skips: 2,
+      topArtist: "Duki",
+    });
+    preferences.listFavorites.mockReturnValue([
+      { id: "a", title: "Fav" },
+      { id: "b", title: "Fav 2" },
+    ]);
+    await dispatchCommand(ctx, parseChatCommand("!mystats")!, sender, send);
+
+    expect(listeningHistory.userSummary).toHaveBeenCalledWith("uid-1");
+    expect(send).toHaveBeenCalledWith(
+      "Tus números: 10 reproducciones (8 completadas, 2 saltadas).\nArtista top: Duki.\nFavoritos: 2.",
+    );
+  });
+
+  it("reports empty personal stats", async () => {
+    const { ctx, send, sender } = makeHarness();
+    await dispatchCommand(ctx, parseChatCommand("!mystats")!, sender, send);
+
+    expect(send).toHaveBeenCalledWith(
+      "Todavía no tenés reproducciones ni favoritos.",
     );
   });
 });

@@ -43,6 +43,8 @@ chat once the TS3 adapter is connected.
 | `!fuente [youtube\|soundcloud\|auto]` | -                     | Show or set your preferred search source for `!play` and `!yt`.                                     |
 | `!radio <nombre o género>`            | `!rb`                 | Search the community radio directory and tune the top match.                                        |
 | `!jump <posición>`                    | `!j`                  | Skip to a queue position (only its requesters or an admin).                                         |
+| `!tops [n]`                           | `!top`                | Most played tracks (default 5, max 10).                                                             |
+| `!mystats`                            | -                     | Your play counts, top artist and favorites.                                                         |
 | `!test-tone`                          | `!tone`               | Play a 3-second test tone (rate-limited).                                                           |
 | `!help`                               | `!h`                  | Show the command summary.                                                                           |
 

@@ -5,6 +5,7 @@ import { playTestTone } from "../audio/test-tone-player.js";
 import type { MetricsCollector } from "../observability/metrics.js";
 import type { UserTelemetry } from "../application/user-telemetry.js";
 import type { UserPreferences } from "../application/user-preferences.js";
+import type { ListeningHistory } from "../application/listening-history.js";
 import type { RadioTitleCache } from "../media/radio-icy.js";
 import type { SystemYtDlpExecutor } from "../media/youtube/yt-dlp.js";
 import type { YoutubePlaybackService } from "../application/youtube-playback-service.js";
@@ -33,6 +34,7 @@ export interface CommandContext {
   readonly metrics: MetricsCollector;
   readonly telemetry: UserTelemetry;
   readonly preferences: UserPreferences;
+  readonly listeningHistory: ListeningHistory;
   readonly radioTitles: RadioTitleCache;
   readonly ytDlpExecutor: SystemYtDlpExecutor;
   readonly commandRateLimiter: CommandRateLimiter;
@@ -369,6 +371,50 @@ async function handleFuente(
   await ctx.preferences.flush();
   await send(
     `Fuente preferida: ${command.source}. Tus búsquedas con !play y !yt van ahí.`,
+  );
+}
+
+async function handleTops(
+  ctx: CommandContext,
+  command: Extract<ChatCommand, { name: "tops" }>,
+  _sender: CommandSender,
+  send: SendFn,
+): Promise<void> {
+  const limit = Math.min(command.page ?? 5, 10);
+  const tops = ctx.listeningHistory.topTracks(limit);
+  await send(
+    tops.length === 0
+      ? "Todavía no hay reproducciones registradas."
+      : [
+          "Top global:",
+          ...tops.map(
+            (track, index) =>
+              `${index + 1}. ${track.title} (${track.plays} ${track.plays === 1 ? "reproducción" : "reproducciones"})`,
+          ),
+        ].join("\n"),
+  );
+}
+
+async function handleMyStats(
+  ctx: CommandContext,
+  _command: Extract<ChatCommand, { name: "mystats" }>,
+  sender: CommandSender,
+  send: SendFn,
+): Promise<void> {
+  const summary = ctx.listeningHistory.userSummary(sender.uid);
+  const favorites = ctx.preferences.listFavorites(sender.uid).length;
+  if (summary.plays === 0 && favorites === 0) {
+    await send("Todavía no tenés reproducciones ni favoritos.");
+    return;
+  }
+  await send(
+    [
+      `Tus números: ${summary.plays} reproducciones (${summary.completes} completadas, ${summary.skips} saltadas).`,
+      ...(summary.topArtist === undefined
+        ? []
+        : [`Artista top: ${summary.topArtist}.`]),
+      `Favoritos: ${favorites}.`,
+    ].join("\n"),
   );
 }
 
@@ -1268,5 +1314,9 @@ export async function dispatchCommand(
       return handleFuente(ctx, command, sender, send);
     case "radio":
       return handleRadio(ctx, command, sender, send);
+    case "tops":
+      return handleTops(ctx, command, sender, send);
+    case "mystats":
+      return handleMyStats(ctx, command, sender, send);
   }
 }
