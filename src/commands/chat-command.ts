@@ -49,6 +49,7 @@ export type ChatCommand =
   | { readonly index: number; readonly name: "jump" }
   | { readonly page?: number; readonly name: "tops" }
   | { readonly name: "mystats" }
+  | { readonly enabled?: boolean; readonly name: "autoplay" }
   | { readonly name: "playlist"; readonly action?: undefined }
   | {
       readonly action: "delete";
@@ -218,6 +219,13 @@ export function parseChatCommand(
       return argument
         ? { name, page: parsePage(argument, "!tops [n]") }
         : { name };
+    case "autoplay": {
+      if (!argument) return { name };
+      if (argument !== "on" && argument !== "off") {
+        throw new UserError("Usá: !autoplay [on|off]");
+      }
+      return { enabled: argument === "on", name };
+    }
     case "effects": {
       const parts = argument.split(/\s+/).filter(Boolean);
       const sub = parts[0];

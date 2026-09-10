@@ -117,6 +117,36 @@ describe("parseChatCommand", () => {
     expect(() => parseChatCommand("!jump x")).toThrow("Usá: !jump <posición>");
   });
 
+  it("parses the autoplay command", () => {
+    expect(parseChatCommand("!autoplay")).toEqual({ name: "autoplay" });
+    expect(parseChatCommand("!autoplay on")).toEqual({
+      enabled: true,
+      name: "autoplay",
+    });
+    expect(parseChatCommand("!autoplay off")).toEqual({
+      enabled: false,
+      name: "autoplay",
+    });
+    expect(() => parseChatCommand("!autoplay maybe")).toThrow(
+      "Usá: !autoplay [on|off]",
+    );
+  });
+
+  it("parses the autoplay command", () => {
+    expect(parseChatCommand("!autoplay")).toEqual({ name: "autoplay" });
+    expect(parseChatCommand("!autoplay on")).toEqual({
+      enabled: true,
+      name: "autoplay",
+    });
+    expect(parseChatCommand("!autoplay off")).toEqual({
+      enabled: false,
+      name: "autoplay",
+    });
+    expect(() => parseChatCommand("!autoplay maybe")).toThrow(
+      "Usá: !autoplay [on|off]",
+    );
+  });
+
   it("parses the stats commands", () => {
     expect(parseChatCommand("!tops")).toEqual({ name: "tops" });
     expect(parseChatCommand("!tops 3")).toEqual({ name: "tops", page: 3 });

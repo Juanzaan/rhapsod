@@ -53,6 +53,7 @@ function setup(
     loudnessProfiler?: LoudnessProfiler;
     prewarmNext?: boolean;
     restoredState?: {
+      autoplay?: boolean;
       loopMode?: "off" | "queue" | "track";
       queue?: readonly SerializedQueueTrack[];
       volumePercent?: number;
@@ -65,6 +66,11 @@ function setup(
     redirectResolver?: RedirectResolver;
     audioUrlCache?: AudioUrlCache;
     proxyUrl?: string;
+    autoplayProfile?: {
+      artistScores(): ReadonlyMap<string, number>;
+      recentArtists(limit: number): readonly string[];
+    };
+    relatedVideoId?: (seedVideoId: string) => Promise<string | undefined>;
   } = {},
 ) {
   const stopSession = vi.fn();
@@ -296,6 +302,12 @@ function setup(
       ? { loudnessProfiler: options.loudnessProfiler }
       : {}),
     ...(options.proxyUrl === undefined ? {} : { proxyUrl: options.proxyUrl }),
+    ...(options.autoplayProfile
+      ? { autoplayProfile: options.autoplayProfile }
+      : {}),
+    ...(options.relatedVideoId
+      ? { relatedVideoId: options.relatedVideoId }
+      : {}),
   });
   return {
     alternativeResolver,
@@ -676,6 +688,159 @@ describe("YoutubePlaybackService", () => {
     expect(() => service.jumpTo(0)).toThrow("Usá: !jump <posición>");
     expect(() => service.jumpTo(2)).toThrow(
       "No existe esa posición en la cola.",
+    );
+  });
+
+  it("picks an autoplay track from the mix using the profile", async () => {
+    const random = vi.spyOn(Math, "random").mockReturnValue(0.99);
+    try {
+      const { resolver, service } = setup({
+        autoplayProfile: {
+          artistScores: () => new Map([["duki", 5]]),
+          recentArtists: () => [],
+        },
+      });
+      await service.enqueue("https://youtu.be/seedvideo11", "user-1", "uid-1");
+      await new Promise((resolve) => setImmediate(resolve));
+      resolver.expandPlaylist.mockResolvedValueOnce({
+        tracks: [
+          {
+            id: "mix11111111",
+            title: "Unknown - Mix One",
+            webpageUrl: "https://www.youtube.com/watch?v=mix11111111",
+          },
+          {
+            id: "mix22222222",
+            title: "Duki - Mix Two",
+            webpageUrl: "https://www.youtube.com/watch?v=mix22222222",
+          },
+        ],
+      });
+
+      const pick = await service.resolveAutoplayTrack();
+
+      expect(resolver.expandPlaylist).toHaveBeenCalledWith(
+        { id: "RDseedvideo11", type: "playlist" },
+        25,
+      );
+      expect(pick).toMatchObject({
+        id: "mix22222222",
+        requestedBy: "Autoplay",
+        requestedByUid: "autoplay",
+        source: "https://www.youtube.com/watch?v=mix22222222",
+        title: "Duki - Mix Two",
+      });
+    } finally {
+      random.mockRestore();
+    }
+  });
+
+  it("returns undefined without playable seeds", async () => {
+    const { resolver, service } = setup();
+
+    await expect(service.resolveAutoplayTrack()).resolves.toBeUndefined();
+    expect(resolver.expandPlaylist).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the related video when the mix is empty", async () => {
+    const { resolver, service } = setup({
+      relatedVideoId: () => Promise.resolve("rel11111111"),
+    });
+    await service.enqueue("https://youtu.be/seedvideo11", "user-1", "uid-1");
+    await new Promise((resolve) => setImmediate(resolve));
+    resolver.expandPlaylist.mockResolvedValueOnce({ tracks: [] });
+    resolver.getTrackFromUrl.mockResolvedValueOnce({
+      audioUrl: "https://media.example/rel",
+      id: "rel11111111",
+      title: "Related Song",
+      webpageUrl: "https://www.youtube.com/watch?v=rel11111111",
+    });
+
+    const pick = await service.resolveAutoplayTrack();
+
+    expect(pick).toMatchObject({
+      requestedBy: "Autoplay",
+      title: "Related Song",
+    });
+  });
+
+  it("continues with an autoplay pick when the queue empties", async () => {
+    const random = vi.spyOn(Math, "random").mockReturnValue(0.99);
+    try {
+      const { playbackResolvers, resolver, service } = setup({
+        autoplayProfile: {
+          artistScores: () => new Map(),
+          recentArtists: () => [],
+        },
+      });
+      service.setAutoplay(true);
+      await service.enqueue("https://youtu.be/seedvideo11", "user-1", "uid-1");
+      await new Promise((resolve) => setImmediate(resolve));
+      resolver.expandPlaylist.mockResolvedValue({
+        tracks: [
+          {
+            id: "mix11111111",
+            title: "Mix One",
+            webpageUrl: "https://www.youtube.com/watch?v=mix11111111",
+          },
+        ],
+      });
+      playbackResolvers[0]?.();
+      await new Promise((resolve) => setImmediate(resolve));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(service.current?.requestedBy).toBe("Autoplay");
+      expect(service.current?.id).toBe("mix11111111");
+    } finally {
+      random.mockRestore();
+    }
+  });
+
+  it("stays parked after stop even with autoplay on", async () => {
+    const { playbackResolvers, resolver, service } = setup({
+      autoplayProfile: {
+        artistScores: () => new Map(),
+        recentArtists: () => [],
+      },
+    });
+    service.setAutoplay(true);
+    await service.enqueue("https://youtu.be/seedvideo11", "user-1", "uid-1");
+    await new Promise((resolve) => setImmediate(resolve));
+    resolver.expandPlaylist.mockResolvedValue({
+      tracks: [
+        {
+          id: "mix11111111",
+          title: "Mix One",
+          webpageUrl: "https://www.youtube.com/watch?v=mix11111111",
+        },
+      ],
+    });
+    service.stop();
+    playbackResolvers[0]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(service.current).toBeUndefined();
+    expect(service.playerState).toBe("idle");
+  });
+
+  it("restores and persists the autoplay flag", () => {
+    const restored = setup({
+      restoredState: { autoplay: true },
+      stateStore: true,
+    });
+    expect(restored.service.autoplayEnabled).toBe(true);
+
+    const { service, stateStore } = setup({ stateStore: true });
+    expect(service.autoplayEnabled).toBe(false);
+    service.setAutoplay(true);
+    expect(service.autoplayEnabled).toBe(true);
+    expect(stateStore!.save).toHaveBeenCalledWith(
+      expect.objectContaining({ autoplay: true }),
+    );
+    service.setAutoplay(false);
+    expect(stateStore!.save).toHaveBeenLastCalledWith(
+      expect.not.objectContaining({ autoplay: true }),
     );
   });
 

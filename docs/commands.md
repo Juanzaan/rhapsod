@@ -45,6 +45,7 @@ chat once the TS3 adapter is connected.
 | `!jump <posición>`                    | `!j`                  | Skip to a queue position (only its requesters or an admin).                                         |
 | `!tops [n]`                           | `!top`                | Most played tracks (default 5, max 10).                                                             |
 | `!mystats`                            | -                     | Your play counts, top artist and favorites.                                                         |
+| `!autoplay [on\|off]`                 | -                     | Keep playing similar tracks when the queue empties (anyone may skip autoplay picks).                |
 | `!test-tone`                          | `!tone`               | Play a 3-second test tone (rate-limited).                                                           |
 | `!help`                               | `!h`                  | Show the command summary.                                                                           |
 
@@ -62,6 +63,12 @@ chat once the TS3 adapter is connected.
   searches to SoundCloud; pasted links always use their own provider. Unset
   (or `auto`) means YouTube, and empty SoundCloud results fall back to
   YouTube instead of failing.
+- **Autoplay:** `!autoplay on` keeps the music going after the queue drains:
+  the bot expands the YouTube mix of recently played tracks and picks the
+  best match for the channel's taste (artists that get finished, 20%
+  exploration, no repeats or artist spam). It needs recent YouTube history
+  to seed from; anyone may skip an autoplay pick. The flag persists in
+  `data/state.json`.
 - **Persistence:** `!volume` (default `50`) and `!loop` are saved to
   `data/state.json` (atomic write) and restored at startup; `!stop`/`!clear`
   reset looping and persist the change.
