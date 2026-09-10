@@ -12,6 +12,7 @@ import type { YoutubePlaybackService } from "../application/youtube-playback-ser
 import type { ChatCommand } from "./chat-command.js";
 import type { CommandRateLimiter } from "./command-rate-limiter.js";
 import { searchStations } from "../media/radio-directory.js";
+import { resolveTuneInStream, searchTuneInStations } from "../media/tunein.js";
 import { parseMediaInput } from "../media/media-input.js";
 import {
   canMoveBotToChannel,
@@ -450,15 +451,28 @@ async function handleRadio(
   const station = stations.find((candidate) =>
     candidate.url.toLowerCase().startsWith("https://"),
   );
-  if (!station) {
+  if (station !== undefined) {
+    await ctx.playback.enqueue(station.url, sender.name, sender.uid);
+    await send(
+      `Sintonizando: ${station.name}${station.bitrate ? ` (${station.bitrate} kbps)` : ""}.`,
+    );
+    return;
+  }
+  const tuneIn = await searchTuneInStations(command.input);
+  const tuneInStation = tuneIn[0];
+  const streamUrl =
+    tuneInStation === undefined
+      ? undefined
+      : await resolveTuneInStream(tuneInStation.id);
+  if (tuneInStation === undefined || streamUrl === undefined) {
     await send(
       `No encontré emisoras para "${command.input}". Probá con otro nombre o género.`,
     );
     return;
   }
-  await ctx.playback.enqueue(station.url, sender.name, sender.uid);
+  await ctx.playback.enqueue(streamUrl, sender.name, sender.uid);
   await send(
-    `Sintonizando: ${station.name}${station.bitrate ? ` (${station.bitrate} kbps)` : ""}.`,
+    `Sintonizando: ${tuneInStation.name}${tuneInStation.bitrate ? ` (${tuneInStation.bitrate} kbps)` : ""}.`,
   );
 }
 

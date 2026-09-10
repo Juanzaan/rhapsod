@@ -7,9 +7,19 @@ import {
   type CommandSender,
 } from "../src/commands/command-handlers.js";
 import { searchStations } from "../src/media/radio-directory.js";
+import {
+  resolveTuneInStream,
+  searchTuneInStations,
+} from "../src/media/tunein.js";
 
 vi.mock("../src/media/radio-directory.js", () => ({
   searchStations: vi.fn((): Promise<unknown[]> => Promise.resolve([])),
+}));
+vi.mock("../src/media/tunein.js", () => ({
+  resolveTuneInStream: vi.fn((): Promise<string | undefined> =>
+    Promise.resolve(undefined),
+  ),
+  searchTuneInStations: vi.fn((): Promise<unknown[]> => Promise.resolve([])),
 }));
 
 function makeHarness(
@@ -1192,6 +1202,64 @@ describe("radio directory", () => {
   it("reports unknown stations", async () => {
     const { ctx, playback, send, sender } = makeHarness();
     vi.mocked(searchStations).mockResolvedValue([]);
+    vi.mocked(searchTuneInStations).mockResolvedValue([]);
+    await dispatchCommand(ctx, parseChatCommand("!radio zzz")!, sender, send);
+
+    expect(playback.enqueue).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledWith(
+      'No encontré emisoras para "zzz". Probá con otro nombre o género.',
+    );
+  });
+
+  it("falls back to TuneIn when the directory misses", async () => {
+    const { ctx, playback, send, sender } = makeHarness();
+    vi.mocked(searchStations).mockResolvedValue([]);
+    vi.mocked(searchTuneInStations).mockResolvedValue([
+      { bitrate: 256, id: "s270143", name: "JFK Radio" },
+    ]);
+    vi.mocked(resolveTuneInStream).mockResolvedValue(
+      "https://stream.example/jfk",
+    );
+    await dispatchCommand(ctx, parseChatCommand("!radio jfk")!, sender, send);
+
+    expect(searchTuneInStations).toHaveBeenCalledWith("jfk");
+    expect(resolveTuneInStream).toHaveBeenCalledWith("s270143");
+    expect(playback.enqueue).toHaveBeenCalledWith(
+      "https://stream.example/jfk",
+      "user",
+      "uid-1",
+    );
+    expect(send).toHaveBeenCalledWith("Sintonizando: JFK Radio (256 kbps).");
+  });
+
+  it("skips TuneIn when the directory hits", async () => {
+    const { ctx, playback, send, sender } = makeHarness();
+    vi.mocked(searchStations).mockResolvedValue([
+      { name: "Direct", url: "https://ice.example/direct", votes: 10 },
+    ]);
+    vi.mocked(searchTuneInStations).mockClear();
+    await dispatchCommand(
+      ctx,
+      parseChatCommand("!radio direct")!,
+      sender,
+      send,
+    );
+
+    expect(playback.enqueue).toHaveBeenCalledWith(
+      "https://ice.example/direct",
+      "user",
+      "uid-1",
+    );
+    expect(searchTuneInStations).not.toHaveBeenCalled();
+  });
+
+  it("reports when TuneIn has no playable stream", async () => {
+    const { ctx, playback, send, sender } = makeHarness();
+    vi.mocked(searchStations).mockResolvedValue([]);
+    vi.mocked(searchTuneInStations).mockResolvedValue([
+      { id: "s9", name: "No Stream" },
+    ]);
+    vi.mocked(resolveTuneInStream).mockResolvedValue(undefined);
     await dispatchCommand(ctx, parseChatCommand("!radio zzz")!, sender, send);
 
     expect(playback.enqueue).not.toHaveBeenCalled();

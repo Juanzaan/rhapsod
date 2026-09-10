@@ -41,7 +41,7 @@ chat once the TS3 adapter is connected.
 | `!unfav <n>`                          | -                     | Remove a favorite by its list position.                                                             |
 | `!favplay <n>`                        | `!fp`                 | Add a favorite to the queue by its list position.                                                   |
 | `!fuente [youtube\|soundcloud\|auto]` | -                     | Show or set your preferred search source for `!play` and `!yt`.                                     |
-| `!radio <nombre o género>`            | `!rb`                 | Search the community radio directory and tune the top match.                                        |
+| `!radio <nombre o género>`            | `!rb`                 | Search the community radio directory (TuneIn fallback) and tune the top match.                      |
 | `!jump <posición>`                    | `!j`                  | Skip to a queue position (only its requesters or an admin).                                         |
 | `!tops [n]`                           | `!top`                | Most played tracks (default 5, max 10).                                                             |
 | `!mystats`                            | -                     | Your play counts, top artist and favorites.                                                         |
@@ -111,8 +111,8 @@ chat once the TS3 adapter is connected.
   `!play <audio-url>` via FFmpeg; `http:` is rejected, only `https:`.
   Icecast/shoutcast streams show the live on-air title in `!np` and the
   panel dashboard when the station sends ICY metadata. Discover stations
-  by name, genre or country with `!radio` (community directory,
-  top voted match wins).
+  by name, genre or country with `!radio` (community directory first,
+  TuneIn fallback, top voted match wins).
 
 No command may accept shell syntax. Rhapsod passes provider arguments directly
 to child processes and never invokes a shell.
