@@ -74,7 +74,7 @@ async function handlePlay(
   sender: CommandSender,
   send: SendFn,
 ): Promise<void> {
-  const { playback, verbose } = ctx;
+  const { playback, preferences, verbose } = ctx;
   const { name: senderName, uid: senderUid } = sender;
   if (verbose) await send("Preparando la reproducción...");
   const media = parseMediaInput(command.input);
@@ -112,8 +112,20 @@ async function handlePlay(
         : `Se agregaron ${result.added.length} canciones a la cola${result.remaining ? ` (quedan ${result.remaining} fuera del límite)` : ""}.`;
     await send(message);
   } else {
-    const track = await playback.enqueue(command.input, senderName, senderUid);
     const viaSearch = media.kind === "file";
+    if (
+      viaSearch &&
+      preferences.getPreferredSource(senderUid) === "soundcloud"
+    ) {
+      const track = await playback.enqueueSoundcloudSearch(
+        command.input,
+        senderName,
+        senderUid,
+      );
+      await send(`En cola (SoundCloud): ${track.title}`);
+      return;
+    }
+    const track = await playback.enqueue(command.input, senderName, senderUid);
     await send(`En cola: ${track.title}${viaSearch ? " (búsqueda)" : ""}`);
   }
 }
@@ -141,7 +153,7 @@ async function handleSearch(
   sender: CommandSender,
   send: SendFn,
 ): Promise<void> {
-  const { playback, verbose } = ctx;
+  const { playback, preferences, verbose } = ctx;
   const { name: senderName, uid: senderUid } = sender;
   if (command.index) {
     const track = await playback.enqueueSearchIndex(
@@ -151,6 +163,15 @@ async function handleSearch(
       senderUid,
     );
     await send(`En cola (resultado ${command.index}): ${track.title}`);
+    return;
+  }
+  if (preferences.getPreferredSource(senderUid) === "soundcloud") {
+    const track = await playback.enqueueSoundcloudSearch(
+      command.input,
+      senderName,
+      senderUid,
+    );
+    await send(`En cola (SoundCloud): ${track.title}`);
     return;
   }
   if (verbose) await send("Buscando en YouTube...");
@@ -302,6 +323,26 @@ async function handleUnfav(
   }
   await ctx.preferences.flush();
   await send(`Quitada de tus favoritos: ${removed.title}`);
+}
+
+async function handleFuente(
+  ctx: CommandContext,
+  command: Extract<ChatCommand, { name: "fuente" }>,
+  sender: CommandSender,
+  send: SendFn,
+): Promise<void> {
+  if (command.source === undefined) {
+    const current = ctx.preferences.getPreferredSource(sender.uid);
+    await send(
+      `Tu fuente preferida es: ${current}. Cambiala con !fuente [youtube|soundcloud|auto].`,
+    );
+    return;
+  }
+  ctx.preferences.setPreferredSource(sender.uid, command.source);
+  await ctx.preferences.flush();
+  await send(
+    `Fuente preferida: ${command.source}. Tus búsquedas con !play y !yt van ahí.`,
+  );
 }
 
 async function handleFavPlay(
@@ -1127,5 +1168,7 @@ export async function dispatchCommand(
       return handleUnfav(ctx, command, sender, send);
     case "favplay":
       return handleFavPlay(ctx, command, sender, send);
+    case "fuente":
+      return handleFuente(ctx, command, sender, send);
   }
 }

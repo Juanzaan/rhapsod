@@ -162,6 +162,17 @@ function setup(
         new Error("No se pudo conectar con SoundCloud. Probá de nuevo."),
       ),
     ),
+    searchTracks: vi.fn(() =>
+      Promise.resolve([
+        {
+          artist: "Duki",
+          durationSeconds: 180,
+          id: "soundcloud:99",
+          title: "Rockstar",
+          url: "https://soundcloud.com/duki/rockstar",
+        },
+      ]),
+    ),
     match: vi.fn((input: string) => input.includes("soundcloud.com")),
     name: "soundcloud",
   };
@@ -570,6 +581,41 @@ describe("YoutubePlaybackService", () => {
       "https://soundcloud.com/artist/track",
     );
     expect(track.title).toBe("SoundCloud Track");
+  });
+
+  it("enqueues the top SoundCloud result for preferred-source search", async () => {
+    const { service, soundcloudResolver } = setup({
+      soundcloudResolver: true,
+    });
+
+    const track = await service.enqueueSoundcloudSearch(
+      "duki rockstar",
+      "user-1",
+      "uid-1",
+    );
+
+    expect(soundcloudResolver.searchTracks).toHaveBeenCalledWith(
+      "duki rockstar",
+      5,
+    );
+    expect(track).toMatchObject({
+      id: "soundcloud:99",
+      requestedBy: "user-1",
+      requestedByUid: "uid-1",
+      source: "https://soundcloud.com/duki/rockstar",
+      title: "Duki - Rockstar",
+    });
+  });
+
+  it("reports an empty SoundCloud search instead of guessing", async () => {
+    const { service, soundcloudResolver } = setup({
+      soundcloudResolver: true,
+    });
+    soundcloudResolver.searchTracks.mockResolvedValueOnce([]);
+
+    await expect(
+      service.enqueueSoundcloudSearch("zzz no existe", "user-1"),
+    ).rejects.toThrow("No encontré esa búsqueda en SoundCloud");
   });
 
   it("advances to the next track when playback completes", async () => {

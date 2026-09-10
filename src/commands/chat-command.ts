@@ -41,6 +41,10 @@ export type ChatCommand =
   | { readonly name: "favs" }
   | { readonly index: number; readonly name: "unfav" }
   | { readonly index: number; readonly name: "favplay" }
+  | {
+      readonly source?: "auto" | "soundcloud" | "youtube";
+      readonly name: "fuente";
+    }
   | { readonly name: "playlist"; readonly action?: undefined }
   | {
       readonly action: "delete";
@@ -190,6 +194,17 @@ export function parseChatCommand(
       return { name, index: parsePosition(argument, "!unfav <n>") };
     case "favplay":
       return { name, index: parsePosition(argument, "!favplay <n>") };
+    case "fuente": {
+      if (!argument) return { name };
+      if (
+        argument !== "youtube" &&
+        argument !== "soundcloud" &&
+        argument !== "auto"
+      ) {
+        throw new UserError("Usá: !fuente [youtube|soundcloud|auto]");
+      }
+      return { name, source: argument };
+    }
     case "effects": {
       const parts = argument.split(/\s+/).filter(Boolean);
       const sub = parts[0];

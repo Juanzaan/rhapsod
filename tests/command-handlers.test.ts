@@ -42,6 +42,12 @@ function makeHarness(
       source: "s",
       title: "Track",
     })),
+    enqueueSoundcloudSearch: vi.fn(() => ({
+      id: "soundcloud:1",
+      requestedBy: "user",
+      source: "https://soundcloud.com/artist/track",
+      title: "Artist - Track",
+    })),
     pause: vi.fn(),
     resume: vi.fn(),
     skip: vi.fn(),
@@ -111,6 +117,8 @@ function makeHarness(
     })),
     listFavorites: vi.fn((): unknown[] => []),
     removeFavorite: vi.fn((): unknown => undefined),
+    getPreferredSource: vi.fn((): string => "auto"),
+    setPreferredSource: vi.fn((_uid: unknown, source: string) => source),
     flush: vi.fn(() => Promise.resolve()),
   };
   const ytDlpExecutor = {
@@ -195,6 +203,8 @@ describe("dispatchCommand", () => {
       ["unfav", "!unfav 1"],
       ["favplay", "!favplay 1"],
       ["favplay-alias", "!fp 1"],
+      ["fuente", "!fuente"],
+      ["fuente-set", "!fuente soundcloud"],
     ];
     const { ctx, send, sender } = makeHarness({ current: { title: "X" } });
     for (const [name, input] of cases) {
@@ -794,5 +804,86 @@ describe("favorites and skip ownership", () => {
     await dispatchCommand(ctx, parseChatCommand("!skip")!, sender, send);
 
     expect(playback.skip).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the preferred source with !fuente", async () => {
+    const { ctx, preferences, send, sender } = makeHarness();
+    preferences.getPreferredSource.mockReturnValue("soundcloud");
+    await dispatchCommand(ctx, parseChatCommand("!fuente")!, sender, send);
+
+    expect(send).toHaveBeenCalledWith(
+      "Tu fuente preferida es: soundcloud. Cambiala con !fuente [youtube|soundcloud|auto].",
+    );
+  });
+
+  it("sets the preferred source with !fuente <source>", async () => {
+    const { ctx, preferences, send, sender } = makeHarness();
+    await dispatchCommand(
+      ctx,
+      parseChatCommand("!fuente soundcloud")!,
+      sender,
+      send,
+    );
+
+    expect(preferences.setPreferredSource).toHaveBeenCalledWith(
+      "uid-1",
+      "soundcloud",
+    );
+    expect(preferences.flush).toHaveBeenCalled();
+    expect(send).toHaveBeenCalledWith(
+      "Fuente preferida: soundcloud. Tus búsquedas con !play y !yt van ahí.",
+    );
+  });
+
+  it("routes free-text !play to SoundCloud when preferred", async () => {
+    const { ctx, playback, preferences, send, sender } = makeHarness();
+    preferences.getPreferredSource.mockReturnValue("soundcloud");
+    await dispatchCommand(
+      ctx,
+      parseChatCommand("!play duki rockstar")!,
+      sender,
+      send,
+    );
+
+    expect(playback.enqueueSoundcloudSearch).toHaveBeenCalledWith(
+      "duki rockstar",
+      "user",
+      "uid-1",
+    );
+    expect(playback.enqueue).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledWith("En cola (SoundCloud): Artist - Track");
+  });
+
+  it("routes !yt to SoundCloud when preferred", async () => {
+    const { ctx, playback, preferences, send, sender } = makeHarness();
+    preferences.getPreferredSource.mockReturnValue("soundcloud");
+    await dispatchCommand(
+      ctx,
+      parseChatCommand("!yt duki rockstar")!,
+      sender,
+      send,
+    );
+
+    expect(playback.enqueueSoundcloudSearch).toHaveBeenCalledWith(
+      "duki rockstar",
+      "user",
+      "uid-1",
+    );
+    expect(playback.enqueueSearch).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledWith("En cola (SoundCloud): Artist - Track");
+  });
+
+  it("keeps links on their provider regardless of preference", async () => {
+    const { ctx, playback, preferences, send, sender } = makeHarness();
+    preferences.getPreferredSource.mockReturnValue("soundcloud");
+    await dispatchCommand(
+      ctx,
+      parseChatCommand("!play https://youtu.be/abc")!,
+      sender,
+      send,
+    );
+
+    expect(playback.enqueueSoundcloudSearch).not.toHaveBeenCalled();
+    expect(playback.enqueue).toHaveBeenCalled();
   });
 });

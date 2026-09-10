@@ -78,6 +78,21 @@ describe("parseChatCommand", () => {
     );
   });
 
+  it("parses the preferred-source command", () => {
+    expect(parseChatCommand("!fuente")).toEqual({ name: "fuente" });
+    expect(parseChatCommand("!fuente soundcloud")).toEqual({
+      name: "fuente",
+      source: "soundcloud",
+    });
+    expect(parseChatCommand("!fuente auto")).toEqual({
+      name: "fuente",
+      source: "auto",
+    });
+    expect(() => parseChatCommand("!fuente spotify")).toThrow(
+      "Usá: !fuente [youtube|soundcloud|auto]",
+    );
+  });
+
   it("does not treat normal chat as a command", () => {
     expect(parseChatCommand("play this please")).toBeUndefined();
   });
