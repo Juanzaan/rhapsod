@@ -65,10 +65,12 @@ chat once the TS3 adapter is connected.
   YouTube instead of failing.
 - **Autoplay:** `!autoplay on` keeps the music going after the queue drains:
   the bot expands the YouTube mix of recently played tracks and picks the
-  best match for the channel's taste (artists that get finished, 20%
-  exploration, no repeats or artist spam). It needs recent YouTube history
-  to seed from; anyone may skip an autoplay pick. The flag persists in
-  `data/state.json`.
+  best match for whoever has been requesting: artist affinity and title
+  tokens from their recent sessions (today wins over last week), plus
+  continuity with the track that just played so transitions flow instead
+  of jumping genres. With no personal signal it blends the channel's
+  overall taste; with nothing to seed from it stays silent. Anyone may
+  skip an autoplay pick. The flag persists in `data/state.json`.
 - **Persistence:** `!volume` (default `50`) and `!loop` are saved to
   `data/state.json` (atomic write) and restored at startup; `!stop`/`!clear`
   reset looping and persist the change.
