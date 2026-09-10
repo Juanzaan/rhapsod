@@ -16,7 +16,7 @@ chat once the TS3 adapter is connected.
 | `!stop`                               | -                     | Stop playback and disconnect the player from the current track.                                     |
 | `!queue [page]`                       | `!q`                  | Show 10 pending tracks per page with per-track durations.                                           |
 | `!history`                            | `!hist`               | Show the 10 most recently started tracks (up to 20 are kept in memory).                             |
-| `!now-playing`                        | `!np`, `!now`         | Show the current track, duration and requester.                                                     |
+| `!now-playing`                        | `!np`, `!now`         | Show the current track, duration and requester (live radio shows the on-air title).                 |
 | `!stats`                              | `!st`                 | Show uptime, tracks played since start, current track, queue length and volume/loop state.          |
 | `!volume <0-100>`                     | `!vol`, `!v`          | Adjust the bot output volume (default `50`; persists in `state.json`).                              |
 | `!move <from> <to>`                   | `!mv`                 | Move a pending track between one-based positions.                                                   |
@@ -90,6 +90,8 @@ chat once the TS3 adapter is connected.
 - **Other sources:** local files are rejected with a clear message. Direct
   HTTPS audio URLs (files, HLS, icecast-style streams) play through
   `!play <audio-url>` via FFmpeg; `http:` is rejected, only `https:`.
+  Icecast/shoutcast streams show the live on-air title in `!np` and the
+  panel dashboard when the station sends ICY metadata.
 
 No command may accept shell syntax. Rhapsod passes provider arguments directly
 to child processes and never invokes a shell.

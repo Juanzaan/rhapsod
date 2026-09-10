@@ -110,6 +110,10 @@ function makeHarness(
     recordBotMovedBy: vi.fn(),
     snapshot: vi.fn(() => []),
   };
+  const radioTitles = {
+    get: vi.fn((): Promise<string | undefined> => Promise.resolve(undefined)),
+    peek: vi.fn((): string | undefined => undefined),
+  };
   const preferences = {
     addFavorite: vi.fn((_uid: unknown, track: Record<string, unknown>) => ({
       addedAt: 0,
@@ -135,6 +139,7 @@ function makeHarness(
     metrics,
     telemetry,
     preferences,
+    radioTitles,
     ytDlpExecutor,
     commandRateLimiter,
     encoder: {},
@@ -156,6 +161,7 @@ function makeHarness(
     metrics,
     telemetry,
     preferences,
+    radioTitles,
     send,
     sender,
     commandRateLimiter,
@@ -805,7 +811,61 @@ describe("favorites and skip ownership", () => {
 
     expect(playback.skip).toHaveBeenCalledTimes(1);
   });
+});
 
+describe("now-playing live titles", () => {
+  it("shows the on-air title for live streams", async () => {
+    const { ctx, radioTitles, send, sender } = makeHarness({
+      current: {
+        requestedBy: "user",
+        source: "https://ice.example/stream",
+        title: "Radio: ice.example",
+      },
+    });
+    radioTitles.get.mockResolvedValue("Live Artist - Live Song");
+    await dispatchCommand(ctx, parseChatCommand("!np")!, sender, send);
+
+    expect(radioTitles.get).toHaveBeenCalledWith("https://ice.example/stream");
+    expect(send).toHaveBeenCalledWith(
+      "Reproduciendo: Live Artist - Live Song (duración desconocida - por user)",
+    );
+  });
+
+  it("falls back to the station title without metadata", async () => {
+    const { ctx, radioTitles, send, sender } = makeHarness({
+      current: {
+        requestedBy: "user",
+        source: "https://ice.example/stream",
+        title: "Radio: ice.example",
+      },
+    });
+    await dispatchCommand(ctx, parseChatCommand("!np")!, sender, send);
+
+    expect(radioTitles.get).toHaveBeenCalled();
+    expect(send).toHaveBeenCalledWith(
+      "Reproduciendo: Radio: ice.example (duración desconocida - por user)",
+    );
+  });
+
+  it("skips the lookup for tracks with a known duration", async () => {
+    const { ctx, radioTitles, send, sender } = makeHarness({
+      current: {
+        durationSeconds: 180,
+        requestedBy: "user",
+        source: "https://youtu.be/abc",
+        title: "Duki - Rockstar",
+      },
+    });
+    await dispatchCommand(ctx, parseChatCommand("!np")!, sender, send);
+
+    expect(radioTitles.get).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledWith(
+      "Reproduciendo: Duki - Rockstar (3:00 - por user)",
+    );
+  });
+});
+
+describe("preferred source routing", () => {
   it("shows the preferred source with !fuente", async () => {
     const { ctx, preferences, send, sender } = makeHarness();
     preferences.getPreferredSource.mockReturnValue("soundcloud");

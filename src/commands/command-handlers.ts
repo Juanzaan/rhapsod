@@ -5,6 +5,7 @@ import { playTestTone } from "../audio/test-tone-player.js";
 import type { MetricsCollector } from "../observability/metrics.js";
 import type { UserTelemetry } from "../application/user-telemetry.js";
 import type { UserPreferences } from "../application/user-preferences.js";
+import type { RadioTitleCache } from "../media/radio-icy.js";
 import type { SystemYtDlpExecutor } from "../media/youtube/yt-dlp.js";
 import type { YoutubePlaybackService } from "../application/youtube-playback-service.js";
 import type { ChatCommand } from "./chat-command.js";
@@ -31,6 +32,7 @@ export interface CommandContext {
   readonly metrics: MetricsCollector;
   readonly telemetry: UserTelemetry;
   readonly preferences: UserPreferences;
+  readonly radioTitles: RadioTitleCache;
   readonly ytDlpExecutor: SystemYtDlpExecutor;
   readonly commandRateLimiter: CommandRateLimiter;
   readonly encoder: RhapsodOpusEncoder;
@@ -530,10 +532,17 @@ async function handleNowPlaying(
   _sender: CommandSender,
   send: SendFn,
 ): Promise<void> {
+  const current = ctx.playback.current;
+  if (!current) {
+    await send("No hay nada reproduciéndose.");
+    return;
+  }
+  const liveTitle =
+    current.durationSeconds === undefined
+      ? await ctx.radioTitles.get(current.source)
+      : undefined;
   await send(
-    ctx.playback.current
-      ? `Reproduciendo: ${ctx.playback.current.title} (${formatDuration(ctx.playback.current.durationSeconds)} - por ${ctx.playback.current.requestedBy})`
-      : "No hay nada reproduciéndose.",
+    `Reproduciendo: ${liveTitle ?? current.title} (${formatDuration(current.durationSeconds)} - por ${current.requestedBy})`,
   );
 }
 
