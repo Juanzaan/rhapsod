@@ -47,6 +47,8 @@ export type ChatCommand =
     }
   | { readonly input: string; readonly name: "radio" }
   | { readonly index: number; readonly name: "jump" }
+  | { readonly page?: number; readonly name: "tops" }
+  | { readonly name: "mystats" }
   | { readonly name: "playlist"; readonly action?: undefined }
   | {
       readonly action: "delete";
@@ -212,6 +214,10 @@ export function parseChatCommand(
       return { input: argument, name };
     case "jump":
       return { name, index: parsePosition(argument, "!jump <posición>") };
+    case "tops":
+      return argument
+        ? { name, page: parsePage(argument, "!tops [n]") }
+        : { name };
     case "effects": {
       const parts = argument.split(/\s+/).filter(Boolean);
       const sub = parts[0];
@@ -363,8 +369,8 @@ function parseMove(argument: string): { from: number; to: number } {
   return { from, to };
 }
 
-function parsePage(argument: string): number {
-  const page = parsePosition(argument, "!queue [page]");
+function parsePage(argument: string, usage = "!queue [page]"): number {
+  const page = parsePosition(argument, usage);
   return page;
 }
 

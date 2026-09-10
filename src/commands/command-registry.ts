@@ -269,6 +269,22 @@ export const COMMAND_SPECS: readonly CommandSpec[] = [
     summary: "Saltar a una posición de la cola",
   },
   {
+    name: "tops",
+    aliases: ["top"],
+    group: "misc",
+    adminOnly: false,
+    usage: "tops [n]",
+    summary: "Canciones más reproducidas",
+  },
+  {
+    name: "mystats",
+    aliases: [],
+    group: "misc",
+    adminOnly: false,
+    usage: "mystats",
+    summary: "Tus estadísticas de escucha",
+  },
+  {
     name: "effects",
     aliases: [],
     group: "misc",

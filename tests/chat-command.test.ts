@@ -117,6 +117,14 @@ describe("parseChatCommand", () => {
     expect(() => parseChatCommand("!jump x")).toThrow("Usá: !jump <posición>");
   });
 
+  it("parses the stats commands", () => {
+    expect(parseChatCommand("!tops")).toEqual({ name: "tops" });
+    expect(parseChatCommand("!tops 3")).toEqual({ name: "tops", page: 3 });
+    expect(parseChatCommand("!top 2")).toEqual({ name: "tops", page: 2 });
+    expect(parseChatCommand("!mystats")).toEqual({ name: "mystats" });
+    expect(() => parseChatCommand("!tops x")).toThrow("Usá: !tops [n]");
+  });
+
   it("does not treat normal chat as a command", () => {
     expect(parseChatCommand("play this please")).toBeUndefined();
   });
