@@ -1097,6 +1097,10 @@ export class YoutubePlaybackService {
     this.#controller.skip();
   }
 
+  jumpTo(position: number): void {
+    this.#controller.jumpTo(position);
+  }
+
   stop(persistState = true): void {
     this.#persistenceSuppressed = !persistState;
     this.#controller.stop();
