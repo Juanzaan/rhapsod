@@ -33,6 +33,7 @@ import { PlaylistStore } from "./application/playlist-store.js";
 import { UserTelemetry } from "./application/user-telemetry.js";
 import { UserPreferences } from "./application/user-preferences.js";
 import { ListeningHistory } from "./application/listening-history.js";
+import { AUTOPLAY_UID } from "./application/autoplay-picker.js";
 import {
   normalizeCommandInput,
   parseChatCommand,
@@ -412,7 +413,9 @@ async function main(): Promise<void> {
       const isFirst = !commandContext.hasStartedPlaying;
       commandContext.hasStartedPlaying = true;
       await connection.sendChannelMessage(
-        formatPlaybackStarted(track.title, isFirst),
+        track.requestedByUid === AUTOPLAY_UID
+          ? `Autoplay: ${track.title}`
+          : formatPlaybackStarted(track.title, isFirst),
       );
     },
     onPlaybackFinished: (track, metrics, reason) => {
@@ -471,6 +474,7 @@ async function main(): Promise<void> {
     audioUrlCache,
     redirectResolver: new RedirectResolver(),
     playlistStore: new PlaylistStore(join(dataDir, "playlists.json"), logger),
+    autoplayProfile: listeningHistory,
     maxQueueTracks: config.RHAPSOD_MAX_QUEUE_TRACKS,
     maxTracksPerUser: config.RHAPSOD_MAX_TRACKS_PER_USER,
     alternativeResolver: new SongLinkClient({ logger }),

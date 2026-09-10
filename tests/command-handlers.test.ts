@@ -57,6 +57,8 @@ function makeHarness(
     resume: vi.fn(),
     skip: vi.fn(),
     jumpTo: vi.fn(),
+    autoplayEnabled: false,
+    setAutoplay: vi.fn(),
     stop: vi.fn(),
     replayPrevious: vi.fn(() => ({
       id: "x",
@@ -217,6 +219,9 @@ describe("dispatchCommand", () => {
       ["skip", "!skip"],
       ["jump", "!jump 2"],
       ["jump-alias", "!j 2"],
+      ["autoplay", "!autoplay"],
+      ["autoplay-on", "!autoplay on"],
+      ["autoplay-off", "!autoplay off"],
       ["stats", "!stats"],
       ["diag", "!diag"],
       ["debug-server", "!debug-server"],
@@ -983,6 +988,50 @@ describe("preferred source routing", () => {
   });
 });
 
+describe("autoplay command", () => {
+  it("shows the current autoplay state", async () => {
+    const { ctx, send, sender } = makeHarness();
+    await dispatchCommand(ctx, parseChatCommand("!autoplay")!, sender, send);
+
+    expect(send).toHaveBeenCalledWith(
+      "Autoplay desactivado. Prendelo con !autoplay on.",
+    );
+  });
+
+  it("toggles autoplay", async () => {
+    const { ctx, playback, send, sender } = makeHarness();
+    await dispatchCommand(ctx, parseChatCommand("!autoplay on")!, sender, send);
+
+    expect(playback.setAutoplay).toHaveBeenCalledWith(true);
+    expect(send).toHaveBeenCalledWith(
+      "Autoplay activado: cuando se vacíe la cola sigo con temas parecidos.",
+    );
+
+    await dispatchCommand(
+      ctx,
+      parseChatCommand("!autoplay off")!,
+      sender,
+      send,
+    );
+    expect(playback.setAutoplay).toHaveBeenCalledWith(false);
+    expect(send).toHaveBeenCalledWith("Autoplay desactivado.");
+  });
+
+  it("lets anyone skip communal autoplay tracks", async () => {
+    const { ctx, playback, send, sender } = makeHarness({
+      current: {
+        requestedBy: "Autoplay",
+        requestedByUid: "autoplay",
+        title: "Mix Pick",
+      },
+    });
+    await dispatchCommand(ctx, parseChatCommand("!skip")!, sender, send);
+
+    expect(playback.skip).toHaveBeenCalledTimes(1);
+    expect(send).toHaveBeenCalledWith("Pista saltada.");
+  });
+});
+
 describe("jump and queue ETA", () => {
   const queued = [
     { requestedBy: "user", requestedByUid: "uid-1", title: "One" },
@@ -1051,6 +1100,50 @@ describe("jump and queue ETA", () => {
         "3. Three (4:00 - por other)\n" +
         "Faltan ~7m (1 sin duración conocida).",
     );
+  });
+});
+
+describe("autoplay command", () => {
+  it("shows the current autoplay state", async () => {
+    const { ctx, send, sender } = makeHarness();
+    await dispatchCommand(ctx, parseChatCommand("!autoplay")!, sender, send);
+
+    expect(send).toHaveBeenCalledWith(
+      "Autoplay desactivado. Prendelo con !autoplay on.",
+    );
+  });
+
+  it("toggles autoplay", async () => {
+    const { ctx, playback, send, sender } = makeHarness();
+    await dispatchCommand(ctx, parseChatCommand("!autoplay on")!, sender, send);
+
+    expect(playback.setAutoplay).toHaveBeenCalledWith(true);
+    expect(send).toHaveBeenCalledWith(
+      "Autoplay activado: cuando se vacíe la cola sigo con temas parecidos.",
+    );
+
+    await dispatchCommand(
+      ctx,
+      parseChatCommand("!autoplay off")!,
+      sender,
+      send,
+    );
+    expect(playback.setAutoplay).toHaveBeenCalledWith(false);
+    expect(send).toHaveBeenCalledWith("Autoplay desactivado.");
+  });
+
+  it("lets anyone skip communal autoplay tracks", async () => {
+    const { ctx, playback, send, sender } = makeHarness({
+      current: {
+        requestedBy: "Autoplay",
+        requestedByUid: "autoplay",
+        title: "Mix Pick",
+      },
+    });
+    await dispatchCommand(ctx, parseChatCommand("!skip")!, sender, send);
+
+    expect(playback.skip).toHaveBeenCalledTimes(1);
+    expect(send).toHaveBeenCalledWith("Pista saltada.");
   });
 });
 

@@ -70,6 +70,17 @@ describe("ListeningHistory", () => {
     ]);
   });
 
+  it("exposes normalized artist scores and recent artists", () => {
+    const history = new ListeningHistory(makeTempFile());
+    history.recordStart("uid-1", { id: "a", title: "Duki - Uno" });
+    history.recordFinish("uid-1", { id: "a", title: "Duki - Uno" }, true);
+    history.recordStart("uid-2", { id: "b", title: "DUKI - Dos" });
+
+    expect(history.artistScores()).toEqual(new Map([["duki", 3]]));
+    expect([...history.recentArtists(2)].sort()).toEqual(["DUKI", "Duki"]);
+    expect(history.recentArtists(1)).toHaveLength(1);
+  });
+
   it("persists across instances", async () => {
     const file = makeTempFile();
     const history = new ListeningHistory(file);

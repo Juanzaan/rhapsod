@@ -285,6 +285,14 @@ export const COMMAND_SPECS: readonly CommandSpec[] = [
     summary: "Tus estadísticas de escucha",
   },
   {
+    name: "autoplay",
+    aliases: [],
+    group: "music",
+    adminOnly: false,
+    usage: "autoplay [on|off]",
+    summary: "Seguir con temas parecidos al vaciarse la cola",
+  },
+  {
     name: "effects",
     aliases: [],
     group: "misc",
