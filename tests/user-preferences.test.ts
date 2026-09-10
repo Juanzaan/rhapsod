@@ -131,4 +131,59 @@ describe("UserPreferences", () => {
       new UserPreferences(dirtyFile).listFavorites("uid-1").map((t) => t.id),
     ).toEqual(["a"]);
   });
+
+  it("defaults the preferred source to auto", () => {
+    const prefs = new UserPreferences(makeTempFile());
+
+    expect(prefs.getPreferredSource("uid-1")).toBe("auto");
+  });
+
+  it("stores and restores the preferred source", async () => {
+    const file = makeTempFile();
+    const prefs = new UserPreferences(file);
+
+    expect(prefs.setPreferredSource("uid-1", "soundcloud")).toBe("soundcloud");
+    expect(prefs.getPreferredSource("uid-1")).toBe("soundcloud");
+    await prefs.flush();
+
+    const reloaded = new UserPreferences(file);
+    expect(reloaded.getPreferredSource("uid-1")).toBe("soundcloud");
+    expect(reloaded.getPreferredSource("uid-2")).toBe("auto");
+  });
+
+  it("rejects unknown sources", () => {
+    const prefs = new UserPreferences(makeTempFile());
+
+    expect(() => prefs.setPreferredSource("uid-1", "spotify")).toThrowError(
+      UserError,
+    );
+    expect(prefs.getPreferredSource("uid-1")).toBe("auto");
+  });
+
+  it("migrates the legacy favorites-array format", () => {
+    const legacyFile = makeTempFile();
+    writeFileSync(
+      legacyFile,
+      JSON.stringify({
+        users: { "uid-1": [{ id: "a", source: "s", title: "Kept" }] },
+        version: 1,
+      }),
+      "utf8",
+    );
+
+    const prefs = new UserPreferences(legacyFile);
+    expect(prefs.listFavorites("uid-1").map((t) => t.id)).toEqual(["a"]);
+    expect(prefs.getPreferredSource("uid-1")).toBe("auto");
+  });
+
+  it("keeps source-only entries without favorites", async () => {
+    const file = makeTempFile();
+    const prefs = new UserPreferences(file);
+    prefs.setPreferredSource("uid-1", "youtube");
+    await prefs.flush();
+
+    const reloaded = new UserPreferences(file);
+    expect(reloaded.getPreferredSource("uid-1")).toBe("youtube");
+    expect(reloaded.listFavorites("uid-1")).toEqual([]);
+  });
 });

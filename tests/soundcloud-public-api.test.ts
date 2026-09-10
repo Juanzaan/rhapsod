@@ -205,4 +205,81 @@ describe("SoundCloudPublicApi", () => {
       metadata: { artist: "artist", title: "Track" },
     });
   });
+
+  it("searches tracks and skips blocked entries", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>((input) => {
+      const url = requestUrl(input);
+      if (url === "https://soundcloud.com/")
+        return Promise.resolve(
+          response(
+            '<script src="https://a-v2.sndcdn.com/assets/app.js"></script>',
+          ),
+        );
+      if (url.includes("app.js"))
+        return Promise.resolve(
+          response('client_id="abcdefghijklmnopqrstuvwx"'),
+        );
+      if (url.includes("/search/tracks"))
+        return Promise.resolve(
+          response({
+            collection: [
+              {
+                duration: 180_000,
+                id: 7,
+                permalink_url: "https://soundcloud.com/duki/rockstar",
+                policy: "ALLOW",
+                streamable: true,
+                title: "Rockstar",
+                user: { username: "duki" },
+              },
+              {
+                id: 8,
+                policy: "BLOCK",
+                streamable: false,
+                title: "Blocked",
+              },
+              { id: 9, title: "No url" },
+            ],
+          }),
+        );
+      return Promise.reject(new Error(`Unexpected URL: ${url}`));
+    });
+
+    const results = await new SoundCloudPublicApi({ fetch }).searchTracks(
+      "duki rockstar",
+    );
+
+    expect(results).toEqual([
+      {
+        artist: "duki",
+        durationSeconds: 180,
+        id: "soundcloud:7",
+        title: "Rockstar",
+        url: "https://soundcloud.com/duki/rockstar",
+      },
+    ]);
+  });
+
+  it("returns no results when the search collection is empty", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>((input) => {
+      const url = requestUrl(input);
+      if (url === "https://soundcloud.com/")
+        return Promise.resolve(
+          response(
+            '<script src="https://a-v2.sndcdn.com/assets/app.js"></script>',
+          ),
+        );
+      if (url.includes("app.js"))
+        return Promise.resolve(
+          response('client_id="abcdefghijklmnopqrstuvwx"'),
+        );
+      if (url.includes("/search/tracks"))
+        return Promise.resolve(response({ collection: [] }));
+      return Promise.reject(new Error(`Unexpected URL: ${url}`));
+    });
+
+    await expect(
+      new SoundCloudPublicApi({ fetch }).searchTracks("zzz no existe"),
+    ).resolves.toEqual([]);
+  });
 });

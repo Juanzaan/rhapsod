@@ -21,27 +21,63 @@ export interface FavoriteInput {
   readonly title: string;
 }
 
+export type PreferredSource = "auto" | "soundcloud" | "youtube";
+
+const PREFERRED_SOURCES: readonly string[] = ["auto", "soundcloud", "youtube"];
+
+function isPreferredSource(value: unknown): value is PreferredSource {
+  return typeof value === "string" && PREFERRED_SOURCES.includes(value);
+}
+
+interface StoredUserEntry {
+  favorites: FavoriteTrack[];
+  preferredSource?: PreferredSource;
+}
+
+function parseUserEntry(raw: unknown): StoredUserEntry | undefined {
+  let preferredSource: PreferredSource | undefined;
+  let items: unknown = raw;
+  if (typeof raw === "object" && raw !== null && !Array.isArray(raw)) {
+    const record = raw as { favorites?: unknown; preferredSource?: unknown };
+    if (isPreferredSource(record.preferredSource)) {
+      preferredSource = record.preferredSource;
+    }
+    items = record.favorites;
+  }
+  if (!Array.isArray(items)) {
+    return preferredSource === undefined
+      ? undefined
+      : { favorites: [], preferredSource };
+  }
+  const favorites: FavoriteTrack[] = [];
+  for (const item of items) {
+    const parsed = parseFavorite(item);
+    if (parsed !== undefined) favorites.push(parsed);
+  }
+  if (favorites.length === 0 && preferredSource === undefined) return undefined;
+  return {
+    favorites,
+    ...(preferredSource === undefined ? {} : { preferredSource }),
+  };
+}
+
 function parsePreferencesFile(
   raw: unknown,
-): Map<string, FavoriteTrack[]> | undefined {
+): Map<string, StoredUserEntry> | undefined {
   if (typeof raw !== "object" || raw === null) return undefined;
   const record = raw as { users?: unknown; version?: unknown };
   if (record.version !== 1) return undefined;
   if (typeof record.users !== "object" || record.users === null)
     return undefined;
-  const favorites = new Map<string, FavoriteTrack[]>();
-  for (const [uid, entries] of Object.entries(
+  const users = new Map<string, StoredUserEntry>();
+  for (const [uid, entry] of Object.entries(
     record.users as Record<string, unknown>,
   )) {
-    if (uid.length === 0 || !Array.isArray(entries)) continue;
-    const clean: FavoriteTrack[] = [];
-    for (const entry of entries) {
-      const parsed = parseFavorite(entry);
-      if (parsed !== undefined) clean.push(parsed);
-    }
-    if (clean.length > 0) favorites.set(uid, clean);
+    if (uid.length === 0) continue;
+    const parsed = parseUserEntry(entry);
+    if (parsed !== undefined) users.set(uid, parsed);
   }
-  return favorites;
+  return users;
 }
 
 export const MAX_FAVORITES_PER_USER = 50;
@@ -70,12 +106,14 @@ function parseFavorite(raw: unknown): FavoriteTrack | undefined {
 }
 
 // Per-TS3-user preferences persisted to local JSON: favorite tracks for
-// !fav / !favplay. Same storage pattern as PlaylistStore (serialized write
-// chain, atomic tmp+rename, tolerant load that drops corrupt entries).
+// !fav / !favplay and the preferred search source for !fuente. Same storage
+// pattern as PlaylistStore (serialized write chain, atomic tmp+rename,
+// tolerant load that drops corrupt entries and migrates the legacy
+// favorites-array format).
 export class UserPreferences {
   readonly #filePath: string;
   readonly #logger: MinimalLogger;
-  #favorites = new Map<string, FavoriteTrack[]>();
+  #users = new Map<string, StoredUserEntry>();
   #loaded = false;
   #writeChain: Promise<void> = Promise.resolve();
 
@@ -86,16 +124,37 @@ export class UserPreferences {
 
   listFavorites(uid: string): readonly FavoriteTrack[] {
     this.#ensureLoaded();
-    return [...(this.#favorites.get(uid) ?? [])];
+    return [...(this.#users.get(uid)?.favorites ?? [])];
+  }
+
+  getPreferredSource(uid: string): PreferredSource {
+    this.#ensureLoaded();
+    return this.#users.get(uid)?.preferredSource ?? "auto";
+  }
+
+  setPreferredSource(uid: string, source: string): PreferredSource {
+    if (!isPreferredSource(source)) {
+      throw new UserError("Usá: !fuente [youtube|soundcloud|auto].");
+    }
+    this.#ensureLoaded();
+    let entry = this.#users.get(uid);
+    if (entry === undefined) {
+      entry = { favorites: [] };
+      this.#users.set(uid, entry);
+    }
+    entry.preferredSource = source;
+    void this.#schedulePersist();
+    return source;
   }
 
   addFavorite(uid: string, track: FavoriteInput): FavoriteTrack {
     this.#ensureLoaded();
-    let list = this.#favorites.get(uid);
-    if (list === undefined) {
-      list = [];
-      this.#favorites.set(uid, list);
+    let entry = this.#users.get(uid);
+    if (entry === undefined) {
+      entry = { favorites: [] };
+      this.#users.set(uid, entry);
     }
+    const list = entry.favorites;
     const existing = list.find((favorite) => favorite.id === track.id);
     if (existing !== undefined) {
       throw new UserError("Esa canción ya está en tus favoritos.");
@@ -105,7 +164,7 @@ export class UserPreferences {
         `Límite de ${MAX_FAVORITES_PER_USER} favoritos por usuario.`,
       );
     }
-    const entry: FavoriteTrack = {
+    const favorite: FavoriteTrack = {
       addedAt: Date.now(),
       ...(track.durationSeconds === undefined
         ? {}
@@ -114,18 +173,20 @@ export class UserPreferences {
       source: track.source,
       title: track.title,
     };
-    list.push(entry);
+    list.push(favorite);
     void this.#schedulePersist();
-    return entry;
+    return favorite;
   }
 
   removeFavorite(uid: string, position: number): FavoriteTrack | undefined {
     this.#ensureLoaded();
-    const list = this.#favorites.get(uid);
-    if (list === undefined) return undefined;
-    const [removed] = list.splice(position - 1, 1);
+    const entry = this.#users.get(uid);
+    if (entry === undefined) return undefined;
+    const [removed] = entry.favorites.splice(position - 1, 1);
     if (removed === undefined) return undefined;
-    if (list.length === 0) this.#favorites.delete(uid);
+    if (entry.favorites.length === 0 && entry.preferredSource === undefined) {
+      this.#users.delete(uid);
+    }
     void this.#schedulePersist();
     return removed;
   }
@@ -137,9 +198,9 @@ export class UserPreferences {
   #ensureLoaded(): void {
     if (this.#loaded) return;
     this.#loaded = true;
-    this.#favorites =
+    this.#users =
       readJsonFile(this.#filePath, parsePreferencesFile) ??
-      new Map<string, FavoriteTrack[]>();
+      new Map<string, StoredUserEntry>();
   }
 
   #schedulePersist(): Promise<void> {
@@ -151,10 +212,17 @@ export class UserPreferences {
   async #persistNow(): Promise<void> {
     try {
       await mkdir(dirname(this.#filePath), { recursive: true });
-      const data = {
-        users: Object.fromEntries(this.#favorites.entries()),
-        version: 1 as const,
-      };
+      const users: Record<string, unknown> = {};
+      for (const [uid, entry] of this.#users.entries()) {
+        users[uid] = {
+          favorites: entry.favorites,
+          ...(entry.preferredSource === undefined ||
+          entry.preferredSource === "auto"
+            ? {}
+            : { preferredSource: entry.preferredSource }),
+        };
+      }
+      const data = { users, version: 1 as const };
       const temporary = `${this.#filePath}.tmp`;
       await writeFile(temporary, JSON.stringify(data), {
         encoding: "utf8",
@@ -164,7 +232,7 @@ export class UserPreferences {
     } catch (error) {
       this.#logger.warn(
         { err: error },
-        "UserPreferences: failed to persist favorites",
+        "UserPreferences: failed to persist preferences",
       );
     }
   }

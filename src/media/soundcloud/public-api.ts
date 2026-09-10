@@ -37,11 +37,23 @@ export class SoundCloudDrmError extends Error {
   }
 }
 
+export interface SoundCloudSearchResult {
+  readonly artist: string;
+  readonly durationSeconds?: number;
+  readonly id: string;
+  readonly title: string;
+  readonly url: string;
+}
+
 export interface SoundCloudResolver {
   readonly name: string;
   match(input: string): boolean;
   getAudioUrl(url: string): Promise<string>;
   getTrack(url: string): Promise<YoutubeTrackMetadata>;
+  searchTracks?(
+    query: string,
+    limit?: number,
+  ): Promise<readonly SoundCloudSearchResult[]>;
 }
 
 interface SoundCloudPublicApiOptions {
@@ -96,6 +108,40 @@ export class SoundCloudPublicApi implements SoundCloudResolver {
     const audioUrl = await this.#resolveTranscoding(track);
     if (!audioUrl) throw new SoundCloudDrmError(drmMetadata(track));
     return audioUrl;
+  }
+
+  async searchTracks(
+    query: string,
+    limit = 5,
+  ): Promise<readonly SoundCloudSearchResult[]> {
+    const response = await this.#apiRequest<{
+      collection?: SoundCloudTrack[];
+    }>(
+      `/search/tracks?q=${encodeURIComponent(query)}&limit=${Math.max(1, Math.min(limit, 10))}`,
+    );
+    const results: SoundCloudSearchResult[] = [];
+    for (const track of response.collection ?? []) {
+      if (
+        track.id === undefined ||
+        !track.title ||
+        !track.permalink_url ||
+        track.access === "blocked" ||
+        track.policy === "BLOCK" ||
+        track.streamable === false
+      ) {
+        continue;
+      }
+      results.push({
+        artist: drmMetadata(track).artist,
+        ...(track.duration === undefined
+          ? {}
+          : { durationSeconds: Math.round(track.duration / 1_000) }),
+        id: `soundcloud:${track.id}`,
+        title: track.title,
+        url: track.permalink_url,
+      });
+    }
+    return results;
   }
 
   async #resolve(url: string): Promise<SoundCloudTrack> {
