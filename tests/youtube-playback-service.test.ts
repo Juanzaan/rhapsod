@@ -74,6 +74,7 @@ function setup(
       };
       recentArtists(limit: number): readonly string[];
     };
+    autoplayTimeoutMs?: number;
     relatedVideoId?: (seedVideoId: string) => Promise<string | undefined>;
   } = {},
 ) {
@@ -309,6 +310,9 @@ function setup(
     ...(options.autoplayProfile
       ? { autoplayProfile: options.autoplayProfile }
       : {}),
+    ...(options.autoplayTimeoutMs === undefined
+      ? {}
+      : { autoplayTimeoutMs: options.autoplayTimeoutMs }),
     ...(options.relatedVideoId
       ? { relatedVideoId: options.relatedVideoId }
       : {}),
@@ -879,6 +883,31 @@ describe("YoutubePlaybackService", () => {
     playbackResolvers[0]?.();
     await new Promise((resolve) => setImmediate(resolve));
     await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(service.current).toBeUndefined();
+    expect(service.playerState).toBe("idle");
+  });
+
+  it("parks when the autoplay provider wedges past the watchdog", async () => {
+    const { playbackResolvers, resolver, service } = setup({
+      autoplayProfile: {
+        artistScores: () => new Map(),
+        tasteProfile: () => ({
+          artistScores: new Map<string, number>(),
+          tokenScores: new Map<string, number>(),
+        }),
+        recentArtists: () => [],
+      },
+      autoplayTimeoutMs: 60,
+      relatedVideoId: () => new Promise<undefined>(() => {}),
+    });
+    service.setAutoplay(true);
+    await service.enqueue("https://youtu.be/seedvideo11", "user-1", "uid-1");
+    await new Promise((resolve) => setImmediate(resolve));
+    resolver.expandPlaylist.mockReturnValue(new Promise(() => {}));
+    playbackResolvers[0]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setTimeout(resolve, 150));
 
     expect(service.current).toBeUndefined();
     expect(service.playerState).toBe("idle");
