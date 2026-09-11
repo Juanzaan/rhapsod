@@ -294,10 +294,10 @@ describe("renderDashboard console", () => {
       renderSetupWizard("admin", "secret"),
     ];
     for (const html of pages) {
-      // Same tokens everywhere: no leftover slate-blue theme.
-      expect(html).toContain("--am:#FBBF24");
+      // Same tokens everywhere: no leftover amber or slate-blue theme.
+      expect(html).toContain("--ac:#1ED760");
       expect(html).toContain("--bl:#60A5FA");
-      expect(html).toContain("--gn:#4ADE80");
+      expect(html).toContain("--wn:#FBBF24");
       expect(html).toContain("--rd:#F87171");
       expect(html).not.toContain("#38bdf8");
       expect(html).not.toContain("#0f172a");
@@ -305,6 +305,8 @@ describe("renderDashboard console", () => {
       expect(html).not.toContain("#ff453a");
       expect(html).not.toContain("#3ddc84");
       expect(html).not.toContain("#8e8e93");
+      expect(html).not.toContain("--am:");
+      expect(html).not.toContain("--gn:");
     }
     // Same brand on every nav.
     for (const html of pages.slice(0, 3)) {
@@ -602,5 +604,70 @@ describe("renderDashboard console", () => {
     expect(parsed.RHAPSOD_TS3_HOST).toBe("new.example.com");
     expect(parsed.RHAPSOD_TS3_PASSWORD).toBe("retyped");
     expect(parsed).not.toHaveProperty("RHAPSOD_PANEL_PASSWORD");
+  });
+
+  it("settings load tells auth apart from connection failures", async () => {
+    const runLoad = async (
+      fetchImpl: (url: unknown, options?: unknown) => Promise<unknown>,
+    ): Promise<string> => {
+      const ct = { html: "" };
+      const doc = {
+        getElementById: (id: string) => {
+          if (id === "ct") {
+            return {
+              classList: { add: () => {}, remove: () => {} },
+              textContent: "",
+              set innerHTML(value: string) {
+                ct.html = value;
+              },
+              get innerHTML(): string {
+                return ct.html;
+              },
+            };
+          }
+          return {
+            classList: { add: () => {}, remove: () => {} },
+            innerHTML: "",
+            textContent: "",
+          };
+        },
+      };
+      const html = renderSettingsPage("admin", "secret");
+      const code = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
+        .map((m) => m[1] ?? "")
+        .join("\n");
+      // eslint-disable-next-line @typescript-eslint/no-implied-eval
+      const factory = new Function(
+        "document",
+        "window",
+        "fetch",
+        "setTimeout",
+        "btoa",
+        `${code};return {};`,
+      ) as (...args: unknown[]) => unknown;
+      factory(
+        doc,
+        { location: { href: "" } },
+        fetchImpl,
+        () => 0,
+        () => "eA==",
+      );
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      return ct.html;
+    };
+
+    const failing = await runLoad(() => Promise.reject(new Error("down")));
+    expect(failing).toContain("Sin conexi");
+    expect(failing).toContain("Reintentar");
+
+    const denied = await runLoad(() =>
+      Promise.resolve({ json: () => Promise.resolve({}), status: 401 }),
+    );
+    expect(denied).toContain("No autorizado");
+
+    const broken = await runLoad(() =>
+      Promise.resolve({ json: () => Promise.resolve({}), status: 500 }),
+    );
+    expect(broken).toContain("http500");
   });
 });
