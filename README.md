@@ -40,7 +40,8 @@ setup wizard (`/setup`) to connect TeamSpeak and YouTube. See
 ## Release profiles
 
 - **1.x** (`v1.2.1`): tuned for low-end VPS deployments (1 vCPU / 1 GB RAM).
-- **2.x** (`v2.4.1`): tuned for the OCI profile (4 vCPUs / 3 GB RAM). Both lines use the same configuration.
+- **2.x** (`v2.4.1`): tuned for the OCI profile (4 vCPUs / 3 GB RAM). The 1.x and 2.x lines use the same configuration.
+- **3.x** (`v3.0.0`, current): user preferences, adaptive autoplay, radio directory, queue tools and the multi-instance hosting base.
 
 ## Commands
 
@@ -52,7 +53,8 @@ setup wizard (`/setup`) to connect TeamSpeak and YouTube. See
 | `!seek <seconds>`                                                       | -                     | Jump within the current track                                                                                     |
 | `!previous`                                                             | `!prev`               | Replay the last finished track                                                                                    |
 | `!pause` / `!resume`                                                    | -                     | Pause / resume the current track                                                                                  |
-| `!skip`                                                                 | `!s`                  | Skip the current track                                                                                            |
+| `!skip`                                                                 | `!s`                  | Skip the current track (requester or admin)                                                                       |
+| `!jump <posición>`                                                      | `!j`                  | Skip to a queue position (requester or admin of every dropped track)                                              |
 | `!stop`                                                                 | -                     | Stop playback and clear the session                                                                               |
 | `!queue [page]`                                                         | `!q`                  | Show 10 pending tracks per page with durations                                                                    |
 | `!history`                                                              | `!hist`               | Show the 10 most recently started tracks                                                                          |
@@ -70,6 +72,11 @@ setup wizard (`/setup`) to connect TeamSpeak and YouTube. See
 | `!loop [off\|track\|queue]`                                             | -                     | Repeat the current track or the whole queue (persists across restarts)                                            |
 | `!lyrics`                                                               | `!ly`                 | Show lyrics for the current track                                                                                 |
 | `!playlist <save\|load\|list\|show\|delete\|add\|remove\|rename\|info>` | `!pl`                 | Saved playlists stored in `data/playlists.json`                                                                   |
+| `!fav` / `!favs` / `!unfav <n>` / `!favplay <n>`                        | `!fp` (favplay)       | Per-user favorites, replayable into the queue                                                                     |
+| `!fuente [youtube\|soundcloud\|auto]`                                   | -                     | Preferred search source for `!play` and `!yt`                                                                     |
+| `!radio <nombre o género>`                                              | `!rb`                 | Tune a community radio station (TuneIn fallback) with live on-air titles                                          |
+| `!tops [n]` / `!mystats`                                                | `!top` (tops)         | Most played tracks and personal listening stats                                                                   |
+| `!autoplay [on\|off]`                                                   | -                     | Keep playing similar tracks when the queue empties                                                                |
 | `!effects <8d\|nightcore\|bassboost\|vaporwave\|list\|reset>`           | -                     | Audio effects; `!bassboost`/`!bb`, `!nightcore`/`!nc`, `!vaporwave`/`!vw`, `!8d` and `!filter` also work directly |
 | `!test-tone`                                                            | `!tone`               | Play a 3-second test tone (rate-limited)                                                                          |
 | `!help`                                                                 | `!h`                  | Show the command summary                                                                                          |
@@ -95,6 +102,7 @@ All settings are environment variables read from `.env`. Defaults are shown; a v
 | `RHAPSOD_ADMIN_UIDS`                  | -           | Comma-separated TeamSpeak UIDs with bot-admin rights                                                                                 |
 | `RHAPSOD_PRIVATE_COMMAND_UIDS`        | -           | Comma-separated UIDs allowed to use commands via private message                                                                     |
 | `RHAPSOD_DATA_DIR`                    | `./data`    | TS3 identity and `state.json`                                                                                                        |
+| `RHAPSOD_INSTANCE_ID`                 | -           | Named instance: namespaces state, playlists and logs under `data/instances/<id>` for multi-bot hosts                                 |
 | `RHAPSOD_YTDLP_PATH`                  | `yt-dlp`    | yt-dlp binary path                                                                                                                   |
 | `RHAPSOD_YTDLP_COOKIES_PATH`          | -           | Cookie file for datacenter extraction                                                                                                |
 | `RHAPSOD_YTDLP_DAEMON_URL`            | -           | Persistent yt-dlp daemon (`scripts/yt-dlp-daemon.py`); the bot asks it for audio URLs before spawning yt-dlp                         |

@@ -12,7 +12,7 @@ release in that line.
 
 The 2.x line is the current stable line, tuned for the OCI production profile
 with 4 vCPUs and 3 GB RAM. Production tracks `main` and deploys on every
-release (currently v2.4.0).
+release (currently v3.0.0).
 
 The yt-dlp queue derives its baseline concurrency from the available CPUs, so
 the same 1.x build remains usable on smaller machines. Resource increases in
