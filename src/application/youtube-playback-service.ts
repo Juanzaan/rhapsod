@@ -71,6 +71,7 @@ interface PlaybackServiceOptions {
   readonly spotifyResolver?: SpotifyResolver;
   readonly lyricsResolver?: LyricsResolver;
   readonly autoplayProfile?: AutoplayProfileSource;
+  readonly autoplayTimeoutMs?: number;
   readonly relatedVideoId?: (
     seedVideoId: string,
   ) => Promise<string | undefined>;
@@ -198,6 +199,9 @@ export class YoutubePlaybackService {
     const restored = this.#stateStore?.load();
     this.#controller = new PlaybackController({
       autoplayProvider: () => this.resolveAutoplayTrack(),
+      ...(options.autoplayTimeoutMs === undefined
+        ? {}
+        : { autoplayTimeoutMs: options.autoplayTimeoutMs }),
       ...(options.createPlayback === undefined
         ? {}
         : { createPlayback: options.createPlayback }),

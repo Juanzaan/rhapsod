@@ -88,6 +88,7 @@ export interface PlaybackControllerOptions {
   readonly onTiming?: (timing: PlaybackTiming) => void;
   readonly onStateChanged?: () => void;
   readonly autoplayProvider?: () => Promise<Track | undefined>;
+  readonly autoplayTimeoutMs?: number;
   readonly initialAutoplay?: boolean;
   readonly initialVolumePercent?: number;
   readonly initialLoopMode?: LoopMode;
@@ -114,6 +115,10 @@ const HISTORY_LIMIT = 20;
 // the driver loop parks forever with the chain claimed: nothing plays until
 // the process restarts.
 const RESOLVE_WATCHDOG_MS = 90_000;
+// Upper bound for one autoplay pick (mix expansion over up to 3 seeds plus
+// the related fallback). Past this the driver parks instead of holding the
+// chain on a wedged resolution with a stale "playing" state.
+const AUTOPLAY_WATCHDOG_MS = 60_000;
 
 // Playback state machine extracted from YoutubePlaybackService: the driver
 // loop, transport controls, prefetch/prewarm and loop/history bookkeeping.
@@ -146,6 +151,7 @@ export class PlaybackController {
   readonly #onTiming: (timing: PlaybackTiming) => void;
   readonly #onStateChanged: () => void;
   readonly #autoplayProvider: (() => Promise<Track | undefined>) | undefined;
+  readonly #autoplayTimeoutMs: number;
   #autoplay = false;
   #autoplayArmed = true;
   readonly #epochs = new PlaybackEpoch();
@@ -195,6 +201,7 @@ export class PlaybackController {
     this.#onTiming = options.onTiming ?? (() => undefined);
     this.#onStateChanged = options.onStateChanged ?? (() => undefined);
     this.#autoplayProvider = options.autoplayProvider;
+    this.#autoplayTimeoutMs = options.autoplayTimeoutMs ?? AUTOPLAY_WATCHDOG_MS;
     this.#autoplay = options.initialAutoplay ?? false;
     if (options.initialVolumePercent !== undefined) {
       this.#volumePercent = options.initialVolumePercent;
@@ -487,7 +494,18 @@ export class PlaybackController {
       return false;
     }
     const stopEpoch = this.#epochs.captureStopEpoch();
-    const picked = await this.#autoplayProvider().catch(() => undefined);
+    this.#driverState = "resolving";
+    this.#onStateChanged();
+    const picked = await Promise.race([
+      this.#autoplayProvider().catch(() => undefined),
+      new Promise<undefined>((resolve) => {
+        const timer = setTimeout(
+          () => resolve(undefined),
+          this.#autoplayTimeoutMs,
+        );
+        timer.unref();
+      }),
+    ]);
     if (
       picked === undefined ||
       !this.#autoplay ||
