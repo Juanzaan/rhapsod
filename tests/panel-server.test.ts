@@ -688,6 +688,7 @@ describe("panel-server", () => {
         expect(res.headers.get("x-frame-options")).toBe("DENY");
         expect(res.headers.get("x-content-type-options")).toBe("nosniff");
         expect(res.headers.get("referrer-policy")).toBe("no-referrer");
+        expect(res.headers.get("cache-control")).toBe("no-store");
         const csp = res.headers.get("content-security-policy") ?? "";
         expect(csp).toContain("frame-ancestors 'none'");
         expect(csp).toContain("default-src 'none'");
