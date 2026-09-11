@@ -210,6 +210,11 @@ export function createPanelServer(options: PanelOptions): {
   app.use("*", async (c, next) => {
     await next();
     c.header("Connection", "close");
+    // Owner console on a tunnel: never let the browser heuristically cache
+    // HTML or API payloads. Stale pages after a deploy submit old shapes to
+    // new endpoints (and old JS against new APIs), which surfaces as
+    // breakage that only a hard refresh fixes.
+    c.header("Cache-Control", "no-store");
     c.header("X-Frame-Options", "DENY");
     c.header("X-Content-Type-Options", "nosniff");
     c.header("Referrer-Policy", "no-referrer");
