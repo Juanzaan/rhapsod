@@ -6,13 +6,66 @@ for [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-09-11
+
+The release that turns the bot into a personal DJ and hardens everything
+around it: per-user taste with adaptive autoplay, radio with live titles,
+queue tools, a split playback core, multi-instance hosting, and a panel
+whose config save actually works.
+
 ### Added
 
+- Per-user favorites (`!fav`, `!favs`, `!unfav`, `!favplay`) backed by a
+  per-UID JSON store with atomic writes and legacy migration.
+- Preferred search source (`!fuente [youtube|soundcloud|auto]`): free-text
+  `!play` and `!yt` honor it, with SoundCloud track search over the public
+  api-v2 and YouTube fallback on empty results. Links keep their provider.
+- Listening history with `!tops`/`!top` and `!mystats`: plays, completes
+  and skips per user and globally, the same signals autoplay learns from.
+- Adaptive autoplay (`!autoplay [on|off]`): when the queue drains, the bot
+  expands the YouTube mix of recently played tracks (Innertube related
+  fallback) and picks by per-user taste — current session dominates with
+  decay, cold starts blend channel taste, energy continuity keeps
+  transitions fluid, explore stays in-mood, repeats and artist spam are
+  vetoed. Picks are communal (anyone may skip), stop/clear disarm the
+  drain, a 60s watchdog parks instead of holding the driver, and the flag
+  persists in `state.json`.
+- Radio: `!radio`/`!rb` searches the community directory with TuneIn
+  fallback and tunes the top match; icecast/shoutcast streams show the
+  live on-air title in `!np` and the panel via ICY metadata.
+- Queue tools: `!jump`/`!j` plays the n-th queued track under the same
+  ownership rule as skip/remove, and `!queue` ends with the remaining time.
+- Multi-instance hosting base: `RHAPSOD_INSTANCE_ID` namespaces identity,
+  state, playlists, telemetry, favorites, caches and logs under
+  `data/instances/<id>`, with a `rhapsod@.service` template unit.
 - Startup refuses to run as a second copy of the bot: if this identity or
   nickname is already connected, the new instance logs which one it saw,
   disconnects, and exits with code 42 instead of joining as a duplicate.
   The systemd unit exempts that code from restart; reconnects skip the check
   so a lingering ghost after a network drop cannot keep a live bot down.
+
+### Changed
+
+- `!skip` (and `!jump`/`!remove`) now require the track requester or an
+  admin; previously anyone could skip anyone's track. Autoplay picks stay
+  communal and skippable by everyone.
+- The 2k-line playback service is split into tested modules: prepared-URL
+  store, staleness epochs, queue ownership with limit policy, and the
+  driver/transport controller. The public service API is unchanged.
+- Panel config page: unknown keys render read-only instead of failing the
+  whole save, the bind address is shown but never writable from the web,
+  and save errors surface the server message.
+- Panel dashboard: no third-party subresources, Spanish labels throughout,
+  and a visible reconnect state instead of failing silently.
+
+### Fixed
+
+- A log file the roller cannot open (fd -1) no longer takes the process
+  down on the first log line: the file stream degrades to dropped lines
+  and reports the root error to stderr.
+- Config save failed on any env file containing `RHAPSOD_PANEL_HOST`
+  (documented but not whitelisted) and wiped masked secrets on every save.
+- SoundCloud search skips 30s SNIP previews.
 
 ## [2.4.1] - 2026-09-08
 
@@ -696,7 +749,9 @@ preserving low-end fallbacks where practical.
 - Removed dead `src/ports` contracts and superseded abstractions; the TS3
   adapter now exposes the only connection contract the application needs.
 
-[unreleased]: https://github.com/Juanzaan/rhapsod/compare/v2.4.0...HEAD
+[unreleased]: https://github.com/Juanzaan/rhapsod/compare/v3.0.0...HEAD
+[3.0.0]: https://github.com/Juanzaan/rhapsod/compare/v2.4.1...v3.0.0
+[2.4.1]: https://github.com/Juanzaan/rhapsod/compare/v2.4.0...v2.4.1
 [2.4.0]: https://github.com/Juanzaan/rhapsod/compare/v2.3.1...v2.4.0
 [2.3.1]: https://github.com/Juanzaan/rhapsod/compare/v2.3.0...v2.3.1
 [2.3.0]: https://github.com/Juanzaan/rhapsod/compare/v2.2.0...v2.3.0

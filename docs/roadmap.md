@@ -11,15 +11,32 @@ The `v1.0.0` through `v1.2.1` releases are optimized for VPS deployments with
 1 vCPU and 1 GB RAM. `v1.2.1` is the final release in this line; new work
 happens on 2.x.
 
-### 2.x — active line
+### 2.x — previous line
 
-Production runs on OCI (4 vCPUs, 3 GB RAM) and is deployed from `main` on
-every release. The current release is **v2.4.1** (see
-[CHANGELOG.md](../CHANGELOG.md)). History: v2.0.0 rebuilt the playback stack
-for the OCI profile, v2.1.0–v2.2.0 added gapless playback and hardening,
-v2.3.0 shipped the owner-facing surface (web panel, one-command installer,
-YouTube 403 resilience), v2.3.1 fixed the dashboard hang and hardened the
-panel, and v2.4.0 made handoffs actually gapless with an observable driver.
+The 2.x line targeted OCI (4 vCPUs, 3 GB RAM), deployed from `main` on
+every release, through **v2.4.1** (see [CHANGELOG.md](../CHANGELOG.md)). History:
+v2.0.0 rebuilt the playback stack for the OCI profile, v2.1.0–v2.2.0 added
+gapless playback and hardening, v2.3.0 shipped the owner-facing surface
+(web panel, one-command installer, YouTube 403 resilience), v2.3.1 fixed
+the dashboard hang and hardened the panel, and v2.4.0 made handoffs
+actually gapless with an observable driver.
+
+### 3.x — active line
+
+The current release is **v3.0.0**. New work happens on 3.x.
+
+## Released highlights
+
+### v3.0.0 (2026-09-11) — personal DJ, radio, queue tools
+
+Per-user favorites, preferred search source and listening stats
+(`!fav`, `!fuente`, `!tops`, `!mystats`); adaptive autoplay that learns
+each requester's taste with fluid energy transitions; radio with live
+on-air titles (`!radio`, TuneIn fallback); `!jump` with remaining-time
+footer; a playback core split into tested modules (queue, controller);
+multi-instance hosting (`RHAPSOD_INSTANCE_ID`); duplicate-instance and
+broken-log-file guards; and a panel whose config save works, with no
+third-party assets and a visible reconnect state.
 
 ## Released highlights
 
@@ -84,8 +101,9 @@ value object (#51). See
 
 ### User preferences (Phase 2.7)
 
-Optional per-TS3-user signals (favorites, protected queue, preferred source).
-Preferences must never override a poor title/artist match. See
+Shipped in v3.0.0 except auto-move: per-user favorites, preferred search
+source and listening stats. Remaining: auto-move the bot to the
+requester's channel, pending validation with real users. See
 [issue #13](https://github.com/Juanzaan/rhapsod/issues/13).
 
 ### Welcome/join announcements
@@ -96,8 +114,8 @@ See [issue #21](https://github.com/Juanzaan/rhapsod/issues/21).
 ### Internal debt
 
 - Split `src/application/youtube-playback-service.ts` (~2k lines) into
-  resolver / prefetch / playback controller / persistence. Cut 1 done: the
-  prepared-URL store is its own tested module (#49).
+  prepared-URL store (#49), staleness epochs (#51), queue ownership
+  (#65) and the driver/transport controller (#66). Done in v3.0.0.
 - Extract `src/main.ts` wiring (~860 lines, low coverage) into tested
   init modules. First piece done: one shared yt-dlp resolver factory for
   both boot paths (#50).
