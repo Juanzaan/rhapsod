@@ -158,6 +158,7 @@ const ENV_DESCRIPTIONS: Record<string, string> = {
   RHAPSOD_PANEL_PORT: "Puerto del panel (default 8080)",
   RHAPSOD_PANEL_USER: "Usuario del panel",
   RHAPSOD_PANEL_PASSWORD: "Contrasena del panel",
+  RHAPSOD_PANEL_HOST: "Bind del panel (solo lectura, default 127.0.0.1)",
 };
 
 function describeEnvKey(key: string): string {
@@ -166,6 +167,14 @@ function describeEnvKey(key: string): string {
 
 function isKnownEnvKey(key: string): boolean {
   return Object.hasOwn(ENV_DESCRIPTIONS, key);
+}
+
+// The panel bind address is shown but never written from the web: flipping
+// it to 0.0.0.0 by accident would expose a localhost-only surface.
+const READONLY_ENV_KEYS = new Set(["RHAPSOD_PANEL_HOST"]);
+
+function isEditableEnvKey(key: string): boolean {
+  return isKnownEnvKey(key) && !READONLY_ENV_KEYS.has(key);
 }
 
 function isSecret(key: string): boolean {
@@ -391,6 +400,7 @@ export function createPanelServer(options: PanelOptions): {
     const entries = Object.entries(env.values).map(([key, value]) => ({
       key,
       description: describeEnvKey(key),
+      editable: isEditableEnvKey(key),
       masked: isMasked(key),
       value: isMasked(key) ? maskSecret(value) : value,
       secret: isSecret(key),
@@ -415,6 +425,18 @@ export function createPanelServer(options: PanelOptions): {
         400,
       );
     }
+    const readonlyKeys = Object.keys(incoming).filter(
+      (key) => !isEditableEnvKey(key),
+    );
+    if (readonlyKeys.length > 0) {
+      return c.json(
+        {
+          ok: false,
+          error: "Clave de solo lectura: " + readonlyKeys.join(", "),
+        },
+        400,
+      );
+    }
     for (const [key, raw] of Object.entries(incoming)) {
       const value = typeof raw === "string" ? raw : "";
       if (value === "") {
@@ -423,7 +445,14 @@ export function createPanelServer(options: PanelOptions): {
         env.values[key] = value;
       }
     }
-    await saveEnvFile(options.envFilePath, env.values);
+    try {
+      await saveEnvFile(options.envFilePath, env.values);
+    } catch {
+      return c.json(
+        { ok: false, error: "No se pudo escribir el archivo de entorno" },
+        500,
+      );
+    }
     return c.json({ ok: true });
   });
 

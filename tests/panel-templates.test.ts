@@ -73,8 +73,12 @@ describe("renderDashboard console", () => {
     }
   });
 
-  it("loads GSAP for progressive enhancement", () => {
-    expect(render()).toContain("gsap.min.js");
+  it("ships no third-party subresources", () => {
+    // Every script/style is inline: a hanging CDN stalls window load and the
+    // tab spinner forever, and the CSP blocks third-party scripts anyway.
+    const html = render();
+    expect(html).not.toContain("<script src=");
+    expect(html).not.toContain('rel="stylesheet" href="http');
   });
 
   it("inline dashboard script parses without syntax errors", () => {
@@ -527,5 +531,76 @@ describe("renderDashboard console", () => {
     expect(barePut).toBeDefined();
     const parsed = JSON.parse(barePut?.body ?? "{}") as Record<string, unknown>;
     expect(parsed.RHAPSOD_TS3_AUTO_CONNECT).toBeUndefined();
+  });
+
+  it("settings save skips untouched masked secrets", () => {
+    // Masked entries render empty with a "(sin cambios)" placeholder. Sending
+    // them back empty would make the server delete the secrets, so save()
+    // must omit them — a regression test for wiped panel/TS passwords.
+    interface FakeSettingInput {
+      dataset: { key: string };
+      placeholder: string;
+      value: string;
+    }
+    const inputs: FakeSettingInput[] = [
+      {
+        dataset: { key: "RHAPSOD_TS3_HOST" },
+        placeholder: "",
+        value: "new.example.com",
+      },
+      {
+        dataset: { key: "RHAPSOD_PANEL_PASSWORD" },
+        placeholder: "(sin cambios)",
+        value: "",
+      },
+      {
+        dataset: { key: "RHAPSOD_TS3_PASSWORD" },
+        placeholder: "(sin cambios)",
+        value: "retyped",
+      },
+    ];
+    const puts: { url: string; body: string | undefined }[] = [];
+    const fakeFetch = (url: unknown, options?: unknown) => {
+      const opts = options as { method?: string; body?: string } | undefined;
+      if (opts?.method === "PUT") {
+        puts.push({ url: String(url), body: opts.body });
+      }
+      return Promise.resolve({ json: () => Promise.resolve({ ok: true }) });
+    };
+    const fakeDocument = {
+      getElementById: () => ({
+        classList: { add: () => {}, remove: () => {} },
+        innerHTML: "",
+        textContent: "",
+      }),
+      querySelectorAll: () => inputs,
+    };
+    const html = renderSettingsPage("admin", "secret");
+    const code = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
+      .map((m) => m[1] ?? "")
+      .join("\n");
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval
+    const factory = new Function(
+      "document",
+      "window",
+      "fetch",
+      "setTimeout",
+      "btoa",
+      `${code};return {save:save};`,
+    ) as (...args: unknown[]) => { save: () => void };
+    const api = factory(
+      fakeDocument,
+      { location: { href: "" } },
+      fakeFetch,
+      () => 0,
+      () => "eA==",
+    );
+    api.save();
+    const envPut = puts.find((p) => p.url === "/api/env");
+    expect(envPut).toBeDefined();
+    const parsed = JSON.parse(envPut?.body ?? "{}") as Record<string, unknown>;
+    expect(parsed.RHAPSOD_TS3_HOST).toBe("new.example.com");
+    expect(parsed.RHAPSOD_TS3_PASSWORD).toBe("retyped");
+    expect(parsed).not.toHaveProperty("RHAPSOD_PANEL_PASSWORD");
   });
 });
