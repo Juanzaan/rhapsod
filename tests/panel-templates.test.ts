@@ -605,4 +605,69 @@ describe("renderDashboard console", () => {
     expect(parsed.RHAPSOD_TS3_PASSWORD).toBe("retyped");
     expect(parsed).not.toHaveProperty("RHAPSOD_PANEL_PASSWORD");
   });
+
+  it("settings load tells auth apart from connection failures", async () => {
+    const runLoad = async (
+      fetchImpl: (url: unknown, options?: unknown) => Promise<unknown>,
+    ): Promise<string> => {
+      const ct = { html: "" };
+      const doc = {
+        getElementById: (id: string) => {
+          if (id === "ct") {
+            return {
+              classList: { add: () => {}, remove: () => {} },
+              textContent: "",
+              set innerHTML(value: string) {
+                ct.html = value;
+              },
+              get innerHTML(): string {
+                return ct.html;
+              },
+            };
+          }
+          return {
+            classList: { add: () => {}, remove: () => {} },
+            innerHTML: "",
+            textContent: "",
+          };
+        },
+      };
+      const html = renderSettingsPage("admin", "secret");
+      const code = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
+        .map((m) => m[1] ?? "")
+        .join("\n");
+      // eslint-disable-next-line @typescript-eslint/no-implied-eval
+      const factory = new Function(
+        "document",
+        "window",
+        "fetch",
+        "setTimeout",
+        "btoa",
+        `${code};return {};`,
+      ) as (...args: unknown[]) => unknown;
+      factory(
+        doc,
+        { location: { href: "" } },
+        fetchImpl,
+        () => 0,
+        () => "eA==",
+      );
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      return ct.html;
+    };
+
+    const failing = await runLoad(() => Promise.reject(new Error("down")));
+    expect(failing).toContain("Sin conexi");
+    expect(failing).toContain("Reintentar");
+
+    const denied = await runLoad(() =>
+      Promise.resolve({ json: () => Promise.resolve({}), status: 401 }),
+    );
+    expect(denied).toContain("No autorizado");
+
+    const broken = await runLoad(() =>
+      Promise.resolve({ json: () => Promise.resolve({}), status: 500 }),
+    );
+    expect(broken).toContain("http500");
+  });
 });

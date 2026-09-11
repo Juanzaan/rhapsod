@@ -977,7 +977,11 @@ export function renderSettingsPage(
     function toast(m){var el=document.getElementById('toast');el.textContent=m;el.classList.add('show');setTimeout(function(){el.classList.remove('show');},3000);}
 
     function load(){
-      fetch('/api/env',{headers:H}).then(function(r){return r.json();}).then(function(d){
+      fetch('/api/env',{headers:H}).then(function(r){
+        if(r.status===401)throw new Error('auth');
+        if(!r.ok)throw new Error('http'+r.status);
+        return r.json();
+      }).then(function(d){
         if(!d.entries||d.entries.length===0){
           document.getElementById('ct').innerHTML='<div class="cd"><div class="em">El bot no puede leer su archivo de entorno. Revisá que el usuario del servicio tenga permiso de lectura sobre RHAPSOD_ENV_FILE.</div></div>';
           return;
@@ -1010,13 +1014,18 @@ export function renderSettingsPage(
         }
         h+='<button class="btn" onclick="save()">Guardar</button>';
         document.getElementById('ct').innerHTML=h;
-      }).catch(function(){loadFailed();});
+      }).catch(function(e){loadFailed(e);});
     }
 
     var loadRetried=false;
-    function loadFailed(){
-      document.getElementById('ct').innerHTML='<div class="cd"><div class="em">Error al cargar config</div><button class="btn" onclick="load()">Reintentar</button></div>';
-      if(!loadRetried){loadRetried=true;setTimeout(load,3000);}
+    function loadFailed(error){
+      var msg=error&&error.message==='auth'
+        ?'No autorizado: revisá el usuario y la contraseña del panel.'
+        :error&&String(error.message||'').indexOf('http')===0
+        ?'El bot respondió un error ('+error.message+').'
+        :null;
+      document.getElementById('ct').innerHTML='<div class="cd"><div class="em">'+(msg||'Sin conexión con el bot. Revisá el túnel SSH.')+'</div><button class="btn" onclick="load()">Reintentar</button></div>';
+      if(!loadRetried&&(!error||error.message!=='auth')){loadRetried=true;setTimeout(load,3000);}
     }
 
     function save(){
