@@ -1009,7 +1009,13 @@ export function renderSettingsPage(
         }
         h+='<button class="btn" onclick="save()">Guardar</button>';
         document.getElementById('ct').innerHTML=h;
-      }).catch(function(){document.getElementById('ct').innerHTML='<div class="cd"><div class="em">Error al cargar config</div></div>';});
+      }).catch(function(){loadFailed();});
+    }
+
+    var loadRetried=false;
+    function loadFailed(){
+      document.getElementById('ct').innerHTML='<div class="cd"><div class="em">Error al cargar config</div><button class="btn" onclick="load()">Reintentar</button></div>';
+      if(!loadRetried){loadRetried=true;setTimeout(load,3000);}
     }
 
     function save(){
