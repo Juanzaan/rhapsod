@@ -597,6 +597,86 @@ describe("panel-server", () => {
     }
   });
 
+  it("saves around the read-only panel host instead of rejecting it", async () => {
+    // Regression: RHAPSOD_PANEL_HOST lived in .env.example without a panel
+    // description, so every save from a copied example failed with an
+    // unknown-key 400 and looked like saving was broken.
+    const port = 23463;
+    const state = startTestPanel(
+      "RHAPSOD_TS3_HOST=old.example.com\nRHAPSOD_PANEL_HOST=127.0.0.1\n",
+      port,
+    );
+    try {
+      const res = await fetch(`${state.baseUrl}/api/env`, {
+        method: "PUT",
+        headers: {
+          authorization: state.auth,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ RHAPSOD_TS3_HOST: "new.example.com" }),
+      });
+      expect(res.status).toBe(200);
+      const content = await import("node:fs").then((fs) =>
+        fs.readFileSync(state.envPath, "utf8"),
+      );
+      expect(content).toContain("RHAPSOD_TS3_HOST=new.example.com");
+      expect(content).toContain("RHAPSOD_PANEL_HOST=127.0.0.1");
+    } finally {
+      await state.close();
+      rmSync(state.dir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects writes to read-only env keys", async () => {
+    const port = 23464;
+    const state = startTestPanel("RHAPSOD_PANEL_HOST=127.0.0.1\n", port);
+    try {
+      const res = await fetch(`${state.baseUrl}/api/env`, {
+        method: "PUT",
+        headers: {
+          authorization: state.auth,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ RHAPSOD_PANEL_HOST: "0.0.0.0" }),
+      });
+      expect(res.status).toBe(400);
+      const payload = (await res.json()) as { error?: string };
+      expect(payload.error).toContain("RHAPSOD_PANEL_HOST");
+      const content = await import("node:fs").then((fs) =>
+        fs.readFileSync(state.envPath, "utf8"),
+      );
+      expect(content).toContain("RHAPSOD_PANEL_HOST=127.0.0.1");
+    } finally {
+      await state.close();
+      rmSync(state.dir, { recursive: true, force: true });
+    }
+  });
+
+  it("marks entries editable in the env listing", async () => {
+    const port = 23465;
+    const state = startTestPanel(
+      "RHAPSOD_TS3_HOST=ts.example.com\nRHAPSOD_PANEL_HOST=127.0.0.1\n",
+      port,
+    );
+    try {
+      const res = await fetch(`${state.baseUrl}/api/env`, {
+        headers: { authorization: state.auth },
+      });
+      const body = (await res.json()) as {
+        entries: { editable: boolean; key: string }[];
+      };
+      expect(
+        body.entries.find((e) => e.key === "RHAPSOD_TS3_HOST")?.editable,
+      ).toBe(true);
+      expect(
+        body.entries.find((e) => e.key === "RHAPSOD_PANEL_HOST")?.editable,
+      ).toBe(false);
+    } finally {
+      await state.close();
+      rmSync(state.dir, { recursive: true, force: true });
+    }
+  });
+
   it("sets security headers on every response", async () => {
     const port = 23460;
     const state = startTestPanel("", port);

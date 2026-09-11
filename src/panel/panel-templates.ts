@@ -176,12 +176,12 @@ export function renderSetupWizard(
     .tr.fl{display:block;background:#220d0d;color:var(--rd);border:1px solid #7f1d1d}
     .tr.ld{display:block;background:#0b0b0d;color:var(--dm);border:1px solid var(--ln)}
     .ob{display:inline-block;background:#0f0f12;color:var(--dm);border:1px solid var(--ln);font-size:.7rem;padding:.1rem .4rem;border-radius:4px;margin-left:.3rem}
-    .wi{font-size:3rem;text-align:center;margin-bottom:1rem}
     .wt{text-align:center;margin-bottom:1.5rem}
     .wt h1{font-size:1.8rem;margin-bottom:.5rem}
     .wt p{color:var(--dm);font-size:.9rem;line-height:1.5}
     .fe{display:flex;align-items:center;gap:.75rem;padding:.5rem 0}
     .fi{width:32px;height:32px;background:#0f0f12;border:1px solid var(--ln);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0}
+    .fi .fn{font-family:var(--mn);font-size:.7rem;font-weight:700;color:var(--am);letter-spacing:.05em}
     .ft{font-size:.85rem}
     .ft strong{color:var(--tx)}
     .ft span{color:var(--dm)}
@@ -215,10 +215,10 @@ export function renderSetupWizard(
     }
 
     function rW(){
-      return '<div class="wi">&#127925;</div><div class="wt"><h1>Rhapsod</h1><p>Bot de musica para TeamSpeak 3.<br>Configuremoslo en unos pasos.</p></div>'+
-        '<div class="fe"><div class="fi">&#127911;</div><div class="ft"><strong>YouTube, Spotify, SoundCloud</strong><br><span>Reproduce musica desde multiples fuentes</span></div></div>'+
-        '<div class="fe"><div class="fi">&#128256;</div><div class="ft"><strong>Cola inteligente</strong><br><span>Playlists, shuffle, loops y mas</span></div></div>'+
-        '<div class="fe"><div class="fi">&#9889;</div><div class="ft"><strong>Facil de usar</strong><br><span>Comandos simples desde el chat de TS3</span></div></div>'+
+      return '<div class="wt"><h1>Rhapsod</h1><p>Bot de música para TeamSpeak 3.<br>Configuremoslo en unos pasos.</p></div>'+
+        '<div class="fe"><div class="fi"><span class="fn">01</span></div><div class="ft"><strong>YouTube, Spotify, SoundCloud</strong><br><span>Música desde múltiples fuentes</span></div></div>'+
+        '<div class="fe"><div class="fi"><span class="fn">02</span></div><div class="ft"><strong>Cola inteligente</strong><br><span>Colas, mezclas y repetición</span></div></div>'+
+        '<div class="fe"><div class="fi"><span class="fn">03</span></div><div class="ft"><strong>Fácil de usar</strong><br><span>Comandos simples desde el chat de TS3</span></div></div>'+
         '<div class="a"><button class="b bp" onclick="next()">Empezar</button></div>';
     }
 
@@ -548,12 +548,12 @@ export function renderDashboard(
         </div>
       </div>
       <div class="cd fw">
-        <div class="ct"><span>Agregar</span><span class="rv">URL o busqueda</span></div>
+          <div class="ct"><span>Agregar</span></div>
         <div class="ir">
           <input id="pi" placeholder="YouTube, Spotify, SoundCloud..." onkeydown="if(event.key==='Enter')play()">
           <button class="go" onclick="play()">Al aire</button>
         </div>
-        <label class="nx"><input type="checkbox" id="nxChk"> Como próxima (playnext)</label>
+          <label class="nx"><input type="checkbox" id="nxChk"> Poner como próxima</label>
       </div>
       <div class="cd">
         <div class="ct"><span>Cola</span><span class="rv" id="qc">${queueLen} pistas</span></div>
@@ -575,12 +575,12 @@ export function renderDashboard(
         </div>
         <div class="fc" style="margin-top:1rem">
           <button class="ch" onclick="cmd('filter off')">Quitar filtro</button>
-          <button class="ch" onclick="cmd('shuffle')">Shuffle</button>
-          <button class="ch" onclick="cmd('clear')">Clear</button>
-          <button class="ch" onclick="cmd('test-tone')">Test Tone</button>
+          <button class="ch" onclick="cmd('shuffle')">Mezclar</button>
+          <button class="ch" onclick="cmd('clear')">Vaciar</button>
+          <button class="ch" onclick="cmd('test-tone')">Tono</button>
         </div>
         <div class="fc">
-          <button class="ch" onclick="showOut('stats')">Stats</button>
+          <button class="ch" onclick="showOut('stats')">Info</button>
           <button class="ch" onclick="showOut('lyrics')">Letra</button>
           <button class="ch" onclick="showOut('history')">Historial</button>
         </div>
@@ -590,7 +590,7 @@ export function renderDashboard(
         <div id="srvTree"><div class="em">Conectando…</div></div>
       </div>
       <div class="cd fw">
-        <div class="ct"><span>Chat del canal</span><span class="rv">en vivo</span></div>
+          <div class="ct"><span>Chat del canal</span></div>
         <ul class="ql" id="chat" style="max-height:240px"></ul>
         <div class="em" id="chatEmpty">Sin mensajes todavía</div>
         <div class="ir" style="margin-top:.75rem;margin-bottom:0">
@@ -622,13 +622,12 @@ export function renderDashboard(
     </div>
   </div>
   <div class="toast" id="toast"></div>
-  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js" defer></script>
   <script>${SERVER_TREE_JS}
     var A='Basic '+btoa('${cred}');
     var H={authorization:A};
     var RM=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     function gs(){return (window.gsap&&!RM)?window.gsap:null;}
-    var PP='idle',POS=0,DUR=0,volDrag=false,lastTracks=-1,lastQ='',lastE='',lastQLen=0,lastC='',lastS='';
+    var PP='idle',POS=0,DUR=0,volDrag=false,lastTracks=-1,lastQ='',lastE='',lastQLen=0,lastC='',lastS='',fails=0;
 
     function fmtT(ms){
       if(ms==null||!isFinite(ms)||ms<0)return '--:--';
@@ -805,6 +804,7 @@ export function renderDashboard(
 
     function refresh(){
       fetch('/api/state',{headers:H}).then(function(r){return r.json();}).then(function(d){
+        fails=0;
         PP=d.playerState||'idle';
         POS=(typeof d.positionMs==='number'&&d.positionMs>=0)?d.positionMs:0;
         DUR=(typeof d.durationMs==='number'&&d.durationMs>0)?d.durationMs:0;
@@ -860,7 +860,17 @@ export function renderDashboard(
         if(cj!==lastC){lastC=cj;renderChat(d.chat||[]);}
         var sj=JSON.stringify(d.server||null);
         if(sj!==lastS){lastS=sj;renderServerCard(d.server);}
-      }).catch(function(){});
+      }).catch(function(){
+        // Never fail silently: a stalled tunnel or a waking VPS looks like a
+        // dead page otherwise. The 5s poll keeps retrying on its own.
+        fails++;
+        if(fails>1){
+          var txt=document.getElementById('stxt');
+          if(txt)txt.textContent='Reconectando…';
+          var dotEl=document.getElementById('dot');
+          if(dotEl)dotEl.className='dot off';
+        }
+      });
     }
 
     function renderErrors(e){
@@ -987,6 +997,10 @@ export function renderSettingsPage(
           h+='<div class="cd"><div class="ct">'+gn+'</div>';
           for(var j=0;j<entries.length;j++){
             var e=entries[j];
+            if(e.editable===false){
+              h+='<div class="f"><label>'+e.key+' (solo lectura)</label><div class="h">'+esc(e.value||'')+'</div></div>';
+              continue;
+            }
             var val=e.masked?'':(e.value||'');
             var desc=e.description?'<div class="h">'+e.description+'</div>':'';
             h+='<div class="f"><label>'+e.key+'</label><input data-key="'+e.key+'" value="'+val.replace(/"/g,'&quot;')+'"'+(e.masked?' placeholder="(sin cambios)"':'')+'>'+desc+'</div>';
@@ -1003,11 +1017,14 @@ export function renderSettingsPage(
       var vals={};
       for(var i=0;i<inputs.length;i++){
         var v=inputs[i].value.trim();
-        if(v||inputs[i].placeholder==='(sin cambios)')vals[inputs[i].dataset.key]=v;
+        // Masked secrets render empty: never submit them untouched, or the
+        // server would delete them from the env file on every save.
+        if(!v&&inputs[i].placeholder==='(sin cambios)')continue;
+        vals[inputs[i].dataset.key]=v;
       }
       fetch('/api/env',{method:'PUT',headers:Object.assign({},H,{'content-type':'application/json'}),body:JSON.stringify(vals)})
         .then(function(r){return r.json();})
-        .then(function(d){toast(d.ok?'Config guardada':'Error al guardar');})
+        .then(function(d){toast(d.ok?'Config guardada':'Error al guardar: '+(d.error||'desconocido'));})
         .catch(function(){toast('Error de conexion');});
     }
 
@@ -1140,7 +1157,6 @@ export function renderServerPage(
     </div>
   </div>
   <div class="toast" id="toast"></div>
-  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js" defer></script>
   <script>${SERVER_TREE_JS}
     var A='Basic '+btoa('${cred}');
     var H={authorization:A};
