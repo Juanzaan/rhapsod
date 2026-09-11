@@ -294,10 +294,10 @@ describe("renderDashboard console", () => {
       renderSetupWizard("admin", "secret"),
     ];
     for (const html of pages) {
-      // Same tokens everywhere: no leftover slate-blue theme.
-      expect(html).toContain("--am:#FBBF24");
+      // Same tokens everywhere: no leftover amber or slate-blue theme.
+      expect(html).toContain("--ac:#1ED760");
       expect(html).toContain("--bl:#60A5FA");
-      expect(html).toContain("--gn:#4ADE80");
+      expect(html).toContain("--wn:#FBBF24");
       expect(html).toContain("--rd:#F87171");
       expect(html).not.toContain("#38bdf8");
       expect(html).not.toContain("#0f172a");
@@ -305,6 +305,8 @@ describe("renderDashboard console", () => {
       expect(html).not.toContain("#ff453a");
       expect(html).not.toContain("#3ddc84");
       expect(html).not.toContain("#8e8e93");
+      expect(html).not.toContain("--am:");
+      expect(html).not.toContain("--gn:");
     }
     // Same brand on every nav.
     for (const html of pages.slice(0, 3)) {
