@@ -127,6 +127,9 @@ export class SoundCloudPublicApi implements SoundCloudResolver {
         !track.permalink_url ||
         track.access === "blocked" ||
         track.policy === "BLOCK" ||
+        // Snippets are 30s previews, not full tracks: links keep the
+        // existing behavior, but search must not top-pick them.
+        track.policy === "SNIP" ||
         track.streamable === false
       ) {
         continue;
