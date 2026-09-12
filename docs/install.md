@@ -1,91 +1,77 @@
 # Install
 
-Rhapsod needs a machine that stays online with outbound UDP access to the
-TeamSpeak 3 voice port. Any mainstream Linux VPS works (Ubuntu, Debian,
-RHEL/Oracle Linux/Rocky/Alma) on x86_64 with ~1 GB RAM. Pick a region close
-to your TeamSpeak server: voice travels over UDP and latency shows.
+[Español](install.es.md)
 
-## One command (recommended)
+Use an always-on Linux host with outbound UDP access to TeamSpeak. The installer supports x86_64 Ubuntu 20.04+, Debian 11+ and RHEL-family 9+ systems. Resource use depends on queue size and extraction concurrency; measure FFmpeg and yt-dlp memory alongside the Node process.
+
+## VPS installer
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Juanzaan/rhapsod/main/install.sh | sudo bash
 ```
 
-What it does, in order:
+The installer selects the latest stable tag, installs Node 22 when absent, yt-dlp, FFmpeg, the Python daemon and optional extraction services, then creates systemd units. An existing Node installation must be >=22.19.0. New installs receive `.env`, an empty cookie file and a generated panel password; reruns preserve existing configuration and cookies.
 
-1. Detects the distro (`apt` or `dnf`, EPEL on RHEL 9) and installs base
-   packages, Node 22, the yt-dlp binary, the daemon Python packages,
-   and static FFmpeg.
-2. Installs Cloudflare WARP **in proxy mode** (routing and SSH stay
-   direct) and enables it on boot. This is the fallback egress the bot
-   uses when YouTube rate-limits the datacenter IP. Skip with
-   `RHAPSOD_SKIP_WARP=1`.
-3. Clones and builds the bgutil POT provider (port 4416) so YouTube
-   player requests pass bot checks.
-4. Clones the bot at the latest stable tag, installs dependencies,
-   and builds it.
-5. Writes systemd units (`rhapsod`, `rhapsod-ytdlp-daemon`,
-   `bgutil-pot-provider`), a `.env` with a placeholder TeamSpeak host,
-   `RHAPSOD_TS3_AUTO_CONNECT=false` and a **generated panel password**, an
-   empty cookies placeholder, and a weekly yt-dlp updater cronjob.
-6. Enables everything and starts it. The bot boots in **setup mode**:
-   panel-only, no TeamSpeak connection, so the wizard is reachable
-   immediately.
+The bot starts in panel-only mode with `RHAPSOD_TS3_AUTO_CONNECT=false`. Open a tunnel:
 
-Then finish in the browser: open an SSH tunnel
-(`ssh -L 8080:127.0.0.1:8080 user@host`), go to
-`http://127.0.0.1:8080/setup`, and follow the wizard (TeamSpeak →
-channel → audio → **YouTube** → review). The TeamSpeak step probes the
-server with a throwaway identity, and completing it re-enables
-auto-connect. The YouTube step tests playback resolution live and lets you
-paste `cookies.txt` without touching the server: export it with the
-"Get cookies.txt LOCALLY" browser extension while logged in to youtube.com.
+```bash
+ssh -N -L 8080:127.0.0.1:8080 user@host
+```
+
+Open `http://127.0.0.1:8080/setup`, sign in with the printed credentials and configure TeamSpeak, channel, audio and YouTube. Saving TeamSpeak settings enables auto-connect for the next start. Keep the panel on `127.0.0.1`.
+
+Installer overrides are `RHAPSOD_REF`, `RHAPSOD_APP_DIR`, `RHAPSOD_USER` and `RHAPSOD_SKIP_WARP=1`. Pass them to the privileged shell explicitly, for example:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Juanzaan/rhapsod/main/install.sh -o /tmp/rhapsod-install.sh
+sudo env RHAPSOD_SKIP_WARP=1 bash /tmp/rhapsod-install.sh
+```
+
+The installer configures a weekly yt-dlp updater. Rhapsod itself is updated separately using the [deployment procedure](deployment.md).
 
 ## Manual install
 
-Follow `docs/deployment.md` (reference setup) plus:
-
-- WARP: install `cloudflare-warp`, then `warp-cli mode proxy` **before**
-  `warp-cli connect`. Never use full-tunnel mode on a remote server or
-  you lose SSH access.
-- POT provider: clone
-  `https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git`,
-  `npm ci && npx tsc` in `server/`, serve `build/main.js` on port 4416,
-  and `pip install bgutil-ytdlp-pot-provider` where the daemon runs.
-- Point `RHAPSOD_WARP_PROXY=socks5h://127.0.0.1:40000` (bot `.env` and
-  daemon unit) to enable the 403 fallback. Empty means direct only.
-
-## Updating
-
-Releases are tags. To update a manual install:
+Install Node.js >=22.19.0, yt-dlp, FFmpeg and ffprobe, then:
 
 ```bash
-cd /home/rhapsod/rhapsod
-git fetch --tags origin
-git checkout --detach <new-tag>
-npm ci && npm run build
-sudo systemctl restart rhapsod-ytdlp-daemon rhapsod
+git clone https://github.com/Juanzaan/rhapsod.git
+cd rhapsod
+npm ci
+cp .env.example .env
 ```
 
-The installer cronjob already keeps yt-dlp fresh weekly.
+Set `RHAPSOD_TS3_HOST`. For browser-first setup also set:
+
+```dotenv
+RHAPSOD_TS3_AUTO_CONNECT=false
+RHAPSOD_PANEL_ENABLED=true
+RHAPSOD_PANEL_HOST=127.0.0.1
+RHAPSOD_PANEL_PASSWORD=replace-with-a-unique-password
+```
+
+```bash
+npm run build
+npm start
+```
+
+Use `RHAPSOD_YTDLP_PATH`, `RHAPSOD_FFMPEG_PATH` and `RHAPSOD_FFPROBE_PATH` when tools are outside PATH. The optional daemon listens at `127.0.0.1:8765`; configure `RHAPSOD_YTDLP_DAEMON_URL` only when it is running. See [deployment](deployment.md) for services and Docker.
+
+## Verify
+
+```bash
+node --version
+yt-dlp --version
+ffmpeg -version
+ffprobe -version
+```
+
+Confirm the bot joins its channel, request a track with `!play` and inspect `!stats`. For installer deployments, inspect `systemctl status rhapsod rhapsod-ytdlp-daemon` and `journalctl -u rhapsod -n 100 --no-pager`.
 
 ## Troubleshooting
 
-**Config page empty / saving fails.** The panel reads and writes
-`RHAPSOD_ENV_FILE` as the service user. If that file lives under a
-read-only path (e.g. `/etc/*.env` combined with `ProtectSystem=full`),
-grant access explicitly:
+- Connection failure: verify host, voice port, server/channel password and speaking permissions. The setup wizard can probe connectivity.
+- YouTube failure: update yt-dlp using its installation method and inspect the panel's YouTube health result. When authentication is required, configure a permitted account's cookie file through the wizard or `RHAPSOD_YTDLP_COOKIES_PATH`.
+- Settings save failure: `RHAPSOD_ENV_FILE` must point to a file writable by the service user. For `/etc/rhapsod.env` under `ProtectSystem=full`, grant `ReadWritePaths=/etc/rhapsod.env` in a systemd override and suitable file ownership.
+- Data permission failure: the service user must own `RHAPSOD_DATA_DIR` and be able to create temporary files beside the persisted JSON files.
 
-```ini
-# /etc/systemd/system/rhapsod.service
-ReadWritePaths=/etc/rhapsod.env
-```
-
-```bash
-sudo chown root:rhapsod /etc/rhapsod.env
-sudo chmod 660 /etc/rhapsod.env
-sudo systemctl daemon-reload
-sudo systemctl restart rhapsod
-```
-
-(The installer avoids this entirely by keeping `.env` inside the app dir.)
+After unit changes, run `sudo systemctl daemon-reload`; wait for idle playback before restarting.

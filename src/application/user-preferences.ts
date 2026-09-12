@@ -179,6 +179,7 @@ export class UserPreferences {
   }
 
   removeFavorite(uid: string, position: number): FavoriteTrack | undefined {
+    if (!Number.isSafeInteger(position) || position < 1) return undefined;
     this.#ensureLoaded();
     const entry = this.#users.get(uid);
     if (entry === undefined) return undefined;
@@ -192,7 +193,7 @@ export class UserPreferences {
   }
 
   async flush(): Promise<void> {
-    await this.#schedulePersist();
+    await this.#writeChain;
   }
 
   #ensureLoaded(): void {

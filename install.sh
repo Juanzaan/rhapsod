@@ -89,7 +89,10 @@ if ! command -v node >/dev/null 2>&1; then
   rm -f "$NODE_ARCHIVE"
 fi
 node --version
+node -e 'const [major, minor] = process.versions.node.split(".").map(Number); process.exit(major > 22 || (major === 22 && minor >= 19) ? 0 : 1)' \
+  || fail "Node.js >=22.19.0 is required; upgrade Node and rerun the installer"
 npm --version
+NODE_BIN="$(command -v node)"
 
 # --- yt-dlp standalone binary -------------------------------------------------
 log "Installing yt-dlp binary"
@@ -201,10 +204,14 @@ sudo -u "$APP_USER" npm --prefix "$APP_DIR" run build
 # --- Runtime files ------------------------------------------------------------------
 log "Preparing runtime files"
 install -d -o "$APP_USER" -g "$APP_USER" -m 0750 "$APP_DIR/data"
-install -o "$APP_USER" -g "$APP_USER" -m 0600 /dev/null "$APP_DIR/.env"
-install -o "$APP_USER" -g "$APP_USER" -m 0600 /dev/null "/home/$APP_USER/youtube-cookies.txt"
-PANEL_PASSWORD="$(openssl rand -hex 12)"
-sudo -u "$APP_USER" tee "$APP_DIR/.env" >/dev/null <<ENV
+if [[ ! -e "/home/$APP_USER/youtube-cookies.txt" ]]; then
+  install -o "$APP_USER" -g "$APP_USER" -m 0600 /dev/null "/home/$APP_USER/youtube-cookies.txt"
+fi
+PANEL_PASSWORD="(existing password preserved)"
+if [[ ! -e "$APP_DIR/.env" ]]; then
+  install -o "$APP_USER" -g "$APP_USER" -m 0600 /dev/null "$APP_DIR/.env"
+  PANEL_PASSWORD="$(openssl rand -hex 12)"
+  sudo -u "$APP_USER" tee "$APP_DIR/.env" >/dev/null <<ENV
 # Placeholder until the wizard saves a real host; the bot boots panel-only
 # (AUTO_CONNECT=false) so /setup is reachable out of the box. Completing the
 # wizard's TeamSpeak step writes the real host and flips AUTO_CONNECT=true.
@@ -222,14 +229,15 @@ RHAPSOD_PANEL_PORT=8080
 RHAPSOD_PANEL_USER=admin
 RHAPSOD_PANEL_PASSWORD=$PANEL_PASSWORD
 ENV
-if [[ "$SKIP_WARP" != "1" ]]; then
-  echo "RHAPSOD_WARP_PROXY=$WARP_PROXY" | sudo -u "$APP_USER" tee -a "$APP_DIR/.env" >/dev/null
+  if [[ "$SKIP_WARP" != "1" ]]; then
+    echo "RHAPSOD_WARP_PROXY=$WARP_PROXY" | sudo -u "$APP_USER" tee -a "$APP_DIR/.env" >/dev/null
+  fi
+  chmod 0600 "$APP_DIR/.env"
 fi
-chmod 0600 "$APP_DIR/.env"
 
 # --- systemd units --------------------------------------------------------------------
 log "Installing systemd units"
-POT_EXEC="ExecStart=/usr/bin/node $POT_DIR/server/build/main.js --port $POT_PORT"
+POT_EXEC="ExecStart=$NODE_BIN $POT_DIR/server/build/main.js --port $POT_PORT"
 cat > /etc/systemd/system/bgutil-pot-provider.service <<UNIT
 [Unit]
 Description=Rhapsod YouTube POT provider
@@ -303,9 +311,10 @@ WorkingDirectory=$APP_DIR
 # working directory. On SELinux-enforcing distros (RHEL 9 family) PID 1
 # (init_t) is denied reading files labeled user_home_t, so an
 # EnvironmentFile under /home fails the whole unit with "Permission denied".
-ExecStart=/usr/bin/node dist/main.js
+ExecStart=$NODE_BIN dist/main.js
 Restart=on-failure
 RestartSec=5
+RestartPreventExitStatus=42
 TimeoutStopSec=15
 NoNewPrivileges=true
 PrivateTmp=true

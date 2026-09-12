@@ -1,5 +1,7 @@
 # Commands
 
+[Español](commands.es.md)
+
 Rhapsod commands use `!` by default. Commands are processed in TeamSpeak text
 chat once the TS3 adapter is connected.
 
@@ -93,8 +95,8 @@ chat once the TS3 adapter is connected.
   a dynamically discovered, cached client identifier. The identifier refreshes
   after authorization failures; yt-dlp and YouTube alternatives remain
   fallbacks. This unofficial API may change without notice. Sets (`/sets/`)
-  are resolved through SongLink, expanding the equivalent YouTube playlist
-  when available; blocked/DRM tracks are never bypassed.
+  use native SoundCloud expansion with SongLink alternatives where available;
+  blocked/DRM tracks are never bypassed.
 - **Spotify:** tracks are resolved through the official Web API (client
   credentials flow, no user login) and the matching "artist title" is searched
   on YouTube for playback. Playlists and albums expand up to 100 tracks per

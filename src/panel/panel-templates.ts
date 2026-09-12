@@ -1,4 +1,5 @@
 import type { PanelStatus } from "./panel-server.js";
+import { AMBIENCE_JS, DASHBOARD_CSS } from "./dashboard-design.js";
 
 // Shared ON AIR console chrome: flat zinc backdrop, green signal accents,
 // tabular mono readouts. Every page interpolates this so the whole
@@ -394,7 +395,7 @@ export function renderDashboard(
 ): string {
   const cred = js(`${panelUser}:${panelPassword}`);
   const connected = status.connected;
-  const title = esc(status.currentTitle || "Sin reproducir");
+  const title = esc(status.currentTitle || "Tu próxima canción empieza acá.");
   const channel = status.currentChannelId || "-";
   const queueLen = status.queueLength;
   const playerState = status.playerState || "idle";
@@ -510,9 +511,11 @@ export function renderDashboard(
     .fc:last-child{margin-bottom:0}
     .ch{padding:.32rem .65rem;border-radius:6px;font-size:.75rem;background:#0f0f12;color:var(--dm);border:1px solid var(--ln);cursor:pointer}
     .ch:hover{color:var(--tx);border-color:#3a3a40}
+    ${DASHBOARD_CSS}
   </style>
 </head>
 <body>
+  <div class="ambient" id="ambient" data-scene="aurora" aria-hidden="true"></div>
   <nav class="nv">
     <div class="nb">RHAPSOD<b>.</b></div>
     <div class="nl">
@@ -527,45 +530,54 @@ export function renderDashboard(
       <span class="st" id="stxt">${connected ? "Conectado" : "Desconectado"}</span>
     </div>
   </nav>
-  <div class="mn">
+  <main class="mn">
+    <header class="page-intro">
+      <div><div class="eyebrow">Tu espacio de escucha / TeamSpeak</div><h1>Buena música. <span>En compañía.</span></h1><p class="intro-note">La sesión, el sonido y tu canal. Todo en un lugar.</p></div>
+      <div class="scene-tools"><label for="scene">Ambiente</label><select id="scene" onchange="setScene(this.value)"><option value="aurora">Aurora</option><option value="ember">Atardecer</option><option value="ocean">Océano</option><option value="off">Sin fondo</option></select><button id="motionToggle" type="button" onclick="toggleMotion()" aria-pressed="false">Pausar movimiento</button></div>
+    </header>
     <div class="g">
-      <div class="cd fw">
-        <div class="ct"><span>Program</span><span class="rv" id="nc2">Canal ${channel}</span></div>
+      <div class="cd player-card" id="playerCard" data-playing="${playerState === "playing"}">
+        <div class="ct"><span><span class="section-no">01 /</span> En reproducción</span><span class="rv" id="nc2">Canal ${channel}</span></div>
         <div class="deck">
+          <div class="record-stage" aria-hidden="true"><div class="record"><div class="record-label"><b>r.</b>RHAPSOD</div></div></div>
           <div class="ns" id="nsState">${stateLabel}</div>
           <div class="nt" id="nt">${title}</div>
-          <div class="tm"><span id="tcur">${timeCur}</span><span class="tt" id="tdur">${timeDur}</span></div>
-          <div class="sk" id="seek" title="Saltar"><div class="skf" id="seekf"></div></div>
+          <div class="track-detail" id="trackDetail">${esc(status.currentArtist || "Elegí un tema y compartí el momento.")}</div>
+          <div class="progress-block"><div class="sk" id="seek" role="slider" tabindex="0" aria-label="Posición de reproducción" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" title="Cambiar posición"><div class="skf" id="seekf"></div></div>
+          <div class="tm"><span id="tcur">${timeCur}</span><span class="tt" id="tdur">${timeDur}</span></div></div>
         </div>
         <div class="tp">
-          <button class="tb" onclick="cmd('previous')" title="Anterior">&#9198;</button>
-          <button class="tb main" id="ppBtn" onclick="togglePlay()" title="Pausar/Reanudar">${ppIcon}</button>
-          <button class="tb" onclick="cmd('skip')" title="Saltar">&#9197;</button>
-          <button class="tb dng" onclick="cmd('stop')" title="Detener">&#9724;</button>
+          <button class="tb" onclick="cmd('previous')" title="Anterior" aria-label="Anterior">&#9198;</button>
+          <button class="tb main" id="ppBtn" onclick="togglePlay()" title="Pausar/Reanudar" aria-label="Pausar o reanudar">${ppIcon}</button>
+          <button class="tb" onclick="cmd('skip')" title="Saltar" aria-label="Saltar">&#9197;</button>
+          <button class="tb dng" onclick="cmd('stop')" title="Detener" aria-label="Detener">&#9724;</button>
+          <div class="player-links"><button class="ch" onclick="showOut('lyrics')">Letra</button><button class="ch" onclick="showOut('history')">Historial</button></div>
           <div class="vg">
+            <label class="volume-label" for="vol">VOLUMEN</label>
             <span class="vv" id="volv">${volInit}%</span>
             <input type="range" min="0" max="100" value="${volInit}" id="vol">
           </div>
         </div>
       </div>
-      <div class="cd fw">
-          <div class="ct"><span>Agregar</span></div>
+      <div class="cd request-card">
+          <div class="ct"><label for="pi">¿Qué escuchamos?</label><span class="rv">Búsqueda o enlace</span></div>
         <div class="ir">
-          <input id="pi" placeholder="YouTube, Spotify, SoundCloud..." onkeydown="if(event.key==='Enter')play()">
-          <button class="go" onclick="play()">Al aire</button>
+          <input id="pi" placeholder="Un artista, una canción o un enlace…" onkeydown="if(event.key==='Enter')play()">
+          <button class="go" id="addTrack" onclick="play()">Agregar a la cola</button>
         </div>
           <label class="nx"><input type="checkbox" id="nxChk"> Poner como próxima</label>
       </div>
-      <div class="cd">
-        <div class="ct"><span>Cola</span><span class="rv" id="qc">${queueLen} pistas</span></div>
+      <div class="cd queue-card">
+        <div class="ct"><span><span class="section-no">02 /</span> A continuación</span><span class="rv" id="qc">${queueLen} pistas</span></div>
         <ul class="ql" id="ql"></ul>
-        <div class="em" id="qe" style="display:${queueLen === 0 ? "block" : "none"}">Cola vacía — pedí un tema arriba</div>
+        <div class="em" id="qe" style="display:${queueLen === 0 ? "block" : "none"}"><span class="empty-mark" aria-hidden="true">＋</span>Hay lugar para otro tema.<br>Agregá música para seguir la sesión.</div>
+        <div class="queue-footer"><button class="ch" onclick="cmd('shuffle')">Mezclar cola</button><button class="ch" onclick="cmd('clear')">Vaciar cola</button></div>
       </div>
-      <div class="cd">
-        <div class="ct"><span>Consola</span></div>
+      <div class="cd sound-card">
+        <div class="ct"><span><span class="section-no">03 /</span> Tu sonido</span></div>
         <div class="ct" style="margin-bottom:.5rem"><span style="letter-spacing:.1em">Loop</span></div>
         <div class="sg" id="loopSeg" style="margin-bottom:1rem">
-          <button data-l="off" onclick="cmd('loop off')">OFF</button><button data-l="track" onclick="cmd('loop track')">TRACK</button><button data-l="queue" onclick="cmd('loop queue')">QUEUE</button>
+          <button data-l="off" onclick="cmd('loop off')">SIN REPETIR</button><button data-l="track" onclick="cmd('loop track')">PISTA</button><button data-l="queue" onclick="cmd('loop queue')">COLA</button>
         </div>
         <div class="ct" style="margin-bottom:.5rem"><span style="letter-spacing:.1em">Filtros</span></div>
         <div class="swl" id="fxRow">
@@ -586,20 +598,29 @@ export function renderDashboard(
           <button class="ch" onclick="showOut('history')">Historial</button>
         </div>
       </div>
-      <div class="cd fw">
-        <div class="ct"><span>Servidor</span><span class="rv" id="srvCount"></span></div>
+      <div class="cd discovery-card">
+        <div class="ct"><span><span class="section-no">04 /</span> Seguí descubriendo</span></div>
+        <p class="helper">Dejá que la música siga cuando termine la cola.</p>
+        <div class="sg"><button onclick="cmd('autoplay on')">ACTIVAR AUTOPLAY</button><button onclick="cmd('autoplay off')">DESACTIVAR</button></div>
+        <div class="mini-label"><label for="radioQuery">Radio en directo</label></div>
+        <div class="ir"><input id="radioQuery" placeholder="Nombre o género…" onkeydown="if(event.key==='Enter')tuneRadio()"><button class="go" id="radioTune" onclick="tuneRadio()">Sintonizar</button></div>
+        <div class="mini-label">Biblioteca del bot</div>
+        <div class="fc"><button class="ch" onclick="showOut('tops')">Más escuchados</button><button class="ch" onclick="showOut('playlist list')">Playlists</button><button class="ch" onclick="showOut('stats')">Estadísticas</button></div>
+      </div>
+      <div class="cd server-card">
+        <div class="ct"><span>Tu servidor</span><span class="rv" id="srvCount"></span></div>
         <div id="srvTree"><div class="em">Conectando…</div></div>
       </div>
-      <div class="cd fw">
+      <div class="cd chat-card">
           <div class="ct"><span>Chat del canal</span></div>
         <ul class="ql" id="chat" style="max-height:240px"></ul>
         <div class="em" id="chatEmpty">Sin mensajes todavía</div>
         <div class="ir" style="margin-top:.75rem;margin-bottom:0">
-          <input id="chatIn" placeholder="Escribir como el bot..." onkeydown="if(event.key==='Enter')sendChat()">
+          <input id="chatIn" aria-label="Mensaje al canal" placeholder="Escribir como el bot..." onkeydown="if(event.key==='Enter')sendChat()">
           <button class="go" onclick="sendChat()">Enviar</button>
         </div>
       </div>
-      <div class="cd fw">
+      <div class="cd system-card">
         <div class="ct"><span>Sistema</span><span class="rv" id="uptime">${uptimeInit}</span></div>
         <div class="sg3">
           <div class="stt"><div class="sv am" id="stTracks">${tracksInit}</div><div class="sl">Temas</div></div>
@@ -614,16 +635,18 @@ export function renderDashboard(
         <div class="ct"><span>Salida</span><span class="rv"><a href="#" onclick="closeOut();return false;" class="lk">cerrar</a></span></div>
         <pre class="dw open" id="dw"></pre>
       </div>
-      <div class="cd fw">
+      <div class="cd errors-card">
         <div class="ct"><span>Errores</span><span class="rv" id="ec">0 total</span></div>
         <div class="fc" id="ek"></div>
         <ul class="ql" id="el"></ul>
         <div class="em" id="ee">Sin errores registrados</div>
       </div>
     </div>
-  </div>
-  <div class="toast" id="toast"></div>
+    <footer class="page-footer"><span>RHAPSOD / HECHO PARA ESCUCHAR JUNTOS</span><a href="/commands">Explorá todos los comandos ↗</a></footer>
+  </main>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <script>${SERVER_TREE_JS}
+    ${AMBIENCE_JS}
     var A='Basic '+btoa('${cred}');
     var H={authorization:A};
     var RM=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -658,9 +681,23 @@ export function renderDashboard(
       var el=document.getElementById('pi');
       var q=el.value.trim();
       if(!q)return;
-      el.value='';
+      var button=document.getElementById('addTrack');
+      if(button.disabled)return;
+      button.disabled=true;button.textContent='Agregando…';
       var nx=document.getElementById('nxChk');
-      cmd(((nx&&nx.checked)?'playnext ':'play ')+q);
+      run(((nx&&nx.checked)?'playnext ':'play ')+q).then(function(message){
+        if(el.value.trim()===q)el.value='';
+        toast(message);refresh();
+      }).catch(function(error){toast('Error: '+error.message);}).finally(function(){button.disabled=false;button.textContent='Agregar a la cola';});
+    }
+
+    function tuneRadio(){
+      var el=document.getElementById('radioQuery');
+      var query=el.value.trim();
+      var button=document.getElementById('radioTune');
+      if(!query||button.disabled)return;
+      button.disabled=true;
+      run('radio '+query).then(function(message){toast(message);refresh();}).catch(function(error){toast('Error: '+error.message);}).finally(function(){button.disabled=false;});
     }
 
     function togglePlay(){
@@ -771,14 +808,20 @@ export function renderDashboard(
       document.getElementById('tdur').textContent=fmtT(DUR>0?DUR:undefined);
       var f=document.getElementById('seekf');
       var bar=document.getElementById('seek');
+      bar.setAttribute('aria-valuenow',String(DUR>0?Math.min(100,Math.round(POS/DUR*100)):0));
+      bar.setAttribute('aria-valuetext',DUR>0?fmtT(POS)+' de '+fmtT(DUR):'Sin duración disponible');
+      bar.setAttribute('aria-disabled',String(DUR<=0));
       if(DUR>0){bar.classList.remove('live');f.style.width=Math.min(100,POS/DUR*100)+'%';}
-      else{bar.classList.add('live');f.style.width='100%';}
+      else if(PP==='playing'||PP==='buffering'){bar.classList.add('live');f.style.width='100%';}
+      else{bar.classList.remove('live');f.style.width='0%';}
     }
 
     function setLamp(state){
       var lamp=document.getElementById('lamp');
       var lab=document.getElementById('nsState');
       var pp=document.getElementById('ppBtn');
+      document.getElementById('playerCard').setAttribute('data-playing',String(state==='playing'));
+      pp.setAttribute('aria-label',(state==='playing'||state==='buffering')?'Pausar':'Reanudar');
       if(state==='playing'){lamp.className='lamp on';lab.textContent='PLAYING';pp.innerHTML='&#9208;';}
       else if(state==='buffering'){lamp.className='lamp buf';lab.textContent='BUFFERING';pp.innerHTML='&#9208;';}
       else if(state==='paused'){lamp.className='lamp';lab.textContent='PAUSED';pp.innerHTML='&#9654;';}
@@ -811,7 +854,8 @@ export function renderDashboard(
         DUR=(typeof d.durationMs==='number'&&d.durationMs>0)?d.durationMs:0;
         setLamp(PP);
         paintTime();
-        document.getElementById('nt').textContent=d.currentTitle||'Sin reproducir';
+        document.getElementById('nt').textContent=d.currentTitle||'Tu próxima canción empieza acá.';
+        document.getElementById('trackDetail').textContent=d.currentArtist||(d.currentTitle?'Una sesión para compartir.':'Elegí un tema y compartí el momento.');
         document.getElementById('nt').title=d.currentTitle||'';
         document.getElementById('nc2').textContent='Canal '+(d.currentChannelId||'-');
         document.getElementById('qc').textContent=d.queueLength+' pistas';
@@ -850,7 +894,7 @@ export function renderDashboard(
             var t=d.queue[i];
             var title=t.title||'Sin titulo';
             var by=t.requestedBy?' <span class="qr">'+esc(t.requestedBy)+'</span>':'';
-            h+='<li class="qi"><span class="qn">'+(i+1)+'</span><span class="qt" title="'+esc(title)+'">'+esc(title)+'</span>'+by+'<button class="qx" title="Quitar" onclick="rmQ('+(i+1)+')">&times;</button></li>';
+            h+='<li class="qi"><span class="qn">'+(i+1)+'</span><span class="qt" title="'+esc(title)+'">'+esc(title)+'</span>'+by+'<button class="qx" title="Quitar" aria-label="Quitar pista '+(i+1)+'" onclick="rmQ('+(i+1)+')">&times;</button></li>';
           }
           list.innerHTML=h;
           if(grew){var gg=gs();if(gg)gg.from(list.children,{y:8,opacity:0,duration:.35,stagger:.04,ease:'power2.out',clearProps:'all',overwrite:true});}
@@ -903,8 +947,19 @@ export function renderDashboard(
     }
 
     (function init(){
+      initAmbience();
       var seek=document.getElementById('seek');
       seek.addEventListener('click',seekEv);
+      seek.addEventListener('keydown',function(event){
+        if(DUR<=0)return;
+        var next=POS;
+        if(event.key==='ArrowRight'||event.key==='ArrowUp')next+=5000;
+        else if(event.key==='ArrowLeft'||event.key==='ArrowDown')next-=5000;
+        else if(event.key==='Home')next=0;
+        else if(event.key==='End')next=DUR;
+        else return;
+        event.preventDefault();POS=Math.max(0,Math.min(DUR,next));paintTime();cmd('seek '+Math.floor(POS/1000));
+      });
       var vol=document.getElementById('vol');
       vol.addEventListener('pointerdown',function(){volDrag=true;});
       window.addEventListener('pointerup',function(){volDrag=false;});

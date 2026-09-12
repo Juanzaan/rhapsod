@@ -77,8 +77,6 @@ whose config save actually works.
   Releases now publish immediately, and the bogus 2.5.0 tag/notes were
   removed. No runtime changes in this patch.
 
-> > > > > > > f469724 (docs: record 2.4.1 patch and refresh release pointers)
-
 ## [2.4.0] - 2026-09-08
 
 The release that makes playback transitions actually gapless and the driver

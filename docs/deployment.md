@@ -1,221 +1,119 @@
 # Deployment
 
-Rhapsod is a persistent service. It needs a machine or container that stays
-online, has outbound UDP access to the TeamSpeak 3 voice port, and can run
-Node.js, `yt-dlp`, and FFmpeg.
+[Español](deployment.es.md)
 
-## Release profiles
+Run Rhapsod as a persistent service with Node.js >=22.19.0, FFmpeg, ffprobe and yt-dlp. The active release line is 3.x. The historical 1.x profile used 1 vCPU / 1 GB; the 2.x production profile used 4 vCPUs / 3 GB. Tune current deployments from measured memory and audio health.
 
-The 1.x line is the low-end stable profile. `v1.0.0` through `v1.2.1` are
-intended to run on a VPS with 1 vCPU and 1 GB RAM; `v1.2.1` is the final
-release in that line.
+## Configuration and state
 
-The 2.x line is the current stable line, tuned for the OCI production profile
-with 4 vCPUs and 3 GB RAM. Production tracks `main` and deploys on every
-release (currently v3.0.0).
-
-The yt-dlp queue derives its baseline concurrency from the available CPUs, so
-the same 1.x build remains usable on smaller machines. Resource increases in
-2.x should be measured rather than assumed.
-
-`RHAPSOD_MAX_CONCURRENT_YTDLP_JOBS` can override the adaptive default from 1 to 4. For the OCI production profile (4 vCPU / 3 GB) set it to `4`: yt-dlp jobs are I/O-bound, so the extra workers reduce sequential wait without stressing the CPUs. Measure child-process RSS and audio health after any change; the schema caps the value at 4.
-
-## Remote access
-
-The current production VM runs on OCI. During initial setup, connect as
-`opc` using the SSH key selected at instance creation and the assigned public
-IP:
-
-```bash
-ssh -i ~/.ssh/rhapsod-vm-key.pem opc@<OCI_PUBLIC_IP>
-```
-
-The bootstrap script copies that key to the `rhapsod` service account, so
-subsequent administration can use:
-
-```bash
-ssh -i ~/.ssh/rhapsod-vm-key.pem rhapsod@<OCI_PUBLIC_IP>
-```
-
-The legacy Azure low-end VM is reachable through the Tailscale tailnet only.
-Its SSH rule allows port 22 solely from `100.64.0.0/10`.
-
-```bash
-ssh -i ~/.ssh/rhapsod-vm-key.pem rhapsod@100.80.92.115
-```
-
-To re-enable a machine, install Tailscale, sign in to the same tailnet
-(`Juanzaan@`), and run `tailscale up`.
-
-## The bot identity
-
-On its first start Rhapsod generates a TeamSpeak client identity and stores it
-at `$RHAPSOD_DATA_DIR/ts3-identity.txt`. This private identity makes the bot
-appear as the same TeamSpeak user after restarts.
-
-- Persist `RHAPSOD_DATA_DIR` on a host volume.
-- Do not commit or share `ts3-identity.txt`.
-- Create a dedicated TeamSpeak server group for the bot.
-- Grant only permission to join the target channel, speak, and use channel chat.
-
-## Required configuration
+The process loads `.env` from its working directory. An existing process environment takes precedence. `RHAPSOD_ENV_FILE` selects the file edited by the panel; when systemd loads `/etc/rhapsod.env`, point the panel at that same file.
 
 ```dotenv
 RHAPSOD_TS3_HOST=voice.example.com
 RHAPSOD_TS3_PORT=9987
 RHAPSOD_TS3_NICKNAME=Rhapsod
-RHAPSOD_TS3_CHANNEL_NAME=Music
 RHAPSOD_DATA_DIR=/var/lib/rhapsod
-RHAPSOD_YTDLP_PATH=/usr/local/bin/yt-dlp
-RHAPSOD_YTDLP_COOKIES_PATH=
-RHAPSOD_FFMPEG_PATH=/usr/bin/ffmpeg
+RHAPSOD_PANEL_ENABLED=true
+RHAPSOD_PANEL_HOST=127.0.0.1
+RHAPSOD_PANEL_PASSWORD=replace-with-a-unique-password
+RHAPSOD_ENV_FILE=/etc/rhapsod.env
 ```
 
-`RHAPSOD_TS3_PASSWORD` is the optional server password. Use
-`RHAPSOD_TS3_CHANNEL_PASSWORD` only when the target channel is protected.
-
-Spotify track links in `!play` are optional. Create an app at
-<https://developer.spotify.com/dashboard> (Web API access; any HTTPS redirect
-URI works, it is never used), then set:
-
-```dotenv
-RHAPSOD_SPOTIFY_CLIENT_ID=
-RHAPSOD_SPOTIFY_CLIENT_SECRET=
-```
-
-The bot uses the client credentials flow only: no user login, no user data.
-When these variables are missing, Spotify links fail with a clear message.
+Persist the whole data directory, including `ts3-identity.txt`, `state.json`, playlists, preferences, listening history and caches. Keep environment files, identities and cookies out of Git. Spotify credentials enable metadata lookups; an optional refresh token enables authenticated playlist metadata reads.
 
 ## systemd
 
-Rhapsod runs as two systemd services: the bot itself and a persistent yt-dlp
-daemon that resolves YouTube audio URLs fast (a single warm `YoutubeDL` process
-instead of a per-call Python startup). The repo ships the unit files under
-`deploy/systemd/` (`rhapsod.service`, `rhapsod-ytdlp-daemon.service`,
-`bgutil-pot-provider.service`); `install.sh` writes them to
-`/etc/systemd/system/` during setup.
+The installer creates units appropriate to its paths. Manual-install examples live in `deploy/systemd/`; inspect their `User`, `WorkingDirectory`, executable and dependency paths before copying them. The bot unit requires the optional daemon by default; remove that dependency if using only executable fallback.
 
-The daemon needs the `yt-dlp[default]` Python package installed into its
-`PYTHONPATH` (installed by `install.sh` into `~/ytdlp-deps`). It listens on
-`127.0.0.1:8765` and reads the bot's cookies file, so the bot can reach it via
-`RHAPSOD_YTDLP_DAEMON_URL=http://127.0.0.1:8765`.
-
-Example production bot unit (adjust the environment values for your server):
+For `/etc/rhapsod.env`, add an override with `sudo systemctl edit rhapsod`:
 
 ```ini
-[Unit]
-Description=Rhapsod TeamSpeak music bot
-After=network-online.target rhapsod-ytdlp-daemon.service
-Wants=network-online.target
-Requires=rhapsod-ytdlp-daemon.service
-
 [Service]
-Environment=RHAPSOD_TS3_HOST=voice.example.com
-Environment=RHAPSOD_TS3_PORT=9987
-Environment=RHAPSOD_TS3_NICKNAME=Rhapsod
-Environment=RHAPSOD_TS3_CLIENT_DESCRIPTION=Rhapsod - [url=https://github.com/Juanzaan/rhapsod]github.com/Juanzaan/rhapsod[/url]
-Environment=RHAPSOD_DATA_DIR=/var/lib/rhapsod
-Environment=RHAPSOD_YTDLP_PATH=/usr/local/bin/yt-dlp
-Environment=RHAPSOD_YTDLP_COOKIES_PATH=/home/rhapsod/youtube-cookies.txt
-Environment=RHAPSOD_YTDLP_DAEMON_URL=http://127.0.0.1:8765
-Environment=RHAPSOD_FFMPEG_PATH=/usr/bin/ffmpeg
-Environment=RHAPSOD_SPOTIFY_CLIENT_ID=
-Environment=RHAPSOD_SPOTIFY_CLIENT_SECRET=
-Type=simple
-User=rhapsod
-WorkingDirectory=/home/rhapsod/rhapsod
-ExecStart=/usr/bin/node dist/main.js
-Restart=on-failure
-RestartSec=5
-TimeoutStopSec=15
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=full
-MemoryMax=512M
-MemorySwapMax=1G
-
-[Install]
-WantedBy=multi-user.target
+EnvironmentFile=/etc/rhapsod.env
+ReadWritePaths=/etc/rhapsod.env
 ```
 
-Example daemon unit (shipped as `deploy/systemd/rhapsod-ytdlp-daemon.service`):
-
-```ini
-[Unit]
-Description=Rhapsod yt-dlp audio resolution daemon
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-User=rhapsod
-ExecStart=/usr/bin/python3 /home/rhapsod/rhapsod/scripts/yt-dlp-daemon.py
-Environment=PYTHONPATH=/home/rhapsod/ytdlp-deps
-Environment=RHAPSOD_YTDLP_COOKIES_PATH=/home/rhapsod/youtube-cookies.txt
-Restart=on-failure
-RestartSec=5
-RuntimeMaxSec=86400
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-# read-only, not true: the daemon's script, PYTHONPATH deps and cookies all
-# live under /home, and ProtectHome=true makes them invisible to it.
-ProtectHome=read-only
-MemoryHigh=512M
-MemoryMax=768M
-MemorySwapMax=0
-TasksMax=64
-
-[Install]
-WantedBy=multi-user.target
-```
-
-`RHAPSOD_TS3_CLIENT_DESCRIPTION` sets the bot's client description, which
-any client can set for itself — no server permissions required. BBCode is
-allowed (e.g. `[url=...]...[/url]`). `RHAPSOD_DATA_DIR` persists the TS3
-identity: give the unit a matching `StateDirectory=rhapsod` (and
-`Environment=RHAPSOD_DATA_DIR=/var/lib/rhapsod`) so the identity survives
-restarts.
-
-Rhapsod also loads a `.env` file from its working directory (`dotenv/config`),
-so non-secret runtime config can live there. Secrets such as the Spotify
-credentials and the yt-dlp cookies file must not be committed.
+The service user needs write permission on that file for panel edits. Use `RestartPreventExitStatus=42` so duplicate-instance rejection does not cause a restart loop. Confirm `ExecStart` uses the path reported by `command -v node`.
 
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl enable --now rhapsod-ytdlp-daemon rhapsod
-journalctl -u rhapsod -f
+journalctl -u rhapsod -n 100 --no-pager
 ```
+
+The daemon uses `scripts/yt-dlp-daemon.py`, Python's `yt-dlp[default]` package and optional extraction plugins. Its default address is `127.0.0.1:8765`; set `RHAPSOD_YTDLP_DAEMON_URL=http://127.0.0.1:8765`. It falls back to the executable when unavailable. Set `RHAPSOD_MAX_CONCURRENT_YTDLP_JOBS` to 1-4 only when overriding the CPU-adaptive default.
+
+## Panel access and idle check
+
+```bash
+ssh -N -L 8080:127.0.0.1:8080 user@host
+```
+
+Open `http://127.0.0.1:8080`. Before a restart, query the authenticated state endpoint from the host or through the tunnel; curl prompts for the password:
+
+```bash
+curl --fail --user admin http://127.0.0.1:8080/api/state
+```
+
+Wait for `playerState` to be `idle`. Paused and buffering sessions also represent active use. If the panel is disabled, coordinate an idle window with channel users and check `!np`.
+
+## Backup, update and rollback
+
+Record the current commit with `git rev-parse HEAD`. During an idle maintenance window, stop the bot and archive the actual data and configuration paths so the backup is consistent:
+
+```bash
+sudo systemctl stop rhapsod
+sudo tar -czf /root/rhapsod-backup.tar.gz /var/lib/rhapsod /etc/rhapsod.env
+```
+
+For installer layouts, use `/home/rhapsod/rhapsod/data`, `/home/rhapsod/rhapsod/.env` and the configured cookie file instead. Store backups privately.
+
+For a tagged installation, replace `<release-tag>` with the selected published tag:
+
+```bash
+git fetch --tags origin
+git checkout --detach <release-tag>
+npm ci
+npm run build
+sudo systemctl restart rhapsod-ytdlp-daemon rhapsod
+```
+
+For a deployment already tracking `main`, use `git pull --ff-only` instead of the checkout. Review the release notes first, particularly when crossing a major version. Do not use the installer as the routine update mechanism.
+
+Verify `systemctl is-active rhapsod`, the panel version, a test track, queue advancement and saved preferences. Inspect `journalctl -u rhapsod -n 100 --no-pager` for errors. To roll back, stop while idle, check out the recorded commit, run `npm ci` and `npm run build`, restore the matching backup if a data migration requires it, and restart.
+
+## Docker Compose (Linux)
+
+The Compose file starts separate bot and yt-dlp containers using Linux host networking. Both services bind to localhost; no panel port is published. This layout also lets the bot reach a TeamSpeak server or optional extraction services on the host.
+
+Prepare `.env` and set container paths:
+
+```dotenv
+RHAPSOD_DATA_DIR=/app/data
+RHAPSOD_YTDLP_PATH=yt-dlp
+RHAPSOD_FFMPEG_PATH=/usr/bin/ffmpeg
+RHAPSOD_FFPROBE_PATH=/usr/bin/ffprobe
+RHAPSOD_YTDLP_COOKIES_PATH=/app/data/youtube-cookies.txt
+```
+
+Create `data/` and place a cookie file there if required. The bot mounts data read/write; the daemon reads it read-only. `.env` is mounted for panel edits; recreate containers after changing environment values because Compose injects them at container creation. Optional WARP/POT services are configured separately on the host.
+
+```bash
+docker compose config --quiet
+docker compose up -d --build
+docker compose logs --tail=100 rhapsod ytdlp
+```
+
+For updates, check idle state, back up data, fetch the chosen source revision and run `docker compose up -d --build --force-recreate`. The image installs Python dependencies in a virtual environment and excludes development npm packages from runtime.
 
 ## Multiple instances
 
-One host can run several bots (different servers, channels or nicknames) as
-isolated processes sharing a single yt-dlp daemon. Each instance needs its own
-identity, state and panel port, so set `RHAPSOD_INSTANCE_ID`: every persistent
-path (identity, `state.json`, playlists, telemetry, favorites, caches, logs)
-moves under `data/instances/<id>/`. Without the variable the historical
-single-instance layout is used unchanged.
-
-The repo ships a template unit, `deploy/systemd/rhapsod@.service`, wired for
-this: copy it to `/etc/systemd/system/`, write one env file per instance, and
-enable each one with a distinct panel port:
+`RHAPSOD_INSTANCE_ID=blue` moves persistent files under `<RHAPSOD_DATA_DIR>/instances/blue/`. Each process needs a unique ID, TeamSpeak identity and panel port. Do not point two processes at the same instance directory.
 
 ```bash
 sudo cp deploy/systemd/rhapsod@.service /etc/systemd/system/
-# /etc/rhapsod-blue.env: RHAPSOD_TS3_NICKNAME=..., RHAPSOD_PANEL_PORT=8081, ...
-# (no RHAPSOD_INSTANCE_ID needed there; the unit sets it from its name)
+sudo systemctl daemon-reload
 sudo systemctl enable --now rhapsod@blue
-journalctl -u rhapsod@blue -f
 ```
 
-Two instances must never share an instance id: the second process would read
-and write the same state files. The duplicate-instance guard still applies per
-connection (exit 42 when the nickname or identity is already online).
-
-The process handles `SIGINT` and `SIGTERM` by disconnecting from TeamSpeak
-cleanly. After a runtime disconnect or kick, it retries at most five times,
-with a five-second delay, then flushes its state and exits. `TimeoutStopSec=15`
-gives the shutdown sequence room; `Restart=on-failure` recovers crashes without
-restarting after the intentional reconnect-limit shutdown. On
-resource-constrained VMs, keep the `MemoryMax=` / `MemorySwapMax=` limits (see
-issue #8) and watch journald logs for `underruns` / `rebufferEvents`.
+Create `/etc/rhapsod-blue.env` first and inspect the template paths. The template sets the instance ID from its unit name. Several instances may share one daemon. A duplicate nickname or identity at initial connection causes exit code 42; inspect logs before starting again.

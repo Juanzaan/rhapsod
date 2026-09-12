@@ -8,6 +8,7 @@ import {
   renderSetupWizard,
 } from "../src/panel/panel-templates.js";
 import type { PanelStatus } from "../src/panel/panel-server.js";
+import { AMBIENCE_JS } from "../src/panel/dashboard-design.js";
 
 function render(status: Partial<PanelStatus> = {}): string {
   return renderDashboard(
@@ -18,6 +19,74 @@ function render(status: Partial<PanelStatus> = {}): string {
 }
 
 describe("renderDashboard console", () => {
+  it("persists scene choices and pauses animation for reduced motion or hidden tabs", () => {
+    const values = new Map<string, string>();
+    const attrs = new Map<string, string>();
+    let reduced = false;
+    const button = {
+      textContent: "",
+      disabled: false,
+      setAttribute: (key: string, value: string) => attrs.set(key, value),
+    };
+    const scene = { value: "" };
+    const document = {
+      hidden: false,
+      documentElement: {
+        setAttribute: (key: string, value: string) => attrs.set(key, value),
+      },
+      getElementById: (id: string) =>
+        id === "motionToggle"
+          ? button
+          : id === "scene"
+            ? scene
+            : {
+                setAttribute: (key: string, value: string) =>
+                  attrs.set(key, value),
+              },
+      addEventListener: () => {},
+    };
+    const window = {
+      localStorage: {
+        getItem: (key: string) => values.get(key),
+        setItem: (key: string, value: string) => values.set(key, value),
+      },
+      matchMedia: () => ({ matches: reduced }),
+    };
+    // Generated browser code is exercised with controlled storage and motion preferences.
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval
+    const factory = new Function(
+      "window",
+      "document",
+      `${AMBIENCE_JS};return {initAmbience,setScene,toggleMotion,applyMotion};`,
+    ) as (
+      window: unknown,
+      document: unknown,
+    ) => {
+      initAmbience(): void;
+      setScene(value: string): void;
+      toggleMotion(): void;
+      applyMotion(): void;
+    };
+    const api = factory(window, document);
+    api.initAmbience();
+    api.setScene("ocean");
+    expect(values.get("rhapsod.scene")).toBe("ocean");
+    api.toggleMotion();
+    expect(attrs.get("data-motion")).toBe("paused");
+    api.toggleMotion();
+    expect(attrs.get("data-motion")).toBe("running");
+    reduced = true;
+    api.applyMotion();
+    expect(button.disabled).toBe(true);
+    expect(attrs.get("data-motion")).toBe("paused");
+    reduced = false;
+    document.hidden = true;
+    api.applyMotion();
+    expect(attrs.get("data-motion")).toBe("paused");
+    api.setScene("unexpected");
+    expect(scene.value).toBe("aurora");
+  });
+
   it("renders program deck controls", () => {
     const html = render({
       currentTitle: "Song",
