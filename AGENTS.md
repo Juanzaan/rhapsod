@@ -5,7 +5,7 @@ Guidance for AI agents (and humans) working in this repository.
 ## What this is
 
 Rhapsod is a self-hosted music bot for TeamSpeak 3 (TS6 planned). TypeScript,
-Node >= 22.12, ESM throughout. Voice: TS3 query + Opus via libopus-wasm;
+Node >= 22.19, ESM throughout. Voice: TS3 query + Opus via libopus-wasm;
 playback: FFmpeg; sources: YouTube (yt-dlp + innertube), SoundCloud, Spotify
 (metadata only, never playback); owner surface: Hono web panel bound to
 localhost.
@@ -17,8 +17,9 @@ npm run check
 ```
 
 Runs, in order: `format:check` (prettier) → `lint` (eslint, zero warnings
-allowed) → `lint:scripts` (custom checker for shell/systemd files) →
-`typecheck` (tsc --noEmit) → `test` (vitest, ~790 tests) → `build`
+allowed) → `lint:scripts` (scripts/systemd validation) →
+`lint:docs` (language pairs, links, release notes) →
+`typecheck` (tsc --noEmit) → `test` (vitest) → `build`
 (tsc -p tsconfig.build.json).
 
 **Never report work done without this passing.** CI runs the same gates plus
@@ -105,9 +106,8 @@ docs/              install, deployment, commands, roadmap, runbooks
 
 ## Things that will bite you
 
-- `src/application/youtube-playback-service.ts` is ~2k lines and everything
-  playback-related routes through it. Changes there need the full suite, not
-  a subset.
+- Playback intake routes through `src/application/youtube-playback-service.ts`;
+  transport lives in `playback-controller.ts`. Changes need the full suite.
 - `src/adapters/ts3/` is at ~68% coverage (was ~38%; pinned behind a mocked
   client in #40). Recurring production bugs
   (reconnect, talk power) live here. Test before you trust.
@@ -128,6 +128,11 @@ commits on `main` accumulate in the open release PR; merging it tags and
 publishes. Manual tags/changelog edits are not needed, and
 `skip-changelog: true` in `release-please-config.json` means the CHANGELOG is
 hand-written in the release PR, not generated.
+
+Archive reviewed English/Spanish notes under `docs/releases/vX.Y.Z*.md` and
+append the release chain to `docs/releases/index.json` in the release PR.
+The workflow publishes them with `scripts/release-notes.mjs`; see
+`docs/releases.md`. Unknown tags fail instead of using unrelated notes.
 
 Deploy: production runs from `main` on OCI via systemd
 (`EnvironmentFile=/etc/rhapsod.env`, `ExecStart=node dist/main.js`). Deploy =

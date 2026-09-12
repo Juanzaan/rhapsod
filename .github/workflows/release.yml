@@ -12,6 +12,18 @@ jobs:
   release-please:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v7
       - uses: googleapis/release-please-action@v5
+        id: release
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-node@v7
+        if: steps.release.outputs.release_created == 'true'
+        with:
+          node-version: 22
+      - name: Publish reviewed bilingual notes
+        if: steps.release.outputs.release_created == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag_name }}
+        run: node scripts/release-notes.mjs sync "$RELEASE_TAG"

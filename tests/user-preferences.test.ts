@@ -35,6 +35,33 @@ function makeTrack(
 }
 
 describe("UserPreferences", () => {
+  it("preserves unread preferences when shutdown flushes the store", async () => {
+    const file = makeTempFile();
+    const original = new UserPreferences(file);
+    original.addFavorite("uid-1", makeTrack("a"));
+    original.setPreferredSource("uid-1", "soundcloud");
+    await original.flush();
+
+    await new UserPreferences(file).flush();
+
+    const reloaded = new UserPreferences(file);
+    expect(reloaded.listFavorites("uid-1").map((track) => track.id)).toEqual([
+      "a",
+    ]);
+    expect(reloaded.getPreferredSource("uid-1")).toBe("soundcloud");
+  });
+
+  it.each([0, -1, 1.5, NaN, Infinity])(
+    "ignores invalid favorite position %s",
+    async (position) => {
+      const prefs = new UserPreferences(makeTempFile());
+      prefs.addFavorite("uid-1", makeTrack("a"));
+      expect(prefs.removeFavorite("uid-1", position)).toBeUndefined();
+      expect(prefs.listFavorites("uid-1")).toHaveLength(1);
+      await prefs.flush();
+    },
+  );
+
   it("adds and lists favorites per user", () => {
     const prefs = new UserPreferences(makeTempFile());
     prefs.addFavorite("uid-1", makeTrack("a"));

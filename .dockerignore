@@ -1,0 +1,9 @@
+.git
+.env
+.env.*
+!.env.example
+data
+cookies.txt
+node_modules
+dist
+coverage

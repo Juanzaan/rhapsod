@@ -1,5 +1,7 @@
 # TS3 Music Bot Research
 
+[Español](research-ts3-bots.es.md)
+
 This document records reusable design ideas found in active TeamSpeak 3 music
 bot projects. It is a reference for Rhapsod, not a code-copying plan.
 
@@ -23,9 +25,8 @@ bot projects. It is a reference for Rhapsod, not a code-copying plan.
   Shipped: the driver tracks them independently with generation guards.
 - Add `previous`/history and shuffle only after deterministic queue tests exist.
   Shipped: `!previous`, `!history`, `!shuffle` with queue tests.
-- Add command permissions before exposing destructive commands such as `!stop`,
-  `!clear`, or a future `!exit`. Shipped: `RHAPSOD_ADMIN_UIDS` gates
-  destructive and admin commands.
+- Define command permissions explicitly. `RHAPSOD_ADMIN_UIDS` gates admin
+  commands and overriding track ownership; `!stop` and `!clear` are shared.
 - Keep provider extraction behind the existing resolver boundary. Spotify links
   should resolve metadata to a playable YouTube candidate; Spotify does not
   provide a raw audio URL for this use case. Shipped and unchanged.
@@ -45,8 +46,8 @@ bot projects. It is a reference for Rhapsod, not a code-copying plan.
 
 ### Features deliberately deferred
 
-- Spotify/SoundCloud/Bandcamp adapters require provider-specific policies and
-  tests; they should not be added by copying GPL/OSL implementation code.
+- Bandcamp support requires provider-specific policies and tests. Spotify
+  metadata and SoundCloud adapters already exist.
 - A full plugin system, desktop-player integration, and a large command DSL add
   complexity before the TS3 audio path is operationally hardened.
 

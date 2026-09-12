@@ -17,21 +17,34 @@ function checkMjs(file) {
 }
 
 function checkPython(file) {
-  try {
-    execFileSync("python3", ["-m", "py_compile", file], { stdio: "pipe" });
-    console.log(`ok   ${file}`);
-  } catch (error) {
-    const stderr = String(error.stderr ?? "");
-    const unavailable =
-      error.code === "ENOENT" || /Microsoft Store|not recognized/i.test(stderr);
-    if (unavailable) {
-      console.log(`skip ${file} (python3 not available)`);
+  for (const executable of ["python3", "python"]) {
+    try {
+      execFileSync(
+        executable,
+        [
+          "-c",
+          "import ast, pathlib, sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))",
+          file,
+        ],
+        { stdio: "pipe" },
+      );
+      console.log(`ok   ${file}`);
+      return;
+    } catch (error) {
+      const stderr = String(error.stderr ?? "");
+      const unavailable =
+        error.code === "ENOENT" ||
+        /Microsoft Store|not recognized/i.test(stderr);
+      if (unavailable) {
+        continue;
+      }
+      failures.push(file);
+      console.error(`FAIL ${file}`);
+      if (error.stderr) process.stderr.write(stderr);
       return;
     }
-    failures.push(file);
-    console.error(`FAIL ${file}`);
-    if (error.stderr) process.stderr.write(stderr);
   }
+  console.log(`skip ${file} (Python not available)`);
 }
 
 for (const entry of readdirSync(scriptDir)) {

@@ -10,20 +10,19 @@ RUN npm run build
 
 FROM node:22-bookworm-slim AS runtime
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends python3 python3-pip ffmpeg curl \
+  && apt-get install -y --no-install-recommends python3 python3-venv ffmpeg \
   && rm -rf /var/lib/apt/lists/*
 # yt-dlp for the daemon's PYTHONPATH (the pip extra pulls requests/certifi).
-RUN python3 -m pip install --no-cache-dir "yt-dlp[default]"
-# Standalone yt-dlp binary for the bot's spawn path.
-RUN curl -fL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux \
-  -o /usr/local/bin/yt-dlp \
-  && chmod 0755 /usr/local/bin/yt-dlp
+RUN python3 -m venv /opt/ytdlp \
+  && /opt/ytdlp/bin/pip install --no-cache-dir "yt-dlp[default]"
+ENV PATH="/opt/ytdlp/bin:${PATH}"
 
 WORKDIR /app
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/node_modules ./node_modules
-COPY package.json ./
+COPY package.json package-lock.json ./
 COPY scripts ./scripts
+RUN npm prune --omit=dev
 ENV NODE_ENV=production
 
 EXPOSE 8080

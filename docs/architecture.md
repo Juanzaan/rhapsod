@@ -1,85 +1,52 @@
 # Architecture
 
-Rhapsod separates music playback from the voice protocol so TeamSpeak 6 can be
-added without replacing the application core.
+[Español](architecture.es.md)
+
+Rhapsod is a Node.js ESM application. `src/main.ts` assembles configuration, persistence, providers, playback, commands, the TeamSpeak adapter and the optional Hono panel.
 
 ```text
-TeamSpeak chat
-      |
-Command parser and rate limiter
-      |
-Application services (queue, playback, resolution)
-      |                        |
-Media resolvers          FFmpeg PCM pipeline
-(YouTube / SoundCloud /  (audio URL -> PCM frames)
- Spotify / SongLink)            |
-      |                          |
-      +---------- Opus encoder --+
-                 |
-           Frame scheduler
-                 |
-        TeamSpeak 3 voice adapter
+TeamSpeak chat / local panel
+             |
+Command registry, permissions and rate limits
+             |
+Playback service -> TrackQueue -> PlaybackController
+             |                         |
+Media providers -> PreparedAudioStore -> FFmpeg PCM
+                                       |
+                              Opus / frame scheduler
+                                       |
+                              TeamSpeak voice adapter
 ```
 
 ## Boundaries
 
-- `src/domain` contains deterministic business rules (queue and track models)
-  with no external dependencies.
-- `src/adapters` contains the TeamSpeak 3 voice/chat adapter, including the
-  client identity store.
-- `src/application` wires the playback service: queue, resolution pipeline,
-  fallbacks, and timing metrics.
-- `src/audio` contains the FFmpeg PCM pipeline, the Opus encoder, the frame
-  scheduler, and the audio player.
-- `src/media` contains the resolvers (YouTube via yt-dlp, SoundCloud, Spotify),
-  the search ranking, the SongLink alternative-source client, and the media
-  input parser.
-- `src/commands` contains the chat command parser and rate limiter.
-- Secrets are read from environment variables and never persisted by Rhapsod.
+- `src/application/`: intake, queue ownership, playback controller, staleness epochs, prepared URLs, playlists, preferences and listening history.
+- `src/audio/`: FFmpeg processes, PCM buffering, loudness profiles, effects, Opus encoding and frame scheduling.
+- `src/media/`: provider metadata, URL resolution, searches, ranking, radio and lyrics.
+- `src/adapters/ts3/`: voice connection, reconnection, talk power, identity and probes.
+- `src/commands/`: command metadata, handlers, permissions and chat responses.
+- `src/panel/`: authenticated localhost HTTP endpoints, templates and environment-file editing.
+- `src/observability/`: structured logs, playback metrics and sanitized errors.
+- `src/config.ts`: runtime schema and default settings.
 
-## Media inputs
+## Playback and providers
 
-The input parser recognizes local files, direct HTTP(S) media URLs, YouTube
-videos and playlists, SoundCloud tracks, and Spotify tracks/albums/playlists.
-Provider-specific resolution is a separate step. A Spotify URL is metadata, not
-an audio stream: the official Spotify Web API does not grant raw audio access.
-The Spotify provider resolves track metadata through the client credentials
-flow (no user login) and searches YouTube for the matching "artist title"
-audio source. Direct Spotify playback would require a separately licensed
-Connect/librespot backend.
+Metadata is resolved at intake; temporary stream URLs are prepared near playback. `PreparedAudioStore` deduplicates lookups and manages expiry and cancellation. `PlaybackEpoch` invalidates stale asynchronous work after transport actions. `PlaybackController` serializes advancement and bounds resolution time.
 
-## TeamSpeak 3
+YouTube uses Innertube and yt-dlp paths, optionally through a persistent Python daemon. SoundCloud uses its public web interface with fallback resolution. Spotify supplies metadata only; SongLink maps supported music-service links to available sources. Direct audio accepts public HTTPS inputs. Outbound checks reject private addresses and pin hostname resolution at connection time.
 
-ServerQuery can administer a server and receive events, but it cannot transmit
-voice. The TS3 adapter therefore uses a headless voice client,
-`@honeybbq/teamspeak-client`, with a thin adapter (`src/adapters/ts3`) that
-exposes only the connection contract the application needs.
+FFmpeg produces 48 kHz stereo PCM. Opus encodes 20 ms frames within the 497-byte audio payload budget; the TS3 wire codec is Opus Music (5). The scheduler uses monotonic deadlines and sends silence during underruns. Prewarm prepares the next FFmpeg stream and loudness profile before handoff.
 
-Rhapsod sends 48 kHz stereo PCM in 20 ms frames through Opus Music (codec 5).
-The encoder enforces the 500-byte TS3 packet budget before the adapter sends a
-frame, and the scheduler uses monotonic absolute deadlines to avoid drift. The
-player begins with a short PCM prebuffer and keeps the frame flow alive during
-underruns by sending silence frames, recovering as soon as real audio is
-available. Playback metrics include the delay until the first real audio frame
-and whether the session completed, was skipped, was stopped, or failed.
+## Persistence and personalization
 
-Media resolver jobs run with bounded concurrency (1-4 workers via
-`RHAPSOD_MAX_CONCURRENT_YTDLP_JOBS`, CPU-adaptive default) so CPU-heavy
-`yt-dlp` processes stay off the real-time audio path. Playback URL jobs take
-priority over metadata jobs that are still waiting in the resolver queue.
+State lives under `RHAPSOD_DATA_DIR`, optionally namespaced by `RHAPSOD_INSTANCE_ID`. JSON stores use temporary-file replacement and serialized or debounced writes. Shutdown waits for pending writes. Read-only or unused stores must not overwrite existing data during shutdown.
 
-SoundCloud uses an isolated public-web adapter. It follows `on.soundcloud.com`
-redirects, discovers and caches the current web client identifier, resolves
-authorized transcodings, and refreshes the identifier after an API `401`. The
-adapter is unofficial and may change with SoundCloud's frontend, so `yt-dlp`
-remains a fallback. When either provider reports DRM or a blocked track, the
-optional SongLink adapter looks for a YouTube alternative, and a final
-metadata-based YouTube search is used as a controlled fallback. Rhapsod never
-tries to bypass DRM and rejects the track when no authorized source is
-available.
+Listening history supplies per-user and global statistics and autoplay ranking signals. Session weighting expires after inactivity; older plays decay. Track-history limits apply in memory and on disk. Title-derived energy is a ranking heuristic, not audio analysis.
 
-## Compatibility
+## Owner surface
 
-TS3-specific packet and identity details must remain inside its adapter. The
-queue, playback service, media resolution, commands, and persistence cannot
-import TS3 implementation types.
+The panel remains bound to `127.0.0.1` behind basic authentication and is reached through SSH. It edits only permitted settings and writes cookie files locally when requested. Secrets therefore exist in local runtime files; logs and API summaries must redact them. Panel-only setup mode does not connect the bot to TeamSpeak.
+
+## Verification and extension
+
+Run `npm run check` and `npm run test:coverage`. Provider and TeamSpeak tests use controlled substitutes; live audio and deployment checks remain necessary in the target environment. TeamSpeak 6 is planned and must preserve the application-facing connection contract.

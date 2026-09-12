@@ -116,10 +116,14 @@ const ssrfAgent = new Agent({
 });
 
 export const safeFetch: typeof fetch = (input, init): Promise<Response> => {
+  // Node 22 and the standalone Undici release expose different FormData types.
+  // This boundary accepts web fetch inputs; the guarded dispatcher stays private.
   return undiciFetch(
     input as Parameters<typeof undiciFetch>[0],
-    init === undefined
-      ? { dispatcher: ssrfAgent, redirect: "manual" }
-      : { ...init, dispatcher: ssrfAgent, redirect: init.redirect ?? "manual" },
-  );
+    {
+      ...init,
+      dispatcher: ssrfAgent,
+      redirect: init?.redirect ?? "manual",
+    } as Parameters<typeof undiciFetch>[1],
+  ) as unknown as Promise<Response>;
 };

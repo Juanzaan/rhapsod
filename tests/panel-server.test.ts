@@ -692,6 +692,7 @@ describe("panel-server", () => {
         const csp = res.headers.get("content-security-policy") ?? "";
         expect(csp).toContain("frame-ancestors 'none'");
         expect(csp).toContain("default-src 'none'");
+        await res.text();
       }
     } finally {
       await state.close();

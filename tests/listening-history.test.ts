@@ -20,6 +20,39 @@ afterEach(() => {
 });
 
 describe("ListeningHistory", () => {
+  it("preserves unread history when shutdown flushes the store", async () => {
+    const file = makeTempFile();
+    const original = new ListeningHistory(file);
+    original.recordStart("uid-1", { id: "a", title: "Artist - Track" });
+    original.recordFinish("uid-1", { id: "a", title: "Artist - Track" }, true);
+    await original.flush();
+
+    await new ListeningHistory(file).flush();
+
+    const reloaded = new ListeningHistory(file);
+    expect(reloaded.userSummary("uid-1")).toMatchObject({
+      plays: 1,
+      completes: 1,
+    });
+    expect(reloaded.topTracks(5)).toHaveLength(1);
+  });
+
+  it("expires the session boost after inactivity", async () => {
+    vi.useFakeTimers();
+    const history = new ListeningHistory(makeTempFile());
+    try {
+      vi.setSystemTime(new Date("2026-01-01T20:00:00Z"));
+      history.recordStart("uid-1", { id: "a", title: "Artist - Track" });
+      vi.setSystemTime(new Date("2026-01-06T20:00:00Z"));
+      expect(
+        history.tasteProfile("uid-1").artistScores.get("artist"),
+      ).toBeCloseTo(0.5);
+    } finally {
+      vi.useRealTimers();
+      await history.flush();
+    }
+  });
+
   it("counts plays, completes and skips per user", () => {
     const history = new ListeningHistory(makeTempFile());
     history.recordStart("uid-1", { id: "a", title: "Duki - Rockstar" });
@@ -155,5 +188,7 @@ describe("ListeningHistory", () => {
     const reloaded = new ListeningHistory(file);
     expect(reloaded.topTracks(10)).toHaveLength(3);
     expect(reloaded.userSummary("uid-1").plays).toBe(2);
+    expect(history.topTracks(10)).toHaveLength(3);
+    expect(history.userSummary("uid-1").plays).toBe(2);
   });
 });
