@@ -333,15 +333,16 @@ export class ListeningHistory {
     const artistScores = new Map<string, number>();
     const tokenScores = new Map<string, number>();
     const plays = this.#users.get(uid)?.plays ?? [];
+    const now = Date.now();
     // Current session: chain backwards while gaps stay under 30 minutes.
     // It dominates so today's taste wins over last week's.
     let sessionStart = plays.length;
     for (let i = plays.length - 1; i >= 0; i--) {
+      if (now - plays[i]!.at > SESSION_GAP_MS && i === plays.length - 1) break;
       sessionStart = i;
       if (i === 0) break;
       if (plays[i]!.at - plays[i - 1]!.at > SESSION_GAP_MS) break;
     }
-    const now = Date.now();
     const add = (trackId: string, weight: number): void => {
       const stats = this.#users.get(uid)?.tracks.get(trackId);
       if (stats?.artist !== undefined) {
@@ -368,7 +369,7 @@ export class ListeningHistory {
   }
 
   async flush(): Promise<void> {
-    await this.#schedulePersist();
+    await this.#writeChain;
   }
 
   #userData(uid: string): StoredUserData {
@@ -387,27 +388,34 @@ export class ListeningHistory {
     if (parsed === undefined) return;
     this.#users = parsed.users;
     this.#global = parsed.global;
+    this.#prune();
   }
 
   #schedulePersist(): Promise<void> {
+    this.#prune();
     const write = this.#writeChain.then(() => this.#persistNow());
     this.#writeChain = write.catch(() => undefined);
     return write;
+  }
+
+  #prune(): void {
+    this.#global = prune(this.#global, this.#maxGlobalTracks);
+    for (const data of this.#users.values()) {
+      data.tracks = prune(data.tracks, this.#maxTracksPerUser);
+    }
   }
 
   async #persistNow(): Promise<void> {
     try {
       await mkdir(dirname(this.#filePath), { recursive: true });
       const data = {
-        global: Object.fromEntries(prune(this.#global, this.#maxGlobalTracks)),
+        global: Object.fromEntries(this.#global),
         users: Object.fromEntries(
           [...this.#users.entries()].map(([uid, data]) => [
             uid,
             {
               plays: data.plays.slice(-MAX_RECENT_PLAYS),
-              tracks: Object.fromEntries(
-                prune(data.tracks, this.#maxTracksPerUser),
-              ),
+              tracks: Object.fromEntries(data.tracks),
             },
           ]),
         ),

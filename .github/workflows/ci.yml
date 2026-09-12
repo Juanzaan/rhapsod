@@ -32,6 +32,9 @@ jobs:
       - run: npm run format:check
       - run: npm run lint
       - run: npm run lint:scripts
+      - run: npm run lint:docs
+      - name: Validate installer syntax
+        run: bash -n install.sh
       - run: npm run typecheck
       - name: Test with coverage
         run: npm run test:coverage
@@ -42,3 +45,37 @@ jobs:
           name: coverage-report
           path: coverage/
           retention-days: 7
+
+  runtime-compatibility:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        node: [22.19.0, 24]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Validate Compose
+        run: |
+          cp .env.example .env
+          docker compose config --quiet
+      - run: docker build -t rhapsod:ci .
+      - name: Check runtime tools
+        run: |
+          docker run --rm rhapsod:ci node --version
+          docker run --rm rhapsod:ci yt-dlp --version
+          docker run --rm rhapsod:ci python3 -c 'import yt_dlp'
+          docker run --rm rhapsod:ci ffmpeg -version
