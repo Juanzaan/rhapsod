@@ -282,8 +282,41 @@ async function main(): Promise<void> {
     serverSnapshot.setChannels(channelDirectory.snapshot());
   };
   let serverViewMode: ServerViewMode = "partial";
-  const resyncServerView = async (): Promise<void> => {
+  // Voice clients cannot run `channellist`, so the full tree (including
+  // empty channels) is discovered by probing `channelinfo` per cid. A full
+  // scan costs ~4 commands/s against the shared flood budget, so it runs in
+  // the background at startup, on reconnect and every tenth resync; the
+  // minute resync only resolves the channels occupied clients sit in.
+  let discoveryInFlight = false;
+  let resyncCount = 0;
+  const runChannelDiscovery = async (): Promise<void> => {
+    if (discoveryInFlight) return;
+    discoveryInFlight = true;
     try {
+      // TS3 allocates cids increasingly, so max+margin catches new channels.
+      const ceiling = Math.min(
+        1024,
+        Math.max(192, channelDirectory.maxCid() + 32),
+      );
+      const result = await channelDirectory.discover({
+        ceiling,
+        concurrency: 4,
+      });
+      logger.debug(
+        { ceiling: result.ceiling, found: result.found },
+        "TeamSpeak channel discovery finished",
+      );
+    } catch (error) {
+      logger.debug({ err: error }, "TeamSpeak channel discovery failed");
+    } finally {
+      discoveryInFlight = false;
+    }
+  };
+  const resyncServerView = async (
+    options: { full?: boolean } = {},
+  ): Promise<void> => {
+    try {
+      if (options.full) await runChannelDiscovery();
       const clients = await connection.listClients();
       // Map explicitly: uids and groups must never reach the panel payload.
       const mapped = clients.map((client) => ({
@@ -291,23 +324,11 @@ async function main(): Promise<void> {
         name: client.name,
         cid: client.cid,
       }));
-      // Prefer the full channellist when the server allows it; otherwise
-      // resolve only the channels of visible clients via channelinfo.
-      let full: readonly { cid: number; name: string; parentCid?: number }[] =
-        [];
-      try {
-        full = await connection.listChannels();
-      } catch {
-        full = [];
-      }
-      for (const channel of full) {
-        channelDirectory.prime(channel);
-      }
       const cids = [...new Set(mapped.map((client) => client.cid))];
       const visible = await Promise.all(
         cids.map((cid) => channelDirectory.resolve(cid)),
       );
-      const picked = pickChannels(full, visible);
+      const picked = pickChannels(channelDirectory.snapshot(), visible);
       serverViewMode = picked.mode;
       serverSnapshot.fullResync(picked.channels, mapped);
     } catch (error) {
@@ -660,8 +681,11 @@ async function main(): Promise<void> {
   };
   await seedTelemetry();
   await resyncServerView();
+  // The minute view stays cheap; the full scan refreshes in the background.
+  void resyncServerView({ full: true });
   setInterval(() => {
-    void resyncServerView();
+    resyncCount++;
+    void resyncServerView({ full: resyncCount % 10 === 0 });
   }, 60_000).unref();
   const logCurrentChannel = async (reason: string): Promise<void> => {
     const currentChannel = await connection.getCurrentChannel();
@@ -790,6 +814,7 @@ async function main(): Promise<void> {
           );
           logger.info({ attempt }, "Reconnected to TeamSpeak 3");
           await resyncServerView();
+          void resyncServerView({ full: true });
           await logCurrentChannel("reconnect");
           reconnecting = false;
           await checkTalkPower("reconnect");

@@ -462,6 +462,7 @@ describe("renderDashboard console", () => {
         { cid: 3, name: "Sub", parentCid: 2 },
         { cid: 4, name: "[cspacer01]Hub" },
         { cid: 5, name: "<b>x</b>" },
+        { cid: 6, name: "Empty orphan", parentCid: 999 },
       ],
       clients: [
         { clid: 7, name: "Ana", cid: 2 },
@@ -475,6 +476,8 @@ describe("renderDashboard console", () => {
     expect(tree).not.toContain("[cspacer01]");
     expect(tree).not.toContain("<b>x</b>");
     expect(tree).toContain("&lt;b&gt;x&lt;/b&gt;");
+    expect(tree).toContain("Empty orphan");
+    expect(tree).toContain("Vacío");
     expect(tree.indexOf("Music")).toBeLessThan(tree.indexOf("Sub"));
     expect(getEl("ucount").textContent).toBe("3 usuarios");
     expect(tree.match(/onclick="moveBot\(2\)"/)).not.toBeNull();
@@ -485,8 +488,9 @@ describe("renderDashboard console", () => {
     expect(getEl("tree").innerHTML).toContain('style="display:none"');
     api.toggleCh({ stopPropagation: () => {} }, 2);
     expect(getEl("tree").innerHTML).not.toContain('style="display:none"');
-    // Mode hint reflects permission-limited views.
-    expect(getEl("treeHint").textContent).toContain("permisos limitados");
+    // Mode hint reflects the background discovery state.
+    expect(getEl("treeHint").textContent).toContain("Vista parcial");
+    expect(getEl("visibilityNote").textContent).toContain("Vista limitada");
     api.render({
       version: 2,
       botChannelId: 2,
@@ -738,5 +742,29 @@ describe("renderDashboard console", () => {
       Promise.resolve({ json: () => Promise.resolve({}), status: 500 }),
     );
     expect(broken).toContain("http500");
+    const loaded = await runLoad(() =>
+      Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            entries: [
+              {
+                key: "RHAPSOD_PANEL_HOST",
+                value: "<private>",
+                editable: false,
+              },
+              {
+                key: "RHAPSOD_TS3_HOST",
+                value: "voice.example.com",
+                description: "Server <name>",
+                editable: true,
+              },
+            ],
+          }),
+      }),
+    );
+    expect(loaded).toContain("&lt;private&gt;");
+    expect(loaded).toContain("Server &lt;name&gt;");
+    expect(loaded).toContain('id="saveSettings"');
   });
 });

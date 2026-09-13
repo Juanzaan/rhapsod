@@ -6,6 +6,8 @@ Persistence fixes, dependency updates, deployment repairs and consistent bilingu
 
 ## Changes
 
+- Extend the listening-room design to Settings, Commands, Setup and Server; add channel search, empty-channel counts and expand/collapse controls. Fix raw channel-name parsing, missing-parent rendering and settings read-only rendering.
+- Show every visible channel, including empty ones: the server tree is now discovered by probing `channelinfo` per channel id in the background (voice clients cannot run `channellist`), refreshed at startup, on reconnect and every ten minutes.
 - Redesign the dashboard as a responsive listening console with animated local backgrounds, saved motion preferences, radio and autoplay controls, and keyboard seeking.
 - Preserve unread favorites and listening history during shutdown; reject invalid favorite positions.
 - Bound listening-track memory and expire the autoplay session boost after inactivity.
