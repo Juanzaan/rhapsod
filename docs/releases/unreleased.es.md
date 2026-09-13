@@ -6,6 +6,8 @@ Correcciones de persistencia, actualización de dependencias, reparación del de
 
 ## Cambios
 
+- Extensión del diseño a ajustes, comandos, asistente y servidor; búsqueda de canales, recuentos y expansión o contracción. Corrección de nombres de canales, canales sin padre visible y ajustes de solo lectura.
+- Visualización de todos los canales visibles, incluidos los vacíos: el árbol se descubre consultando `channelinfo` por identificador en segundo plano (los clientes de voz no pueden ejecutar `channellist`); se actualiza al iniciar, al reconectar y cada diez minutos.
 - Rediseño del panel con distribución adaptable, fondos animados locales, preferencias de movimiento, controles de radio y reproducción automática y búsqueda de posición con teclado.
 - Conservación de favoritos e historial sin cargar al cerrar; rechazo de posiciones de favoritos no válidas.
 - Límite de pistas en memoria y caducidad del refuerzo de sesión tras inactividad.

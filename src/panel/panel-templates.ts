@@ -1,5 +1,6 @@
 import type { PanelStatus } from "./panel-server.js";
 import { AMBIENCE_JS, DASHBOARD_CSS } from "./dashboard-design.js";
+import { PAGE_CSS } from "./page-design.js";
 
 // Shared ON AIR console chrome: flat zinc backdrop, green signal accents,
 // tabular mono readouts. Every page interpolates this so the whole
@@ -39,7 +40,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .chev{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:4px;color:var(--ft);font-size:.75rem;flex-shrink:0;cursor:pointer}
 .chev:hover{color:var(--tx);background:#1e1e22}
 .chev.closed{transform:rotate(-90deg)}
-.chev.leaf{visibility:hidden}`;
+.chev.leaf{visibility:hidden}
+.channel-move{display:flex;align-items:center;gap:8px;flex:1;min-width:0;text-align:left;background:none;border:0;color:inherit;cursor:pointer}.channel-symbol{color:var(--ft)}
+`;
 
 // Shared server-tree renderer (dashboard card + server page): nested
 // channels ordered like TeamSpeak (channel_order, then name), users,
@@ -59,9 +62,11 @@ function serverTreeHtml(view,opts){
   var cls=(view&&view.clients)||[];
   var bot=(view&&view.botChannelId)||0;
   var byParent={};
+  var ids={};
+  for(var ci=0;ci<chs.length;ci++)ids[chs[ci].cid]=true;
   for(var i=0;i<chs.length;i++){
     var c=chs[i];
-    var p=c.parentCid||0;
+    var p=c.parentCid&&ids[c.parentCid]&&c.parentCid!==c.cid?c.parentCid:0;
     if(!byParent[p])byParent[p]=[];
     byParent[p].push(c);
   }
@@ -87,12 +92,12 @@ function serverTreeHtml(view,opts){
   }
   var seen={};
   var rowHtml=function(ch,us,here,hasKids){
-    var h='<div class="chrow'+(here?' here':'')+'" onclick="moveBot('+ch.cid+')">';
+    var h='<div class="chrow'+(here?' here':'')+'">';
     h+='<div class="chhead">';
     if(interactive){
-      h+='<span class="chev'+(hasKids?(collapsed[ch.cid]?' closed':''):' leaf')+'" onclick="toggleCh(event,'+ch.cid+')">›</span>';
+      h+='<button type="button" class="chev'+(hasKids?(collapsed[ch.cid]?' closed':''):' leaf')+'" aria-label="Mostrar subcanales" aria-expanded="'+(!collapsed[ch.cid])+'" onclick="toggleCh(event,'+ch.cid+')">›</button>';
     }
-    h+='<span class="chnm">'+esc(ch.name)+'</span>'+(here?'<span class="botpill">BOT</span>':'')+'<span class="chct">'+us.length+'</span></div>';
+    h+='<button type="button" class="channel-move" onclick="moveBot('+ch.cid+')" title="Mover el bot a este canal"><span class="channel-symbol" aria-hidden="true">#</span><span class="chnm">'+esc(ch.name)+'</span></button>'+(here?'<span class="botpill">BOT</span>':'')+'<span class="chct">'+(us.length?us.length:'Vacío')+'</span></div>';
     if(us.length>0){
       h+='<ul class="users">';
       for(var u=0;u<us.length;u++){h+='<li>'+esc(us[u].name)+'</li>';}
@@ -121,7 +126,12 @@ function serverTreeHtml(view,opts){
     }
     return out;
   };
-  return {html:walk(0,0),total:total};
+  var html=walk(0,0);
+  for(var remaining=0;remaining<chs.length;remaining++){
+    var orphan=chs[remaining];
+    if(!seen[orphan.cid]){seen[orphan.cid]=true;html+=rowHtml(orphan,byChannel[orphan.cid]||[],orphan.cid===bot,false);html+=walk(orphan.cid,0);}
+  }
+  return {html:html,total:total};
 }`;
 
 function esc(s: string): string {
@@ -188,10 +198,12 @@ export function renderSetupWizard(
     .ft strong{color:var(--tx)}
     .ft span{color:var(--dm)}
     .dv{height:1px;background:var(--ln);margin:1rem 0}
+    ${PAGE_CSS}
   </style>
 </head>
-<body>
-  <div class="w" id="w"></div>
+<body class="setup-page">
+  <nav class="nv"><a class="nb" href="/">RHAPSOD<b>.</b></a><div class="nl"><a class="nk" href="/">Consola</a><a class="nk" href="/server">Servidor</a><a class="nk" href="/settings">Config</a><a class="nk" href="/commands">Comandos</a></div></nav>
+  <main class="setup-shell"><section class="setup-story"><div class="setup-art" aria-hidden="true"><span>r.</span></div><div class="eyebrow">Tu próximo espacio de escucha</div><h1>Conectá.<br>Elegí un tema.<br>Compartilo.</h1><p>Prepará tu servidor, ajustá el sonido y dejá todo listo para escuchar en compañía.</p></section><div class="w" id="w"></div></main>
   <script>
     var A='Basic '+btoa('${cred}');
     var H={authorization:A};
@@ -1011,6 +1023,7 @@ export function renderSettingsPage(
     .f .h{font-size:.75rem;color:var(--ft);margin-top:.15rem}
     .btn{padding:.6rem 1.5rem;background:var(--ac);color:#0b0b0d;border:none;border-radius:6px;font-weight:700;cursor:pointer;font-size:.9rem}
     .btn:active{transform:translateY(1px)}
+    ${PAGE_CSS}
   </style>
 </head>
 <body>
@@ -1023,13 +1036,14 @@ export function renderSettingsPage(
       <a class="nk" href="/commands">Comandos</a>
     </div>
   </nav>
-  <div class="mn" id="ct"><div class="cd"><div class="em">Cargando...</div></div></div>
+  <main class="mn"><header class="page-heading"><div><div class="eyebrow">A tu manera / Configuración</div><h1>Los detalles hacen la sesión.</h1><p>Conexión, sonido y servicios. Los secretos sin modificar se conservan al guardar.</p></div><a href="/setup">Abrir asistente ↗</a></header><div class="settings-grid" id="ct"><div class="cd"><div class="em">Cargando...</div></div></div></main>
   <div class="toast" id="toast"></div>
   <script>
     var A='Basic '+btoa('${cred}');
     var H={authorization:A};
 
     function toast(m){var el=document.getElementById('toast');el.textContent=m;el.classList.add('show');setTimeout(function(){el.classList.remove('show');},3000);}
+    function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
     function load(){
       fetch('/api/env',{headers:H}).then(function(r){
@@ -1058,16 +1072,16 @@ export function renderSettingsPage(
           for(var j=0;j<entries.length;j++){
             var e=entries[j];
             if(e.editable===false){
-              h+='<div class="f"><label>'+e.key+' (solo lectura)</label><div class="h">'+esc(e.value||'')+'</div></div>';
+              h+='<div class="f"><label>'+esc(e.key)+' (solo lectura)</label><div class="h">'+esc(e.value||'')+'</div></div>';
               continue;
             }
             var val=e.masked?'':(e.value||'');
-            var desc=e.description?'<div class="h">'+e.description+'</div>':'';
-            h+='<div class="f"><label>'+e.key+'</label><input data-key="'+e.key+'" value="'+val.replace(/"/g,'&quot;')+'"'+(e.masked?' placeholder="(sin cambios)"':'')+'>'+desc+'</div>';
+            var desc=e.description?'<div class="h">'+esc(e.description)+'</div>':'';
+            h+='<div class="f"><label for="setting-'+esc(e.key)+'">'+esc(e.key)+'</label><input id="setting-'+esc(e.key)+'" data-key="'+esc(e.key)+'" value="'+esc(val)+'"'+(e.masked?' type="password" autocomplete="new-password" placeholder="(sin cambios)"':'')+'>'+desc+'</div>';
           }
           h+='</div>';
         }
-        h+='<button class="btn" onclick="save()">Guardar</button>';
+        h+='<div class="save-bar"><span>Los cambios se aplican al reiniciar el bot.</span><button class="btn" id="saveSettings" onclick="save()">Guardar cambios</button></div>';
         document.getElementById('ct').innerHTML=h;
       }).catch(function(e){loadFailed(e);});
     }
@@ -1085,6 +1099,9 @@ export function renderSettingsPage(
 
     function save(){
       var inputs=document.querySelectorAll('input[data-key]');
+      var button=document.getElementById('saveSettings');
+      if(button&&button.disabled)return;
+      if(button){button.disabled=true;button.textContent='Guardando…';}
       var vals={};
       for(var i=0;i<inputs.length;i++){
         var v=inputs[i].value.trim();
@@ -1096,7 +1113,8 @@ export function renderSettingsPage(
       fetch('/api/env',{method:'PUT',headers:Object.assign({},H,{'content-type':'application/json'}),body:JSON.stringify(vals)})
         .then(function(r){return r.json();})
         .then(function(d){toast(d.ok?'Config guardada':'Error al guardar: '+(d.error||'desconocido'));})
-        .catch(function(){toast('Error de conexion');});
+        .catch(function(){toast('Error de conexion');})
+        .finally(function(){if(button){button.disabled=false;button.textContent='Guardar cambios';}});
     }
 
     load();
@@ -1127,6 +1145,7 @@ export function renderCommandsPage(
     .ca{color:var(--ft);font-size:.8rem;font-family:var(--mn)}
     .cd2{color:var(--dm);font-size:.85rem;margin-top:.15rem}
     .cg{font-size:.65rem;background:#0f0f12;color:var(--dm);border:1px solid var(--ln);padding:.1rem .4rem;border-radius:4px;margin-left:.5rem;letter-spacing:.1em}
+    ${PAGE_CSS}
   </style>
 </head>
 <body>
@@ -1139,22 +1158,24 @@ export function renderCommandsPage(
       <a class="nk a" href="/commands">Comandos</a>
     </div>
   </nav>
-  <div class="mn">
-    <input class="sr" id="sr" placeholder="Buscar comandos..." oninput="filter()">
-    <div id="ls"></div>
-  </div>
+  <main class="mn"><header class="page-heading"><div><div class="eyebrow">La música bajo tu control</div><h1>Un comando. Otra posibilidad.</h1><p>Explorá reproducción, cola y herramientas del bot. Usá estos comandos en el chat de TeamSpeak.</p></div><span class="command-count" id="commandCount"></span></header>
+    <label class="field-label" for="sr">Buscar por nombre, alias o descripción</label><input class="sr" id="sr" placeholder="Probá con play, radio o playlist…" oninput="filter()">
+    <div class="command-grid" id="ls"><div class="cd"><div class="em">Cargando comandos…</div></div></div>
+  </main>
   <script>
     var A='Basic '+btoa('${cred}');
     var H={authorization:A};
     var cmds=[];
     var gn={music:'Reproduccion',queue:'Cola',admin:'Administracion',misc:'Otros'};
+    function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
     function load(){
-      fetch('/api/commands',{headers:H}).then(function(r){return r.json();}).then(function(d){cmds=d.commands;render(cmds);}).catch(function(){});
+      fetch('/api/commands',{headers:H}).then(function(r){if(!r.ok)throw new Error('http');return r.json();}).then(function(d){cmds=d.commands;render(cmds);}).catch(function(){document.getElementById('ls').innerHTML='<div class="cd"><div class="em">No se pudieron cargar los comandos.</div><button class="btn" onclick="load()">Reintentar</button></div>';});
     }
 
     function render(list){
       var el=document.getElementById('ls');
+      document.getElementById('commandCount').textContent=list.length+' comandos';
       if(!list.length){el.innerHTML='<div class="cd"><div class="em">No se encontraron comandos</div></div>';return;}
       var groups={};
       for(var i=0;i<list.length;i++){var c=list[i];if(!groups[c.group])groups[c.group]=[];groups[c.group].push(c);}
@@ -1167,10 +1188,10 @@ export function renderCommandsPage(
         h+='<div class="cd"><div class="ct">'+(gn[g]||g)+'</div>';
         for(var j=0;j<items.length;j++){
           var c=items[j];
-          h+='<div class="ci"><div><span class="cn">!'+c.usage+'</span>'+
-            (c.aliases.length?' <span class="ca">(!'+c.aliases.join(', !')+')</span>':'')+
+          h+='<div class="ci"><div><span class="cn">!'+esc(c.usage)+'</span>'+
+            (c.aliases.length?' <span class="ca">(!'+esc(c.aliases.join(', !'))+')</span>':'')+
             (c.adminOnly?' <span class="cg">admin</span>':'')+
-            '</div><div class="cd2">'+c.summary+'</div></div>';
+            '</div><div class="cd2">'+esc(c.summary)+'</div></div>';
         }
         h+='</div>';
       }
@@ -1178,7 +1199,7 @@ export function renderCommandsPage(
     }
 
     function filter(){
-      var q=document.getElementById('sr').value.toLowerCase();
+      var q=document.getElementById('sr').value.toLowerCase().trim().replace(/^!/, '');
       if(!q){render(cmds);return;}
       render(cmds.filter(function(c){return c.name.indexOf(q)!==-1||c.aliases.some(function(a){return a.indexOf(q)!==-1;})||c.summary.toLowerCase().indexOf(q)!==-1;}));
     }
@@ -1205,6 +1226,7 @@ export function renderServerPage(
     .liveb{font-family:var(--mn);font-size:.62rem;letter-spacing:.22em;padding:.32rem .6rem;border:1px solid #3a3a40;border-radius:4px;color:var(--ft);white-space:nowrap}
     .liveb.on{color:var(--ac);border-color:var(--ac)}
     .liveb.fb{color:var(--ac);border-color:var(--ac)}
+    ${PAGE_CSS}
   </style>
 </head>
 <body>
@@ -1220,13 +1242,15 @@ export function renderServerPage(
       <div class="liveb" id="live">···</div>
     </div>
   </nav>
-  <div class="mn">
-    <div class="cd">
+  <main class="mn"><header class="page-heading"><div><div class="eyebrow">Tu comunidad / TeamSpeak</div><h1>Cada canal tiene su lugar.</h1><p>Explorá el servidor, encontrá a tus amigos y elegí dónde suena Rhapsod.</p></div></header>
+    <div class="server-metrics"><div class="metric"><strong id="channelCount">0</strong><span>Canales conocidos</span></div><div class="metric"><strong id="peopleCount">0</strong><span>Usuarios visibles</span></div><div class="metric"><strong id="emptyCount">0</strong><span>Sin usuarios visibles</span></div></div>
+    <div class="server-layout"><div class="cd">
+      <label class="field-label" for="channelSearch">Buscar un canal o usuario</label><div class="toolbar"><input class="sr" id="channelSearch" placeholder="Nombre del canal o usuario…" oninput="filterChannels()"><button class="btn secondary" onclick="expandChannels(true)">Expandir</button><button class="btn secondary" onclick="expandChannels(false)">Contraer</button></div>
       <div class="ct"><span>Canales</span><span class="rv" id="ucount"></span></div>
       <div id="tree"><div class="em">Conectando…</div></div>
       <div class="em" id="treeHint" style="font-size:.75rem">Click en un canal para mover el bot ahí</div>
-    </div>
-  </div>
+    </div><aside class="cd server-side"><div class="ct">Visibilidad del servidor</div><p class="visibility-note" id="visibilityNote">Consultando los canales disponibles para la identidad del bot.</p><p>Los canales vacíos también aparecen cuando TeamSpeak entrega la lista completa. La visibilidad de usuarios puede depender de las suscripciones del bot.</p><p>El árbol completo se descubre en segundo plano al iniciar y cada diez minutos; una vista limitada significa que el análisis aún no termina o falló. No requiere permisos especiales.</p><button class="btn secondary" onclick="poll()">Actualizar vista</button></aside></div>
+  </main>
   <div class="toast" id="toast"></div>
   <script>${SERVER_TREE_JS}
     var A='Basic '+btoa('${cred}');
@@ -1249,22 +1273,37 @@ export function renderServerPage(
 
     function render(view){
       var box=document.getElementById('tree');
-      var built=serverTreeHtml(view||{},{interactive:true,collapsed:collapsed});
       var chs=(view&&view.channels)||[];
-      if(chs.length===0){box.innerHTML='<div class="em">Sin datos — ¿bot conectado?</div>';return;}
+      lastView=view;
       var total=0;
       var cls=(view&&view.clients)||[];
       for(var j=0;j<cls.length;j++){total++;}
+      document.getElementById('channelCount').textContent=String(chs.length);
+      document.getElementById('peopleCount').textContent=String(total);
+      document.getElementById('emptyCount').textContent=String(chs.filter(function(ch){return !cls.some(function(client){return client.cid===ch.cid;});}).length);
       document.getElementById('ucount').textContent=total+(total===1?' usuario':' usuarios');
-      document.getElementById('treeHint').textContent=(view.mode==='full')
+      document.getElementById('visibilityNote').textContent=view&&view.mode==='full'?'Lista completa, incluidos canales vacíos.':'Vista limitada: el análisis de canales aún no termina o falló. Se muestran canales con usuarios visibles.';
+      document.getElementById('treeHint').textContent=(view&&view.mode==='full')
         ? 'Click en un canal para mover el bot ahí'
-        : 'Solo canales con gente (permisos limitados) · click para mover el bot';
-      lastView=view;
+        : 'Vista parcial: revisá permisos limitados o la conexión · click para mover el bot';
+      if(chs.length===0){box.innerHTML='<div class="em">Sin canales disponibles. Comprobá la conexión del bot.</div>';return;}
+      var query=String(document.getElementById('channelSearch').value||'').trim().toLowerCase();
+      var filtered=chs;
+      if(query){
+        var keep={};var byId={};chs.forEach(function(ch){byId[ch.cid]=ch;});
+        chs.forEach(function(ch){if(ch.name.toLowerCase().indexOf(query)!==-1||cls.some(function(client){return client.cid===ch.cid&&client.name.toLowerCase().indexOf(query)!==-1;})){var current=ch;var path={};while(current&&!path[current.cid]){path[current.cid]=true;keep[current.cid]=true;current=byId[current.parentCid];}}});
+        filtered=chs.filter(function(ch){return keep[ch.cid];});
+      }
+      var built=serverTreeHtml(Object.assign({},view,{channels:filtered}),{interactive:true,collapsed:query?{}:collapsed});
+      if(!filtered.length){box.innerHTML='<div class="em">No hay canales ni usuarios que coincidan.</div>';return;}
       box.innerHTML=built.html;
       var g=gs();
       if(g&&lastV===-1)g.from('#tree .chrow',{y:10,opacity:0,duration:.4,stagger:.03,ease:'power2.out',clearProps:'all'});
       lastV=view.version;
     }
+
+    function filterChannels(){if(lastView)render(lastView);}
+    function expandChannels(expand){collapsed={};if(lastView){if(!expand)(lastView.channels||[]).forEach(function(channel){collapsed[channel.cid]=true;});render(lastView);}}
 
     function toggleCh(e,cid){
       if(e&&e.stopPropagation)e.stopPropagation();
@@ -1280,21 +1319,13 @@ export function renderServerPage(
     }
 
     function poll(){
-      fetch('/api/server',{headers:H}).then(function(r){return r.json();}).then(function(d){render(d);}).catch(function(){});
+      return fetch('/api/server',{headers:H}).then(function(r){if(r.ok===false)throw new Error('http');return r.json();}).then(function(d){render(d);var badge=document.getElementById('live');badge.textContent='EN VIVO';badge.className='liveb on';}).catch(function(){var badge=document.getElementById('live');badge.textContent='SIN CONEXIÓN';badge.className='liveb';});
     }
 
     function live(){
-      var badge=document.getElementById('live');
-      var go=function(){
-        fetch('/api/server',{headers:H}).then(function(r){return r.json();}).then(function(d){
-          badge.textContent='EN VIVO';badge.className='liveb on';
-          render(d);
-        }).catch(function(){
-          badge.textContent='···';badge.className='liveb';
-        });
-      };
-      go();
-      setInterval(go,2500);
+      poll();
+      setInterval(function(){if(!document.hidden)poll();},2500);
+      document.addEventListener('visibilitychange',function(){if(!document.hidden)poll();});
     }
 
     (function init(){

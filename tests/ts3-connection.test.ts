@@ -308,6 +308,26 @@ describe("createTs3Connection messaging", () => {
 });
 
 describe("createTs3Connection queries", () => {
+  it("keeps empty channels from standard raw channel rows", async () => {
+    const m = await ts3Mock();
+    m.listChannels.mockRejectedValueOnce(new Error("lib failed"));
+    m.__client.execCommandWithResponse.mockResolvedValueOnce([
+      {
+        cid: "10",
+        channel_name: "Empty room",
+        pid: "1",
+        channel_order: "0",
+        total_clients: "0",
+      },
+      { cid: "NaN", channel_name: "Invalid" },
+      { cid: "-2", channel_name: "Invalid" },
+    ]);
+    const connection = createTs3Connection(testConfig(), identity, logger);
+    expect(await connection.listChannels()).toEqual([
+      { cid: 10, name: "Empty room", parentCid: 1, order: 0 },
+    ]);
+  });
+
   it("falls back to raw channellist when the library call fails", async () => {
     const m = await ts3Mock();
     m.listChannels.mockRejectedValueOnce(new Error("lib broke"));

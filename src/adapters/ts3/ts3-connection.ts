@@ -85,7 +85,7 @@ export interface Ts3Connection {
   connect(options?: { skipDuplicateCheck?: boolean }): Promise<void>;
   disconnect(): Promise<void>;
   listChannels(): Promise<
-    readonly { cid: number; name: string; parentCid?: number }[]
+    readonly { cid: number; name: string; parentCid?: number; order?: number }[]
   >;
   getCurrentChannel(): Promise<{
     readonly cid: number;
@@ -346,25 +346,28 @@ export function createTs3Connection(
         logger.debug({ err: error }, "listChannels failed, using raw command");
         try {
           const rows = await client.execCommandWithResponse("channellist");
-          return rows
-            .filter(
-              (
-                row,
-              ): row is Record<string, string> & {
-                cid: string;
-                name: string;
-              } => typeof row.cid === "string" && typeof row.name === "string",
+          return rows.flatMap((row) => {
+            const cid = Number(row.cid);
+            const name = row.channel_name ?? row.name;
+            if (
+              !Number.isSafeInteger(cid) ||
+              cid <= 0 ||
+              typeof name !== "string"
             )
-            .map((row) => {
-              const pid = Number(
-                (row as Record<string, string>).pid ?? Number.NaN,
-              );
-              const parentCid =
-                Number.isSafeInteger(pid) && pid > 0 ? pid : undefined;
-              return parentCid === undefined
-                ? { cid: Number(row.cid), name: row.name }
-                : { cid: Number(row.cid), name: row.name, parentCid };
-            });
+              return [];
+            const pid = Number(row.pid);
+            const order = Number(row.channel_order ?? Number.NaN);
+            return [
+              {
+                cid,
+                name,
+                ...(Number.isSafeInteger(pid) && pid > 0
+                  ? { parentCid: pid }
+                  : {}),
+                ...(Number.isSafeInteger(order) && order >= 0 ? { order } : {}),
+              },
+            ];
+          });
         } catch {
           return [];
         }

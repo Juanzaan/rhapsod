@@ -134,4 +134,72 @@ describe("ChannelDirectory", () => {
     );
     expect(await directory.resolve(3)).toEqual({ cid: 3, name: "Solo" });
   });
+
+  it("discovers empty channels the client list never mentions", async () => {
+    // Voice clients cannot run `channellist`; the full tree comes from
+    // probing `channelinfo` per cid, which also answers for empty channels.
+    const existing = new Map([
+      [1, { name: "Lobby" }],
+      [3, { name: "Empty room", parentCid: 1, order: 0 }],
+    ]);
+    const directory = new ChannelDirectory((cid: number) =>
+      Promise.resolve(existing.get(cid)),
+    );
+    const result = await directory.discover({ ceiling: 4, concurrency: 2 });
+    expect(result).toEqual({ ceiling: 4, found: 2 });
+    expect(directory.snapshot()).toEqual([
+      { cid: 1, name: "Lobby" },
+      { cid: 3, name: "Empty room", order: 0, parentCid: 1 },
+    ]);
+    expect(directory.maxCid()).toBe(3);
+  });
+
+  it("evicts deleted channels but keeps entries above the ceiling", async () => {
+    const directory = new ChannelDirectory(() => Promise.resolve(undefined));
+    directory.prime({ cid: 2, name: "Gone" });
+    directory.prime({ cid: 9, name: "Above ceiling" });
+    const result = await directory.discover({ ceiling: 4, concurrency: 2 });
+    expect(result.found).toBe(0);
+    // A scan that finds nothing is a failed scan: keep the cache.
+    expect(directory.snapshot()).toEqual([
+      { cid: 2, name: "Gone" },
+      { cid: 9, name: "Above ceiling" },
+    ]);
+  });
+
+  it("evicts only the probed range on a successful scan", async () => {
+    const directory = new ChannelDirectory((cid: number) =>
+      cid === 1
+        ? Promise.resolve({ name: "Lobby" })
+        : Promise.resolve(undefined),
+    );
+    directory.prime({ cid: 2, name: "Deleted" });
+    directory.prime({ cid: 50, name: "Above ceiling" });
+    const result = await directory.discover({ ceiling: 4, concurrency: 2 });
+    expect(result.found).toBe(1);
+    expect(directory.snapshot()).toEqual([
+      { cid: 1, name: "Lobby" },
+      { cid: 50, name: "Above ceiling" },
+    ]);
+  });
+
+  it("tolerates fetch failures and bounds concurrency", async () => {
+    let inFlight = 0;
+    let peak = 0;
+    const directory = new ChannelDirectory((cid: number) => {
+      inFlight++;
+      peak = Math.max(peak, inFlight);
+      return new Promise((resolve, reject) => {
+        setTimeout(() => {
+          inFlight--;
+          if (cid % 2 === 0) reject(new Error("gone"));
+          else resolve({ name: `Ch${cid}` });
+        }, 5);
+      });
+    });
+    const result = await directory.discover({ ceiling: 6, concurrency: 2 });
+    expect(result.found).toBe(3);
+    expect(peak).toBeLessThanOrEqual(2);
+    expect(directory.snapshot().map((c) => c.cid)).toEqual([1, 3, 5]);
+  });
 });

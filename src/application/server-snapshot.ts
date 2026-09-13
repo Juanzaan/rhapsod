@@ -22,15 +22,80 @@ export type ChannelInfoFetcher = (
 ) => Promise<{ name?: string; parentCid?: number; order?: number } | undefined>;
 
 /**
- * Resolves channel metadata without `channellist` (some servers restrict
- * that command to admins). Channels are discovered from the cids of visible
- * clients and enriched one by one via `channelinfo`, which regular clients
- * can usually call. Results are cached; unknown channels degrade to `#cid`.
+ * Resolves channel metadata without `channellist` (voice clients cannot run
+ * it: the server answers `command not found`). Channels are discovered by
+ * probing `channelinfo` per cid, which works for any channel the bot may
+ * see - including empty ones no client currently occupies. Results are
+ * cached; unknown channels degrade to `#cid`.
  */
 export class ChannelDirectory {
   readonly #cache = new Map<number, SnapshotChannel>();
 
   constructor(private readonly fetchInfo: ChannelInfoFetcher) {}
+
+  /**
+   * Probes every cid from 1 to `ceiling` with bounded concurrency and
+   * replaces the cached entries in that range with what the server reports.
+   * Cached entries above the ceiling are kept. When the scan finds nothing
+   * (e.g. a dropped connection mid-scan) the cache is left untouched so a
+   * transient failure cannot wipe the whole tree.
+   */
+  async discover(
+    options: { ceiling?: number; concurrency?: number } = {},
+  ): Promise<{ found: number; ceiling: number }> {
+    const ceiling = Math.max(1, Math.floor(options.ceiling ?? 192));
+    const concurrency = Math.max(
+      1,
+      Math.min(16, Math.floor(options.concurrency ?? 4)),
+    );
+    const missing = new Set<number>();
+    let found = 0;
+    let next = 1;
+    const workers = Array.from(
+      { length: Math.min(concurrency, ceiling) },
+      async () => {
+        while (next <= ceiling) {
+          const cid = next++;
+          let info: Awaited<ReturnType<ChannelInfoFetcher>>;
+          try {
+            info = await this.fetchInfo(cid);
+          } catch {
+            missing.add(cid);
+            continue;
+          }
+          if (info === undefined) {
+            missing.add(cid);
+            continue;
+          }
+          const name =
+            info.name !== undefined && info.name.length > 0
+              ? info.name
+              : `#${cid}`;
+          this.#cache.set(cid, {
+            cid,
+            name,
+            ...(info.parentCid !== undefined
+              ? { parentCid: info.parentCid }
+              : {}),
+            ...(info.order !== undefined ? { order: info.order } : {}),
+          });
+          found++;
+        }
+      },
+    );
+    await Promise.all(workers);
+    if (found === 0) return { ceiling, found: 0 };
+    for (const cid of missing) this.#cache.delete(cid);
+    return { ceiling, found };
+  }
+
+  maxCid(): number {
+    let max = 0;
+    for (const cid of this.#cache.keys()) {
+      if (cid > max) max = cid;
+    }
+    return max;
+  }
 
   async resolve(cid: number): Promise<SnapshotChannel> {
     const cached = this.#cache.get(cid);
@@ -74,7 +139,7 @@ export class ChannelDirectory {
 export type ServerViewMode = "full" | "partial";
 
 /**
- * Picks the channel source: the full channellist when the server allows it,
+ * Picks the channel source: the discovered directory when it holds entries,
  * otherwise the channels resolved from visible clients (occupied only).
  */
 export function pickChannels(

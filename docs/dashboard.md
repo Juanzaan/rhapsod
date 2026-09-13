@@ -18,7 +18,19 @@ Choose Aurora, Sunset or Ocean from the background selector, or disable the back
 
 The motion button pauses animation. Scene and motion preferences are stored in this browser, independently from bot configuration. System reduced-motion settings override animation, and hidden tabs pause movement. If browser storage is unavailable, the controls still work for the current page.
 
-## Verify
+## Settings, commands and setup
+
+The other panel pages use the same colors, typography and responsive cards. Settings are grouped by service, with read-only values identified and masked secrets preserved. The save bar remains available while scrolling. Commands can be searched by name, alias or description, including a leading `!`; required arguments remain visible. The setup wizard provides guided configuration and a link back to the console.
+
+## Server and empty channels
+
+The Server page displays channel and visible-user counts, channel/user search, expand/collapse controls and keyboard-accessible channel movement. Searching retains parent channels for context. Channels with a missing parent are shown at the root instead of disappearing.
+
+Voice clients cannot run `channellist` (the server answers `command not found`), so Rhapsod discovers the tree by probing `channelinfo` per channel id. That query answers for every visible channel, including empty ones, which is why the panel shows the same rooms a normal client sees - password or rank requirements only gate joining, not listing. A full scan runs in the background at startup, on reconnect and every ten minutes; the minute resync only refreshes channels with visible users, and joins or moves resolve new channels immediately.
+
+If the panel reports a limited view, the background scan has not completed yet or every probe failed; the tree then shows channels discovered from visible users only. No special server permission is needed for the scan. The refresh button re-reads the current snapshot. Deleted channels leave the tree on the next full scan; renamed channels update there as well.
+
+## Verify the pages
 
 Change the scene and reload to check persistence. Pause movement, then change the operating system's reduced-motion preference. Confirm the animation stays stopped. At narrow widths, cards stack into a single column and playback controls remain accessible.
 
