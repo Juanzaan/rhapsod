@@ -63,14 +63,18 @@ export class ChannelDirectory {
             missing.add(cid);
             continue;
           }
-          if (info === undefined) {
+          // A channel without a name does not exist: the fetcher reports
+          // unknown cids as undefined or an empty row, and neither may
+          // become a `#cid` phantom entry in the tree.
+          if (
+            info === undefined ||
+            info.name === undefined ||
+            info.name.length === 0
+          ) {
             missing.add(cid);
             continue;
           }
-          const name =
-            info.name !== undefined && info.name.length > 0
-              ? info.name
-              : `#${cid}`;
+          const name = info.name;
           this.#cache.set(cid, {
             cid,
             name,
@@ -101,24 +105,27 @@ export class ChannelDirectory {
     const cached = this.#cache.get(cid);
     if (cached !== undefined) return cached;
     const fallback: SnapshotChannel = { cid, name: `#${cid}` };
+    // Failures stay uncached: a transient `channelinfo` error must not pin
+    // a `#cid` entry, or the real name would never load on retry.
+    let info: Awaited<ReturnType<ChannelInfoFetcher>>;
     try {
-      const info = await this.fetchInfo(cid);
-      const name =
-        info?.name !== undefined && info.name.length > 0
-          ? info.name
-          : fallback.name;
-      const entry: SnapshotChannel = {
-        cid,
-        name,
-        ...(info?.parentCid !== undefined ? { parentCid: info.parentCid } : {}),
-        ...(info?.order !== undefined ? { order: info.order } : {}),
-      };
-      this.#cache.set(cid, entry);
-      return entry;
+      info = await this.fetchInfo(cid);
     } catch {
-      this.#cache.set(cid, fallback);
       return fallback;
     }
+    if (info === undefined) return fallback;
+    const name =
+      info.name !== undefined && info.name.length > 0
+        ? info.name
+        : fallback.name;
+    const entry: SnapshotChannel = {
+      cid,
+      name,
+      ...(info.parentCid !== undefined ? { parentCid: info.parentCid } : {}),
+      ...(info.order !== undefined ? { order: info.order } : {}),
+    };
+    this.#cache.set(cid, entry);
+    return entry;
   }
 
   snapshot(): readonly SnapshotChannel[] {
