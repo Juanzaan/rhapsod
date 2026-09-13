@@ -128,6 +128,18 @@ describe("ChannelDirectory", () => {
     expect(await failing.resolve(10)).toEqual({ cid: 10, name: "#10" });
   });
 
+  it("does not cache failed resolutions", async () => {
+    let fail = true;
+    const directory = new ChannelDirectory(() =>
+      fail
+        ? Promise.reject(new Error("blip"))
+        : Promise.resolve({ name: "Lobby" }),
+    );
+    expect(await directory.resolve(1)).toEqual({ cid: 1, name: "#1" });
+    fail = false;
+    expect(await directory.resolve(1)).toEqual({ cid: 1, name: "Lobby" });
+  });
+
   it("omits parentCid when unknown", async () => {
     const directory = new ChannelDirectory(() =>
       Promise.resolve({ name: "Solo" }),
@@ -152,6 +164,17 @@ describe("ChannelDirectory", () => {
       { cid: 3, name: "Empty room", order: 0, parentCid: 1 },
     ]);
     expect(directory.maxCid()).toBe(3);
+  });
+
+  it("ignores nameless rows instead of caching phantom channels", async () => {
+    // A swallowed `channelinfo` error surfaces as an empty row; without a
+    // name the cid does not exist and must not enter the tree as `#cid`.
+    const directory = new ChannelDirectory((cid: number) =>
+      cid === 1 ? Promise.resolve({ name: "Lobby" }) : Promise.resolve({}),
+    );
+    const result = await directory.discover({ ceiling: 3, concurrency: 2 });
+    expect(result.found).toBe(1);
+    expect(directory.snapshot()).toEqual([{ cid: 1, name: "Lobby" }]);
   });
 
   it("evicts deleted channels but keeps entries above the ceiling", async () => {

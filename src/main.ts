@@ -265,11 +265,15 @@ async function main(): Promise<void> {
     try {
       const info = await connection.getChannelInfo(cid);
       const name = info["channel_name"];
+      // A missing channel surfaces as an error (swallowed to {}) or an
+      // empty row: without a name the cid does not exist, so report it as
+      // unknown instead of caching a `#cid` phantom entry.
+      if (name === undefined || name.length === 0) return undefined;
       // channellist uses `pid`, channelinfo uses `cpid`.
       const pid = Number(info["cpid"] ?? info["pid"] ?? Number.NaN);
       const order = Number(info["channel_order"] ?? Number.NaN);
       return {
-        ...(name === undefined || name.length === 0 ? {} : { name }),
+        name,
         ...(Number.isSafeInteger(pid) && pid > 0 ? { parentCid: pid } : {}),
         ...(Number.isSafeInteger(order) ? { order } : {}),
       };
