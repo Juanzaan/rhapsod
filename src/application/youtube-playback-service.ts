@@ -24,6 +24,7 @@ import type { VoiceFrameOutput } from "../audio/audio-player.js";
 import type { AudioFilter, FilterParam } from "../audio/filter-chain.js";
 import type { AudioPlayerMetrics } from "../audio/audio-player.js";
 import type { AlternativeSourceResolver } from "../media/song-link.js";
+import type { AppleMusicResolver } from "../media/apple-music.js";
 import type { DirectUrlResolver } from "../media/direct-url.js";
 import {
   SoundCloudDrmError,
@@ -66,6 +67,7 @@ interface PlaybackServiceOptions {
   readonly encoder: RhapsodOpusEncoder;
   readonly resolver: YoutubePlaybackResolver;
   readonly alternativeResolver?: AlternativeSourceResolver;
+  readonly appleMusicResolver?: AppleMusicResolver;
   readonly directUrlResolver?: DirectUrlResolver;
   readonly soundcloudResolver?: SoundCloudResolver;
   readonly spotifyResolver?: SpotifyResolver;
@@ -151,6 +153,7 @@ export class YoutubePlaybackService {
   readonly #controller: PlaybackController;
   readonly #resolver: YoutubePlaybackResolver;
   readonly #alternativeResolver: AlternativeSourceResolver | undefined;
+  readonly #appleMusicResolver: AppleMusicResolver | undefined;
   readonly #directUrlResolver: DirectUrlResolver | undefined;
   readonly #soundcloudResolver: SoundCloudResolver | undefined;
   readonly #spotifyResolver: SpotifyResolver | undefined;
@@ -174,6 +177,7 @@ export class YoutubePlaybackService {
   constructor(options: PlaybackServiceOptions) {
     this.#resolver = options.resolver;
     this.#alternativeResolver = options.alternativeResolver;
+    this.#appleMusicResolver = options.appleMusicResolver;
     this.#directUrlResolver = options.directUrlResolver;
     this.#soundcloudResolver = options.soundcloudResolver;
     this.#spotifyResolver = options.spotifyResolver;
@@ -475,7 +479,31 @@ export class YoutubePlaybackService {
         throw providerError;
       }
     }
-    if (media.kind === "apple-music" || media.kind === "amazon-music") {
+    if (media.kind === "apple-music") {
+      if (!this.#appleMusicResolver) {
+        throw new UserError(
+          "Este bot no tiene resolución de links de Apple Music configurada.",
+        );
+      }
+      const appleTrack = await this.#appleMusicResolver.getTrack(media.value);
+      const query = `${appleTrack.artist} ${appleTrack.title}`.trim();
+      if (!query) {
+        throw new UserError("No encontré los datos del track de Apple Music.");
+      }
+      const metadata = await this.#resolver.search(
+        query,
+        appleTrack.durationSeconds,
+        appleTrack.title,
+      );
+      this.#recordMetadataTiming(metadata, startedAt);
+      return this.#enqueueMetadata(
+        metadata,
+        requestedBy,
+        "apple-music",
+        requestedByUid,
+      );
+    }
+    if (media.kind === "amazon-music") {
       const result = await this.enqueueMusicLink(
         media.value,
         requestedBy,

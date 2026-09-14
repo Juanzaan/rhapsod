@@ -19,6 +19,7 @@ Persistence fixes, dependency updates, deployment repairs and consistent bilingu
 - Play radio streams that refuse HEAD probes: Icecast and Shoutcast stations answering 400 are confirmed with a one-byte ranged GET, with added Shoutcast AAC content types.
 - Play pasted TuneIn links (tun.in short links and tunein.com pages) in !play and !radio, resolving them to the station stream.
 - Probe direct streams on ffprobe builds without -max_redirects support (static 7.0.x): the redirect block is passed only when the binary accepts it.
+- Resolve Apple Music song and album links through the keyless iTunes lookup after SongLink retired anonymous access; Amazon Music stays on SongLink.
 - Use the same animated background, scene picker and motion control on every panel page, not only the dashboard.
 - Show spacer section labels as plain headers that can never be joined or moved, and order siblings by channel_order chains like the TeamSpeak client.
 

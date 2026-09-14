@@ -101,10 +101,13 @@ chat once the TS3 adapter is connected.
   credentials flow, no user login) and the matching "artist title" is searched
   on YouTube for playback. Playlists and albums expand up to 100 tracks per
   `!play` (paged requests with 429 backoff, duplicates skipped).
-- **Apple Music / Amazon Music:** these services have no public audio API, so
-  links are resolved through SongLink (Odesli), preferring the YouTube
-  equivalent (playlists included) and falling back to SoundCloud. If nothing
-  playable exists, `!play` says so instead of guessing.
+- **Apple Music:** song and album links resolve through the keyless iTunes
+  lookup and play through a YouTube "artist title" search, like Spotify.
+  Playlists name no single track and are rejected with a clear message.
+- **Amazon Music:** links are resolved through SongLink (Odesli), preferring
+  the YouTube equivalent (playlists included) and falling back to
+  SoundCloud. If nothing playable exists, `!play` says so instead of
+  guessing.
 - **Search text:** `!play` accepts free text and runs the same YouTube search
   as `!yt` (fuzzy term matching, channel credits, and a shortened retry when
   nothing is reliable).

@@ -65,6 +65,13 @@ function setup(
     playlistStore?: PlaylistStore;
     redirectResolver?: RedirectResolver;
     tuneInStreamUrl?: (url: string) => Promise<string | undefined>;
+    appleMusicResolver?: {
+      getTrack(url: string): Promise<{
+        artist: string;
+        durationSeconds?: number;
+        title: string;
+      }>;
+    };
     audioUrlCache?: AudioUrlCache;
     proxyUrl?: string;
     autoplayProfile?: {
@@ -304,6 +311,9 @@ function setup(
       : {}),
     ...(options.tuneInStreamUrl
       ? { tuneInStreamUrl: options.tuneInStreamUrl }
+      : {}),
+    ...(options.appleMusicResolver
+      ? { appleMusicResolver: options.appleMusicResolver }
       : {}),
     ...(options.audioUrlCache ? { audioUrlCache: options.audioUrlCache } : {}),
     ...(options.maxQueueTracks
@@ -1374,19 +1384,51 @@ describe("YoutubePlaybackService", () => {
   });
 
   it("resolves Apple Music and Amazon Music links through the main enqueue path", async () => {
-    const { service } = setup();
+    const appleMusicResolver = {
+      getTrack: vi.fn(() =>
+        Promise.resolve({
+          artist: "Rick Astley",
+          durationSeconds: 215,
+          title: "Never Gonna Give You Up",
+        }),
+      ),
+    };
+    const { resolver, service } = setup({ appleMusicResolver });
 
     const appleTrack = await service.enqueue(
       "https://music.apple.com/us/album/titulo/123?i=456",
       "user-1",
     );
-    expect(appleTrack.id).toBe("fallback");
+    expect(appleMusicResolver.getTrack).toHaveBeenCalledWith(
+      "https://music.apple.com/us/album/titulo/123?i=456",
+    );
+    expect(resolver.search).toHaveBeenCalledWith(
+      "Rick Astley Never Gonna Give You Up",
+      215,
+      "Never Gonna Give You Up",
+    );
+    expect(appleTrack).toMatchObject({
+      id: "search-result",
+      requestedBy: "user-1",
+    });
 
-    const amazonTrack = await service.enqueue(
+    const { service: amazonService } = setup();
+    const amazonTrack = await amazonService.enqueue(
       "https://music.amazon.com/albums/B0ABC123?trackAsin=B0XYZ",
       "user-2",
     );
     expect(amazonTrack.id).toBe("fallback");
+  });
+
+  it("rejects Apple Music links without a configured resolver", async () => {
+    const { service } = setup();
+
+    await expect(
+      service.enqueue(
+        "https://music.apple.com/us/album/titulo/123?i=456",
+        "user-1",
+      ),
+    ).rejects.toThrow("resolución de links de Apple Music");
   });
 
   it("applies the volume to the active and future sessions", async () => {

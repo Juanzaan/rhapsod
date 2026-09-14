@@ -314,6 +314,35 @@ describe("dispatchCommand", () => {
     expect(send).toHaveBeenCalledWith("En cola: Track (búsqueda)");
   });
 
+  it("routes Apple Music links through playback.enqueue", async () => {
+    const { ctx, playback, send, sender } = makeHarness();
+    const command = parseChatCommand(
+      "!play https://music.apple.com/us/album/titulo/123?i=456",
+    )!;
+    await dispatchCommand(ctx, command, sender, send);
+    expect(playback.enqueue).toHaveBeenCalledWith(
+      "https://music.apple.com/us/album/titulo/123?i=456",
+      "user",
+      "uid-1",
+    );
+    expect(playback.enqueueMusicLink).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledWith("En cola: Track");
+  });
+
+  it("keeps Amazon Music links on the music-link path", async () => {
+    const { ctx, playback, send, sender } = makeHarness();
+    const command = parseChatCommand(
+      "!play https://music.amazon.com/albums/B0ABC123",
+    )!;
+    await dispatchCommand(ctx, command, sender, send);
+    expect(playback.enqueueMusicLink).toHaveBeenCalledWith(
+      "https://music.amazon.com/albums/B0ABC123",
+      "user",
+      "uid-1",
+    );
+    expect(playback.enqueue).not.toHaveBeenCalled();
+  });
+
   it("denies admin-only commands to non-admin senders", async () => {
     const { ctx, metrics, send, sender } = makeHarness();
     const diag = parseChatCommand("!diag")!;

@@ -75,6 +75,7 @@ import type { YoutubePlaybackResolver } from "./media/youtube/youtube-resolver.j
 import { RedirectResolver } from "./media/redirect-resolver.js";
 import { resolveTuneInUrl } from "./media/tunein.js";
 import { SongLinkClient } from "./media/song-link.js";
+import { AppleMusicClient } from "./media/apple-music.js";
 import { DirectUrlClient } from "./media/direct-url.js";
 import { LyricsClient } from "./media/lyrics.js";
 import { SoundCloudPublicApi } from "./media/soundcloud/public-api.js";
@@ -505,6 +506,7 @@ async function main(): Promise<void> {
     maxQueueTracks: config.RHAPSOD_MAX_QUEUE_TRACKS,
     maxTracksPerUser: config.RHAPSOD_MAX_TRACKS_PER_USER,
     alternativeResolver: new SongLinkClient({ logger }),
+    appleMusicResolver: new AppleMusicClient(),
     directUrlResolver: new DirectUrlClient({
       ...(config.RHAPSOD_FFPROBE_PATH === undefined
         ? {}

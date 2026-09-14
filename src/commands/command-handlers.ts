@@ -110,7 +110,7 @@ async function handlePlay(
         ? "La playlist o álbum no tiene canciones reproducibles."
         : `Se agregaron ${result.added.length} canciones a la cola${result.remaining ? ` (quedan ${result.remaining} fuera del límite)` : ""}.`;
     await send(message);
-  } else if (media.kind === "apple-music" || media.kind === "amazon-music") {
+  } else if (media.kind === "amazon-music") {
     const result = await playback.enqueueMusicLink(
       media.value,
       senderName,
