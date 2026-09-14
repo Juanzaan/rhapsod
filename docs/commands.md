@@ -5,51 +5,51 @@
 Rhapsod commands use `!` by default. Commands are processed in TeamSpeak text
 chat once the TS3 adapter is connected.
 
-| Command                               | Alias                 | Description                                                                                         |
-| ------------------------------------- | --------------------- | --------------------------------------------------------------------------------------------------- |
-| `!play <URL or search>`               | `!p`                  | Resolve a YouTube video/playlist, SoundCloud, Spotify, Apple Music or Amazon Music link, or search. |
-| `!playnext <URL or search>`           | `!pn`, `!next`        | Add a single track or search result at the front of the pending queue.                              |
-| `!yt [n] <search terms>`              | `!search`, `!youtube` | Add a matching YouTube video; a leading number picks the n-th ranked result.                        |
-| `!pause`                              | -                     | Pause the current track.                                                                            |
-| `!resume`                             | -                     | Resume the current track.                                                                           |
-| `!skip`                               | `!s`                  | Skip the current track (only its requester or an admin).                                            |
-| `!previous`                           | `!prev`               | Replay the last finished track.                                                                     |
-| `!seek <seconds>`                     | -                     | Jump to a position in seconds within the current track.                                             |
-| `!stop`                               | -                     | Stop playback and disconnect the player from the current track.                                     |
-| `!queue [page]`                       | `!q`                  | Show 10 pending tracks per page with per-track durations.                                           |
-| `!history`                            | `!hist`               | Show the 10 most recently started tracks (up to 20 are kept in memory).                             |
-| `!now-playing`                        | `!np`, `!now`         | Show the current track, duration and requester (live radio shows the on-air title).                 |
-| `!stats`                              | `!st`                 | Show uptime, tracks played since start, current track, queue length and volume/loop state.          |
-| `!volume <0-100>`                     | `!vol`, `!v`          | Adjust the bot output volume (default `50`; persists in `state.json`).                              |
-| `!move <from> <to>`                   | `!mv`                 | Move a pending track between one-based positions.                                                   |
-| `!channel-move <channel>`             | `!ch`                 | Move the bot to a matching TeamSpeak channel (configured admins only).                              |
-| `!diag`                               | -                     | Internal diagnostics (admins only).                                                                 |
-| `!debug-server`                       | `!ds`                 | TeamSpeak server info (admins only).                                                                |
-| `!chart`                              | -                     | User telemetry chart (admins only).                                                                 |
-| `!remove <n\|from-to>`                | `!rm`                 | Remove one position or an inclusive range (requesters may remove only their own tracks).            |
-| `!clear`                              | `!c`                  | Clear pending tracks.                                                                               |
-| `!shuffle`                            | -                     | Shuffle the pending queue (the current track keeps playing).                                        |
-| `!loop [off\|track\|queue]`           | -                     | Repeat the current track (`track`) or the whole queue (`queue`); persists in `state.json`.          |
-| `!lyrics`                             | `!ly`                 | Show the lyrics of the current track, found via LRCLIB (best-effort, no account).                   |
-| `!bassboost [1-5]`                    | `!bb`                 | Apply the bassboost filter (level 1-5).                                                             |
-| `!nightcore [1.05-1.35]`              | `!nc`                 | Apply the nightcore filter (playback speed).                                                        |
-| `!vaporwave [0.80-0.95]`              | `!vw`                 | Apply the vaporwave filter (playback speed).                                                        |
-| `!8d`                                 | -                     | Apply the 8D spatial audio filter.                                                                  |
-| `!filter [off]`                       | -                     | Show the current audio filter, or `off` to disable it.                                              |
-| `!effects <effect> [on\|off]`         | -                     | Control audio effects (`8d`, `nightcore`, `bassboost`, `vaporwave`, `list`, `reset`).               |
-| `!playlist <subcommand>`              | `!pl`                 | Saved playlists: `save\|load\|list\|show\|delete\|add\|remove\|rename\|info`.                       |
-| `!fav`                                | -                     | Save the current track to your favorites (max 50 per user).                                         |
-| `!favs`                               | -                     | List your favorite tracks.                                                                          |
-| `!unfav <n>`                          | -                     | Remove a favorite by its list position.                                                             |
-| `!favplay <n>`                        | `!fp`                 | Add a favorite to the queue by its list position.                                                   |
-| `!fuente [youtube\|soundcloud\|auto]` | -                     | Show or set your preferred search source for `!play` and `!yt`.                                     |
-| `!radio <nombre o género>`            | `!rb`                 | Search the community radio directory (TuneIn fallback) and tune the top match.                      |
-| `!jump <posición>`                    | `!j`                  | Skip to a queue position (only its requesters or an admin).                                         |
-| `!tops [n]`                           | `!top`                | Most played tracks (default 5, max 10).                                                             |
-| `!mystats`                            | -                     | Your play counts, top artist and favorites.                                                         |
-| `!autoplay [on\|off]`                 | -                     | Keep playing similar tracks when the queue empties (anyone may skip autoplay picks).                |
-| `!test-tone`                          | `!tone`               | Play a 3-second test tone (rate-limited).                                                           |
-| `!help`                               | `!h`                  | Show the command summary.                                                                           |
+| Command                               | Alias                 | Description                                                                                                                |
+| ------------------------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `!play <URL or search>`               | `!p`                  | Resolve a YouTube video/playlist, SoundCloud, Spotify, Apple Music or Amazon Music link, or search.                        |
+| `!playnext <URL or search>`           | `!pn`, `!next`        | Add a single track or search result at the front of the pending queue.                                                     |
+| `!yt [n] <search terms>`              | `!search`, `!youtube` | Add a matching YouTube video; a leading number picks the n-th ranked result.                                               |
+| `!pause`                              | -                     | Pause the current track.                                                                                                   |
+| `!resume`                             | -                     | Resume the current track.                                                                                                  |
+| `!skip`                               | `!s`                  | Skip the current track (only its requester or an admin).                                                                   |
+| `!previous`                           | `!prev`               | Replay the last finished track.                                                                                            |
+| `!seek <seconds>`                     | -                     | Jump to a position in seconds within the current track.                                                                    |
+| `!stop`                               | -                     | Stop playback and disconnect the player from the current track.                                                            |
+| `!queue [page]`                       | `!q`                  | Show 10 pending tracks per page with per-track durations.                                                                  |
+| `!history`                            | `!hist`               | Show the 10 most recently started tracks (up to 20 are kept in memory).                                                    |
+| `!now-playing`                        | `!np`, `!now`         | Show the current track, duration and requester (live radio shows the on-air title).                                        |
+| `!stats`                              | `!st`                 | Show uptime, tracks played since start, current track, queue length and volume/loop state.                                 |
+| `!volume <0-100>`                     | `!vol`, `!v`          | Adjust the bot output volume (default `50`; persists in `state.json`).                                                     |
+| `!move <from> <to>`                   | `!mv`                 | Move a pending track between one-based positions.                                                                          |
+| `!channel-move <channel>`             | `!ch`                 | Move the bot to a matching TeamSpeak channel (configured admins only).                                                     |
+| `!diag`                               | -                     | Internal diagnostics (admins only).                                                                                        |
+| `!debug-server`                       | `!ds`                 | TeamSpeak server info (admins only).                                                                                       |
+| `!chart`                              | -                     | User telemetry chart (admins only).                                                                                        |
+| `!remove <n\|from-to>`                | `!rm`                 | Remove one position or an inclusive range (requesters may remove only their own tracks).                                   |
+| `!clear`                              | `!c`                  | Clear pending tracks.                                                                                                      |
+| `!shuffle`                            | -                     | Shuffle the pending queue (the current track keeps playing).                                                               |
+| `!loop [off\|track\|queue]`           | -                     | Repeat the current track (`track`) or the whole queue (`queue`); persists in `state.json`.                                 |
+| `!lyrics`                             | `!ly`                 | Show the lyrics of the current track, found via LRCLIB (best-effort, no account).                                          |
+| `!bassboost [1-5]`                    | `!bb`                 | Apply the bassboost filter (level 1-5).                                                                                    |
+| `!nightcore [1.05-1.35]`              | `!nc`                 | Apply the nightcore filter (playback speed).                                                                               |
+| `!vaporwave [0.80-0.95]`              | `!vw`                 | Apply the vaporwave filter (playback speed).                                                                               |
+| `!8d`                                 | -                     | Apply the 8D spatial audio filter.                                                                                         |
+| `!filter [off]`                       | -                     | Show the current audio filter, or `off` to disable it.                                                                     |
+| `!effects <effect> [on\|off]`         | -                     | Control audio effects (`8d`, `nightcore`, `bassboost`, `vaporwave`, `list`, `reset`).                                      |
+| `!playlist <subcommand>`              | `!pl`                 | Saved playlists: `save\|load\|list\|show\|delete\|add\|remove\|rename\|info`.                                              |
+| `!fav`                                | -                     | Save the current track to your favorites (max 50 per user).                                                                |
+| `!favs`                               | -                     | List your favorite tracks.                                                                                                 |
+| `!unfav <n>`                          | -                     | Remove a favorite by its list position.                                                                                    |
+| `!favplay <n>`                        | `!fp`                 | Add a favorite to the queue by its list position.                                                                          |
+| `!fuente [youtube\|soundcloud\|auto]` | -                     | Show or set your preferred search source for `!play` and `!yt`.                                                            |
+| `!radio <nombre, género o link>`      | `!rb`                 | Search the community radio directory (TuneIn fallback) and tune the top match; TuneIn page and tun.in links play directly. |
+| `!jump <posición>`                    | `!j`                  | Skip to a queue position (only its requesters or an admin).                                                                |
+| `!tops [n]`                           | `!top`                | Most played tracks (default 5, max 10).                                                                                    |
+| `!mystats`                            | -                     | Your play counts, top artist and favorites.                                                                                |
+| `!autoplay [on\|off]`                 | -                     | Keep playing similar tracks when the queue empties (anyone may skip autoplay picks).                                       |
+| `!test-tone`                          | `!tone`               | Play a 3-second test tone (rate-limited).                                                                                  |
+| `!help`                               | `!h`                  | Show the command summary.                                                                                                  |
 
 ## Source behavior
 
@@ -114,7 +114,8 @@ chat once the TS3 adapter is connected.
   Icecast/shoutcast streams show the live on-air title in `!np` and the
   panel dashboard when the station sends ICY metadata. Discover stations
   by name, genre or country with `!radio` (community directory first,
-  TuneIn fallback, top voted match wins).
+  TuneIn fallback, top voted match wins). Pasted TuneIn page links and
+  tun.in short links resolve to the station stream.
 
 No command may accept shell syntax. Rhapsod passes provider arguments directly
 to child processes and never invokes a shell.

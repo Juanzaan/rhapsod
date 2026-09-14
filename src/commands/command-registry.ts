@@ -257,7 +257,7 @@ export const COMMAND_SPECS: readonly CommandSpec[] = [
     aliases: ["rb"],
     group: "misc",
     adminOnly: false,
-    usage: "radio <nombre o género>",
+    usage: "radio <nombre, género o link>",
     summary: "Buscar una emisora y sintonizarla",
   },
   {

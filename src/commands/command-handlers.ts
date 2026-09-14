@@ -12,7 +12,11 @@ import type { YoutubePlaybackService } from "../application/youtube-playback-ser
 import type { ChatCommand } from "./chat-command.js";
 import type { CommandRateLimiter } from "./command-rate-limiter.js";
 import { searchStations } from "../media/radio-directory.js";
-import { resolveTuneInStream, searchTuneInStations } from "../media/tunein.js";
+import {
+  resolveTuneInStream,
+  resolveTuneInUrl,
+  searchTuneInStations,
+} from "../media/tunein.js";
 import { parseMediaInput } from "../media/media-input.js";
 import {
   canMoveBotToChannel,
@@ -447,6 +451,15 @@ async function handleRadio(
   sender: CommandSender,
   send: SendFn,
 ): Promise<void> {
+  // Pasted links never match a name search: TuneIn pages and tun.in short
+  // links resolve straight to the station stream. Plain names fail the URL
+  // parse with no network, so this stays first for both shapes.
+  const tuneInLink = await resolveTuneInUrl(command.input);
+  if (tuneInLink !== undefined) {
+    await ctx.playback.enqueue(tuneInLink, sender.name, sender.uid);
+    await send(`Sintonizando: ${command.input}.`);
+    return;
+  }
   const stations = await searchStations(command.input);
   const station = stations.find((candidate) =>
     candidate.url.toLowerCase().startsWith("https://"),
@@ -466,7 +479,7 @@ async function handleRadio(
       : await resolveTuneInStream(tuneInStation.id);
   if (tuneInStation === undefined || streamUrl === undefined) {
     await send(
-      `No encontré emisoras para "${command.input}". Probá con otro nombre o género.`,
+      `No encontré emisoras para "${command.input}". Probá con otro nombre, género o link de TuneIn.`,
     );
     return;
   }

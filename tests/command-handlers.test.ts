@@ -9,6 +9,7 @@ import {
 import { searchStations } from "../src/media/radio-directory.js";
 import {
   resolveTuneInStream,
+  resolveTuneInUrl,
   searchTuneInStations,
 } from "../src/media/tunein.js";
 
@@ -17,6 +18,9 @@ vi.mock("../src/media/radio-directory.js", () => ({
 }));
 vi.mock("../src/media/tunein.js", () => ({
   resolveTuneInStream: vi.fn((): Promise<string | undefined> =>
+    Promise.resolve(undefined),
+  ),
+  resolveTuneInUrl: vi.fn((): Promise<string | undefined> =>
     Promise.resolve(undefined),
   ),
   searchTuneInStations: vi.fn((): Promise<unknown[]> => Promise.resolve([])),
@@ -1207,7 +1211,7 @@ describe("radio directory", () => {
 
     expect(playback.enqueue).not.toHaveBeenCalled();
     expect(send).toHaveBeenCalledWith(
-      'No encontré emisoras para "zzz". Probá con otro nombre o género.',
+      'No encontré emisoras para "zzz". Probá con otro nombre, género o link de TuneIn.',
     );
   });
 
@@ -1264,8 +1268,32 @@ describe("radio directory", () => {
 
     expect(playback.enqueue).not.toHaveBeenCalled();
     expect(send).toHaveBeenCalledWith(
-      'No encontré emisoras para "zzz". Probá con otro nombre o género.',
+      'No encontré emisoras para "zzz". Probá con otro nombre, género o link de TuneIn.',
     );
+  });
+
+  it("tunes a pasted TuneIn short link without searching", async () => {
+    const { ctx, playback, send, sender } = makeHarness();
+    vi.mocked(searchStations).mockClear();
+    vi.mocked(searchTuneInStations).mockClear();
+    vi.mocked(resolveTuneInUrl).mockResolvedValueOnce(
+      "https://stream.example/jfk",
+    );
+    await dispatchCommand(
+      ctx,
+      parseChatCommand("!radio http://tun.in/sfrnd")!,
+      sender,
+      send,
+    );
+
+    expect(playback.enqueue).toHaveBeenCalledWith(
+      "https://stream.example/jfk",
+      "user",
+      "uid-1",
+    );
+    expect(send).toHaveBeenCalledWith("Sintonizando: http://tun.in/sfrnd.");
+    expect(searchStations).not.toHaveBeenCalled();
+    expect(searchTuneInStations).not.toHaveBeenCalled();
   });
 });
 
