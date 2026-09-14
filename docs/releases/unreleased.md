@@ -15,6 +15,9 @@ Persistence fixes, dependency updates, deployment repairs and consistent bilingu
 - Refresh panel styling and prevent stale dashboard/settings responses, with settings-load retry.
 - Repair Docker Python installation and daemon startup; preserve installer configuration and cookies on reruns.
 - Standardize historical and future release notes with English and Spanish summaries, upgrade guidance and verification steps.
+- Keep autoplay playing after a restart: recent listening history seeds the mix rotation and restores the last listener's taste instead of starting silent.
+- Play radio streams that refuse HEAD probes: Icecast and Shoutcast stations answering 400 are confirmed with a one-byte ranged GET, with added Shoutcast AAC content types.
+- Use the same animated background, scene picker and motion control on every panel page, not only the dashboard.
 
 ## Upgrade
 
