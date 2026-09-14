@@ -17,6 +17,7 @@ Correcciones de persistencia, actualización de dependencias, reparación del de
 - Notas históricas y futuras uniformes en inglés y español, con instrucciones de actualización y verificación.
 - Mantener la reproducción automática tras un reinicio: el historial reciente alimenta la rotación y recupera el gusto del último oyente, en lugar de iniciar en silencio.
 - Reproducir emisoras que rechazan la comprobación HEAD: las estaciones Icecast y Shoutcast que responden 400 se confirman con una petición GET de un byte, con tipos de contenido AAC de Shoutcast añadidos.
+- Reproducir enlaces pegados de TuneIn (acortados tun.in y páginas tunein.com) en !play y !radio, resolviéndolos a la emisión.
 - Utilizar el mismo fondo animado, selector de ambiente y control de movimiento en todas las páginas del panel, no solo en la consola.
 - Mostrar las etiquetas de los separadores como encabezados simples que no se pueden unir ni mover, y ordenar los hermanos por cadenas de channel_order como el cliente TeamSpeak.
 

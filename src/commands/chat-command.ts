@@ -211,7 +211,7 @@ export function parseChatCommand(
       return { name, source: argument };
     }
     case "radio":
-      if (!argument) throw new UserError("Usá: !radio <nombre o género>");
+      if (!argument) throw new UserError("Usá: !radio <nombre, género o link>");
       return { input: argument, name };
     case "jump":
       return { name, index: parsePosition(argument, "!jump <posición>") };

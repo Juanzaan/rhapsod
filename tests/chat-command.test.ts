@@ -103,7 +103,7 @@ describe("parseChatCommand", () => {
       name: "radio",
     });
     expect(() => parseChatCommand("!radio")).toThrow(
-      "Usá: !radio <nombre o género>",
+      "Usá: !radio <nombre, género o link>",
     );
   });
 

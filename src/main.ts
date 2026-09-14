@@ -73,6 +73,7 @@ import {
 } from "./panel/youtube-setup.js";
 import type { YoutubePlaybackResolver } from "./media/youtube/youtube-resolver.js";
 import { RedirectResolver } from "./media/redirect-resolver.js";
+import { resolveTuneInUrl } from "./media/tunein.js";
 import { SongLinkClient } from "./media/song-link.js";
 import { DirectUrlClient } from "./media/direct-url.js";
 import { LyricsClient } from "./media/lyrics.js";
@@ -498,6 +499,7 @@ async function main(): Promise<void> {
     stateStore: new FilePlaybackStateStore(join(dataDir, "state.json"), logger),
     audioUrlCache,
     redirectResolver: new RedirectResolver(),
+    tuneInStreamUrl: (url) => resolveTuneInUrl(url),
     playlistStore: new PlaylistStore(join(dataDir, "playlists.json"), logger),
     autoplayProfile: listeningHistory,
     maxQueueTracks: config.RHAPSOD_MAX_QUEUE_TRACKS,

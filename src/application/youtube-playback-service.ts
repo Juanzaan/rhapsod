@@ -78,6 +78,7 @@ interface PlaybackServiceOptions {
   readonly stateStore?: PlaybackStateStore;
   readonly audioUrlCache?: AudioUrlCache;
   readonly redirectResolver?: RedirectResolver;
+  readonly tuneInStreamUrl?: (url: string) => Promise<string | undefined>;
   readonly playlistStore?: PlaylistStore;
   readonly output: VoiceFrameOutput;
   readonly playlistMaxTracks?: number;
@@ -162,6 +163,8 @@ export class YoutubePlaybackService {
   readonly #stateStore: PlaybackStateStore | undefined;
   readonly #onTiming: (timing: PlaybackTiming) => void;
   readonly #redirectResolver: RedirectResolver | undefined;
+  readonly #tuneInStreamUrl:
+    ((url: string) => Promise<string | undefined>) | undefined;
   readonly #playlistStore: PlaylistStore | undefined;
   readonly #playlistMaxTracks: number;
   #expansionActive = false;
@@ -185,6 +188,7 @@ export class YoutubePlaybackService {
         : { cache: options.audioUrlCache }),
     });
     this.#redirectResolver = options.redirectResolver;
+    this.#tuneInStreamUrl = options.tuneInStreamUrl;
     this.#playlistStore = options.playlistStore;
     this.#playlistMaxTracks =
       options.playlistMaxTracks ?? DEFAULT_PLAYLIST_MAX_TRACKS;
@@ -369,6 +373,12 @@ export class YoutubePlaybackService {
         if (reParsed.kind !== "url") {
           return this.enqueue(finalUrl, requestedBy, requestedByUid);
         }
+      }
+      // TuneIn pages and short links hold no audio themselves: resolve the
+      // station id to its stream first, then intake it as a direct URL.
+      const tuneInStream = await this.#tuneInStreamUrl?.(media.value);
+      if (tuneInStream !== undefined) {
+        return this.enqueue(tuneInStream, requestedBy, requestedByUid);
       }
       throw new UserError(
         "No reconozco ese link: pegá un link de YouTube o SoundCloud, una URL de audio directa (mp3, ogg, m3u8…), o buscá con !yt.",

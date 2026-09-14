@@ -64,6 +64,7 @@ function setup(
     stateStore?: boolean;
     playlistStore?: PlaylistStore;
     redirectResolver?: RedirectResolver;
+    tuneInStreamUrl?: (url: string) => Promise<string | undefined>;
     audioUrlCache?: AudioUrlCache;
     proxyUrl?: string;
     autoplayProfile?: {
@@ -300,6 +301,9 @@ function setup(
     ...(options.playlistStore ? { playlistStore: options.playlistStore } : {}),
     ...(options.redirectResolver
       ? { redirectResolver: options.redirectResolver }
+      : {}),
+    ...(options.tuneInStreamUrl
+      ? { tuneInStreamUrl: options.tuneInStreamUrl }
       : {}),
     ...(options.audioUrlCache ? { audioUrlCache: options.audioUrlCache } : {}),
     ...(options.maxQueueTracks
@@ -2593,6 +2597,33 @@ describe("YoutubePlaybackService", () => {
     await expect(
       service.enqueue("https://cdn.example.test/page.html", "user-1"),
     ).rejects.toThrow("No reconozco ese link");
+  });
+
+  it("resolves TuneIn page links to their stream", async () => {
+    const tuneInStreamUrl = vi.fn(() =>
+      Promise.resolve("https://stream.example/jfk"),
+    );
+    const { directUrlResolverMocks, service } = setup({
+      directUrlResolver: true,
+      tuneInStreamUrl,
+    });
+    directUrlResolverMocks.match.mockResolvedValueOnce(false);
+
+    const track = await service.enqueue(
+      "https://tunein.com/radio/JFK-Radio-s270143/",
+      "user-1",
+    );
+
+    expect(tuneInStreamUrl).toHaveBeenCalledWith(
+      "https://tunein.com/radio/JFK-Radio-s270143/",
+    );
+    expect(directUrlResolverMocks.getTrack).toHaveBeenCalledWith(
+      "https://stream.example/jfk",
+    );
+    expect(track).toMatchObject({
+      requestedBy: "user-1",
+      title: "Radio: ice1.somafm.com",
+    });
   });
 
   it("plays direct URLs without calling yt-dlp", async () => {

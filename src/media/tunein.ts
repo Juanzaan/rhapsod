@@ -1,4 +1,4 @@
-import { safeFetch } from "../lib/ssrf.js";
+import { isPublicHostname, safeFetch } from "../lib/ssrf.js";
 
 export interface TuneInStation {
   readonly bitrate?: number;
@@ -16,6 +16,9 @@ export interface TuneInSearchOptions {
 const API_BASE = "https://opml.radiotime.com";
 const DEFAULT_TIMEOUT_MS = 8_000;
 const STATION_ID_RE = /^s\d+$/;
+const TUNEIN_HOSTS = new Set(["tunein.com", "www.tunein.com"]);
+const OPML_HOST = "opml.radiotime.com";
+const MAX_LINK_HOPS = 5;
 
 // TuneIn's public OPML directory (no auth): search stations, then resolve a
 // station id to a playable stream through its .m3u tune file. Live-verified
@@ -67,6 +70,116 @@ function collectStations(raw: unknown, into: TuneInStation[]): void {
     id: record.guide_id,
     name: record.text,
   });
+}
+
+// Parses a TuneIn station id out of TuneIn URLs without any fetch:
+// tunein.com/radio/<slug>-s<id>/ pages and opml Tune.ashx?id=s<id> links.
+export function parseTuneInStationId(input: string): string | undefined {
+  let url: URL;
+  try {
+    url = new URL(input.trim());
+  } catch {
+    return undefined;
+  }
+  const host = url.hostname.toLowerCase();
+  if (host === OPML_HOST) {
+    const id = url.searchParams.get("id") ?? "";
+    return STATION_ID_RE.test(id) ? id : undefined;
+  }
+  if (TUNEIN_HOSTS.has(host)) {
+    const match = /-s(\d+)\/?$/.exec(url.pathname);
+    return match ? `s${match[1]}` : undefined;
+  }
+  return undefined;
+}
+
+// Resolves anything pointing at a TuneIn station (tun.in short links,
+// tunein.com pages, opml Tune links) to a playable HTTPS stream URL.
+// Short links ride plain http, so intermediate hops allow http; the
+// station id only counts from a TuneIn URL, and every hop must resolve
+// to a public host. Never throws: unknown links yield undefined.
+export async function resolveTuneInUrl(
+  input: string,
+  options: TuneInSearchOptions = {},
+): Promise<string | undefined> {
+  let current: string;
+  try {
+    current = new URL(input.trim()).toString();
+  } catch {
+    return undefined;
+  }
+  const fetchImpl = options.fetch ?? safeFetch;
+  for (let hop = 0; hop <= MAX_LINK_HOPS; hop++) {
+    const id = parseTuneInStationId(current);
+    if (id !== undefined) return resolveTuneInStream(id, options);
+    let parsed: URL;
+    try {
+      parsed = new URL(current);
+    } catch {
+      return undefined;
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return undefined;
+    }
+    if (!(await isPublicHostname(parsed.hostname))) return undefined;
+    const target = await tuneInLinkTarget(
+      fetchImpl,
+      current,
+      options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+    );
+    if (target === undefined || target === current) return undefined;
+    current = target;
+  }
+  return undefined;
+}
+
+async function tuneInLinkTarget(
+  fetchImpl: typeof fetch,
+  url: string,
+  timeoutMs: number,
+): Promise<string | undefined> {
+  const head = await probeLink(fetchImpl, url, timeoutMs, "HEAD");
+  // Shorteners that reject HEAD (405/400) still answer a ranged GET.
+  const response =
+    head === undefined || head.status >= 400
+      ? await probeLink(fetchImpl, url, timeoutMs, "GET")
+      : head;
+  if (response === undefined) return undefined;
+  if (response.status >= 300 && response.status < 400) {
+    const location = response.headers.get("location");
+    if (location === null) return undefined;
+    try {
+      return new URL(location, url).toString();
+    } catch {
+      return undefined;
+    }
+  }
+  return url;
+}
+
+async function probeLink(
+  fetchImpl: typeof fetch,
+  url: string,
+  timeoutMs: number,
+  method: "GET" | "HEAD",
+): Promise<Response | undefined> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetchImpl(url, {
+      headers: {
+        ...(method === "GET" ? { range: "bytes=0-1" } : {}),
+        "user-agent": "Rhapsod/3.0 (tunein-link)",
+      },
+      method,
+      redirect: "manual",
+      signal: controller.signal,
+    });
+  } catch {
+    return undefined;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // Resolves a station id (s12345) to its first HTTPS stream URL from the

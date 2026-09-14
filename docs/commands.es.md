@@ -40,7 +40,7 @@ Los comandos utilizan `!` por defecto y se procesan en el chat de TeamSpeak cuan
 | `!unfav <n>`                          | -                     | Eliminar un favorito por posición.                                           |
 | `!favplay <n>`                        | `!fp`                 | Añadir un favorito a la cola.                                                |
 | `!fuente [youtube\|soundcloud\|auto]` | -                     | Consultar o elegir fuente de búsqueda.                                       |
-| `!radio <nombre o género>`            | `!rb`                 | Buscar y sintonizar una emisora.                                             |
+| `!radio <nombre, género o link>`      | `!rb`                 | Buscar y sintonizar una emisora; los enlaces de TuneIn suenan directo.       |
 | `!jump <posición>`                    | `!j`                  | Saltar a una posición con permisos sobre las pistas descartadas.             |
 | `!tops [n]`                           | `!top`                | Mostrar pistas más escuchadas; 5 por defecto, máximo 10.                     |
 | `!mystats`                            | -                     | Mostrar estadísticas personales y favoritos.                                 |
@@ -63,7 +63,7 @@ La cola usa posiciones desde 1. `!remove inicio-fin` incluye ambos extremos y li
 - Spotify: solo metadatos de pistas, álbumes y listas; reproducción mediante coincidencias en YouTube. Las listas usan metadatos públicos o Web API según las credenciales disponibles.
 - Apple Music y Amazon Music: resolución mediante SongLink a YouTube o SoundCloud disponibles.
 - Audio directo: URL HTTPS públicas de archivos, HLS y emisoras. Se rechazan HTTP, redes privadas y archivos locales.
-- Radio: directorio comunitario con alternativa TuneIn. Los títulos en directo dependen de metadatos ICY de la emisora.
+- Radio: directorio comunitario con alternativa TuneIn. Los enlaces pegados de TuneIn (páginas y acortados tun.in) suenan directo. Los títulos en directo dependen de metadatos ICY de la emisora.
 
 `!fuente soundcloud` dirige las búsquedas de texto de `!play` y `!yt` a SoundCloud; sin resultados se usa YouTube. `auto` utiliza YouTube. Los enlaces conservan su proveedor.
 
