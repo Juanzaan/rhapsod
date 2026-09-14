@@ -18,6 +18,7 @@ Persistence fixes, dependency updates, deployment repairs and consistent bilingu
 - Keep autoplay playing after a restart: recent listening history seeds the mix rotation and restores the last listener's taste instead of starting silent.
 - Play radio streams that refuse HEAD probes: Icecast and Shoutcast stations answering 400 are confirmed with a one-byte ranged GET, with added Shoutcast AAC content types.
 - Use the same animated background, scene picker and motion control on every panel page, not only the dashboard.
+- Show spacer section labels as plain headers that can never be joined or moved, and order siblings by channel_order chains like the TeamSpeak client.
 
 ## Upgrade
 
