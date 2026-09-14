@@ -18,6 +18,7 @@ import {
   searchTuneInStations,
 } from "../media/tunein.js";
 import { parseMediaInput } from "../media/media-input.js";
+import { isAppleMusicPlaylist } from "../media/apple-music.js";
 import {
   canMoveBotToChannel,
   canRemoveTrack,
@@ -108,6 +109,20 @@ async function handlePlay(
     const message =
       result.added.length === 0
         ? "La playlist o álbum no tiene canciones reproducibles."
+        : `Se agregaron ${result.added.length} canciones a la cola${result.remaining ? ` (quedan ${result.remaining} fuera del límite)` : ""}.`;
+    await send(message);
+  } else if (
+    media.kind === "apple-music" &&
+    isAppleMusicPlaylist(media.value)
+  ) {
+    const result = await playback.enqueueAppleMusicCollection(
+      media.value,
+      senderName,
+      senderUid,
+    );
+    const message =
+      result.added.length === 0
+        ? "La playlist no tiene canciones reproducibles."
         : `Se agregaron ${result.added.length} canciones a la cola${result.remaining ? ` (quedan ${result.remaining} fuera del límite)` : ""}.`;
     await send(message);
   } else if (media.kind === "amazon-music") {

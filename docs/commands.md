@@ -103,7 +103,8 @@ chat once the TS3 adapter is connected.
   `!play` (paged requests with 429 backoff, duplicates skipped).
 - **Apple Music:** song and album links resolve through the keyless iTunes
   lookup and play through a YouTube "artist title" search, like Spotify.
-  Playlists name no single track and are rejected with a clear message.
+  Playlists expand up to 100 tracks the same way (lazy YouTube searches,
+  like Spotify collections).
 - **Amazon Music:** links are resolved through SongLink (Odesli), preferring
   the YouTube equivalent (playlists included) and falling back to
   SoundCloud. If nothing playable exists, `!play` says so instead of

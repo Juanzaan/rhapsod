@@ -40,6 +40,9 @@ function makeHarness(
       source: "s",
       title: "Track",
     })),
+    enqueueAppleMusicCollection: vi.fn(
+      (): { added: { id: string }[]; remaining?: number } => ({ added: [] }),
+    ),
     enqueuePlaylist: vi.fn(() => ({ added: [] })),
     enqueueSpotifyCollection: vi.fn(() => ({ added: [] })),
     enqueueMusicLink: vi.fn(() => ({ added: [] })),
@@ -328,7 +331,6 @@ describe("dispatchCommand", () => {
     expect(playback.enqueueMusicLink).not.toHaveBeenCalled();
     expect(send).toHaveBeenCalledWith("En cola: Track");
   });
-
   it("keeps Amazon Music links on the music-link path", async () => {
     const { ctx, playback, send, sender } = makeHarness();
     const command = parseChatCommand(
@@ -341,6 +343,25 @@ describe("dispatchCommand", () => {
       "uid-1",
     );
     expect(playback.enqueue).not.toHaveBeenCalled();
+  });
+
+  it("expands Apple Music playlists through the collection path", async () => {
+    const { ctx, playback, send, sender } = makeHarness();
+    playback.enqueueAppleMusicCollection.mockReturnValue({
+      added: [{ id: "x" }, { id: "y" }],
+    });
+    const command = parseChatCommand(
+      "!play https://music.apple.com/pe/playlist/pl.u-123",
+    )!;
+    await dispatchCommand(ctx, command, sender, send);
+    expect(playback.enqueueAppleMusicCollection).toHaveBeenCalledWith(
+      "https://music.apple.com/pe/playlist/pl.u-123",
+      "user",
+      "uid-1",
+    );
+    expect(playback.enqueue).not.toHaveBeenCalled();
+    expect(playback.enqueueMusicLink).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledWith("Se agregaron 2 canciones a la cola.");
   });
 
   it("denies admin-only commands to non-admin senders", async () => {

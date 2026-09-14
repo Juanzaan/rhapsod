@@ -61,7 +61,7 @@ La cola usa posiciones desde 1. `!remove inicio-fin` incluye ambos extremos y li
 - YouTube: videos y listas, hasta 100 pistas por expansión; se omiten duplicados. La búsqueda clasifica coincidencias y permite elegir el resultado número `n`.
 - SoundCloud: interfaz web pública con identificador temporal, búsqueda de pistas y expansión nativa de listas. yt-dlp y alternativas de SongLink o YouTube actúan como respaldo. No se elude contenido bloqueado o DRM.
 - Spotify: solo metadatos de pistas, álbumes y listas; reproducción mediante coincidencias en YouTube. Las listas usan metadatos públicos o Web API según las credenciales disponibles.
-- Apple Music: canciones y álbumes mediante datos de iTunes y búsqueda en YouTube. Las listas no nombran una pista y se rechazan.
+- Apple Music: canciones y álbumes mediante datos de iTunes y búsqueda en YouTube. Las listas se expanden igual que las colecciones de Spotify.
 - Amazon Music: resolución mediante SongLink a YouTube o SoundCloud disponibles.
 - Audio directo: URL HTTPS públicas de archivos, HLS y emisoras. Se rechazan HTTP, redes privadas y archivos locales.
 - Radio: directorio comunitario con alternativa TuneIn. Los enlaces pegados de TuneIn (páginas y acortados tun.in) suenan directo. Los títulos en directo dependen de metadatos ICY de la emisora.
