@@ -79,6 +79,7 @@ export class DirectUrlClient implements DirectUrlResolver {
   readonly #timeoutMs: number;
   readonly #matchCache = new Map<string, boolean>();
   readonly #validatedUrls = new Map<string, ValidatedUrl>();
+  #maxRedirectsSupport: Promise<boolean> | undefined;
 
   constructor(options: DirectUrlResolverOptions = {}) {
     this.#fetch = options.fetch ?? safeFetch;
@@ -258,8 +259,9 @@ export class DirectUrlClient implements DirectUrlResolver {
         "json",
         "-show_entries",
         "format=duration:format_tags=title,artist",
-        "-max_redirects",
-        "0",
+        ...((await this.#supportsMaxRedirects())
+          ? ["-max_redirects", "0"]
+          : []),
         url,
       ],
       { maxBuffer: 1024 * 1024, timeout: this.#timeoutMs, windowsHide: true },
@@ -278,6 +280,27 @@ export class DirectUrlClient implements DirectUrlResolver {
       }
       throw error;
     }
+  }
+
+  // -max_redirects keeps ffprobe from following redirects past the
+  // validated URL, but older static builds (7.0.x) reject the option and
+  // fail every probe. Detect once per process and pass it only when the
+  // binary accepts it; without the flag those builds follow redirects,
+  // which the hop-by-hop validation already resolved.
+  async #supportsMaxRedirects(): Promise<boolean> {
+    this.#maxRedirectsSupport ??= (async () => {
+      try {
+        await execFileAsync(
+          this.#ffprobeBinary,
+          ["-v", "error", "-max_redirects", "0", "-version"],
+          { timeout: 10_000, windowsHide: true },
+        );
+        return true;
+      } catch {
+        return false;
+      }
+    })();
+    return this.#maxRedirectsSupport;
   }
 
   #fallbackTitle(url: string, hasDuration: boolean): string {
