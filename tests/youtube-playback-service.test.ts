@@ -19,6 +19,7 @@ import type { FfmpegPlaybackSession } from "../src/audio/ffmpeg-player.js";
 import { LoudnessProfiler } from "../src/audio/loudness-profiler.js";
 import type { SpotifyResolver } from "../src/media/spotify/api.js";
 import type { LyricsResolver } from "../src/media/lyrics.js";
+import type { AppleMusicResolver } from "../src/media/apple-music.js";
 import type { AudioPlayer } from "../src/audio/audio-player.js";
 import type { RhapsodOpusEncoder } from "../src/audio/opus-encoder.js";
 import type { DirectUrlResolver } from "../src/media/direct-url.js";
@@ -65,13 +66,7 @@ function setup(
     playlistStore?: PlaylistStore;
     redirectResolver?: RedirectResolver;
     tuneInStreamUrl?: (url: string) => Promise<string | undefined>;
-    appleMusicResolver?: {
-      getTrack(url: string): Promise<{
-        artist: string;
-        durationSeconds?: number;
-        title: string;
-      }>;
-    };
+    appleMusicResolver?: AppleMusicResolver;
     audioUrlCache?: AudioUrlCache;
     proxyUrl?: string;
     autoplayProfile?: {
@@ -1385,10 +1380,12 @@ describe("YoutubePlaybackService", () => {
 
   it("resolves Apple Music and Amazon Music links through the main enqueue path", async () => {
     const appleMusicResolver = {
+      getPlaylist: () => Promise.resolve({ tracks: [] }),
       getTrack: vi.fn(() =>
         Promise.resolve({
           artist: "Rick Astley",
           durationSeconds: 215,
+          id: "456",
           title: "Never Gonna Give You Up",
         }),
       ),
@@ -1429,6 +1426,56 @@ describe("YoutubePlaybackService", () => {
         "user-1",
       ),
     ).rejects.toThrow("resolución de links de Apple Music");
+  });
+
+  it("expands Apple Music playlists with lazy YouTube searches", async () => {
+    const appleMusicResolver = {
+      getPlaylist: vi.fn(() =>
+        Promise.resolve({
+          name: "Party",
+          tracks: [
+            { artist: "A", durationSeconds: 180, id: "111", title: "One" },
+            { artist: "B", id: "222", title: "Two" },
+          ],
+        }),
+      ),
+      getTrack: () => Promise.reject(new Error("unused")),
+    };
+    const { service } = setup({ appleMusicResolver });
+
+    const result = await service.enqueueAppleMusicCollection(
+      "https://music.apple.com/pe/playlist/pl.u-123",
+      "user-1",
+    );
+
+    expect(appleMusicResolver.getPlaylist).toHaveBeenCalledWith(
+      "https://music.apple.com/pe/playlist/pl.u-123",
+    );
+    expect(result.added).toHaveLength(2);
+    expect(result.added[0]).toMatchObject({
+      id: "apple:111",
+      requestedBy: "user-1",
+      searchQuery: "A One",
+      title: "A - One",
+    });
+    expect(result.added[1]).toMatchObject({
+      id: "apple:222",
+      searchQuery: "B Two",
+    });
+    expect(result.remaining).toBeUndefined();
+  });
+
+  it("routes Apple Music playlists to the collection path", async () => {
+    const { service } = setup({
+      appleMusicResolver: {
+        getPlaylist: () => Promise.resolve({ tracks: [] }),
+        getTrack: () => Promise.reject(new Error("unused")),
+      },
+    });
+
+    await expect(
+      service.enqueue("https://music.apple.com/pe/playlist/pl.u-123", "user-1"),
+    ).rejects.toThrow("se expanden con !play");
   });
 
   it("applies the volume to the active and future sessions", async () => {

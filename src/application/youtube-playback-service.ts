@@ -24,7 +24,10 @@ import type { VoiceFrameOutput } from "../audio/audio-player.js";
 import type { AudioFilter, FilterParam } from "../audio/filter-chain.js";
 import type { AudioPlayerMetrics } from "../audio/audio-player.js";
 import type { AlternativeSourceResolver } from "../media/song-link.js";
-import type { AppleMusicResolver } from "../media/apple-music.js";
+import {
+  isAppleMusicPlaylist,
+  type AppleMusicResolver,
+} from "../media/apple-music.js";
 import type { DirectUrlResolver } from "../media/direct-url.js";
 import {
   SoundCloudDrmError,
@@ -480,6 +483,11 @@ export class YoutubePlaybackService {
       }
     }
     if (media.kind === "apple-music") {
+      if (isAppleMusicPlaylist(media.value)) {
+        throw new UserError(
+          "Las playlists de Apple Music se expanden con !play desde el canal.",
+        );
+      }
       if (!this.#appleMusicResolver) {
         throw new UserError(
           "Este bot no tiene resolución de links de Apple Music configurada.",
@@ -1124,6 +1132,88 @@ export class YoutubePlaybackService {
                 (expansion.total ?? expansion.tracks.length) -
                   added.length -
                   duplicates,
+              ),
+            }
+          : {}),
+      };
+    });
+  }
+
+  async enqueueAppleMusicCollection(
+    input: string,
+    requestedBy: string,
+    requestedByUid?: string,
+  ): Promise<PlaylistEnqueueResult> {
+    return this.#withExpansionSlot(async () => {
+      const stopEpoch = this.#controller.captureStopEpoch();
+      if (!this.#appleMusicResolver) {
+        throw new UserError(
+          "Este bot no tiene resolución de links de Apple Music configurada.",
+        );
+      }
+      const playlist = await this.#appleMusicResolver.getPlaylist(input);
+      if (!this.#controller.isStopEpochCurrent(stopEpoch)) {
+        return { added: [], remaining: playlist.tracks.length };
+      }
+      const added: Track[] = [];
+      let duplicates = 0;
+      let halted = false;
+      const addedIds = new Set<string>();
+      for (const appleTrack of playlist.tracks.slice(
+        0,
+        this.#playlistMaxTracks,
+      )) {
+        if (!this.#controller.isStopEpochCurrent(stopEpoch)) {
+          halted = true;
+          break;
+        }
+        const query = `${appleTrack.artist} ${appleTrack.title}`.trim();
+        const id = `apple:${appleTrack.id}`;
+        if (!query || addedIds.has(id)) {
+          duplicates++;
+          continue;
+        }
+        try {
+          const track = this.#enqueueMetadata(
+            {
+              ...(appleTrack.durationSeconds === undefined
+                ? {}
+                : { durationSeconds: appleTrack.durationSeconds }),
+              id,
+              title: `${appleTrack.artist} - ${appleTrack.title}`,
+              webpageUrl:
+                appleTrack.url ??
+                `https://music.apple.com/song/${appleTrack.id}`,
+            },
+            requestedBy,
+            "apple-music",
+            requestedByUid,
+            query,
+          );
+          addedIds.add(track.id);
+          added.push(track);
+        } catch (error) {
+          if (error instanceof QueueLimitError) {
+            halted = true;
+            break;
+          }
+          if (
+            error instanceof Error &&
+            /ya está en la cola/i.test(error.message)
+          ) {
+            duplicates++;
+            continue;
+          }
+          throw error;
+        }
+      }
+      return {
+        added,
+        ...(halted
+          ? {
+              remaining: Math.max(
+                0,
+                playlist.tracks.length - added.length - duplicates,
               ),
             }
           : {}),
