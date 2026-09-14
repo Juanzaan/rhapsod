@@ -29,6 +29,9 @@ export interface ServerViewChannel {
   readonly cid: number;
   readonly name: string;
   readonly parentCid?: number;
+  // TeamSpeak channel_order: the cid below which this channel sorts
+  // (0 first). The tree resolves it as a chain, never a position number.
+  readonly order?: number;
 }
 
 export interface ServerViewClient {
