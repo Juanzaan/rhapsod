@@ -174,6 +174,48 @@ describe("DirectUrlResolver", () => {
     );
   });
 
+  it("accepts radio streams that reject HEAD but serve a ranged GET", async () => {
+    // Icecast stations answering HEAD with 400 text/html made whole radio
+    // directories unplayable; the stream itself only answers GET.
+    audioFetch
+      .mockResolvedValueOnce(
+        fetchResponse({ contentType: "text/html", status: 400 }),
+      )
+      .mockResolvedValueOnce(fetchResponse({ contentType: "audio/mpeg" }));
+    const resolver = new DirectUrlClient({ fetch: audioFetch });
+
+    await expect(
+      resolver.match("https://icecast.walmradio.com:8443/jazz"),
+    ).resolves.toBe(true);
+    const second = audioFetch.mock.calls[1]?.[1] as
+      { headers?: Record<string, string> } | undefined;
+    expect(second?.headers?.range).toBe("bytes=0-1");
+  });
+
+  it("accepts shoutcast AAC content types", async () => {
+    for (const contentType of ["audio/aacp", "audio/x-aac"]) {
+      audioFetch.mockReset();
+      audioFetch.mockResolvedValueOnce(fetchResponse({ contentType }));
+      const resolver = new DirectUrlClient({ fetch: audioFetch });
+      await expect(
+        resolver.match("https://stream.example.test/live"),
+      ).resolves.toBe(true);
+    }
+  });
+
+  it("still rejects when the ranged GET is not audio either", async () => {
+    audioFetch
+      .mockResolvedValueOnce(
+        fetchResponse({ contentType: "text/html", status: 400 }),
+      )
+      .mockResolvedValueOnce(fetchResponse({ contentType: "text/html" }));
+    const resolver = new DirectUrlClient({ fetch: audioFetch });
+
+    await expect(resolver.match("https://example.test/feed")).resolves.toBe(
+      false,
+    );
+  });
+
   it("builds a track with tags title and artist from ffprobe", async () => {
     audioFetch.mockResolvedValueOnce(
       fetchResponse({ contentType: "audio/mpeg" }),

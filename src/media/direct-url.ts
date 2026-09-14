@@ -21,9 +21,11 @@ const DIRECT_AUDIO_EXTENSIONS = new Set([
 
 const DIRECT_AUDIO_CONTENT_TYPES = new Set([
   "application/mpegurl",
+  "application/ogg",
   "application/vnd.apple.mpegurl",
   "application/x-mpegurl",
   "audio/aac",
+  "audio/aacp",
   "audio/flac",
   "audio/mp4",
   "audio/mpeg",
@@ -31,6 +33,8 @@ const DIRECT_AUDIO_CONTENT_TYPES = new Set([
   "audio/ogg",
   "audio/opus",
   "audio/wav",
+  "audio/x-aac",
+  "audio/x-aacp",
   "audio/x-flac",
   "audio/x-m4a",
   "audio/x-wav",
@@ -163,7 +167,7 @@ export class DirectUrlClient implements DirectUrlResolver {
       }
       if (parsed.protocol !== "https:") return undefined;
       if (!(await isPublicHostname(parsed.hostname))) return undefined;
-      const response = await this.#head(current);
+      const response = await this.#probeUrl(current);
       if (response === undefined) return undefined;
       if (response.status >= 300 && response.status < 400) {
         const location = response.headers.get("location");
@@ -212,6 +216,36 @@ export class DirectUrlClient implements DirectUrlResolver {
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  // Icecast and Shoutcast stations commonly answer HEAD with an error page
+  // (400 text/html) while serving the stream itself fine. A one-byte ranged
+  // GET confirms those streams; without it whole radio directories look
+  // unplayable.
+  async #rangedGet(url: string): Promise<Response | undefined> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), HEAD_TIMEOUT_MS);
+    try {
+      return await this.#fetch(url, {
+        headers: {
+          range: "bytes=0-1",
+          "user-agent": "Rhapsod/1 (audio-probe)",
+        },
+        method: "GET",
+        redirect: "manual",
+        signal: controller.signal,
+      });
+    } catch {
+      return undefined;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async #probeUrl(url: string): Promise<Response | undefined> {
+    const head = await this.#head(url);
+    if (head !== undefined && head.status < 400) return head;
+    return (await this.#rangedGet(url)) ?? head;
   }
 
   async #probe(url: string): Promise<FfprobeFormat> {
