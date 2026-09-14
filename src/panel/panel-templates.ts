@@ -1,5 +1,10 @@
 import type { PanelStatus } from "./panel-server.js";
-import { AMBIENCE_JS, DASHBOARD_CSS } from "./dashboard-design.js";
+import {
+  AMBIENCE_JS,
+  DASHBOARD_CSS,
+  AMBIENT_LAYER_HTML,
+  SCENE_TOOLS_HTML,
+} from "./dashboard-design.js";
 import { PAGE_CSS } from "./page-design.js";
 
 // Shared ON AIR console chrome: flat zinc backdrop, green signal accents,
@@ -202,9 +207,11 @@ export function renderSetupWizard(
   </style>
 </head>
 <body class="setup-page">
-  <nav class="nv"><a class="nb" href="/">RHAPSOD<b>.</b></a><div class="nl"><a class="nk" href="/">Consola</a><a class="nk" href="/server">Servidor</a><a class="nk" href="/settings">Config</a><a class="nk" href="/commands">Comandos</a></div></nav>
+  ${AMBIENT_LAYER_HTML}
+  <nav class="nv"><a class="nb" href="/">RHAPSOD<b>.</b></a><div class="nl"><a class="nk" href="/">Consola</a><a class="nk" href="/server">Servidor</a><a class="nk" href="/settings">Config</a><a class="nk" href="/commands">Comandos</a></div><div class="nr">${SCENE_TOOLS_HTML}</div></nav>
   <main class="setup-shell"><section class="setup-story"><div class="setup-art" aria-hidden="true"><span>r.</span></div><div class="eyebrow">Tu próximo espacio de escucha</div><h1>Conectá.<br>Elegí un tema.<br>Compartilo.</h1><p>Prepará tu servidor, ajustá el sonido y dejá todo listo para escuchar en compañía.</p></section><div class="w" id="w"></div></main>
   <script>
+    ${AMBIENCE_JS}
     var A='Basic '+btoa('${cred}');
     var H={authorization:A};
     var S=[
@@ -394,6 +401,7 @@ export function renderSetupWizard(
         .catch(function(e){btn.textContent='Error: '+e.message;btn.disabled=false;});
     }
 
+    initAmbience();
     render();
   </script>
 </body>
@@ -527,7 +535,7 @@ export function renderDashboard(
   </style>
 </head>
 <body>
-  <div class="ambient" id="ambient" data-scene="aurora" aria-hidden="true"></div>
+  ${AMBIENT_LAYER_HTML}
   <nav class="nv">
     <div class="nb">RHAPSOD<b>.</b></div>
     <div class="nl">
@@ -545,7 +553,7 @@ export function renderDashboard(
   <main class="mn">
     <header class="page-intro">
       <div><div class="eyebrow">Tu espacio de escucha / TeamSpeak</div><h1>Buena música. <span>En compañía.</span></h1><p class="intro-note">La sesión, el sonido y tu canal. Todo en un lugar.</p></div>
-      <div class="scene-tools"><label for="scene">Ambiente</label><select id="scene" onchange="setScene(this.value)"><option value="aurora">Aurora</option><option value="ember">Atardecer</option><option value="ocean">Océano</option><option value="off">Sin fondo</option></select><button id="motionToggle" type="button" onclick="toggleMotion()" aria-pressed="false">Pausar movimiento</button></div>
+      ${SCENE_TOOLS_HTML}
     </header>
     <div class="g">
       <div class="cd player-card" id="playerCard" data-playing="${playerState === "playing"}">
@@ -1027,6 +1035,7 @@ export function renderSettingsPage(
   </style>
 </head>
 <body>
+  ${AMBIENT_LAYER_HTML}
   <nav class="nv">
     <div class="nb">RHAPSOD<b>.</b></div>
     <div class="nl">
@@ -1036,9 +1045,10 @@ export function renderSettingsPage(
       <a class="nk" href="/commands">Comandos</a>
     </div>
   </nav>
-  <main class="mn"><header class="page-heading"><div><div class="eyebrow">A tu manera / Configuración</div><h1>Los detalles hacen la sesión.</h1><p>Conexión, sonido y servicios. Los secretos sin modificar se conservan al guardar.</p></div><a href="/setup">Abrir asistente ↗</a></header><div class="settings-grid" id="ct"><div class="cd"><div class="em">Cargando...</div></div></div></main>
+  <main class="mn"><header class="page-heading"><div><div class="eyebrow">A tu manera / Configuración</div><h1>Los detalles hacen la sesión.</h1><p>Conexión, sonido y servicios. Los secretos sin modificar se conservan al guardar.</p></div><div class="page-tools">${SCENE_TOOLS_HTML}<a href="/setup">Abrir asistente ↗</a></div></header><div class="settings-grid" id="ct"><div class="cd"><div class="em">Cargando...</div></div></div></main>
   <div class="toast" id="toast"></div>
   <script>
+    ${AMBIENCE_JS}
     var A='Basic '+btoa('${cred}');
     var H={authorization:A};
 
@@ -1117,6 +1127,7 @@ export function renderSettingsPage(
         .finally(function(){if(button){button.disabled=false;button.textContent='Guardar cambios';}});
     }
 
+    initAmbience();
     load();
   </script>
 </body>
@@ -1149,6 +1160,7 @@ export function renderCommandsPage(
   </style>
 </head>
 <body>
+  ${AMBIENT_LAYER_HTML}
   <nav class="nv">
     <div class="nb">RHAPSOD<b>.</b></div>
     <div class="nl">
@@ -1158,11 +1170,12 @@ export function renderCommandsPage(
       <a class="nk a" href="/commands">Comandos</a>
     </div>
   </nav>
-  <main class="mn"><header class="page-heading"><div><div class="eyebrow">La música bajo tu control</div><h1>Un comando. Otra posibilidad.</h1><p>Explorá reproducción, cola y herramientas del bot. Usá estos comandos en el chat de TeamSpeak.</p></div><span class="command-count" id="commandCount"></span></header>
+  <main class="mn"><header class="page-heading"><div><div class="eyebrow">La música bajo tu control</div><h1>Un comando. Otra posibilidad.</h1><p>Explorá reproducción, cola y herramientas del bot. Usá estos comandos en el chat de TeamSpeak.</p></div><div class="page-tools">${SCENE_TOOLS_HTML}<span class="command-count" id="commandCount"></span></div></header>
     <label class="field-label" for="sr">Buscar por nombre, alias o descripción</label><input class="sr" id="sr" placeholder="Probá con play, radio o playlist…" oninput="filter()">
     <div class="command-grid" id="ls"><div class="cd"><div class="em">Cargando comandos…</div></div></div>
   </main>
   <script>
+    ${AMBIENCE_JS}
     var A='Basic '+btoa('${cred}');
     var H={authorization:A};
     var cmds=[];
@@ -1204,6 +1217,7 @@ export function renderCommandsPage(
       render(cmds.filter(function(c){return c.name.indexOf(q)!==-1||c.aliases.some(function(a){return a.indexOf(q)!==-1;})||c.summary.toLowerCase().indexOf(q)!==-1;}));
     }
 
+    initAmbience();
     load();
   </script>
 </body>
@@ -1230,6 +1244,7 @@ export function renderServerPage(
   </style>
 </head>
 <body>
+  ${AMBIENT_LAYER_HTML}
   <nav class="nv">
     <div class="nb">RHAPSOD<b>.</b></div>
     <div class="nl">
@@ -1242,7 +1257,7 @@ export function renderServerPage(
       <div class="liveb" id="live">···</div>
     </div>
   </nav>
-  <main class="mn"><header class="page-heading"><div><div class="eyebrow">Tu comunidad / TeamSpeak</div><h1>Cada canal tiene su lugar.</h1><p>Explorá el servidor, encontrá a tus amigos y elegí dónde suena Rhapsod.</p></div></header>
+  <main class="mn"><header class="page-heading"><div><div class="eyebrow">Tu comunidad / TeamSpeak</div><h1>Cada canal tiene su lugar.</h1><p>Explorá el servidor, encontrá a tus amigos y elegí dónde suena Rhapsod.</p></div><div class="page-tools">${SCENE_TOOLS_HTML}</div></header>
     <div class="server-metrics"><div class="metric"><strong id="channelCount">0</strong><span>Canales conocidos</span></div><div class="metric"><strong id="peopleCount">0</strong><span>Usuarios visibles</span></div><div class="metric"><strong id="emptyCount">0</strong><span>Sin usuarios visibles</span></div></div>
     <div class="server-layout"><div class="cd">
       <label class="field-label" for="channelSearch">Buscar un canal o usuario</label><div class="toolbar"><input class="sr" id="channelSearch" placeholder="Nombre del canal o usuario…" oninput="filterChannels()"><button class="btn secondary" onclick="expandChannels(true)">Expandir</button><button class="btn secondary" onclick="expandChannels(false)">Contraer</button></div>
@@ -1253,6 +1268,7 @@ export function renderServerPage(
   </main>
   <div class="toast" id="toast"></div>
   <script>${SERVER_TREE_JS}
+    ${AMBIENCE_JS}
     var A='Basic '+btoa('${cred}');
     var H={authorization:A};
     var RM=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -1329,6 +1345,7 @@ export function renderServerPage(
     }
 
     (function init(){
+      initAmbience();
       if(document.readyState==='complete')live();
       else window.addEventListener('load',live);
     })();
