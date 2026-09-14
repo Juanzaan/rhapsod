@@ -37,7 +37,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .chnm{font-weight:650;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .chct{font-family:var(--mn);font-size:.72rem;color:var(--dm)}
 .botpill{font-family:var(--mn);font-size:.62rem;letter-spacing:.18em;background:var(--ac);color:#0b0b0d;border-radius:4px;padding:.15rem .45rem;font-weight:700}
-.spacer{text-align:center;color:var(--ft);font-size:.72rem;letter-spacing:.3em;text-transform:uppercase;padding:.9rem 0 .4rem}
 .users{margin:.5rem 0 0 1.2rem;padding:0;list-style:none}
 .users li{font-size:.82rem;color:var(--dm);padding:.12rem 0;display:flex;gap:.45rem;align-items:center}
 .users li::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--bl);flex-shrink:0}
@@ -50,14 +49,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 `;
 
 // Shared server-tree renderer (dashboard card + server page): nested
-// channels ordered like TeamSpeak (channel_order, then name), users,
-// BOT pill, spacers. opts.interactive adds collapse chevrons + click-move.
+// channels in TeamSpeak order, users, BOT pill. Spacers are decoration,
+// never channels: they render nothing and their subchannels move up to
+// the spacer's parent. opts.interactive adds collapse chevrons + click-move.
 const SERVER_TREE_JS = `
-function spacerName(name){
-  var m=/^\\[\\*?(cspacer\\d*)\\](.*)$/.exec(name||'');
-  if(!m)return null;
-  var rest=(m[2]||'').trim();
-  return rest.length>0?rest:'···';
+function isSpacer(name){
+  return /^\\[\\*?(?:[crl]?spacer)\\d*\\]/i.test(name||'');
 }
 function serverTreeHtml(view,opts){
   opts=opts||{};
@@ -66,27 +63,72 @@ function serverTreeHtml(view,opts){
   var chs=(view&&view.channels)||[];
   var cls=(view&&view.clients)||[];
   var bot=(view&&view.botChannelId)||0;
+  var byId={};
+  var gi;
+  for(gi=0;gi<chs.length;gi++){byId[chs[gi].cid]=chs[gi];}
+  // Spacers cannot hold channels: subchannels of a spacer render under
+  // the spacer's own parent so hiding decoration never hides music.
+  var effParent=function(c){
+    var p=c.parentCid;
+    var guard={};
+    guard[c.cid]=true;
+    while(p&&byId[p]&&!guard[p]){
+      guard[p]=true;
+      if(!isSpacer(byId[p].name))return p;
+      p=byId[p].parentCid;
+    }
+    return 0;
+  };
   var byParent={};
-  var ids={};
-  for(var ci=0;ci<chs.length;ci++)ids[chs[ci].cid]=true;
   for(var i=0;i<chs.length;i++){
     var c=chs[i];
-    var p=c.parentCid&&ids[c.parentCid]&&c.parentCid!==c.cid?c.parentCid:0;
+    var p=effParent(c);
     if(!byParent[p])byParent[p]=[];
     byParent[p].push(c);
   }
-  var names=Object.keys(byParent);
-  for(var k=0;k<names.length;k++){
-    byParent[names[k]].sort(function(a,b){
-      var ao=(typeof a.order==='number'&&isFinite(a.order))?a.order:2147483647;
-      var bo=(typeof b.order==='number'&&isFinite(b.order))?b.order:2147483647;
-      if(ao!==bo)return ao-bo;
-      var an=String(a.name||''),bn=String(b.name||'');
-      var cmp=an.localeCompare(bn,'es');
-      if(cmp!==0)return cmp;
-      return (a.cid||0)-(b.cid||0);
-    });
-  }
+  // channel_order is the cid below which a channel sorts (0 first), not
+  // a position number: resolve every sibling group as a chain. Stale
+  // links, cycles and missing order fall back to name, then cid.
+  var nameCmp=function(a,b){
+    var r=String(a.name||'').localeCompare(String(b.name||''),'es');
+    if(r!==0)return r;
+    return (a.cid||0)-(b.cid||0);
+  };
+  var chainGroup=function(kids){
+    var ordered=kids.slice().sort(nameCmp);
+    var group={};
+    var g;
+    for(g=0;g<ordered.length;g++){group[ordered[g].cid]=ordered[g];}
+    var next={};
+    var heads=[];
+    var h;
+    for(h=0;h<ordered.length;h++){
+      var ch=ordered[h];
+      var o=(typeof ch.order==='number'&&isFinite(ch.order))?ch.order:-1;
+      if(o===0){heads.push(ch);}
+      else if(o>0&&o!==ch.cid&&group[o]){(next[o]||(next[o]=[])).push(ch);}
+    }
+    var placed={};
+    var out=[];
+    var follow=function(start){
+      var cur=start;
+      var guard=0;
+      while(cur&&!placed[cur.cid]&&guard<=ordered.length){
+        guard++;
+        placed[cur.cid]=true;
+        out.push(cur);
+        var cands=next[cur.cid]||[];
+        var n=0;
+        while(n<cands.length&&placed[cands[n].cid]){n++;}
+        cur=n<cands.length?cands[n]:undefined;
+      }
+    };
+    for(h=0;h<heads.length;h++){follow(heads[h]);}
+    for(h=0;h<ordered.length;h++){if(!placed[ordered[h].cid]){follow(ordered[h]);}}
+    return out;
+  };
+  var pids=Object.keys(byParent);
+  for(var k=0;k<pids.length;k++){byParent[pids[k]]=chainGroup(byParent[pids[k]]);}
   var byChannel={};
   var total=0;
   for(var j=0;j<cls.length;j++){
@@ -118,12 +160,8 @@ function serverTreeHtml(view,opts){
       if(seen[ch.cid])continue;
       seen[ch.cid]=true;
       if(depth>8)continue;
-      var sp=spacerName(ch.name);
-      if(sp!==null){
-        out+='<div class="spacer">'+esc(sp)+'</div>';
-      }else{
-        out+=rowHtml(ch,byChannel[ch.cid]||[],ch.cid===bot,(byParent[ch.cid]||[]).length>0);
-      }
+      if(isSpacer(ch.name))continue;
+      out+=rowHtml(ch,byChannel[ch.cid]||[],ch.cid===bot,(byParent[ch.cid]||[]).length>0);
       var inner=walk(ch.cid,depth+1);
       if(inner!==''){
         out+='<div class="kids" data-kids="'+ch.cid+'"'+(collapsed[ch.cid]?' style="display:none"':'')+'>'+inner+'</div>';
@@ -134,7 +172,13 @@ function serverTreeHtml(view,opts){
   var html=walk(0,0);
   for(var remaining=0;remaining<chs.length;remaining++){
     var orphan=chs[remaining];
-    if(!seen[orphan.cid]){seen[orphan.cid]=true;html+=rowHtml(orphan,byChannel[orphan.cid]||[],orphan.cid===bot,false);html+=walk(orphan.cid,0);}
+    if(!seen[orphan.cid]){
+      seen[orphan.cid]=true;
+      if(!isSpacer(orphan.name)){
+        html+=rowHtml(orphan,byChannel[orphan.cid]||[],orphan.cid===bot,false);
+        html+=walk(orphan.cid,0);
+      }
+    }
   }
   return {html:html,total:total};
 }`;

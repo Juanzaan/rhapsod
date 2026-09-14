@@ -472,8 +472,9 @@ describe("renderDashboard console", () => {
     });
     const tree = getEl("tree").innerHTML;
     expect(tree).toContain("BOT");
-    expect(tree).toContain("Hub");
-    expect(tree).not.toContain("[cspacer01]");
+    // Spacers never render: not as channels, not as section headers.
+    expect(tree).not.toContain("Hub");
+    expect(tree).not.toContain("cspacer");
     expect(tree).not.toContain("<b>x</b>");
     expect(tree).toContain("&lt;b&gt;x&lt;/b&gt;");
     expect(tree).toContain("Empty orphan");
@@ -514,6 +515,110 @@ describe("renderDashboard console", () => {
     expect(
       (moveCall?.options as { body?: string } | undefined)?.body,
     ).toContain('"cid":3');
+  });
+
+  function renderTreeHtml(view: {
+    version: number;
+    botChannelId: number;
+    mode?: string;
+    channels: {
+      cid: number;
+      name: string;
+      parentCid?: number;
+      order?: number;
+    }[];
+    clients: { clid: number; name: string; cid: number }[];
+  }): string {
+    const els = new Map<string, { innerHTML: string; textContent: string }>();
+    const getEl = (id: string) => {
+      let el = els.get(id);
+      if (!el) {
+        el = { innerHTML: "", textContent: "" };
+        els.set(id, el);
+      }
+      return el;
+    };
+    const html = renderServerPage("admin", "secret");
+    const code = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
+      .map((m) => m[1] ?? "")
+      .join("\n");
+    // Intentional: executes generated template JS against fake DOM globals.
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval
+    const factory = new Function(
+      "document",
+      "window",
+      "fetch",
+      "setInterval",
+      "setTimeout",
+      "btoa",
+      `${code};return {render:render};`,
+    ) as (...args: unknown[]) => { render: (view: unknown) => void };
+    const api = factory(
+      {
+        getElementById: (id: string) =>
+          id === "channelSearch" ? { value: "" } : getEl(id),
+        readyState: "loading",
+      },
+      { matchMedia: () => ({ matches: false }), addEventListener: () => {} },
+      () => Promise.resolve({ json: () => Promise.resolve({}) }),
+      () => 0,
+      () => 0,
+      () => "eA==",
+    );
+    api.render(view);
+    return getEl("tree").innerHTML;
+  }
+
+  it("hides every TeamSpeak spacer form instead of showing channels", () => {
+    // Spacers are server-side decoration ([spacer]/[cspacer]/[rspacer]/
+    // [lspacer], optional * and number): the panel renders nothing for
+    // them, never a channel row or a section header.
+    const tree = renderTreeHtml({
+      version: 1,
+      botChannelId: 2,
+      mode: "full",
+      channels: [
+        { cid: 1, name: "Lobby" },
+        { cid: 2, name: "Music", parentCid: 1 },
+        { cid: 4, name: "[cspacer01]Hub" },
+        { cid: 5, name: "[spacer02]---" },
+        { cid: 6, name: "[rspacer]News" },
+        { cid: 7, name: "[*spacer03]-" },
+        { cid: 8, name: "[lspacer7]Left" },
+        // Hiding decoration never hides music: subchannels of a spacer
+        // render under the spacer's own parent.
+        { cid: 9, name: "Hidden Gem", parentCid: 4 },
+      ],
+      clients: [],
+    });
+    for (const text of ["Hub", "News", "Left", "spacer", "---"]) {
+      expect(tree).not.toContain(text);
+    }
+    expect(tree).toContain("Lobby");
+    expect(tree).toContain("Music");
+    expect(tree).toContain("Hidden Gem");
+  });
+
+  it("orders siblings by the channel_order chain, not the numeric value", () => {
+    // channel_order is the cid below which a channel sorts (0 first):
+    // numeric values only match TeamSpeak when cids grow in order.
+    const tree = renderTreeHtml({
+      version: 1,
+      botChannelId: 99,
+      mode: "full",
+      channels: [
+        { cid: 30, name: "First", order: 0 },
+        { cid: 12, name: "Second", order: 30 },
+        { cid: 20, name: "Third", order: 12 },
+      ],
+      clients: [],
+    });
+    const first = tree.indexOf("First");
+    const second = tree.indexOf("Second");
+    const third = tree.indexOf("Third");
+    expect(first).toBeGreaterThan(-1);
+    expect(second).toBeGreaterThan(first);
+    expect(third).toBeGreaterThan(second);
   });
 
   it("escapes the current title", () => {
