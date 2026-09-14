@@ -71,7 +71,7 @@ const configSchema = z.object({
     .int()
     .min(1)
     .max(200)
-    .default(30),
+    .default(100),
   RHAPSOD_AUDIO_TEST_TONE_SECONDS: z.coerce.number().min(0).max(10).default(0),
   RHAPSOD_OPUS_BITRATE: z.coerce
     .number()
