@@ -15,6 +15,9 @@ Correcciones de persistencia, actualización de dependencias, reparación del de
 - Renovación visual del panel y prevención de respuestas antiguas, con reintento de carga de ajustes.
 - Reparación de Python y del inicio del servicio en Docker; conservación de configuración y cookies al repetir el instalador.
 - Notas históricas y futuras uniformes en inglés y español, con instrucciones de actualización y verificación.
+- Mantener la reproducción automática tras un reinicio: el historial reciente alimenta la rotación y recupera el gusto del último oyente, en lugar de iniciar en silencio.
+- Reproducir emisoras que rechazan la comprobación HEAD: las estaciones Icecast y Shoutcast que responden 400 se confirman con una petición GET de un byte, con tipos de contenido AAC de Shoutcast añadidos.
+- Utilizar el mismo fondo animado, selector de ambiente y control de movimiento en todas las páginas del panel, no solo en la consola.
 
 ## Actualización
 
