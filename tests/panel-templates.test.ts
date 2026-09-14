@@ -472,8 +472,9 @@ describe("renderDashboard console", () => {
     });
     const tree = getEl("tree").innerHTML;
     expect(tree).toContain("BOT");
-    // Spacers never render: not as channels, not as section headers.
-    expect(tree).not.toContain("Hub");
+    // Spacer labels render as plain headers, never as channels.
+    expect(tree).toContain('<div class="spacer">Hub</div>');
+    expect(tree).not.toContain("moveBot(4)");
     expect(tree).not.toContain("cspacer");
     expect(tree).not.toContain("<b>x</b>");
     expect(tree).toContain("&lt;b&gt;x&lt;/b&gt;");
@@ -569,10 +570,10 @@ describe("renderDashboard console", () => {
     return getEl("tree").innerHTML;
   }
 
-  it("hides every TeamSpeak spacer form instead of showing channels", () => {
+  it("shows spacer labels as headers, never as channels", () => {
     // Spacers are server-side decoration ([spacer]/[cspacer]/[rspacer]/
-    // [lspacer], optional * and number): the panel renders nothing for
-    // them, never a channel row or a section header.
+    // [lspacer], optional * and number): labels render as plain headers
+    // with no row, no move and no counts; line spacers render nothing.
     const tree = renderTreeHtml({
       version: 1,
       botChannelId: 2,
@@ -591,8 +592,21 @@ describe("renderDashboard console", () => {
       ],
       clients: [],
     });
-    for (const text of ["Hub", "News", "Left", "spacer", "---"]) {
-      expect(tree).not.toContain(text);
+    for (const label of ["Hub", "News", "Left"]) {
+      expect(tree).toContain(`<div class="spacer">${label}</div>`);
+    }
+    for (const raw of [
+      "cspacer",
+      "rspacer",
+      "lspacer",
+      "[spacer",
+      "[*spacer",
+      "---",
+    ]) {
+      expect(tree).not.toContain(raw);
+    }
+    for (const cid of [4, 5, 6, 7, 8]) {
+      expect(tree).not.toContain(`moveBot(${cid})`);
     }
     expect(tree).toContain("Lobby");
     expect(tree).toContain("Music");

@@ -37,6 +37,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .chnm{font-weight:650;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .chct{font-family:var(--mn);font-size:.72rem;color:var(--dm)}
 .botpill{font-family:var(--mn);font-size:.62rem;letter-spacing:.18em;background:var(--ac);color:#0b0b0d;border-radius:4px;padding:.15rem .45rem;font-weight:700}
+.spacer{text-align:center;color:var(--ft);font-size:.72rem;letter-spacing:.3em;text-transform:uppercase;padding:.9rem 0 .4rem}
 .users{margin:.5rem 0 0 1.2rem;padding:0;list-style:none}
 .users li{font-size:.82rem;color:var(--dm);padding:.12rem 0;display:flex;gap:.45rem;align-items:center}
 .users li::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--bl);flex-shrink:0}
@@ -50,11 +51,20 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 
 // Shared server-tree renderer (dashboard card + server page): nested
 // channels in TeamSpeak order, users, BOT pill. Spacers are decoration,
-// never channels: they render nothing and their subchannels move up to
-// the spacer's parent. opts.interactive adds collapse chevrons + click-move.
+// never channels: a spacer with a label renders as a plain section header
+// (no row, no move, no counts) and its subchannels move up to the
+// spacer's parent; line spacers render nothing. opts.interactive adds
+// collapse chevrons + click-move.
 const SERVER_TREE_JS = `
+function spacerText(name){
+  var m=/^\\[\\*?(?:[crl]?spacer)\\d*\\](.*)$/i.exec(name||'');
+  if(!m)return null;
+  var rest=(m[1]||'').trim();
+  if(rest.length===0||/^[^a-z0-9]+$/i.test(rest))return '';
+  return rest;
+}
 function isSpacer(name){
-  return /^\\[\\*?(?:[crl]?spacer)\\d*\\]/i.test(name||'');
+  return spacerText(name)!==null;
 }
 function serverTreeHtml(view,opts){
   opts=opts||{};
@@ -160,7 +170,11 @@ function serverTreeHtml(view,opts){
       if(seen[ch.cid])continue;
       seen[ch.cid]=true;
       if(depth>8)continue;
-      if(isSpacer(ch.name))continue;
+      var sp=spacerText(ch.name);
+      if(sp!==null){
+        if(sp!==''){out+='<div class="spacer">'+esc(sp)+'</div>';}
+        continue;
+      }
       out+=rowHtml(ch,byChannel[ch.cid]||[],ch.cid===bot,(byParent[ch.cid]||[]).length>0);
       var inner=walk(ch.cid,depth+1);
       if(inner!==''){
@@ -174,10 +188,13 @@ function serverTreeHtml(view,opts){
     var orphan=chs[remaining];
     if(!seen[orphan.cid]){
       seen[orphan.cid]=true;
-      if(!isSpacer(orphan.name)){
-        html+=rowHtml(orphan,byChannel[orphan.cid]||[],orphan.cid===bot,false);
-        html+=walk(orphan.cid,0);
+      var osp=spacerText(orphan.name);
+      if(osp!==null){
+        if(osp!==''){html+='<div class="spacer">'+esc(osp)+'</div>';}
+        continue;
       }
+      html+=rowHtml(orphan,byChannel[orphan.cid]||[],orphan.cid===bot,false);
+      html+=walk(orphan.cid,0);
     }
   }
   return {html:html,total:total};
