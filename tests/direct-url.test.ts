@@ -282,6 +282,10 @@ describe("DirectUrlResolver", () => {
         _options: unknown,
         callback: (error: Error | null, result: { stdout: string }) => void,
       ) => {
+        if (args.includes("-version")) {
+          callback(null, { stdout: "ffprobe version 8.0" });
+          return;
+        }
         expect(args).toContain("-max_redirects");
         expect(args.at(-1)).toBe("https://cdn.example.test/real.mp3");
         callback(null, {
@@ -296,6 +300,45 @@ describe("DirectUrlResolver", () => {
     );
 
     expect(track.durationSeconds).toBe(12);
+  });
+
+  it("probes without -max_redirects when ffprobe rejects the option", async () => {
+    // Older static builds (7.0.x) fail every probe with "Option not found":
+    // detect once, then probe without the flag instead of erroring.
+    audioFetch.mockResolvedValueOnce(
+      fetchResponse({ contentType: "audio/mpeg" }),
+    );
+    const seen: string[][] = [];
+    execFileMock.mockImplementation(
+      (
+        _binary: string,
+        args: string[],
+        _options: unknown,
+        callback: (error: Error | null, result: { stdout: string }) => void,
+      ) => {
+        seen.push(args);
+        if (args.includes("-version")) {
+          callback(
+            new Error(
+              "Failed to set value '0' for option 'max_redirects': Option not found",
+            ),
+            { stdout: "" },
+          );
+          return;
+        }
+        callback(null, {
+          stdout: JSON.stringify({ format: { duration: "12.4" } }),
+        });
+      },
+    );
+    const resolver = new DirectUrlClient({ fetch: audioFetch });
+
+    const track = await resolver.getTrack("https://cdn.example.test/song.mp3");
+
+    expect(track.durationSeconds).toBe(12);
+    const probe = seen.find((args) => !args.includes("-version")) ?? [];
+    expect(probe).not.toContain("-max_redirects");
+    expect(probe.at(-1)).toBe("https://cdn.example.test/song.mp3");
   });
 
   it("rejects when ffprobe fails", async () => {
