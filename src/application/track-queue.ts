@@ -10,7 +10,7 @@ export interface TrackQueueOptions {
 }
 
 const DEFAULT_MAX_QUEUE_TRACKS = 200;
-const DEFAULT_MAX_TRACKS_PER_USER = 30;
+const DEFAULT_MAX_TRACKS_PER_USER = 100;
 
 // Queue ownership extracted from YoutubePlaybackService: the raw container
 // plus the limit policy that used to live inside #enqueueMetadata. Internal

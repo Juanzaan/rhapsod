@@ -20,7 +20,7 @@ describe("loadConfig", () => {
       RHAPSOD_WATCHDOG_INTERVAL_MINUTES: 15,
       RHAPSOD_MAX_CONCURRENT_COMMANDS: 3,
       RHAPSOD_MAX_QUEUE_TRACKS: 200,
-      RHAPSOD_MAX_TRACKS_PER_USER: 30,
+      RHAPSOD_MAX_TRACKS_PER_USER: 100,
     });
     expect(config.RHAPSOD_YTDLP_COOKIES_PATH).toBeUndefined();
     expect(config.RHAPSOD_MAX_CONCURRENT_YTDLP_JOBS).toBeUndefined();

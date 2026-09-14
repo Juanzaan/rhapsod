@@ -100,6 +100,17 @@ describe("TrackQueue", () => {
     expect(queue.removeAt(1)).toBeUndefined();
   });
 
+  it("defaults to 100 tracks per user so playlists load fully", () => {
+    const queue = new TrackQueue();
+    for (let index = 0; index < 100; index++) {
+      queue.add(makeTrack(`t${index}`, "ana", "uid-1"), undefined);
+    }
+    expect(queue.length).toBe(100);
+    expect(() =>
+      queue.add(makeTrack("t100", "ana", "uid-1"), undefined),
+    ).toThrowError(QueueLimitError);
+  });
+
   it("clears, shuffles and exposes capacity", () => {
     const queue = new TrackQueue({ maxQueueTracks: 7 });
     expect(queue.maxTracks).toBe(7);
