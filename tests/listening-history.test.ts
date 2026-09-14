@@ -114,6 +114,44 @@ describe("ListeningHistory", () => {
     expect(history.recentArtists(1)).toHaveLength(1);
   });
 
+  it("exposes persisted autoplay seeds and the last requester", () => {
+    vi.useFakeTimers();
+    try {
+      const history = new ListeningHistory(makeTempFile());
+      vi.setSystemTime(new Date("2026-01-01T10:00:00Z"));
+      history.recordStart("uid-1", { id: "aaaaaaaaaaA", title: "Duki - Uno" });
+      history.recordStart("uid-1", {
+        id: "deadbeef1234",
+        title: "Radio Stream",
+      });
+      vi.setSystemTime(new Date("2026-01-01T10:05:00Z"));
+      history.recordStart("autoplay", { id: "bbbbbbbbbbB", title: "Mix Pick" });
+      vi.setSystemTime(new Date("2026-01-01T10:10:00Z"));
+      history.recordStart("uid-2", { id: "ccccccccccC", title: "Beto - Dos" });
+
+      // YouTube-shaped ids only, most recent first; the 12-hex direct-URL id
+      // is not a mix-expansion seed.
+      expect(history.recentSeeds(3).map((seed) => seed.id)).toEqual([
+        "ccccccccccC",
+        "bbbbbbbbbbB",
+        "aaaaaaaaaaA",
+      ]);
+      expect(history.recentSeeds(1).map((seed) => seed.id)).toEqual([
+        "ccccccccccC",
+      ]);
+      // Autoplay's own plays never count as the requester.
+      expect(history.lastRequesterUid()).toBe("uid-2");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reports no requester when only autoplay has played", () => {
+    const history = new ListeningHistory(makeTempFile());
+    history.recordStart("autoplay", { id: "aaaaaaaaaaA", title: "Mix Pick" });
+    expect(history.lastRequesterUid()).toBeUndefined();
+  });
+
   it("weights the current session over older taste", () => {
     vi.useFakeTimers();
     try {
