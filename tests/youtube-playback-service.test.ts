@@ -73,6 +73,12 @@ function setup(
         tokenScores: ReadonlyMap<string, number>;
       };
       recentArtists(limit: number): readonly string[];
+      recentSeeds?(limit: number): readonly {
+        artist?: string;
+        id: string;
+        title: string;
+      }[];
+      lastRequesterUid?(): string | undefined;
     };
     autoplayTimeoutMs?: number;
     relatedVideoId?: (seedVideoId: string) => Promise<string | undefined>;
@@ -308,7 +314,13 @@ function setup(
       : {}),
     ...(options.proxyUrl === undefined ? {} : { proxyUrl: options.proxyUrl }),
     ...(options.autoplayProfile
-      ? { autoplayProfile: options.autoplayProfile }
+      ? {
+          autoplayProfile: {
+            recentSeeds: () => [] as const,
+            lastRequesterUid: () => undefined,
+            ...options.autoplayProfile,
+          },
+        }
       : {}),
     ...(options.autoplayTimeoutMs === undefined
       ? {}
@@ -752,6 +764,57 @@ describe("YoutubePlaybackService", () => {
 
     await expect(service.resolveAutoplayTrack()).resolves.toBeUndefined();
     expect(resolver.expandPlaylist).not.toHaveBeenCalled();
+  });
+
+  it("seeds autoplay from persisted listening history after a restart", async () => {
+    // A fresh process has no in-memory history; the persisted store must
+    // still drive the rotation instead of leaving autoplay silent.
+    const random = vi.spyOn(Math, "random").mockReturnValue(0.99);
+    try {
+      const tasteProfile = vi.fn(() => ({
+        artistScores: new Map<string, number>(),
+        tokenScores: new Map<string, number>(),
+      }));
+      const { resolver, service } = setup({
+        autoplayProfile: {
+          artistScores: () => new Map(),
+          tasteProfile,
+          recentArtists: () => [],
+          recentSeeds: () => [
+            {
+              artist: "Duki",
+              id: "oldvideo111",
+              title: "Duki - Old Choice",
+            },
+          ],
+          lastRequesterUid: () => "uid-9",
+        },
+      });
+      resolver.expandPlaylist.mockResolvedValueOnce({
+        tracks: [
+          {
+            id: "mix11111111",
+            title: "Duki - Mix One",
+            webpageUrl: "https://www.youtube.com/watch?v=mix11111111",
+          },
+        ],
+      });
+
+      const pick = await service.resolveAutoplayTrack();
+
+      expect(resolver.expandPlaylist).toHaveBeenCalledWith(
+        { id: "RDoldvideo111", type: "playlist" },
+        25,
+      );
+      expect(pick).toMatchObject({
+        id: "mix11111111",
+        requestedBy: "Autoplay",
+        title: "Duki - Mix One",
+      });
+      expect(tasteProfile).toHaveBeenCalledWith("uid-9");
+    } finally {
+      random.mockRestore();
+    }
   });
 
   it("falls back to the related video when the mix is empty", async () => {

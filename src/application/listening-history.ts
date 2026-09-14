@@ -5,7 +5,13 @@ import type { MinimalLogger } from "../observability/logger.js";
 import { noopLogger } from "../observability/logger.js";
 import { readJsonFile } from "../lib/json-file-store.js";
 import { parseArtistTitle } from "../media/lyrics.js";
-import { tokenizeTitle, type AutoplayProfile } from "./autoplay-picker.js";
+import {
+  tokenizeTitle,
+  isYouTubeVideoId,
+  AUTOPLAY_UID,
+  type AutoplayProfile,
+  type AutoplaySeed,
+} from "./autoplay-picker.js";
 
 export interface ListeningTrackInput {
   readonly id: string;
@@ -288,6 +294,39 @@ export class ListeningHistory {
       .map((entry) => entry.artist)
       .filter((artist): artist is string => artist !== undefined)
       .slice(0, Math.max(1, limit));
+  }
+
+  // Autoplay seeds that survive restarts: the most recently played YouTube
+  // tracks from the persisted store, so past user choices keep driving the
+  // rotation even when the in-memory session history is empty.
+  recentSeeds(limit: number): readonly AutoplaySeed[] {
+    this.#ensureLoaded();
+    return [...this.#global.entries()]
+      .filter(([id]) => isYouTubeVideoId(id))
+      .sort(([, a], [, b]) => b.lastPlayedAt - a.lastPlayedAt)
+      .map(([id, entry]) => ({
+        ...(entry.artist === undefined ? {} : { artist: entry.artist }),
+        id,
+        title: entry.title,
+      }))
+      .slice(0, Math.max(1, limit));
+  }
+
+  // The most recent non-autoplay listener, so autoplay follows a real user's
+  // taste after a restart instead of falling back to the global profile.
+  lastRequesterUid(): string | undefined {
+    this.#ensureLoaded();
+    let bestUid: string | undefined;
+    let bestAt = -1;
+    for (const [uid, data] of this.#users) {
+      if (uid === AUTOPLAY_UID) continue;
+      const last = data.plays.at(-1);
+      if (last !== undefined && last.at > bestAt) {
+        bestAt = last.at;
+        bestUid = uid;
+      }
+    }
+    return bestUid;
   }
 
   userSummary(uid: string): ListeningUserSummary {

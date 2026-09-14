@@ -14,12 +14,27 @@ export interface AutoplayProfile {
   readonly tokenScores: ReadonlyMap<string, number>;
 }
 
+export interface AutoplaySeed {
+  readonly artist?: string;
+  readonly id: string;
+  readonly title: string;
+}
+
+// YouTube video ids are exactly 11 chars from this alphabet; other sources
+// use other shapes (12-char hex for direct URLs, numeric ids elsewhere), so
+// this filter keeps persisted history usable as mix-expansion seeds.
+export function isYouTubeVideoId(id: string): boolean {
+  return /^[\w-]{11}$/.test(id) && /[A-Za-z_-]/.test(id);
+}
+
 // The listening-history surface autoplay needs. ListeningHistory satisfies
 // this structurally; the service takes it as an option so tests inject fakes.
 export interface AutoplayProfileSource {
   artistScores(): ReadonlyMap<string, number>;
   tasteProfile(uid: string): AutoplayProfile;
   recentArtists(limit: number): readonly string[];
+  recentSeeds(limit: number): readonly AutoplaySeed[];
+  lastRequesterUid(): string | undefined;
 }
 
 export interface LastPlayedTrack {

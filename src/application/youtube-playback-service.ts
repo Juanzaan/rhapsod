@@ -1146,6 +1146,11 @@ export class YoutubePlaybackService {
 
   async resolveAutoplayTrack(): Promise<Track | undefined> {
     const history = this.#controller.history();
+    // Seeds that survive restarts: past user choices from the persisted
+    // listening store backfill the in-memory session history, so autoplay
+    // keeps following the channel's taste instead of going silent.
+    const persistedSeeds =
+      this.#autoplayProfile?.recentSeeds(AUTOPLAY_SEED_LIMIT) ?? [];
     const seeds: string[] = [];
     for (const track of history) {
       const videoId = youtubeVideoIdFromSource(track.source);
@@ -1153,7 +1158,13 @@ export class YoutubePlaybackService {
         seeds.push(videoId);
       if (seeds.length >= AUTOPLAY_SEED_LIMIT) break;
     }
-    const seedUid = this.#resolveAutoplayUid(history);
+    for (const seed of persistedSeeds) {
+      if (seeds.length >= AUTOPLAY_SEED_LIMIT) break;
+      if (!seeds.includes(seed.id)) seeds.push(seed.id);
+    }
+    const seedUid =
+      this.#resolveAutoplayUid(history) ??
+      this.#autoplayProfile?.lastRequesterUid();
     if (seedUid !== undefined) this.#autoplayUid = seedUid;
     const profile =
       seedUid === undefined
@@ -1167,7 +1178,7 @@ export class YoutubePlaybackService {
             artistScores: new Map<string, number>(),
             tokenScores: new Map<string, number>(),
           });
-    const last = history[0];
+    const last = history[0] ?? persistedSeeds[0];
     const lastArtist =
       last === undefined ? undefined : parseArtistTitle(last.title).artist;
     const lastTrack =
@@ -1179,6 +1190,7 @@ export class YoutubePlaybackService {
           };
     const recentIds = new Set<string>();
     for (const track of history) recentIds.add(track.id);
+    for (const seed of persistedSeeds) recentIds.add(seed.id);
     for (const track of this.#queue.snapshot()) recentIds.add(track.id);
     const current = this.#controller.current;
     if (current !== undefined) recentIds.add(current.id);
