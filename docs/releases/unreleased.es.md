@@ -19,6 +19,7 @@ Correcciones de persistencia, actualización de dependencias, reparación del de
 - Reproducir emisoras que rechazan la comprobación HEAD: las estaciones Icecast y Shoutcast que responden 400 se confirman con una petición GET de un byte, con tipos de contenido AAC de Shoutcast añadidos.
 - Reproducir enlaces pegados de TuneIn (acortados tun.in y páginas tunein.com) en !play y !radio, resolviéndolos a la emisión.
 - Comprobar emisoras directas en ffprobe sin -max_redirects (7.0.x estático): el bloqueo de redirecciones solo se envía si el binario lo acepta.
+- Resolver enlaces de canciones y álbumes de Apple Music con iTunes sin clave tras el retiro del acceso anónimo de SongLink; Amazon Music sigue en SongLink.
 - Utilizar el mismo fondo animado, selector de ambiente y control de movimiento en todas las páginas del panel, no solo en la consola.
 - Mostrar las etiquetas de los separadores como encabezados simples que no se pueden unir ni mover, y ordenar los hermanos por cadenas de channel_order como el cliente TeamSpeak.
 
