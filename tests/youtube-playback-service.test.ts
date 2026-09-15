@@ -2730,6 +2730,43 @@ describe("YoutubePlaybackService", () => {
     expect(createPlayback).toHaveBeenCalled();
   });
 
+  it("skips loudness normalization for live radio streams", async () => {
+    // Endless streams have no measured profile, so they used to play through
+    // dynamic single-pass loudnorm: audible gain-riding on a pre-mastered
+    // broadcast chain. Finite tracks keep their target.
+    const { createPlayback, service } = setup({
+      directUrlResolver: true,
+      loudnessProfiler: new LoudnessProfiler({ targetLufs: -16 }),
+    });
+
+    await service.enqueue("https://cdn.example.test/audio.mp3", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const radioOptions = (createPlayback as Mock).mock.calls.at(-1)?.[3] as
+      Record<string, unknown> | undefined;
+    expect(radioOptions).not.toHaveProperty("loudnessTargetLufs");
+    expect(radioOptions).not.toHaveProperty("loudnessProfile");
+  });
+
+  it("keeps loudness normalization for finite tracks", async () => {
+    const { createPlayback, resolver, service } = setup({
+      loudnessProfiler: new LoudnessProfiler({ targetLufs: -16 }),
+    });
+    resolver.getTrack.mockResolvedValueOnce({
+      durationSeconds: 180,
+      id: "finite123",
+      title: "Finite Track",
+      webpageUrl: "https://www.youtube.com/watch?v=finite123",
+    });
+
+    await service.enqueue("https://youtu.be/finite123", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const options = (createPlayback as Mock).mock.calls.at(-1)?.[3] as
+      Record<string, unknown> | undefined;
+    expect(options).toMatchObject({ loudnessTargetLufs: -16 });
+  });
+
   it("reuses a persisted audio URL without calling yt-dlp", async () => {
     const cache = AudioUrlCache.memoryOnly();
     cache.set(
