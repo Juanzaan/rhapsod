@@ -614,6 +614,7 @@ export class PlaybackController {
             readonly param?: FilterParam;
           };
           readonly stream?: FfmpegPcmStream;
+          readonly loudnessTargetLufs?: number;
           readonly loudnessProfile?: {
             readonly measuredI: number;
             readonly measuredLra: number;
@@ -623,14 +624,23 @@ export class PlaybackController {
         } = {
           ...(seekSeconds === undefined ? {} : { seekSeconds }),
           audioFilter: { name: this.#filter, param: this.#filterParam },
-          ...(this.#loudnessProfiler === undefined
+          // Live radio has no measured profile, so it used to play through
+          // dynamic single-pass loudnorm forever: the gain rides audibly on
+          // an endless pre-mastered broadcast chain (pumping, squashed
+          // transients). Finite tracks keep measured two-pass normalization;
+          // live streams pass through at station level, !volume still applies.
+          ...(this.#loudnessProfiler === undefined ||
+          track.durationSeconds === undefined
             ? {}
-            : (() => {
-                const profile = this.#loudnessProfiler.cached(track.source);
-                return profile === undefined
-                  ? {}
-                  : { loudnessProfile: profile };
-              })()),
+            : {
+                loudnessTargetLufs: this.#loudnessProfiler.targetLufs,
+                ...(() => {
+                  const profile = this.#loudnessProfiler.cached(track.source);
+                  return profile === undefined
+                    ? {}
+                    : { loudnessProfile: profile };
+                })(),
+              }),
         };
         let session: FfmpegPlaybackSession;
         try {
@@ -1092,7 +1102,11 @@ export class PlaybackController {
         if (!this.#epochs.isCurrent(stamp)) {
           return undefined;
         }
-        this.#loudnessProfiler?.measure(next.source, url);
+        // Measuring an endless stream would burn a 120s ffmpeg sample for a
+        // profile live playback never uses (see the loudnorm bypass above).
+        if (next.durationSeconds !== undefined) {
+          this.#loudnessProfiler?.measure(next.source, url);
+        }
         if (
           this.#current === undefined ||
           this.#queue.snapshot()[0]?.source !== next.source
@@ -1101,12 +1115,14 @@ export class PlaybackController {
         }
         // Option parity with the cold path (#playNext's playbackOptions
         // + main.ts wiring): without loudness here, warm-started tracks would
-        // sound different from cold-started ones.
+        // sound different from cold-started ones. Live streams skip loudness
+        // on both paths.
         const loudnessProfile = this.#loudnessProfiler?.cached(next.source);
         const stream = this.#createPcmStream(url, {
           audioFilter: { name: this.#filter, param: this.#filterParam },
           ...(this.#proxyUrl === undefined ? {} : { proxyUrl: this.#proxyUrl }),
-          ...(this.#loudnessProfiler === undefined
+          ...(this.#loudnessProfiler === undefined ||
+          next.durationSeconds === undefined
             ? {}
             : {
                 loudnessTargetLufs: this.#loudnessProfiler.targetLufs,

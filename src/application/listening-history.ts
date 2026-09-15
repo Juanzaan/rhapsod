@@ -48,9 +48,12 @@ interface StoredTrackStats {
   title: string;
 }
 
-const MAX_TRACKS_PER_USER = 500;
-const MAX_GLOBAL_TRACKS = 2000;
-const MAX_RECENT_PLAYS = 100;
+// Generous ceilings, not targets: entries run ~200 bytes, so even a full
+// store is ~10 MB and real usage (distinct songs actually heard) stays far
+// below. History only ever grows by listening, never by provisioning.
+const MAX_TRACKS_PER_USER = 50000;
+const MAX_GLOBAL_TRACKS = 50000;
+const MAX_RECENT_PLAYS = 50000;
 const SESSION_GAP_MS = 30 * 60_000;
 const SESSION_BOOST = 2;
 const DECAY_HALF_LIFE_MS = 5 * 24 * 60 * 60_000;

@@ -70,6 +70,6 @@ La cola usa posiciones desde 1. `!remove inicio-fin` incluye ambos extremos y li
 
 ## Reproducción automática
 
-`!autoplay on` usa mezclas y pistas relacionadas de YouTube, señales de escucha personal y del canal, coincidencias de títulos y continuidad de energía estimada. Limita repeticiones y concentración de artistas. Sin pistas iniciales permanece en silencio; las solicitudes a proveedores tienen tiempo limitado.
+`!autoplay on` usa mezclas y pistas relacionadas de YouTube, señales de escucha personal y del canal, coincidencias de títulos y continuidad de energía estimada. Limita repeticiones y concentración de artistas. Sin pistas iniciales permanece en silencio; las solicitudes a proveedores tienen tiempo limitado. Las canciones de la radio en directo entran al mismo historial cuando la emisora las nombra en sus metadatos, para que la rotación también alimente la reproducción automática y `!tops`.
 
 Rhapsod pasa argumentos directamente a los procesos hijos; los comandos de chat no ejecutan sintaxis de shell.

@@ -74,6 +74,9 @@ chat once the TS3 adapter is connected.
   is pressured so one act cannot lock the rotation; exploration stays
   within compatible energy. With no personal signal it blends the
   channel's overall taste; with nothing to seed from it stays silent.
+  Songs heard on live radio join the same history once the station names
+  them in its stream metadata, so the station rotation also feeds autoplay
+  and `!tops`.
   Anyone may skip an autoplay pick. The flag persists in
   `data/state.json`.
 - **Persistence:** `!volume` (default `50`) and `!loop` are saved to

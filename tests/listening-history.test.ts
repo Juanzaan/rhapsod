@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -228,5 +228,84 @@ describe("ListeningHistory", () => {
     expect(reloaded.userSummary("uid-1").plays).toBe(2);
     expect(history.topTracks(10)).toHaveLength(3);
     expect(history.userSummary("uid-1").plays).toBe(2);
+  });
+
+  // Seeded files instead of thousands of record calls: one atomic write
+  // each, and every count still exceeds the matching previous cap
+  // (2000/10000/500) so each test fails against the old code.
+  function seedHistoryFile(
+    file: string,
+    trackCount: number,
+    uid = "uid-1",
+  ): void {
+    const base = Date.now();
+    const tracks: Record<string, unknown> = {};
+    for (let index = 0; index < trackCount; index++) {
+      tracks[`t${index}`] = {
+        completes: 0,
+        lastPlayedAt: base + index,
+        plays: 1,
+        skips: 0,
+        title: `Artist - Track ${index}`,
+      };
+    }
+    writeFileSync(
+      file,
+      JSON.stringify({
+        global: tracks,
+        users: { [uid]: { plays: [], tracks } },
+        version: 1,
+      }),
+      "utf8",
+    );
+  }
+
+  it("keeps fifty thousand tracks per user by default", async () => {
+    const file = makeTempFile();
+    seedHistoryFile(file, 49999);
+    const history = new ListeningHistory(file);
+
+    history.recordStart("uid-1", { id: "new", title: "Artist - New" });
+    await history.flush();
+
+    expect(history.userSummary("uid-1").plays).toBe(50000);
+  });
+
+  it("keeps fifty thousand global tracks by default", async () => {
+    const file = makeTempFile();
+    seedHistoryFile(file, 49999);
+    const history = new ListeningHistory(file);
+
+    history.recordStart("uid-1", { id: "new", title: "Artist - New" });
+    await history.flush();
+
+    expect(history.topTracks(60000)).toHaveLength(50000);
+  });
+
+  it("keeps fifty thousand recent plays by default", async () => {
+    const file = makeTempFile();
+    seedHistoryFile(file, 1);
+    const raw = JSON.parse(readFileSync(file, "utf8")) as {
+      users: Record<
+        string,
+        { plays: { at: number; completed: boolean; id: string }[] }
+      >;
+    };
+    const base = Date.now();
+    raw.users["uid-1"]!.plays = Array.from({ length: 49999 }, (_, index) => ({
+      at: base + index,
+      completed: true,
+      id: "t0",
+    }));
+    writeFileSync(file, JSON.stringify(raw), "utf8");
+    const history = new ListeningHistory(file);
+
+    history.recordStart("uid-1", { id: "t0", title: "Artist - Track 0" });
+    await history.flush();
+
+    const reloaded = JSON.parse(readFileSync(file, "utf8")) as {
+      users: Record<string, { plays: unknown[] }>;
+    };
+    expect(reloaded.users["uid-1"]?.plays).toHaveLength(50000);
   });
 });

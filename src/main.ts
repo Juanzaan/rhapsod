@@ -58,6 +58,8 @@ import { createYtDlpResolverStack } from "./media/youtube/yt-dlp.js";
 import { getTimeoutConfig } from "./lib/timeout-config.js";
 import { resolveInstanceDir } from "./lib/instance-dir.js";
 import { RadioTitleCache } from "./media/radio-icy.js";
+import { RadioScrobbler } from "./application/radio-scrobbler.js";
+import { SongLibrary } from "./application/song-library.js";
 import { UserError } from "./lib/user-error.js";
 import { createPanelServer, type QueueEntry } from "./panel/panel-server.js";
 import { ChatLog, isOwnEcho } from "./application/chat-log.js";
@@ -77,7 +79,7 @@ import { resolveTuneInUrl } from "./media/tunein.js";
 import { SongLinkClient } from "./media/song-link.js";
 import { AppleMusicClient } from "./media/apple-music.js";
 import { DirectUrlClient } from "./media/direct-url.js";
-import { LyricsClient } from "./media/lyrics.js";
+import { LyricsClient, parseArtistTitle } from "./media/lyrics.js";
 import { SoundCloudPublicApi } from "./media/soundcloud/public-api.js";
 import { SpotifyApi } from "./media/spotify/api.js";
 import { createRhapsodLogger } from "./observability/logger.js";
@@ -262,6 +264,10 @@ async function main(): Promise<void> {
     join(dataDir, "listening-history.json"),
     logger,
   );
+  const songLibrary = new SongLibrary(
+    join(dataDir, "song-library.json"),
+    logger,
+  );
   const serverSnapshot = new ServerSnapshot();
   const channelDirectory = new ChannelDirectory(async (cid) => {
     try {
@@ -403,7 +409,11 @@ async function main(): Promise<void> {
     createPlayback: (url, playbackEncoder, output, options) =>
       playFfmpegUrl(url, playbackEncoder, output, {
         ...(ffmpegPath === undefined ? {} : { binary: ffmpegPath }),
-        loudnessTargetLufs: config.RHAPSOD_LOUDNESS_TARGET_LUFS,
+        // The controller decides per track: finite tracks carry a target,
+        // live radio omits it so endless streams skip dynamic loudnorm.
+        ...(options?.loudnessTargetLufs === undefined
+          ? {}
+          : { loudnessTargetLufs: options.loudnessTargetLufs }),
         ...(ffmpegUserAgent === undefined
           ? {}
           : { userAgent: ffmpegUserAgent }),
@@ -437,6 +447,17 @@ async function main(): Promise<void> {
         id: track.id,
         title: track.title,
       });
+      // Endless radio streams are not songs themselves; their songs enter
+      // the library through the scrobbler once the station names them.
+      if (track.durationSeconds !== undefined) {
+        const { artist } = parseArtistTitle(track.title);
+        songLibrary.record({
+          ...(artist === undefined ? {} : { artist }),
+          id: track.id,
+          source: track.source,
+          title: track.title,
+        });
+      }
       const isFirst = !commandContext.hasStartedPlaying;
       commandContext.hasStartedPlaying = true;
       await connection.sendChannelMessage(
@@ -849,6 +870,7 @@ async function main(): Promise<void> {
         telemetry.save().catch(() => undefined),
         preferences.flush().catch(() => undefined),
         listeningHistory.flush().catch(() => undefined),
+        songLibrary.flush().catch(() => undefined),
       ]);
       process.exit(1);
     })();
@@ -881,10 +903,21 @@ async function main(): Promise<void> {
     if (current.durationSeconds !== undefined) return current.title;
     return radioTitles.peek(current.source) ?? current.title;
   };
+  // Songs heard on live radio are scrobbled into the same listening history
+  // that feeds !tops and autoplay: the station's rotation becomes taste
+  // signal instead of evaporating when the stream moves on.
+  const scrobbler = new RadioScrobbler(listeningHistory, resolver, songLibrary);
   setInterval(() => {
     const live = playback.current;
     if (live !== undefined && live.durationSeconds === undefined) {
       void radioTitles.get(live.source).catch(() => undefined);
+      void scrobbler
+        .poll({
+          source: live.source,
+          title: radioTitles.peek(live.source),
+          uid: live.requestedByUid ?? live.requestedBy,
+        })
+        .catch(() => undefined);
     }
   }, 30_000).unref();
 
@@ -973,6 +1006,7 @@ async function main(): Promise<void> {
       telemetry.save(),
       preferences.flush().catch(() => undefined),
       listeningHistory.flush().catch(() => undefined),
+      songLibrary.flush().catch(() => undefined),
       ...(panel === undefined ? [] : [panel.close().catch(() => undefined)]),
       new Promise((resolve) => setTimeout(resolve, 5_000)),
     ]).then(() => {
