@@ -69,6 +69,21 @@ describe("RadioScrobbler", () => {
     expect(history.recordStart).toHaveBeenCalledTimes(1);
   });
 
+  it("counts confirmed songs for the dashboard Temas stat", async () => {
+    const { scrobbler } = setup();
+    expect(scrobbler.confirmedCount).toBe(0);
+
+    await scrobbler.poll({ ...POLL, title: "Duki - Rockstar" });
+    expect(scrobbler.confirmedCount).toBe(0);
+    await scrobbler.poll({ ...POLL, title: "Duki - Rockstar" });
+    expect(scrobbler.confirmedCount).toBe(1);
+    await scrobbler.poll({ ...POLL, title: "Duki - Rockstar" });
+    expect(scrobbler.confirmedCount).toBe(1);
+    await scrobbler.poll({ ...POLL, title: "Bizarrap - Session" });
+    await scrobbler.poll({ ...POLL, title: "Bizarrap - Session" });
+    expect(scrobbler.confirmedCount).toBe(2);
+  });
+
   it("drops a title that changes before confirmation", async () => {
     const { history, scrobbler } = setup();
 
