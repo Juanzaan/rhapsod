@@ -943,7 +943,7 @@ async function main(): Promise<void> {
           volume: playback.volume,
           loopMode: playback.loopMode,
           currentFilter: playback.filter,
-          tracksPlayed: playback.tracksPlayed,
+          tracksPlayed: playback.tracksPlayed + scrobbler.confirmedCount,
           uptimeMs: Math.round(process.uptime() * 1000),
           disconnects: metrics.disconnectSummary(),
           version: packageVersion,

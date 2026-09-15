@@ -51,6 +51,13 @@ export class RadioScrobbler {
   readonly #resolver: ScrobbleResolver;
   readonly #library: ScrobbleLibrary;
   readonly #state = new Map<string, SourceState>();
+  #confirmed = 0;
+
+  // Songs confirmed on air this run. The dashboard adds it to the played
+  // count so every radio song ticks the Temas stat like a queued track.
+  get confirmedCount(): number {
+    return this.#confirmed;
+  }
 
   constructor(
     history: ScrobbleHistory,
@@ -89,6 +96,7 @@ export class RadioScrobbler {
     this.#history.recordStart(uid, track);
     this.#history.recordFinish(uid, track, true);
     this.#library.record(track);
+    this.#confirmed++;
   }
 
   async #resolve(
