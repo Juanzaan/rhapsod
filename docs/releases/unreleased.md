@@ -22,10 +22,19 @@ Persistence fixes, dependency updates, deployment repairs and consistent bilingu
 - Resolve Apple Music song, album and playlist links through the keyless iTunes lookup after SongLink retired anonymous access; playlists expand to lazy YouTube searches like Spotify collections. Amazon Music stays on SongLink.
 - Use the same animated background, scene picker and motion control on every panel page, not only the dashboard.
 - Show spacer section labels as plain headers that can never be joined or moved, and order siblings by channel_order chains like the TeamSpeak client.
+- Reject panel writes that are not same-origin JSON, so a web page opened while the SSH tunnel is up can no longer run commands or restart the bot with the browser's cached credentials. Panel pages no longer embed the password.
+- Validate panel settings with the startup rules before saving, reject values with line breaks, keep comments and permissions in the env file, and make the yt-dlp, FFmpeg and ffprobe paths read-only from the web.
+- Refuse to start the panel with a published default password (`rhapsod`, `change-me`, `admin`, `password`).
+- Flush favorites, history, telemetry and the queue before every exit: panel restart, watchdog, crash handlers and reconnect failure. Shutdown waits at most 5 seconds instead of at least 5. Crash logs keep the error message.
+- Treat the panel as an administrator, so skipping or removing another user's track works from the web.
+- The weekly yt-dlp update no longer restarts the bot: the service now uses `Wants=` on the daemon instead of `Requires=`, and the update retries pip with `--break-system-packages` on Debian 12 and Ubuntu 24.04.
+- Redact bearer tokens and full cookie headers in logs and diagnostics.
 
 ## Upgrade
 
 Node.js >=22.19.0 is required. Back up configuration and data, run `npm ci` and `npm run build`, and restart when `/api/state` reports `playerState: "idle"`.
+
+If the panel uses a default password it will not start; set a unique `RHAPSOD_PANEL_PASSWORD` first. Existing installs keep the old `Requires=` line in `/etc/systemd/system/rhapsod.service` until the installer runs again: change it to `Wants=` and run `systemctl daemon-reload`.
 
 Docker Compose uses Linux host networking to keep the panel and daemon on localhost. Review the deployment guide before recreating containers. Existing data formats remain supported.
 
