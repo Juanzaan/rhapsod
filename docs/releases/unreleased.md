@@ -29,6 +29,9 @@ Persistence fixes, dependency updates, deployment repairs and consistent bilingu
 - Treat the panel as an administrator, so skipping or removing another user's track works from the web.
 - The weekly yt-dlp update no longer restarts the bot: the service now uses `Wants=` on the daemon instead of `Requires=`, and the update retries pip with `--break-system-packages` on Debian 12 and Ubuntu 24.04.
 - Redact bearer tokens and full cookie headers in logs and diagnostics.
+- Treat `!seek`, filter changes and 403 retries as the same play: no second "Reproduciendo" message, no extra count in stats, no skipped listen in the taste profile, and `!previous` returns the prior track. The panel position continues from the seek target instead of restarting at 0:00.
+- Resume 403 retries where the audio stopped instead of replaying the start of the track, retry silently instead of posting an error for each attempt, and rejoin live radio at the live edge. 403 detection matches the HTTP error wording instead of any "403" in URLs.
+- Use the configured FFmpeg binary and User-Agent for prewarmed next-track streams; they used to fall back to the bundled ffmpeg-static.
 
 ## Upgrade
 
