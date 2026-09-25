@@ -335,8 +335,8 @@ describe("renderDashboard console", () => {
     ).toBe(true);
     expect(getEl("stTracks").textContent).toBe("7");
     expect(getEl("uptime").textContent).toBe("up 1 h · 2 cortes");
-    expect(getEl("ql").innerHTML).toContain("rmQ(1)");
-    expect(getEl("ql").innerHTML).toContain("rmQ(2)");
+    expect(getEl("ql").innerHTML).toContain("rmQ(1,this)");
+    expect(getEl("ql").innerHTML).toContain("rmQ(2,this)");
     expect(getEl("ql").innerHTML).toContain('class="qr"');
     expect(getEl("ql").innerHTML).toContain("Dj");
     expect(getEl("chat").innerHTML).toContain("hola!");
@@ -1029,5 +1029,103 @@ describe("dashboard motion", () => {
       expect(page).not.toContain("gsap");
       expect(page).toContain("function initMotion");
     }
+  });
+});
+
+describe("panel pages motion and feedback", () => {
+  function pageScript(html: string): string {
+    return [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
+      .map((m) => m[1] ?? "")
+      .join("\n");
+  }
+
+  const quietWindow = { matchMedia: () => ({ matches: false }) };
+  const pendingFetch = () => new Promise(() => undefined);
+
+  it("highlights command search matches without trusting the text", () => {
+    const document = {
+      getElementById: () => ({ addEventListener: () => {} }),
+      addEventListener: () => {},
+    };
+    // Generated browser code is exercised against controlled globals.
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval
+    const factory = new Function(
+      "window",
+      "document",
+      "fetch",
+      "btoa",
+      `${pageScript(renderCommandsPage())};return {hl};`,
+    ) as (...args: unknown[]) => { hl: (text: string, q: string) => string };
+    const { hl } = factory(quietWindow, document, pendingFetch, () => "");
+    expect(hl("Buscar una radio y sintonizar la radio", "radio")).toBe(
+      "Buscar una <mark>radio</mark> y sintonizar la <mark>radio</mark>",
+    );
+    expect(hl('<img src=x onerror="x">radio', "radio")).toBe(
+      "&lt;img src=x onerror=&quot;x&quot;&gt;<mark>radio</mark>",
+    );
+    expect(hl("Play", "")).toBe("Play");
+  });
+
+  it("counts unsaved settings and clears them after saving", () => {
+    const fieldClasses = new Map<unknown, boolean>();
+    const makeInput = (value: string, defaultValue: string) => {
+      const parentNode = {
+        classList: {
+          toggle: (_name: string, on: boolean) =>
+            fieldClasses.set(parentNode, on),
+        },
+      };
+      return { value, defaultValue, parentNode };
+    };
+    const inputs = [
+      makeInput("Rhapsod DJ", "Rhapsod"),
+      makeInput("9987", "9987"),
+    ];
+    const note = { textContent: "" };
+    const barClasses = new Set<string>();
+    const bar = {
+      classList: {
+        toggle: (name: string, on: boolean) =>
+          on ? barClasses.add(name) : barClasses.delete(name),
+        add: (name: string) => barClasses.add(name),
+        remove: (name: string) => barClasses.delete(name),
+      },
+    };
+    const document = {
+      getElementById: (id: string) =>
+        id === "saveNote"
+          ? note
+          : id === "saveBar"
+            ? bar
+            : { addEventListener: () => {} },
+      querySelectorAll: () => inputs,
+      addEventListener: () => {},
+    };
+    // Generated browser code is exercised against controlled globals.
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval
+    const factory = new Function(
+      "window",
+      "document",
+      "fetch",
+      "btoa",
+      `${pageScript(renderSettingsPage())};return {markDirty,markSaved};`,
+    ) as (...args: unknown[]) => { markDirty(): void; markSaved(): void };
+    const api = factory(quietWindow, document, pendingFetch, () => "");
+    api.markDirty();
+    expect(note.textContent).toContain("1 cambio sin guardar");
+    expect(barClasses.has("dirty")).toBe(true);
+    expect(fieldClasses.get(inputs[0]?.parentNode)).toBe(true);
+    expect(fieldClasses.get(inputs[1]?.parentNode)).toBe(false);
+    api.markSaved();
+    expect(barClasses.has("dirty")).toBe(false);
+    expect(barClasses.has("saved")).toBe(true);
+    expect(inputs[0]?.defaultValue).toBe("Rhapsod DJ");
+    expect(note.textContent).toContain("Guardado");
+  });
+
+  it("labels settings by meaning and keeps the variable name visible", () => {
+    const html = renderSettingsPage();
+    expect(html).toContain('class="fk"');
+    expect(html).toContain("e.description||e.key");
   });
 });

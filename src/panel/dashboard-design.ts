@@ -14,6 +14,19 @@ html[data-live=true] .ambient .orb{opacity:1}html[data-live=true] .ambient .orb:
 .cd::before{content:'';position:absolute;inset:0;z-index:-1;border-radius:inherit;pointer-events:none;background:radial-gradient(460px circle at var(--mx,50%) var(--my,-30%),hsl(var(--song-h) 70% 62% / .09),transparent 62%);opacity:0;transition:opacity .4s ease}
 .cd:hover::before{opacity:1}.cd:hover{border-color:#ffffff1f;box-shadow:0 22px 60px #00000040}
 .tb,.go,.ch,.sw,.sg button,.qx,.btn,.scene-tools button{position:relative;overflow:hidden}
+.toast{display:flex;align-items:center;gap:10px;border-radius:12px;padding:12px 16px;box-shadow:0 18px 50px #0009;transform:translateY(18px) scale(.95);transition:opacity .3s ease,transform .5s cubic-bezier(.2,1.4,.4,1)}
+.toast::before{content:'';width:8px;height:8px;flex-shrink:0;border-radius:50%;background:var(--song);box-shadow:0 0 10px var(--song)}
+.toast.show{transform:none}html .toast{border-left:3px solid var(--song)}html .toast.err{border-left-color:var(--rd)}.toast.err::before{background:var(--rd);box-shadow:0 0 10px var(--rd)}
+.toast.copy::before{background:var(--ac)}
+@view-transition{navigation:auto}
+::view-transition-old(root),::view-transition-new(root){animation-duration:.32s;animation-timing-function:cubic-bezier(.2,.8,.2,1)}
+.nv{view-transition-name:site-nav}
+.nb b{display:inline-block;color:var(--song);transition:color .8s ease}
+.nk{position:relative;transition:background .25s ease,color .25s ease}
+.nk::after{content:'';position:absolute;left:50%;bottom:3px;width:4px;height:4px;margin-left:-2px;border-radius:50%;background:var(--song);box-shadow:0 0 8px var(--song);transform:scale(0);transition:transform .4s cubic-bezier(.2,1.4,.4,1)}
+.nk.a::after{transform:scale(1)}.nk:hover::after{transform:scale(.7)}
+.rv-wait{opacity:0}
+@media(prefers-reduced-motion:reduce){::view-transition-group(*),::view-transition-old(*),::view-transition-new(*){animation:none!important}.rv-wait{opacity:1}}
 .rp{position:absolute;border-radius:50%;pointer-events:none;background:currentColor;opacity:0;transform:scale(0)}
 .ambient{position:fixed;inset:0;z-index:-1;overflow:hidden;pointer-events:none;background:radial-gradient(ellipse at 80% 0%,#17342855,transparent 65%),#090d0c}
 .ambient::before,.ambient::after{content:'';position:absolute;width:85vw;height:75vh;left:-20%;top:-30%;border-radius:45%;background:radial-gradient(ellipse,#33734f77,transparent 65%);animation:aurora-drift 28s ease-in-out infinite alternate;will-change:transform}
@@ -104,7 +117,7 @@ const LIVE_DECK_CSS = `
 @keyframes onair{50%{box-shadow:0 0 20px #1ed76055;background:#1ed76028}}
 .dot{position:relative}.dot.on::after{content:'';position:absolute;inset:0;border-radius:50%;background:var(--ac);animation:ping 2.4s cubic-bezier(0,0,.2,1) infinite}
 @keyframes ping{75%,100%{transform:scale(2.8);opacity:0}}
-.nb b{display:inline-block;color:var(--song)}html[data-live=true] .nb b{animation:beat 1.2s ease-in-out infinite}
+html[data-live=true] .nb b{animation:beat 1.2s ease-in-out infinite}
 @keyframes beat{0%,40%,100%{transform:scale(1)}14%{transform:scale(1.6)}}
 .page-intro h1 span{background:linear-gradient(100deg,#8b9b90 20%,hsl(var(--song-h) 62% 76%) 48%,#8b9b90 76%);background-size:240% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shimmer 7s ease-in-out infinite alternate}
 @keyframes shimmer{from{background-position:100% 0}to{background-position:0 0}}
@@ -124,11 +137,16 @@ const LIVE_DECK_CSS = `
 .chrow.here{background:hsl(var(--song-h) 32% 17% / .6);border-color:hsl(var(--song-h) 45% 55% / .45)}
 .botpill{background:var(--song);color:hsl(var(--song-h) 50% 12%)}
 .chrow{transition:border-color .25s ease,background .25s ease,transform .25s ease}.chrow:hover{transform:translateX(2px)}
-.toast{display:flex;align-items:center;gap:10px;border-radius:12px;padding:12px 16px;border-left:3px solid var(--song);box-shadow:0 18px 50px #0009;transform:translateY(18px) scale(.95);transition:opacity .3s ease,transform .5s cubic-bezier(.2,1.4,.4,1)}
-.toast::before{content:'';width:8px;height:8px;flex-shrink:0;border-radius:50%;background:var(--song);box-shadow:0 0 10px var(--song)}
-.toast.show{transform:none}.toast.err{border-left-color:var(--rd)}.toast.err::before{background:var(--rd);box-shadow:0 0 10px var(--rd)}
+.sk-tip{position:absolute;bottom:16px;left:0;transform:translateX(-50%);padding:3px 7px;border-radius:6px;background:#0b120ee8;border:1px solid hsl(var(--song-h) 45% 55% / .4);font:10px var(--mn);color:#eef5ec;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .15s ease}
+.sk:hover .sk-tip:not(:empty){opacity:1}
+.vg input[type=range]{background:linear-gradient(90deg,var(--song) calc(var(--v,50) * 1%),#2b2b30 0)}
+.empty-mark{animation:float-mark 3.4s ease-in-out infinite}
+@keyframes float-mark{50%{transform:translateY(-5px);color:var(--song)}}
+.cd{transition:border-color .35s ease,box-shadow .35s ease,transform .35s ease,filter .6s ease}
+html[data-offline=true] .player-card,html[data-offline=true] .queue-card,html[data-offline=true] .server-card{filter:grayscale(.75) brightness(.8)}
+html[data-offline=true] .lamp{opacity:.4}
 @media(max-width:640px){.tonearm{scale:.5}.shine{width:88px;height:88px}.ns-row{margin-bottom:8px}}
-@media(prefers-reduced-motion:reduce){.player-card::after,.record-stage::before,.eq i,.skf::after,.tb.main,.lamp.on,.dot.on::after,.nb b,.page-intro h1 span,.sw.on .led,.ambient .orb,.ambient .orb::before{animation:none!important}.tonearm,.cd,.toast{transition:none}}
+@media(prefers-reduced-motion:reduce){.player-card::after,.record-stage::before,.eq i,.skf::after,.tb.main,.lamp.on,.dot.on::after,.nb b,.page-intro h1 span,.sw.on .led,.ambient .orb,.ambient .orb::before,.empty-mark{animation:none!important}.tonearm,.cd,.toast{transition:none}}
 `;
 
 export const DASHBOARD_CSS = `${AMBIENT_CSS}
@@ -276,8 +294,45 @@ function initMotion(){
     },{passive:true});
   }
   if(document.querySelectorAll){
-    fxRise(document.querySelectorAll('.page-intro,.page-heading'),0);
-    fxRise(document.querySelectorAll('.cd'),55);
+    fxRise(document.querySelectorAll('.page-intro,.page-heading,.setup-story'),0);
+    fxReveal(document.querySelectorAll('.cd,.metric'));
   }
+}
+// Cards on screen rise together; cards below the fold wait hidden and rise
+// as they scroll in, so long pages keep moving past the first screen.
+function fxReveal(nodes,step){
+  if(!nodes)return;
+  var vh=window.innerHeight||0,now=[],later=[];
+  for(var i=0;i<nodes.length;i++){
+    var n=nodes[i],r=n.getBoundingClientRect?n.getBoundingClientRect():null;
+    if(r&&vh&&r.top>vh)later.push(n);else now.push(n);
+  }
+  fxRise(now,step===undefined?55:step);
+  if(!later.length||typeof IntersectionObserver!=='function'||!motionOn())return;
+  var io=new IntersectionObserver(function(entries){
+    for(var j=0;j<entries.length;j++){
+      var en=entries[j];
+      if(!en.isIntersecting)continue;
+      io.unobserve(en.target);
+      en.target.classList.remove('rv-wait');
+      fxRise([en.target],0);
+    }
+  },{rootMargin:'0px 0px 8% 0px'});
+  for(var k=0;k<later.length;k++){later[k].classList.add('rv-wait');io.observe(later[k]);}
+}
+var copyToastTimer=0;
+function copyText(text){
+  var done=function(ok){
+    var el=document.getElementById?document.getElementById('toast'):null;
+    if(!el)return;
+    el.textContent=ok?'Copiado: '+text:'No se pudo copiar';
+    el.classList.remove('err');el.classList.add('copy');el.classList.add('show');
+    clearTimeout(copyToastTimer);
+    copyToastTimer=setTimeout(function(){el.classList.remove('show');el.classList.remove('copy');},2200);
+  };
+  try{
+    if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(function(){done(true);},function(){done(false);});return;}
+  }catch(e){}
+  done(false);
 }
 `;
