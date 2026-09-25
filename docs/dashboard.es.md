@@ -8,13 +8,17 @@ Abrir el panel autenticado en `http://127.0.0.1:8080/`. Para un servidor remoto,
 
 Buscar por título, artista o enlace compatible. Seleccionar la casilla de próxima pista para insertar antes de la cola pendiente. Si falla una solicitud, el texto se conserva para repetirla. Anterior, pausa, salto, parada y volumen controlan la sesión compartida.
 
-Pulsar la barra de progreso para cambiar de posición. Con el foco en la barra, las flechas avanzan o retroceden cinco segundos; Inicio y Fin seleccionan los extremos. Las transmisiones sin duración conocida no admiten búsqueda de posición. El disco giratorio indica reproducción y es decorativo, no un espectro de audio ni una portada.
+Pulsar la barra de progreso para cambiar de posición. Con el foco en la barra, las flechas avanzan o retroceden cinco segundos; Inicio y Fin seleccionan los extremos. Las transmisiones sin duración conocida no admiten búsqueda de posición. El disco giratorio, el brazo y las barras del ecualizador junto al estado indican la reproducción. Son decorativos, no un espectro de audio ni una portada: las barras se mueven mientras el bot reproduce y se detienen en pausa.
+
+Cada pista tiene su propio color, calculado a partir del título. El reproductor, la barra de progreso, los botones principales, los filtros activos y el brillo del fondo cambian a ese color al cambiar de pista, por lo que la misma canción siempre muestra el mismo color. El último color se guarda en este navegador y lo usan las demás páginas del panel.
 
 La tarjeta de descubrimiento permite buscar radio y activar o desactivar la reproducción automática. Listas y estadísticas utilizan el contexto de comandos del bot; no representan la biblioteca personal de un usuario TeamSpeak. Letras e historial se muestran en la tarjeta de salida.
 
 ## Fondo y movimiento
 
 Elegir Aurora, Atardecer u Océano, o desactivar el fondo. Los degradados animados se generan localmente con CSS; no descargan imágenes externas, GIF ni solicitudes de seguimiento.
+
+Las tarjetas aparecen de forma escalonada al cargar, las entradas nuevas de la cola y del chat se deslizan, los contadores se animan hasta su nuevo valor y los botones responden al pulsarlos. Todo el movimiento se ejecuta en la propia página con CSS y la API de animación del navegador; no se descarga ninguna biblioteca de animación.
 
 El botón de movimiento pausa las animaciones. Las preferencias se guardan en este navegador, separadas de la configuración del bot. La reducción de movimiento del sistema tiene prioridad; las pestañas ocultas pausan la animación. Sin almacenamiento del navegador, los controles siguen funcionando durante la visita actual.
 

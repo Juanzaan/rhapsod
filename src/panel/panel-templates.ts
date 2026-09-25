@@ -2,6 +2,7 @@ import type { PanelStatus } from "./panel-server.js";
 import {
   AMBIENCE_JS,
   DASHBOARD_CSS,
+  songHue,
   AMBIENT_LAYER_HTML,
   SCENE_TOOLS_HTML,
 } from "./dashboard-design.js";
@@ -495,8 +496,9 @@ export function renderDashboard(status: PanelStatus): string {
   const uptimeInit = fmtUp(status.uptimeMs);
   const tracksInit = status.tracksPlayed ?? 0;
   const version = esc(status.version);
+  const hue = songHue(status.currentTitle);
   return `<!DOCTYPE html>
-<html lang="es">
+<html lang="es" style="--song-h:${hue}" data-live="${playerState === "playing"}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -606,8 +608,8 @@ export function renderDashboard(status: PanelStatus): string {
       <div class="cd player-card" id="playerCard" data-playing="${playerState === "playing"}">
         <div class="ct"><span><span class="section-no">01 /</span> En reproducción</span><span class="rv" id="nc2">Canal ${channel}</span></div>
         <div class="deck">
-          <div class="record-stage" aria-hidden="true"><div class="record"><div class="record-label"><b>r.</b>RHAPSOD</div></div></div>
-          <div class="ns" id="nsState">${stateLabel}</div>
+          <div class="record-stage" aria-hidden="true"><div class="record" id="record"><div class="record-label"><b>r.</b>RHAPSOD</div></div><i class="shine"></i><div class="tonearm"><i class="arm"></i><i class="head"></i><i class="pivot"></i></div></div>
+          <div class="ns-row"><div class="ns" id="nsState">${stateLabel}</div><span class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span></div>
           <div class="nt" id="nt">${title}</div>
           <div class="track-detail" id="trackDetail">${esc(status.currentArtist || "Elegí un tema y compartí el momento.")}</div>
           <div class="progress-block"><div class="sk" id="seek" role="slider" tabindex="0" aria-label="Posición de reproducción" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" title="Cambiar posición"><div class="skf" id="seekf"></div></div>
@@ -690,7 +692,7 @@ export function renderDashboard(status: PanelStatus): string {
       <div class="cd system-card">
         <div class="ct"><span>Sistema</span><span class="rv" id="uptime">${uptimeInit}</span></div>
         <div class="sg3">
-          <div class="stt"><div class="sv am" id="stTracks">${tracksInit}</div><div class="sl">Temas</div></div>
+          <div class="stt"><div class="sv am" id="stTracks" data-v="0">${tracksInit}</div><div class="sl">Temas</div></div>
           <div class="stt"><div class="sv" id="stVer">${version}</div><div class="sl">Versión</div></div>
           <div class="stt"><div class="sv" id="ytRes">—</div><div class="sl">YouTube</div></div>
         </div>
@@ -715,9 +717,8 @@ export function renderDashboard(status: PanelStatus): string {
   <script>${SERVER_TREE_JS}
     ${AMBIENCE_JS}
     var H={'content-type':'application/json'};
-    var RM=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    function gs(){return (window.gsap&&!RM)?window.gsap:null;}
     var PP='idle',POS=0,DUR=0,volDrag=false,lastTracks=-1,lastQ='',lastE='',lastQLen=0,lastC='',lastS='',fails=0;
+    var anchorPos=0,anchorAt=0,lastTitle=null,lastChatLen=-1;
 
     function fmtT(ms){
       if(ms==null||!isFinite(ms)||ms<0)return '--:--';
@@ -730,7 +731,6 @@ export function renderDashboard(status: PanelStatus): string {
     }
 
     function cmd(c){
-      pressAnim();
       fetch('/api/command',{method:'POST',headers:Object.assign({},H,{'content-type':'application/json'}),body:JSON.stringify({command:c})})
         .then(function(r){return r.json();})
         .then(function(d){toast(d.ok?(d.response||'OK'):'Error: '+(d.error||'desconocido'));if(d.ok)setTimeout(refresh,500);})
@@ -817,9 +817,12 @@ export function renderDashboard(status: PanelStatus): string {
       for(var i=0;i<msgs.length;i++){
         var m=msgs[i];
         var who=m.outgoing?'BOT':(m.from||'?');
-        h+='<li class="qi"><span class="qn">'+esc(new Date(m.ts).toLocaleTimeString())+'</span><span class="'+(m.outgoing?'cmB':'cnm')+'">'+esc(who)+'</span><span class="cmt">'+esc(m.text)+'</span></li>';
+        var tint=m.outgoing?'':' style="color:hsl('+nameHue(who)+' 62% 76%)"';
+        h+='<li class="qi"><span class="qn">'+esc(new Date(m.ts).toLocaleTimeString())+'</span><span class="'+(m.outgoing?'cmB':'cnm')+'"'+tint+'>'+esc(who)+'</span><span class="cmt">'+esc(m.text)+'</span></li>';
       }
       list.innerHTML=h;
+      if(lastChatLen>=0&&msgs.length>lastChatLen&&list.children)fxRise(Array.prototype.slice.call(list.children,list.children.length-(msgs.length-lastChatLen)),60);
+      lastChatLen=msgs.length;
       if(nearBottom)list.scrollTop=list.scrollHeight;
     }
 
@@ -830,7 +833,7 @@ export function renderDashboard(status: PanelStatus): string {
       var x=(e.touches&&e.touches[0]?e.touches[0].clientX:e.clientX)-r.left;
       var ratio=Math.max(0,Math.min(1,x/r.width));
       var sec=Math.floor(ratio*DUR/1000);
-      POS=ratio*DUR;
+      POS=ratio*DUR;anchorPos=POS;anchorAt=Date.now();
       paintTime();
       cmd('seek '+sec);
     }
@@ -838,9 +841,11 @@ export function renderDashboard(status: PanelStatus): string {
     function showOut(c){
       var card=document.getElementById('dwCard');
       var pre=document.getElementById('dw');
+      var wasOpen=card.style.display==='block';
       card.style.display='block';
       pre.textContent='...';
       card.scrollIntoView({block:'nearest'});
+      if(!wasOpen)fx(card,[{opacity:0,transform:'translateY(14px) scale(.98)'},{opacity:1,transform:'none'}],{duration:420,easing:'cubic-bezier(.2,.8,.2,1)'});
       run(c).then(function(t){pre.textContent=t;}).catch(function(e){pre.textContent='Error: '+e.message;});
     }
 
@@ -848,25 +853,39 @@ export function renderDashboard(status: PanelStatus): string {
       document.getElementById('dwCard').style.display='none';
     }
 
+    var toastTimer=0;
     function toast(m){
       var el=document.getElementById('toast');
-      el.textContent=m;el.classList.add('show');
-      setTimeout(function(){el.classList.remove('show');},3000);
+      el.textContent=m;
+      if(/^Error/.test(String(m)))el.classList.add('err');else el.classList.remove('err');
+      el.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer=setTimeout(function(){el.classList.remove('show');},3200);
     }
 
-    function pressAnim(){
-      var g=gs();
-      if(!g)return;
-      var b=document.activeElement;
-      if(b&&b.classList&&b.classList.contains('tb'))g.fromTo(b,{scale:.93},{scale:1,duration:.25,ease:'back.out(3)'});
+    function nameHue(name){return hashHue(String(name||'?').toLowerCase());}
+
+    function avatar(name){
+      var n=String(name||'?');
+      return '<span class="av" style="--h:'+nameHue(n)+'" aria-hidden="true">'+esc(n.charAt(0).toUpperCase())+'</span>';
     }
 
-    function countUp(el,to,suffix){
-      var g=gs();
-      if(!g){el.textContent=to+(suffix||'');return;}
-      var o={v:parseFloat(el.getAttribute('data-v')||'0')};
-      g.to(o,{v:to,duration:.8,ease:'power1.out',overwrite:true,onUpdate:function(){el.textContent=Math.round(o.v)+(suffix||'');}});
-      el.setAttribute('data-v',String(to));
+    function livePos(){
+      return (PP==='playing'&&DUR>0)?Math.min(DUR,anchorPos+(Date.now()-anchorAt)):POS;
+    }
+
+    function paintBar(){
+      if(DUR<=0)return;
+      document.getElementById('seekf').style.width=Math.min(100,livePos()/DUR*100)+'%';
+    }
+
+    function onTrackChange(title,first){
+      setSongHue(title);
+      if(first)return;
+      var ease='cubic-bezier(.2,.8,.2,1)';
+      fx(document.getElementById('nt'),[{opacity:0,transform:'translateY(18px)',filter:'blur(8px)'},{opacity:1,transform:'none',filter:'blur(0)'}],{duration:620,easing:ease});
+      fx(document.getElementById('trackDetail'),[{opacity:0,transform:'translateY(10px)'},{opacity:1,transform:'none'}],{duration:620,delay:90,easing:ease,fill:'backwards'});
+      fx(document.getElementById('record'),[{transform:'scale(.9)'},{transform:'scale(1.04)'},{transform:'scale(1)'}],{duration:700,easing:ease,composite:'add'});
     }
 
     function paintTime(){
@@ -877,7 +896,7 @@ export function renderDashboard(status: PanelStatus): string {
       bar.setAttribute('aria-valuenow',String(DUR>0?Math.min(100,Math.round(POS/DUR*100)):0));
       bar.setAttribute('aria-valuetext',DUR>0?fmtT(POS)+' de '+fmtT(DUR):'Sin duración disponible');
       bar.setAttribute('aria-disabled',String(DUR<=0));
-      if(DUR>0){bar.classList.remove('live');f.style.width=Math.min(100,POS/DUR*100)+'%';}
+      if(DUR>0){bar.classList.remove('live');f.style.width=Math.min(100,livePos()/DUR*100)+'%';}
       else if(PP==='playing'||PP==='buffering'){bar.classList.add('live');f.style.width='100%';}
       else{bar.classList.remove('live');f.style.width='0%';}
     }
@@ -887,6 +906,7 @@ export function renderDashboard(status: PanelStatus): string {
       var lab=document.getElementById('nsState');
       var pp=document.getElementById('ppBtn');
       document.getElementById('playerCard').setAttribute('data-playing',String(state==='playing'));
+      setLive(state==='playing');
       pp.setAttribute('aria-label',(state==='playing'||state==='buffering')?'Pausar':'Reanudar');
       if(state==='playing'){lamp.className='lamp on';lab.textContent='PLAYING';pp.innerHTML='&#9208;';}
       else if(state==='buffering'){lamp.className='lamp buf';lab.textContent='BUFFERING';pp.innerHTML='&#9208;';}
@@ -918,13 +938,16 @@ export function renderDashboard(status: PanelStatus): string {
         PP=d.playerState||'idle';
         POS=(typeof d.positionMs==='number'&&d.positionMs>=0)?d.positionMs:0;
         DUR=(typeof d.durationMs==='number'&&d.durationMs>0)?d.durationMs:0;
+        anchorPos=POS;anchorAt=Date.now();
         setLamp(PP);
+        var titleNow=d.currentTitle||'';
+        if(titleNow!==lastTitle){onTrackChange(titleNow,lastTitle===null);lastTitle=titleNow;}
         paintTime();
         document.getElementById('nt').textContent=d.currentTitle||'Tu próxima canción empieza acá.';
         document.getElementById('trackDetail').textContent=d.currentArtist||(d.currentTitle?'Una sesión para compartir.':'Elegí un tema y compartí el momento.');
         document.getElementById('nt').title=d.currentTitle||'';
         document.getElementById('nc2').textContent='Canal '+(d.currentChannelId||'-');
-        document.getElementById('qc').textContent=d.queueLength+' pistas';
+        fxCount(document.getElementById('qc'),d.queueLength,d.queueLength===1?' pista':' pistas');
         if(!volDrag&&typeof d.volume==='number'){
           document.getElementById('vol').value=d.volume;
           document.getElementById('volv').textContent=d.volume+'%';
@@ -933,7 +956,7 @@ export function renderDashboard(status: PanelStatus): string {
         syncSeg('fxRow','data-f',d.currentFilter||'off');
         if(typeof d.tracksPlayed==='number'&&d.tracksPlayed!==lastTracks){
           lastTracks=d.tracksPlayed;
-          countUp(document.getElementById('stTracks'),d.tracksPlayed);
+          fxCount(document.getElementById('stTracks'),d.tracksPlayed);
         }
         if(typeof d.uptimeMs==='number'){
           var m=Math.floor(d.uptimeMs/60000);
@@ -953,17 +976,18 @@ export function renderDashboard(status: PanelStatus): string {
           if(!d.queue||d.queue.length===0){list.innerHTML='';empty.style.display='block';}
           else{
           empty.style.display='none';
-          var grew=d.queue.length>lastQLen;
+          var prevLen=lastQLen;
+          var grew=d.queue.length>prevLen;
           lastQLen=d.queue.length;
           var h='';
           for(var i=0;i<d.queue.length;i++){
             var t=d.queue[i];
             var title=t.title||'Sin titulo';
-            var by=t.requestedBy?' <span class="qr">'+esc(t.requestedBy)+'</span>':'';
+            var by=t.requestedBy?' <span class="qr">'+avatar(t.requestedBy)+esc(t.requestedBy)+'</span>':'';
             h+='<li class="qi"><span class="qn">'+(i+1)+'</span><span class="qt" title="'+esc(title)+'">'+esc(title)+'</span>'+by+'<button class="qx" title="Quitar" aria-label="Quitar pista '+(i+1)+'" onclick="rmQ('+(i+1)+')">&times;</button></li>';
           }
           list.innerHTML=h;
-          if(grew){var gg=gs();if(gg)gg.from(list.children,{y:8,opacity:0,duration:.35,stagger:.04,ease:'power2.out',clearProps:'all',overwrite:true});}
+          if(grew&&list.children)fxRise(Array.prototype.slice.call(list.children,prevLen),45);
           }
         }
         renderErrors(d.errors||{totalErrors:0,byCategory:{},recent:[]});
@@ -1024,7 +1048,7 @@ export function renderDashboard(status: PanelStatus): string {
         else if(event.key==='Home')next=0;
         else if(event.key==='End')next=DUR;
         else return;
-        event.preventDefault();POS=Math.max(0,Math.min(DUR,next));paintTime();cmd('seek '+Math.floor(POS/1000));
+        event.preventDefault();POS=Math.max(0,Math.min(DUR,next));anchorPos=POS;anchorAt=Date.now();paintTime();cmd('seek '+Math.floor(POS/1000));
       });
       var vol=document.getElementById('vol');
       vol.addEventListener('pointerdown',function(){volDrag=true;});
@@ -1033,13 +1057,6 @@ export function renderDashboard(status: PanelStatus): string {
         document.getElementById('volv').textContent=vol.value+'%';
         cmd('volume '+vol.value);
       });
-      function entrance(){
-        var g=gs();
-        if(!g)return;
-        g.from('.cd',{y:16,opacity:0,duration:.5,stagger:.07,ease:'power2.out',clearProps:'all'});
-      }
-      if(document.readyState==='complete')entrance();
-      else window.addEventListener('load',entrance);
       function tick(){
         if(document.hidden)return;
         refresh();
@@ -1048,8 +1065,17 @@ export function renderDashboard(status: PanelStatus): string {
       setInterval(tick,5000);
       document.addEventListener('visibilitychange',function(){if(!document.hidden)refresh();});
       setInterval(function(){
-        if(PP==='playing'&&DUR>0&&POS<DUR){POS+=1000;paintTime();}
+        if(PP==='playing'&&DUR>0){POS=livePos();paintTime();}
       },1000);
+      // The bar glides between one-second text updates; the text stays on
+      // whole seconds so the readout never jitters.
+      if(typeof requestAnimationFrame==='function'){
+        var glide=function(){
+          if(PP==='playing'&&!document.hidden&&motionOn())paintBar();
+          requestAnimationFrame(glide);
+        };
+        requestAnimationFrame(glide);
+      }
     })();
   </script>
 </body>
@@ -1302,8 +1328,6 @@ export function renderServerPage(): string {
   <script>${SERVER_TREE_JS}
     ${AMBIENCE_JS}
     var H={'content-type':'application/json'};
-    var RM=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    function gs(){return (window.gsap&&!RM)?window.gsap:null;}
     var lastV=-1;
     var lastView=null;
     var collapsed={};
@@ -1344,8 +1368,7 @@ export function renderServerPage(): string {
       var built=serverTreeHtml(Object.assign({},view,{channels:filtered}),{interactive:true,collapsed:query?{}:collapsed});
       if(!filtered.length){box.innerHTML='<div class="em">No hay canales ni usuarios que coincidan.</div>';return;}
       box.innerHTML=built.html;
-      var g=gs();
-      if(g&&lastV===-1)g.from('#tree .chrow',{y:10,opacity:0,duration:.4,stagger:.03,ease:'power2.out',clearProps:'all'});
+      if(lastV===-1&&document.querySelectorAll)fxRise(document.querySelectorAll('#tree .chrow'),30);
       lastV=view.version;
     }
 
