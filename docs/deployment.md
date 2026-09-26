@@ -86,6 +86,17 @@ Verify `systemctl is-active rhapsod`, the panel version, a test track, queue adv
 
 When a data file (playlists, favorites, listening history, song library, telemetry or playback state) cannot be read at startup because it is not valid JSON or has an unknown format version, the bot renames it to `<name>.corrupt-<UTC time>` in the same directory, logs a warning with both names and starts that store empty. Nothing is deleted. List set-aside files with `ls /var/lib/rhapsod/*.corrupt-*`. To recover one, stop the bot while idle, repair the copy or take the file from the backup, move it back to its original name and start the bot.
 
+## Playback indicators
+
+Every finished track logs a `Playback session` line with its latency: `startDelayMs` (from picking the track to its first audio frame), `handoffGapMs` (silence after the previous track, absent after the bot sat idle), `coldStart`, `prewarmed`, underruns and rebuffers. Summarize them from the log directory:
+
+```bash
+cd /var/lib/rhapsod
+node /home/rhapsod/rhapsod/scripts/log-stats.mjs --since 2026-09-01T00:00:00Z logs/*.log
+```
+
+The "Indicadores de reproducción" block reports p50, p90 and p99 for the time from a command to the first audio on a cold start, the gap between tracks, and underruns per track, plus the share of handoffs that used the prewarmed stream. Compare the same window before and after an update.
+
 ## Docker Compose (Linux)
 
 The Compose file starts separate bot and yt-dlp containers using Linux host networking. Both services bind to localhost; no panel port is published. This layout also lets the bot reach a TeamSpeak server or optional extraction services on the host.

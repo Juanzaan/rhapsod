@@ -391,3 +391,58 @@ describe("log-stats analyzeLogs aggregates", () => {
     expect(stats.period).toBeUndefined();
   });
 });
+
+describe("log-stats playback KPIs", () => {
+  const session = (fields: Record<string, unknown>): string =>
+    line({ level: 30, time: NOW, msg: "Playback session", ...fields });
+
+  it("summarizes start delay, handoff gaps and prewarm hits", () => {
+    const stats = analyzeLogs([
+      session({
+        coldStart: true,
+        metadataMs: 400,
+        prewarmed: false,
+        rebufferEvents: 0,
+        startDelayMs: 900,
+        underruns: 0,
+      }),
+      session({
+        coldStart: false,
+        handoffGapMs: 80,
+        prewarmed: true,
+        rebufferEvents: 1,
+        startDelayMs: 60,
+        underruns: 2,
+      }),
+      session({
+        coldStart: false,
+        handoffGapMs: 1_500,
+        prewarmed: false,
+        rebufferEvents: 0,
+        startDelayMs: 1_400,
+        underruns: 0,
+      }),
+      // Older lines without the new fields still count as sessions.
+      session({ firstFrameDelayMs: 50 }),
+    ]);
+
+    expect(stats.playbackSessions).toBe(4);
+    expect(stats.kpis.commandToAudioMs).toMatchObject({ count: 1, max: 1_300 });
+    expect(stats.kpis.startDelayMs).toMatchObject({ count: 3, max: 1_400 });
+    expect(stats.kpis.handoffGapMs).toMatchObject({ count: 2, p50: 80 });
+    expect(stats.kpis.handoffs).toEqual({ prewarmed: 1, cold: 1 });
+    expect(stats.kpis.prewarmRate).toBe(50);
+    expect(stats.kpis.underrunsPerPlay).toMatchObject({ count: 3, max: 2 });
+
+    const report = formatStats(stats);
+    expect(report).toContain("Pausa entre pistas: n=2");
+    expect(report).toContain("Cambios precargados: 1 de 2 (50%)");
+  });
+
+  it("reports n/a when no play carried the indicators", () => {
+    const stats = analyzeLogs([]);
+    expect(stats.kpis.handoffGapMs).toEqual({ count: 0 });
+    expect(stats.kpis.prewarmRate).toBe(0);
+    expect(formatStats(stats)).toContain("Pausa entre pistas: n/a");
+  });
+});

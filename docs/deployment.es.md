@@ -86,6 +86,17 @@ Verificar `systemctl is-active rhapsod`, versión del panel, una pista de prueba
 
 Si un archivo de datos (listas, favoritos, historial de escucha, biblioteca de canciones, telemetría o estado de reproducción) no se puede leer al iniciar porque no es JSON válido o tiene una versión de formato desconocida, el bot lo renombra a `<nombre>.corrupt-<hora UTC>` en el mismo directorio, registra una advertencia con ambos nombres y ese almacén arranca vacío. No se borra nada. Los archivos apartados se listan con `ls /var/lib/rhapsod/*.corrupt-*`. Para recuperar uno, detener el bot en reposo, reparar la copia o tomar el archivo del respaldo, devolverle su nombre original e iniciar el bot.
 
+## Indicadores de reproducción
+
+Cada pista terminada registra una línea `Playback session` con su latencia: `startDelayMs` (desde que se elige la pista hasta su primer cuadro de audio), `handoffGapMs` (silencio después de la pista anterior, ausente si el bot estuvo en reposo), `coldStart`, `prewarmed`, cortes y recargas del búfer. Para resumirlos desde el directorio de registros:
+
+```bash
+cd /var/lib/rhapsod
+node /home/rhapsod/rhapsod/scripts/log-stats.mjs --since 2026-09-01T00:00:00Z logs/*.log
+```
+
+El bloque "Indicadores de reproducción" informa p50, p90 y p99 del tiempo desde un comando hasta el primer audio en un arranque en frío, de la pausa entre pistas y de los cortes por pista, además de la proporción de cambios que usaron el flujo precargado. Comparar la misma ventana antes y después de una actualización.
+
 ## Docker Compose (Linux)
 
 Compose inicia contenedores separados para el bot y yt-dlp con la red del host Linux. Ambos servicios escuchan en localhost; no se publica ningún puerto del panel. Esta configuración permite acceder a TeamSpeak o servicios auxiliares del host.

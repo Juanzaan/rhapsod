@@ -42,6 +42,29 @@ export type PlaybackEndReason = "completed" | "error" | "skipped" | "stopped";
 // track (seek, 403 retry); never reported to observers.
 type SessionEndReason = PlaybackEndReason | "restart";
 
+/**
+ * Per-play latency, reported once when a play ends (restarts of the same
+ * play for seek or a 403 do not count as new starts).
+ * - startDelayMs: from the driver picking the track to its first audio frame
+ *   (resolution, ffmpeg startup and buffering).
+ * - handoffGapMs: from the previous track's end to this track's first frame,
+ *   the silence listeners hear; absent after the driver sat idle.
+ */
+export interface PlaybackKpis {
+  readonly coldStart: boolean;
+  readonly handoffGapMs?: number;
+  readonly prewarmed: boolean;
+  readonly startDelayMs?: number;
+}
+
+interface PlayStart {
+  readonly createdAt: number;
+  readonly pickedAt: number;
+  readonly player: { readonly metrics: AudioPlayerMetrics };
+  readonly prewarmed: boolean;
+  readonly previousEndedAt: number | undefined;
+}
+
 export interface PlaybackTiming {
   readonly audioUrlSource?: AudioUrlSource;
   readonly cacheHit?: boolean;
@@ -85,6 +108,7 @@ export interface PlaybackControllerOptions {
     track: Track,
     metrics: AudioPlayerMetrics,
     reason: PlaybackEndReason,
+    kpis?: PlaybackKpis,
   ) => void;
   readonly onTiming?: (timing: PlaybackTiming) => void;
   readonly onStateChanged?: () => void;
@@ -147,8 +171,13 @@ export class PlaybackController {
     track: Track,
     metrics: AudioPlayerMetrics,
     reason: PlaybackEndReason,
+    kpis?: PlaybackKpis,
   ) => void;
   readonly #onTiming: (timing: PlaybackTiming) => void;
+  readonly #playStarts = new WeakMap<Track, PlayStart>();
+  // When the last session ended while more was queued; cleared when the
+  // driver goes idle so a start after silence counts as cold, not a gap.
+  #lastSessionEndedAt: number | undefined;
   readonly #onStateChanged: () => void;
   readonly #autoplayProvider: (() => Promise<Track | undefined>) | undefined;
   readonly #autoplayTimeoutMs: number;
@@ -281,9 +310,34 @@ export class PlaybackController {
     const unfinished = this.#unfinished;
     if (unfinished === undefined) return;
     this.#unfinished = undefined;
+    const kpis = this.#takeKpis(unfinished.track);
     this.#safeObserver(() =>
-      this.#onPlaybackFinished(unfinished.track, unfinished.metrics, reason),
+      this.#onPlaybackFinished(
+        unfinished.track,
+        unfinished.metrics,
+        reason,
+        kpis,
+      ),
     );
+  }
+
+  #takeKpis(track: Track): PlaybackKpis | undefined {
+    const start = this.#playStarts.get(track);
+    if (start === undefined) return undefined;
+    this.#playStarts.delete(track);
+    const delay = start.player.metrics.firstFrameDelayMs;
+    const firstFrameAt =
+      delay === undefined ? undefined : start.createdAt + delay;
+    return {
+      coldStart: start.previousEndedAt === undefined,
+      prewarmed: start.prewarmed,
+      ...(firstFrameAt === undefined
+        ? {}
+        : { startDelayMs: firstFrameAt - start.pickedAt }),
+      ...(firstFrameAt === undefined || start.previousEndedAt === undefined
+        ? {}
+        : { handoffGapMs: firstFrameAt - start.previousEndedAt }),
+    };
   }
 
   /** Resume point for a restart of the current track; undefined when live. */
@@ -435,6 +489,7 @@ export class PlaybackController {
     this.#session = undefined;
     this.#current = undefined;
     this.#driverState = "idle";
+    this.#lastSessionEndedAt = undefined;
     this.#loopMode = "off";
     this.#loopPool = [];
   }
@@ -560,6 +615,7 @@ export class PlaybackController {
           if (this.#queue.length > 0) continue;
           this.#current = undefined;
           this.#driverState = "idle";
+          this.#lastSessionEndedAt = undefined;
           this.#onStateChanged();
           return;
         }
@@ -649,9 +705,12 @@ export class PlaybackController {
               }),
         };
         let session: FfmpegPlaybackSession;
+        let prewarmed = false;
+        const createdAt = Date.now();
         try {
           if (seekSeconds === undefined) {
             const warm = this.#takeWarmStream(track.source);
+            prewarmed = warm !== undefined;
             if (warm !== undefined) {
               session = this.#createPlayback(
                 resolved.url,
@@ -691,6 +750,13 @@ export class PlaybackController {
           // The resumed session reports the finish from here on.
           this.#unfinished = undefined;
         } else {
+          this.#playStarts.set(track, {
+            createdAt,
+            pickedAt: audioResolutionStartedAt,
+            player: session.player,
+            prewarmed,
+            previousEndedAt: this.#lastSessionEndedAt,
+          });
           this.#tracksPlayed++;
           this.#recordHistory(track);
           this.#safeObserver(() => this.#onPlaybackStarted(track));
@@ -702,6 +768,7 @@ export class PlaybackController {
         } catch (error) {
           playbackError = error;
         }
+        this.#lastSessionEndedAt = Date.now();
         const endReason =
           this.#sessionEndReasons.get(session) ??
           (playbackError !== undefined ? "error" : "completed");
@@ -749,8 +816,14 @@ export class PlaybackController {
             }
           }
         }
+        const kpis = this.#takeKpis(track);
         this.#safeObserver(() => {
-          this.#onPlaybackFinished(track, session.player.metrics, endReason);
+          this.#onPlaybackFinished(
+            track,
+            session.player.metrics,
+            endReason,
+            kpis,
+          );
         });
         if (playbackError !== undefined) {
           this.#reportPlaybackError(track, playbackError);

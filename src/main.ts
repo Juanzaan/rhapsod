@@ -504,13 +504,14 @@ async function main(): Promise<void> {
           : formatPlaybackStarted(track.title, isFirst),
       );
     },
-    onPlaybackFinished: (track, metrics, reason) => {
+    onPlaybackFinished: (track, metrics, reason, kpis) => {
       const timings = trackTimings.get(track.id);
       trackTimings.delete(track.id);
       logger.info(
         {
           ...timings,
           ...metrics,
+          ...kpis,
           reason,
           trackId: track.id,
           title: track.title,
