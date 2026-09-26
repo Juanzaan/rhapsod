@@ -86,8 +86,9 @@ import { startSetupMode } from "./bootstrap/setup-mode.js";
 import { ytDlpStackOptions } from "./bootstrap/yt-dlp-options.js";
 import { userFacingError } from "./lib/user-facing-error.js";
 
+const exits = new ExitCoordinator();
+
 async function main(): Promise<void> {
-  const exits = new ExitCoordinator();
   const config = loadConfig();
   const dataDir = resolveInstanceDir(
     config.RHAPSOD_DATA_DIR,
@@ -149,6 +150,11 @@ async function main(): Promise<void> {
     return;
   }
 
+  // The TeamSpeak connect timeouts run on unref'd timers. When the UDP
+  // socket closed on ECONNREFUSED mid-connect, nothing held the event loop
+  // and Node exited with code 0, which Restart=on-failure never restarts.
+  // The bot now only stops through exits.exit().
+  setInterval(() => undefined, 2 ** 31 - 1);
   const identity = await new Ts3IdentityStore(
     join(dataDir, "ts3-identity.txt"),
   ).loadOrCreate();
@@ -1003,11 +1009,11 @@ async function main(): Promise<void> {
 void main().catch((error: unknown) => {
   if (error instanceof DuplicateBotInstanceError) {
     process.stderr.write(`Rhapsod refused to start: ${error.message}\n`);
-    process.exitCode = DUPLICATE_INSTANCE_EXIT_CODE;
+    void exits.exit(DUPLICATE_INSTANCE_EXIT_CODE);
     return;
   }
   const message =
     error instanceof Error ? error.message : "Unknown startup error";
   process.stderr.write(`Rhapsod failed to start: ${message}\n`);
-  process.exitCode = 1;
+  void exits.exit(1);
 });
