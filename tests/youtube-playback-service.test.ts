@@ -45,6 +45,7 @@ function setup(
     maxTracksPerUser?: number;
     metrics?: {
       bufferedBytes: number;
+      firstFrameDelayMs?: number;
       framesSent: number;
       maxBufferedBytes: number;
       rebufferEvents: number;
@@ -368,6 +369,12 @@ function setup(
     stopSession,
   };
 }
+
+// Every finished play that started reports its latency indicators.
+const PLAY_KPIS: unknown = expect.objectContaining({
+  coldStart: expect.any(Boolean) as unknown,
+  prewarmed: expect.any(Boolean) as unknown,
+});
 
 describe("audioUrlExpiresAt", () => {
   it("parses the query-style expire parameter", () => {
@@ -699,6 +706,7 @@ describe("YoutubePlaybackService", () => {
       expect.objectContaining({ id: "first" }),
       expect.anything(),
       "completed",
+      PLAY_KPIS,
     );
   });
 
@@ -719,6 +727,7 @@ describe("YoutubePlaybackService", () => {
       expect.objectContaining({ id: "first" }),
       expect.anything(),
       "skipped",
+      PLAY_KPIS,
     );
   });
 
@@ -1148,6 +1157,7 @@ describe("YoutubePlaybackService", () => {
       expect.objectContaining({ id: "first" }),
       expect.anything(),
       "skipped",
+      PLAY_KPIS,
     );
 
     await service.enqueue("https://youtu.be/second", "user-1");
@@ -1159,6 +1169,7 @@ describe("YoutubePlaybackService", () => {
       expect.objectContaining({ id: "second" }),
       expect.anything(),
       "stopped",
+      PLAY_KPIS,
     );
   });
 
@@ -1202,6 +1213,7 @@ describe("YoutubePlaybackService", () => {
       expect.objectContaining({ id: "first" }),
       expect.anything(),
       "skipped",
+      PLAY_KPIS,
     );
   });
 
@@ -3457,6 +3469,115 @@ describe("YoutubePlaybackService", () => {
     expect((createPlayback as Mock).mock.calls.at(-1)?.[3]).toHaveProperty(
       "stream",
     );
+  });
+
+  it("reports start delay and handoff gap per play", async () => {
+    const { onPlaybackFinished, playbackResolvers, service } = setup({
+      metrics: {
+        bufferedBytes: 0,
+        firstFrameDelayMs: 40,
+        framesSent: 1,
+        maxBufferedBytes: 3_840,
+        rebufferEvents: 0,
+        underruns: 0,
+      },
+    });
+    await service.enqueue("https://youtu.be/first", "user-1");
+    await service.enqueue("https://youtu.be/second", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    playbackResolvers[0]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+    playbackResolvers[1]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const kpisFor = (id: string): Record<string, unknown> | undefined =>
+      (
+        onPlaybackFinished.mock.calls.find(
+          (call) => (call[0] as { id: string }).id === id,
+        ) as unknown[] | undefined
+      )?.[3] as Record<string, unknown> | undefined;
+    const first = kpisFor("first");
+    const second = kpisFor("second");
+    expect(first).toMatchObject({ coldStart: true, prewarmed: false });
+    expect(first?.startDelayMs).toBeGreaterThanOrEqual(40);
+    expect(first).not.toHaveProperty("handoffGapMs");
+    expect(second).toMatchObject({ coldStart: false, prewarmed: false });
+    expect(second?.handoffGapMs).toBeGreaterThanOrEqual(40);
+
+    // After the driver sat idle, the next play is a cold start again.
+    await service.enqueue("https://youtu.be/third", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+    playbackResolvers[2]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(kpisFor("third")).toMatchObject({ coldStart: true });
+    expect(kpisFor("third")).not.toHaveProperty("handoffGapMs");
+  });
+
+  it("counts the first play after !stop as a cold start", async () => {
+    const { onPlaybackFinished, playbackResolvers, service } = setup({
+      metrics: {
+        bufferedBytes: 0,
+        firstFrameDelayMs: 40,
+        framesSent: 1,
+        maxBufferedBytes: 3_840,
+        rebufferEvents: 0,
+        underruns: 0,
+      },
+    });
+    await service.enqueue("https://youtu.be/first", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+    service.stop();
+    playbackResolvers[0]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    await service.enqueue("https://youtu.be/second", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+    playbackResolvers[1]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const call = onPlaybackFinished.mock.calls.find(
+      (entry) => (entry[0] as { id: string }).id === "second",
+    ) as unknown[] | undefined;
+    expect(call?.[3]).toMatchObject({ coldStart: true });
+    expect(call?.[3]).not.toHaveProperty("handoffGapMs");
+  });
+
+  it("marks a play started from the prewarmed stream", async () => {
+    const metrics = {
+      bufferedBytes: 0,
+      framesSent: 0,
+      maxBufferedBytes: 3_840,
+      rebufferEvents: 0,
+      underruns: 0,
+    };
+    const { onPlaybackFinished, playbackResolvers, resolver, service } = setup({
+      metrics,
+      prewarmNext: true,
+    });
+    resolver.getTrack.mockImplementation((resource: { id: string }) =>
+      Promise.resolve({
+        durationSeconds: 120,
+        id: resource.id,
+        title: `Track ${resource.id}`,
+        webpageUrl: `https://www.youtube.com/watch?v=${resource.id}`,
+      }),
+    );
+    await service.enqueue("https://youtu.be/first", "user-1");
+    await service.enqueue("https://youtu.be/second", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+    metrics.framesSent = Math.ceil(65_000 / 20);
+    await new Promise((resolve) => setTimeout(resolve, 180));
+    playbackResolvers[0]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    playbackResolvers[1]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const call = onPlaybackFinished.mock.calls.find(
+      (entry) => (entry[0] as { id: string }).id === "second",
+    ) as unknown[] | undefined;
+    expect(call?.[3]).toMatchObject({ coldStart: false, prewarmed: true });
   });
 
   it("does not prewarm before the midpoint", async () => {
