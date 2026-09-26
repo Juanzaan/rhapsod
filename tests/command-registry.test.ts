@@ -4,6 +4,7 @@ import { parseChatCommand } from "../src/commands/chat-command.js";
 import {
   COMMAND_SPECS,
   formatHelpCategory,
+  formatHelpCommand,
   formatHelpMenu,
   lookupCommandName,
   resolveHelpCategory,
@@ -125,5 +126,57 @@ describe("command registry", () => {
     });
     expect(() => parseChatCommand("!help 9")).toThrow(/Usá: !help/);
     expect(() => parseChatCommand("!help xyz")).toThrow(/Usá: !help/);
+  });
+
+  it("parses !help with a command or alias", () => {
+    expect(parseChatCommand("!help play")).toEqual({
+      command: "play",
+      name: "help",
+    });
+    expect(parseChatCommand("!help !np")).toEqual({
+      command: "now-playing",
+      name: "help",
+    });
+    // A full category name wins over the command of the same word, and a
+    // command alias wins over a category prefix.
+    expect(parseChatCommand("!help queue")).toEqual({
+      category: "queue",
+      name: "help",
+    });
+    expect(parseChatCommand("!help c")).toEqual({
+      command: "clear",
+      name: "help",
+    });
+    expect(parseChatCommand("!help repro")).toEqual({
+      category: "music",
+      name: "help",
+    });
+  });
+
+  it("explains one command with its aliases and category", () => {
+    const detail = formatHelpCommand("volume", false);
+    expect(detail).toContain("!volume");
+    expect(detail).toContain("Alias: !v, !vol");
+    expect(detail).toMatch(/Categoría: .+ \(!help \d\)/);
+    expect(detail).not.toContain("Solo admins");
+
+    expect(formatHelpCommand("diag", true)).toContain("Solo admins.");
+    expect(formatHelpCommand("diag", false)).toContain(
+      "No hay ayuda para !diag",
+    );
+  });
+
+  it("points each category page to the next one the reader can see", () => {
+    expect(formatHelpCategory("music", false)).toContain(
+      "Siguiente: !help 2 (Cola).",
+    );
+    // Administración is empty for regular users, so Cola skips to Otros.
+    expect(formatHelpCategory("queue", false)).toContain(
+      "Siguiente: !help 4 (Otros).",
+    );
+    expect(formatHelpCategory("queue", true)).toContain(
+      "Siguiente: !help 3 (Administración).",
+    );
+    expect(formatHelpCategory("misc", true)).not.toContain("Siguiente");
   });
 });

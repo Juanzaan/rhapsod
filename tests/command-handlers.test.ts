@@ -247,6 +247,7 @@ describe("dispatchCommand", () => {
       ["stop", "!stop"],
       ["test-tone", "!test-tone"],
       ["help", "!help"],
+      ["help-command", "!help skip"],
       ["loop", "!loop off"],
       ["volume", "!volume 50"],
       ["lyrics", "!lyrics"],
@@ -389,6 +390,13 @@ describe("dispatchCommand", () => {
       "No puedo reproducir el tono mientras hay música. Probá con !stop o esperá a que termine la pista.",
     );
     expect(playback.skip).not.toHaveBeenCalled();
+  });
+
+  it("explains a single command with !help <command>", async () => {
+    const { ctx, send, sender } = makeHarness();
+    await dispatchCommand(ctx, parseChatCommand("!help s")!, sender, send);
+    expect(send).toHaveBeenCalledWith(expect.stringMatching(/^!skip/));
+    expect(send).toHaveBeenCalledWith(expect.stringContaining("Alias: !s"));
   });
 
   it("shows playlist help when !playlist has no arguments", async () => {

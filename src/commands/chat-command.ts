@@ -1,6 +1,6 @@
 import {
   lookupCommandName,
-  resolveHelpCategory,
+  resolveHelpTopic,
   type CommandGroup,
 } from "./command-registry.js";
 import { UserError } from "../lib/user-error.js";
@@ -12,7 +12,12 @@ export type ChatCommand =
   | { readonly name: "clear" }
   | { readonly name: "debug-server" }
   | { readonly name: "diag" }
-  | { readonly category?: CommandGroup; readonly name: "help" }
+  | {
+      readonly category?: CommandGroup;
+      /** Canonical name of the command to explain. */
+      readonly command?: string;
+      readonly name: "help";
+    }
   | { readonly name: "loop"; readonly mode?: "off" | "queue" | "track" }
   | { readonly name: "lyrics" }
   | { readonly input: string; readonly name: "playnext" }
@@ -270,11 +275,11 @@ export function parseChatCommand(
       throw new UserError(messages.parseChatCommandUsaPlaylistSaveLoad);
     }
     case "help": {
-      const category = resolveHelpCategory(argument);
-      if (argument && category === undefined) {
+      const topic = resolveHelpTopic(argument);
+      if (argument && topic === undefined) {
         throw new UserError(messages.parseChatCommandUsaHelp14);
       }
-      return category === undefined ? { name } : { category, name };
+      return topic === undefined ? { name } : { ...topic, name };
     }
     default:
       if (argument)
