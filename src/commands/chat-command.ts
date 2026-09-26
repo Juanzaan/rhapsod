@@ -122,6 +122,15 @@ export function normalizeCommandInput(raw: string): string {
   return `!${trimmed}`;
 }
 
+/**
+ * Commands that still run while the bot cannot talk in its channel. Moving
+ * the bot is the way out of a muted channel, so blocking it left no in-chat
+ * fix. The handler still applies its own move permissions.
+ */
+export function runsWithoutTalkPower(command: ChatCommand): boolean {
+  return command.name === "channel-move";
+}
+
 export function parseChatCommand(
   message: string,
   prefix = "!",

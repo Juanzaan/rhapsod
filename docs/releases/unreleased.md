@@ -35,6 +35,7 @@ Persistence fixes, dependency updates, deployment repairs and consistent bilingu
 - Use the configured FFmpeg binary and User-Agent for prewarmed next-track streams; they used to fall back to the bundled ffmpeg-static.
 - Space outgoing chat messages one second apart even when several are queued at once, log messages dropped by the anti-flood queue, split texts longer than 1024 characters (such as `!help` or `!debug-server` on large servers) instead of losing them, and detect a heartbeat probe that never answers.
 - `!stop` and `!clear` follow the same ownership rule as `!skip` and `!remove`: they are refused when the queue holds another user's tracks, unless the sender is an admin. Autoplay picks stay communal.
+- Accept `!channel-move` while the bot cannot talk in its channel: it is the command that moves it out, and it used to be ignored with every other command. Move permissions still apply.
 
 ## Upgrade
 
