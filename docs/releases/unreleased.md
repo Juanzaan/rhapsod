@@ -42,6 +42,7 @@ Persistence fixes, dependency updates, deployment repairs and consistent bilingu
 - Fix the yt-dlp daemon: youtu.be, `/shorts/` and `/live/` links no longer crash a request, two requests for the same video no longer extract it twice, a request waiting on a stuck extraction gives up after 45 seconds, cached URLs expire at the time signed in the URL (minus 15 minutes) instead of a fixed six hours, and unknown paths answer 404.
 - Keep unreadable data files: playlists, favorites, listening history, the song library, telemetry or playback state that fail to parse are renamed to `<name>.corrupt-<time>` instead of being replaced by the next save. Every data write is flushed to disk before the rename, so a power loss cannot leave an empty file.
 - Accept `!channel-move` while the bot cannot talk in its channel: it is the command that moves it out, and it used to be ignored with every other command. Move permissions still apply.
+- Verify installer and weekly-update downloads against published checksums, use private temp directories instead of fixed `/tmp` paths, create the service user with a `nologin` shell and pin the POT provider server and plugin to the same release. Docker containers run as the unprivileged `node` user and Compose starts the POT provider on loopback.
 - Send the parts of a split chat message back to back: another message queued meanwhile can no longer land between them.
 
 ## Upgrade
@@ -49,6 +50,8 @@ Persistence fixes, dependency updates, deployment repairs and consistent bilingu
 Node.js >=22.19.0 is required. Back up configuration and data, run `npm ci` and `npm run build`, and restart when `/api/state` reports `playerState: "idle"`.
 
 If the panel uses a default password it will not start; set a unique `RHAPSOD_PANEL_PASSWORD` first. Existing installs keep the old `Requires=` line in `/etc/systemd/system/rhapsod.service` until the installer runs again: change it to `Wants=` and run `systemctl daemon-reload`.
+
+Docker installs: run `sudo chown -R 1000:1000 data .env` before recreating the containers, which now run as uid 1000.
 
 A yt-dlp timeout outside its range now stops startup. Before restarting, compare any `RHAPSOD_YTDLP_*_TIMEOUT_MS` line from `grep TIMEOUT_MS /etc/rhapsod.env` with the ranges in `.env.example`.
 
