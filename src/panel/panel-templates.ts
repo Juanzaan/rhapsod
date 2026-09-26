@@ -208,15 +208,7 @@ function esc(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-function js(str: string): string {
-  return str.replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/\n/g, "\\n");
-}
-
-export function renderSetupWizard(
-  panelUser: string,
-  panelPassword: string,
-): string {
-  const cred = js(`${panelUser}:${panelPassword}`);
+export function renderSetupWizard(): string {
   return `<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -273,8 +265,7 @@ export function renderSetupWizard(
   <main class="setup-shell"><section class="setup-story"><div class="setup-art" aria-hidden="true"><span>r.</span></div><div class="eyebrow">Tu próximo espacio de escucha</div><h1>Conectá.<br>Elegí un tema.<br>Compartilo.</h1><p>Prepará tu servidor, ajustá el sonido y dejá todo listo para escuchar en compañía.</p></section><div class="w" id="w"></div></main>
   <script>
     ${AMBIENCE_JS}
-    var A='Basic '+btoa('${cred}');
-    var H={authorization:A};
+    var H={'content-type':'application/json'};
     var S=[
       {id:'welcome',r:rW},
       {id:'ts3',r:rT},
@@ -469,12 +460,7 @@ export function renderSetupWizard(
 </html>`;
 }
 
-export function renderDashboard(
-  status: PanelStatus,
-  panelUser: string,
-  panelPassword: string,
-): string {
-  const cred = js(`${panelUser}:${panelPassword}`);
+export function renderDashboard(status: PanelStatus): string {
   const connected = status.connected;
   const title = esc(status.currentTitle || "Tu próxima canción empieza acá.");
   const channel = status.currentChannelId || "-";
@@ -728,8 +714,7 @@ export function renderDashboard(
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <script>${SERVER_TREE_JS}
     ${AMBIENCE_JS}
-    var A='Basic '+btoa('${cred}');
-    var H={authorization:A};
+    var H={'content-type':'application/json'};
     var RM=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     function gs(){return (window.gsap&&!RM)?window.gsap:null;}
     var PP='idle',POS=0,DUR=0,volDrag=false,lastTracks=-1,lastQ='',lastE='',lastQLen=0,lastC='',lastS='',fails=0;
@@ -1071,11 +1056,7 @@ export function renderDashboard(
 </html>`;
 }
 
-export function renderSettingsPage(
-  panelUser: string,
-  panelPassword: string,
-): string {
-  const cred = js(`${panelUser}:${panelPassword}`);
+export function renderSettingsPage(): string {
   return `<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -1110,8 +1091,7 @@ export function renderSettingsPage(
   <div class="toast" id="toast"></div>
   <script>
     ${AMBIENCE_JS}
-    var A='Basic '+btoa('${cred}');
-    var H={authorization:A};
+    var H={'content-type':'application/json'};
 
     function toast(m){var el=document.getElementById('toast');el.textContent=m;el.classList.add('show');setTimeout(function(){el.classList.remove('show');},3000);}
     function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
@@ -1195,11 +1175,7 @@ export function renderSettingsPage(
 </html>`;
 }
 
-export function renderCommandsPage(
-  panelUser: string,
-  panelPassword: string,
-): string {
-  const cred = js(`${panelUser}:${panelPassword}`);
+export function renderCommandsPage(): string {
   return `<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -1237,8 +1213,7 @@ export function renderCommandsPage(
   </main>
   <script>
     ${AMBIENCE_JS}
-    var A='Basic '+btoa('${cred}');
-    var H={authorization:A};
+    var H={'content-type':'application/json'};
     var cmds=[];
     var gn={music:'Reproduccion',queue:'Cola',admin:'Administracion',misc:'Otros'};
     function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
@@ -1285,11 +1260,7 @@ export function renderCommandsPage(
 </html>`;
 }
 
-export function renderServerPage(
-  panelUser: string,
-  panelPassword: string,
-): string {
-  const cred = js(`${panelUser}:${panelPassword}`);
+export function renderServerPage(): string {
   return `<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -1330,8 +1301,7 @@ export function renderServerPage(
   <div class="toast" id="toast"></div>
   <script>${SERVER_TREE_JS}
     ${AMBIENCE_JS}
-    var A='Basic '+btoa('${cred}');
-    var H={authorization:A};
+    var H={'content-type':'application/json'};
     var RM=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     function gs(){return (window.gsap&&!RM)?window.gsap:null;}
     var lastV=-1;

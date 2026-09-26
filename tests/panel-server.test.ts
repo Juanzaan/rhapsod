@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -697,6 +697,183 @@ describe("panel-server", () => {
     } finally {
       await state.close();
       rmSync(state.dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("panel-server write protection", () => {
+  const auth = `Basic ${Buffer.from("admin:secret").toString("base64")}`;
+
+  function startSpyPanel(port: number, envContent = "") {
+    const dir = mkdtempSync(join(tmpdir(), "panel-"));
+    const envPath = join(dir, ".env");
+    writeFileSync(envPath, envContent);
+    const commands: string[] = [];
+    let restarts = 0;
+    const panel = createPanelServer({
+      config: baseConfig({ RHAPSOD_PANEL_PORT: port }),
+      envFilePath: envPath,
+      logger,
+      status: () => ({ connected: true, queueLength: 0, version: "3.0.0" }),
+      queue: () => [],
+      executeCommand: (command) => {
+        commands.push(command);
+        return Promise.resolve("OK");
+      },
+      restart: () => {
+        restarts++;
+      },
+    });
+    return {
+      baseUrl: `http://127.0.0.1:${port}`,
+      envPath,
+      commands,
+      restarts: () => restarts,
+      cleanup: async () => {
+        await panel.close();
+        rmSync(dir, { recursive: true, force: true });
+      },
+    };
+  }
+
+  it("rejects a cross-site text/plain form post to /api/command", async () => {
+    const state = startSpyPanel(23470);
+    try {
+      const res = await fetch(`${state.baseUrl}/api/command`, {
+        method: "POST",
+        headers: {
+          authorization: auth,
+          "content-type": "text/plain",
+          origin: "https://evil.example",
+          "sec-fetch-site": "cross-site",
+        },
+        body: '{"command":"!stop","x":"="}',
+      });
+      expect(res.status).toBe(403);
+      expect(state.commands).toEqual([]);
+    } finally {
+      await state.cleanup();
+    }
+  });
+
+  it("rejects JSON writes from another origin", async () => {
+    const state = startSpyPanel(23471);
+    try {
+      const res = await fetch(`${state.baseUrl}/api/restart`, {
+        method: "POST",
+        headers: {
+          authorization: auth,
+          "content-type": "application/json",
+          origin: "https://evil.example",
+        },
+      });
+      expect(res.status).toBe(403);
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      expect(state.restarts()).toBe(0);
+    } finally {
+      await state.cleanup();
+    }
+  });
+
+  it("answers a same-origin restart before restarting", async () => {
+    const state = startSpyPanel(23472);
+    try {
+      const res = await fetch(`${state.baseUrl}/api/restart`, {
+        method: "POST",
+        headers: {
+          authorization: auth,
+          "content-type": "application/json",
+          origin: state.baseUrl,
+          "sec-fetch-site": "same-origin",
+        },
+      });
+      expect(res.status).toBe(200);
+      expect(state.restarts()).toBe(0);
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      expect(state.restarts()).toBe(1);
+    } finally {
+      await state.cleanup();
+    }
+  });
+
+  it("rejects env values with line breaks and leaves the file untouched", async () => {
+    const state = startSpyPanel(23473, "RHAPSOD_TS3_NICKNAME=Rhapsod\n");
+    try {
+      const res = await fetch(`${state.baseUrl}/api/env`, {
+        method: "PUT",
+        headers: { authorization: auth, "content-type": "application/json" },
+        body: JSON.stringify({
+          RHAPSOD_TS3_NICKNAME: "Bot\nNODE_OPTIONS=--require /tmp/x.js",
+        }),
+      });
+      expect(res.status).toBe(400);
+      expect(readFileSync(state.envPath, "utf8")).toBe(
+        "RHAPSOD_TS3_NICKNAME=Rhapsod\n",
+      );
+    } finally {
+      await state.cleanup();
+    }
+  });
+
+  it("rejects values startup would refuse instead of saving a crash loop", async () => {
+    const state = startSpyPanel(23474, "RHAPSOD_OPUS_BITRATE=128000\n");
+    try {
+      const res = await fetch(`${state.baseUrl}/api/env`, {
+        method: "PUT",
+        headers: { authorization: auth, "content-type": "application/json" },
+        body: JSON.stringify({ RHAPSOD_OPUS_BITRATE: "abc" }),
+      });
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as { ok: boolean; error: string };
+      expect(body.error).toContain("RHAPSOD_OPUS_BITRATE");
+      expect(readFileSync(state.envPath, "utf8")).toContain(
+        "RHAPSOD_OPUS_BITRATE=128000",
+      );
+    } finally {
+      await state.cleanup();
+    }
+  });
+
+  it("keeps binary paths read-only", async () => {
+    const state = startSpyPanel(23475);
+    try {
+      const res = await fetch(`${state.baseUrl}/api/env`, {
+        method: "PUT",
+        headers: { authorization: auth, "content-type": "application/json" },
+        body: JSON.stringify({ RHAPSOD_FFMPEG_PATH: "/tmp/evil" }),
+      });
+      expect(res.status).toBe(400);
+    } finally {
+      await state.cleanup();
+    }
+  });
+
+  it("does not start with a published default password", async () => {
+    const errors: string[] = [];
+    const panel = createPanelServer({
+      config: baseConfig({
+        RHAPSOD_PANEL_PORT: 23476,
+        RHAPSOD_PANEL_PASSWORD: "change-me",
+      }),
+      envFilePath: join(tmpdir(), "unused.env"),
+      logger: {
+        info: noop,
+        warn: noop,
+        debug: noop,
+        error: (msg: string) => errors.push(msg),
+      } as never,
+      status: () => ({ connected: true, queueLength: 0, version: "3.0.0" }),
+      queue: () => [],
+      executeCommand: () => Promise.resolve("OK"),
+      restart: () => undefined,
+    });
+    try {
+      await expect(
+        fetch("http://127.0.0.1:23476/api/health"),
+      ).rejects.toThrow();
+      expect(errors.join(" ")).toContain("RHAPSOD_PANEL_PASSWORD");
+    } finally {
+      await panel.close();
     }
   });
 });

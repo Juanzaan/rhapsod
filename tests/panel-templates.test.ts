@@ -11,11 +11,12 @@ import type { PanelStatus } from "../src/panel/panel-server.js";
 import { AMBIENCE_JS } from "../src/panel/dashboard-design.js";
 
 function render(status: Partial<PanelStatus> = {}): string {
-  return renderDashboard(
-    { connected: true, queueLength: 0, version: "2.2.0", ...status },
-    "admin",
-    "secret",
-  );
+  return renderDashboard({
+    connected: true,
+    queueLength: 0,
+    version: "2.2.0",
+    ...status,
+  });
 }
 
 describe("renderDashboard console", () => {
@@ -353,14 +354,10 @@ describe("renderDashboard console", () => {
 
   it("shares the console design system across pages", () => {
     const pages = [
-      renderDashboard(
-        { connected: true, queueLength: 0, version: "2.2.0" },
-        "admin",
-        "secret",
-      ),
-      renderSettingsPage("admin", "secret"),
-      renderCommandsPage("admin", "secret"),
-      renderSetupWizard("admin", "secret"),
+      renderDashboard({ connected: true, queueLength: 0, version: "2.2.0" }),
+      renderSettingsPage(),
+      renderCommandsPage(),
+      renderSetupWizard(),
     ];
     for (const html of pages) {
       // Same tokens everywhere: no leftover amber or slate-blue theme.
@@ -384,7 +381,7 @@ describe("renderDashboard console", () => {
   });
 
   it("server page has live tree markers", () => {
-    const html = renderServerPage("admin", "secret");
+    const html = renderServerPage();
     for (const id of ["tree", "live", "ucount"]) {
       expect(html).toContain(`id="${id}"`);
     }
@@ -422,7 +419,7 @@ describe("renderDashboard console", () => {
         calls.push({ url: String(url), options });
         return res;
       });
-    const html = renderServerPage("admin", "secret");
+    const html = renderServerPage();
     const code = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
       .map((m) => m[1] ?? "")
       .join("\n");
@@ -539,7 +536,7 @@ describe("renderDashboard console", () => {
       }
       return el;
     };
-    const html = renderServerPage("admin", "secret");
+    const html = renderServerPage();
     const code = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
       .map((m) => m[1] ?? "")
       .join("\n");
@@ -686,7 +683,7 @@ describe("renderDashboard console", () => {
         }
         return Promise.resolve({ json: () => Promise.resolve({ ok: true }) });
       };
-      const html = renderSetupWizard("admin", "secret");
+      const html = renderSetupWizard();
       const code = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
         .map((m) => m[1] ?? "")
         .join("\n");
@@ -769,7 +766,7 @@ describe("renderDashboard console", () => {
       }),
       querySelectorAll: () => inputs,
     };
-    const html = renderSettingsPage("admin", "secret");
+    const html = renderSettingsPage();
     const code = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
       .map((m) => m[1] ?? "")
       .join("\n");
@@ -824,7 +821,7 @@ describe("renderDashboard console", () => {
           };
         },
       };
-      const html = renderSettingsPage("admin", "secret");
+      const html = renderSettingsPage();
       const code = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
         .map((m) => m[1] ?? "")
         .join("\n");
@@ -885,5 +882,21 @@ describe("renderDashboard console", () => {
     expect(loaded).toContain("&lt;private&gt;");
     expect(loaded).toContain("Server &lt;name&gt;");
     expect(loaded).toContain('id="saveSettings"');
+  });
+});
+
+describe("panel credentials", () => {
+  it("never embeds basic-auth credentials in page source", () => {
+    const pages = [
+      renderDashboard({ connected: true, queueLength: 0, version: "3.0.0" }),
+      renderSettingsPage(),
+      renderCommandsPage(),
+      renderSetupWizard(),
+      renderServerPage(),
+    ];
+    for (const html of pages) {
+      expect(html).not.toContain("btoa(");
+      expect(html).not.toMatch(/authorization/i);
+    }
   });
 });

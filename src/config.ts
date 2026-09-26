@@ -146,3 +146,19 @@ export function loadConfig(
 ): AppConfig {
   return configSchema.parse(environment);
 }
+
+/**
+ * Checks an environment the way startup will, without throwing. The panel
+ * runs this before saving: a value startup rejects would otherwise crash the
+ * bot on the next restart and take the panel (same process) down with it.
+ */
+export function validateConfig(
+  environment: NodeJS.ProcessEnv,
+): ReadonlyArray<{ readonly key: string; readonly message: string }> {
+  const result = configSchema.safeParse(environment);
+  if (result.success) return [];
+  return result.error.issues.map((issue) => ({
+    key: issue.path.map(String).join("."),
+    message: issue.message,
+  }));
+}

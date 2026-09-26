@@ -86,6 +86,27 @@ import { createRhapsodLogger } from "./observability/logger.js";
 import { MetricsCollector } from "./observability/metrics.js";
 import { startWatchdog } from "./watchdog.js";
 
+// Favorites, history, telemetry and the queue are written on a debounce, so
+// a bare process.exit() drops whatever changed since the last write. main()
+// registers the flush once the stores exist; every exit path goes through
+// exitAfterFlush so crashes, the watchdog and panel restarts keep that data.
+let flushBeforeExit: (() => Promise<void>) | undefined;
+
+const EXIT_FLUSH_TIMEOUT_MS = 5_000;
+
+async function exitAfterFlush(code: number): Promise<void> {
+  const flush = flushBeforeExit;
+  // A second crash while flushing must not wait on the same stuck flush.
+  flushBeforeExit = undefined;
+  if (flush !== undefined) {
+    await Promise.race([
+      flush().catch(() => undefined),
+      new Promise((resolve) => setTimeout(resolve, EXIT_FLUSH_TIMEOUT_MS)),
+    ]);
+  }
+  process.exit(code);
+}
+
 async function main(): Promise<void> {
   const config = loadConfig();
   const dataDir = resolveInstanceDir(
@@ -106,21 +127,26 @@ async function main(): Promise<void> {
     trackId: string,
     timing: { audioUrlMs?: number; cacheHit?: boolean; metadataMs?: number },
   ): void => {
-    trackTimings.set(trackId, timing);
+    // Metadata and audio-URL timings arrive separately for the same track;
+    // merge so the second report does not erase the first.
+    trackTimings.set(trackId, { ...trackTimings.get(trackId), ...timing });
     if (trackTimings.size > 200) {
       const oldest = trackTimings.keys().next().value;
       if (oldest !== undefined) trackTimings.delete(oldest);
     }
   };
+  // pino only serializes Error objects under the `err` key; any other key
+  // logs them as `{}`, which is how crash reports lost their message.
   process.on("unhandledRejection", (reason: unknown) => {
-    logger.error({ reason }, "Unhandled promise rejection; restarting");
-    process.exit(1);
+    logger.error({ err: reason }, "Unhandled promise rejection; restarting");
+    void exitAfterFlush(1);
   });
   process.on("uncaughtException", (error: Error) => {
-    logger.error({ error }, "Uncaught exception; restarting");
-    process.exit(1);
+    logger.error({ err: error }, "Uncaught exception; restarting");
+    void exitAfterFlush(1);
   });
   const adminUids = parseAdminUids(config.RHAPSOD_ADMIN_UIDS);
+  const panelAdminUids: ReadonlySet<string> = new Set([...adminUids, "panel"]);
   const privateCommandUids =
     config.RHAPSOD_PRIVATE_COMMAND_UIDS === undefined ||
     config.RHAPSOD_PRIVATE_COMMAND_UIDS === ""
@@ -191,7 +217,7 @@ async function main(): Promise<void> {
         ),
         restart: (): void => {
           logger.info("Panel requested restart");
-          process.exit(1);
+          void exitAfterFlush(1);
         },
         testConnection: (host: string, port: number) =>
           probeTs3Server(host, port),
@@ -238,7 +264,7 @@ async function main(): Promise<void> {
       intervalMs: config.RHAPSOD_WATCHDOG_INTERVAL_MINUTES * 60_000,
       onTimeout: (driftMs) => {
         logger.error({ driftMs }, "Watchdog: event loop blocked; restarting");
-        process.exit(1);
+        void exitAfterFlush(1);
       },
     });
   }
@@ -537,6 +563,17 @@ async function main(): Promise<void> {
     lyricsResolver: new LyricsClient({ logger }),
     ...(spotifyResolver ? { spotifyResolver } : {}),
   });
+  const flushState = async (): Promise<void> => {
+    await Promise.all([
+      playback.flushState().catch(() => undefined),
+      audioUrlCache.flush().catch(() => undefined),
+      telemetry.save().catch(() => undefined),
+      preferences.flush().catch(() => undefined),
+      listeningHistory.flush().catch(() => undefined),
+      songLibrary.flush().catch(() => undefined),
+    ]);
+  };
+  flushBeforeExit = flushState;
   const youtubeAuthCheckUrl = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
   const youtubeAuthCheckIntervalMs = 24 * 60 * 60 * 1_000;
   const youtubeAuthState = { healthy: true };
@@ -850,7 +887,7 @@ async function main(): Promise<void> {
           playback.resume();
           return;
         } catch (error) {
-          logger.error({ attempt, error }, "TeamSpeak reconnect failed");
+          logger.error({ attempt, err: error }, "TeamSpeak reconnect failed");
           // A timed-out attempt may leave a half-open client behind;
           // make sure the next attempt starts from a clean state.
           await connection.disconnect().catch(() => undefined);
@@ -864,15 +901,7 @@ async function main(): Promise<void> {
       stopHeartbeat();
       playback.stop(false);
       await connection.disconnect().catch(() => undefined);
-      await Promise.all([
-        playback.flushState().catch(() => undefined),
-        audioUrlCache.flush().catch(() => undefined),
-        telemetry.save().catch(() => undefined),
-        preferences.flush().catch(() => undefined),
-        listeningHistory.flush().catch(() => undefined),
-        songLibrary.flush().catch(() => undefined),
-      ]);
-      process.exit(1);
+      await exitAfterFlush(1);
     })();
   });
 
@@ -980,42 +1009,49 @@ async function main(): Promise<void> {
             responses.push(text);
             return Promise.resolve();
           };
+          // The panel is the owner console behind basic auth, so it acts
+          // as an admin: skip/remove on someone else's track must work
+          // from there too. "panel" can never collide with a TS3 uid.
           const sender = { name: "Panel", uid: "panel", groups: [] };
-          await dispatchCommand(commandContext, parsed, sender, send);
+          await dispatchCommand(
+            { ...commandContext, adminUids: panelAdminUids },
+            parsed,
+            sender,
+            send,
+          );
           return responses.join("\n") || "OK";
         },
+        // Exit code 1 so systemd (Restart=on-failure) brings the bot back.
         restart: (): void => {
           logger.info("Panel requested restart");
-          process.exit(1);
+          shutdown(1);
         },
         testConnection: (host: string, port: number) =>
           probeTs3Server(host, port),
       })
     : undefined;
 
-  const shutdown = (): void => {
+  let shutdownStarted = false;
+  const shutdown = (code: number): void => {
+    if (shutdownStarted) return;
+    shutdownStarted = true;
     logger.info("Shutdown initiated; stopping playback and flushing state");
+    shuttingDown = true;
     playback.stop(false);
     encoder.close();
     stopHeartbeat();
-    const disconnect = connection.disconnect();
-    void Promise.all([
-      disconnect.catch(() => undefined),
-      playback.flushState().catch(() => undefined),
-      audioUrlCache.flush().catch(() => undefined),
-      telemetry.save(),
-      preferences.flush().catch(() => undefined),
-      listeningHistory.flush().catch(() => undefined),
-      songLibrary.flush().catch(() => undefined),
-      ...(panel === undefined ? [] : [panel.close().catch(() => undefined)]),
-      new Promise((resolve) => setTimeout(resolve, 5_000)),
-    ]).then(() => {
+    flushBeforeExit = async () => {
+      await Promise.all([
+        connection.disconnect().catch(() => undefined),
+        flushState(),
+        ...(panel === undefined ? [] : [panel.close().catch(() => undefined)]),
+      ]);
       logger.info("Shutdown complete");
-      process.exit(0);
-    });
+    };
+    void exitAfterFlush(code);
   };
-  process.once("SIGINT", shutdown);
-  process.once("SIGTERM", shutdown);
+  process.once("SIGINT", () => shutdown(0));
+  process.once("SIGTERM", () => shutdown(0));
 }
 
 export function userFacingError(error: Error): string {
