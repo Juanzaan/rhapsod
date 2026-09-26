@@ -56,6 +56,8 @@ npm start
 
 Usar `RHAPSOD_YTDLP_PATH`, `RHAPSOD_FFMPEG_PATH` y `RHAPSOD_FFPROBE_PATH` si las herramientas no están en PATH. El servicio opcional escucha en `127.0.0.1:8765`; configurar `RHAPSOD_YTDLP_DAEMON_URL` solo si está ejecutándose. Consultar [despliegue](deployment.es.md) para servicios y Docker.
 
+Las claves `RHAPSOD_YTDLP_*_TIMEOUT_MS` fijan los tiempos de espera de yt-dlp en milisegundos; `.env.example` muestra cada una con su valor por defecto y su rango permitido. El bot no inicia con un valor fuera de ese rango y el panel no permite guardarlo.
+
 ## Verificación
 
 ```bash

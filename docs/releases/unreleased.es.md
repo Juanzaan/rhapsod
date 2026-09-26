@@ -37,6 +37,7 @@ Correcciones de persistencia, actualización de dependencias, reparación del de
 - Reanudar los reintentos por 403 donde se cortó el audio en lugar de repetir el comienzo de la pista, reintentar sin publicar un error en cada intento y volver a la radio en vivo en el punto actual. La detección de 403 busca el texto del error HTTP en lugar de cualquier "403" dentro de las URL.
 - Usar el binario de FFmpeg y el User-Agent configurados para los flujos precargados de la pista siguiente; antes usaban el ffmpeg-static incluido.
 - Espaciar los mensajes de chat un segundo aunque se encolen varios a la vez, registrar los mensajes descartados por la cola anti-flood, dividir los textos de más de 1024 caracteres (como `!help` o `!debug-server` en servidores grandes) en lugar de perderlos, y detectar un sondeo de heartbeat que nunca responde.
+- Validar los tiempos de espera de yt-dlp (`RHAPSOD_YTDLP_SEARCH_TIMEOUT_MS`, `_AUDIO_URL_`, `_DOWNLOAD_`, `_METADATA_`, `_PLAYLIST_`) junto con el resto de la configuración: figuran en `.env.example`, se pueden editar desde el panel y un valor fuera de rango detiene el inicio en vez de ajustarse con un aviso en consola.
 - Corregir el daemon de yt-dlp: los enlaces youtu.be, `/shorts/` y `/live/` ya no rompen la solicitud, dos solicitudes del mismo video ya no lo extraen dos veces, una solicitud que espera una extracción trabada se rinde a los 45 segundos, las URL en caché vencen en la hora firmada en la URL (menos 15 minutos) en vez de a las seis horas fijas, y las rutas desconocidas responden 404.
 - Conservar los archivos de datos ilegibles: listas, favoritos, historial de escucha, biblioteca de canciones, telemetría o estado de reproducción que no se pueden leer se renombran a `<nombre>.corrupt-<hora>` en vez de ser reemplazados por el siguiente guardado. Cada escritura de datos se sincroniza con el disco antes del renombre, así que un corte de energía no puede dejar un archivo vacío.
 - Aceptar `!channel-move` mientras el bot no puede hablar en su canal: es el comando que lo saca de ahí y antes se ignoraba junto con todos los demás. Los permisos de movimiento siguen aplicando.
@@ -46,6 +47,8 @@ Correcciones de persistencia, actualización de dependencias, reparación del de
 Se requiere Node.js >=22.19.0. Respaldar configuración y datos, ejecutar `npm ci` y `npm run build`, y reiniciar cuando `/api/state` indique `playerState: "idle"`.
 
 Si el panel usa una contraseña por defecto no se iniciará; definir antes una `RHAPSOD_PANEL_PASSWORD` única. Las instalaciones existentes conservan la línea `Requires=` en `/etc/systemd/system/rhapsod.service` hasta volver a ejecutar el instalador: cambiarla por `Wants=` y ejecutar `systemctl daemon-reload`.
+
+Un tiempo de espera de yt-dlp fuera de rango ahora detiene el inicio. Antes de reiniciar, comparar cada línea `RHAPSOD_YTDLP_*_TIMEOUT_MS` de `grep TIMEOUT_MS /etc/rhapsod.env` con los rangos de `.env.example`.
 
 Docker Compose utiliza la red del host Linux para mantener panel y servicio en localhost. Revisar la guía de despliegue antes de recrear contenedores. Los formatos de datos existentes siguen siendo compatibles.
 

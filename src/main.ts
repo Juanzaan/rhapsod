@@ -56,7 +56,7 @@ import {
   parseMoveGroupIds,
 } from "./commands/permissions.js";
 import { createYtDlpResolverStack } from "./media/youtube/yt-dlp.js";
-import { getTimeoutConfig } from "./lib/timeout-config.js";
+import { timeoutConfigFrom } from "./lib/timeout-config.js";
 import { resolveInstanceDir } from "./lib/instance-dir.js";
 import { RadioTitleCache } from "./media/radio-icy.js";
 import { RadioScrobbler } from "./application/radio-scrobbler.js";
@@ -191,7 +191,7 @@ async function main(): Promise<void> {
         ...(config.RHAPSOD_YTDLP_DAEMON_URL === undefined
           ? {}
           : { daemonUrl: config.RHAPSOD_YTDLP_DAEMON_URL }),
-        timeouts: getTimeoutConfig(),
+        timeouts: timeoutConfigFrom(config),
       });
       createPanelServer({
         config,
@@ -419,7 +419,7 @@ async function main(): Promise<void> {
       ...(config.RHAPSOD_MAX_CONCURRENT_YTDLP_JOBS === undefined
         ? {}
         : { maxConcurrentJobs: config.RHAPSOD_MAX_CONCURRENT_YTDLP_JOBS }),
-      timeouts: getTimeoutConfig(),
+      timeouts: timeoutConfigFrom(config),
       onSearchMetrics: (m) => metrics.recordSearchMetrics(m),
     });
   ytDlpMetricsRef.getMetrics = () => ytDlpExecutor.metrics();
