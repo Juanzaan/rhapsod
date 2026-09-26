@@ -31,6 +31,7 @@ import {
 } from "./prepared-audio-store.js";
 import { PlaybackEpoch } from "./playback-epoch.js";
 import type { TrackQueue } from "./track-queue.js";
+import { messages } from "../lib/messages.js";
 
 export type LoopMode = "off" | "queue" | "track";
 
@@ -459,10 +460,10 @@ export class PlaybackController {
 
   jumpTo(position: number): void {
     if (!Number.isSafeInteger(position) || position < 1) {
-      throw new UserError("Usá: !jump <posición>");
+      throw new UserError(messages.jumpToUsaJumpPosicion);
     }
     if (position > this.#queue.length) {
-      throw new UserError("No existe esa posición en la cola.");
+      throw new UserError(messages.jumpToNoExisteEsaPosicion);
     }
     this.#epochs.invalidatePlayback();
     this.#pendingSkips += position - 1 + (this.#current === undefined ? 0 : 1);
@@ -516,9 +517,7 @@ export class PlaybackController {
 
   seek(seconds: number): void {
     if (!this.#current || !this.#session) {
-      throw new UserError(
-        "No hay nada reproduciéndose para saltar de posición.",
-      );
+      throw new UserError(messages.seekNoHayNadaReproduciendose);
     }
     let target = Math.max(0, Math.floor(seconds));
     if (this.#current.durationSeconds !== undefined) {
@@ -530,7 +529,7 @@ export class PlaybackController {
   replayPrevious(): Track {
     const previous = this.#history[this.#current ? 1 : 0];
     if (!previous) {
-      throw new UserError("No hay ninguna canción anterior para repetir.");
+      throw new UserError(messages.replayPreviousNoHayNingunaCancion);
     }
     try {
       this.#queue.requeue(previous);
