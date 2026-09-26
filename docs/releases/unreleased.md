@@ -36,6 +36,7 @@ Persistence fixes, dependency updates, deployment repairs and consistent bilingu
 - Use the configured FFmpeg binary and User-Agent for prewarmed next-track streams; they used to fall back to the bundled ffmpeg-static.
 - Space outgoing chat messages one second apart even when several are queued at once, log messages dropped by the anti-flood queue, split texts longer than 1024 characters (such as `!help` or `!debug-server` on large servers) instead of losing them, and detect a heartbeat probe that never answers.
 - Accept `!channel-move` while the bot cannot talk in its channel: it is the command that moves it out, and it used to be ignored with every other command. Move permissions still apply.
+- Send the parts of a split chat message back to back: another message queued meanwhile can no longer land between them.
 
 ## Upgrade
 
