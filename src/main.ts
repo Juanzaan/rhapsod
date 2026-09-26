@@ -591,9 +591,12 @@ async function main(): Promise<void> {
     playbackMetrics,
     radioTitles,
     resolver: ytDlpResolver,
+    reconnecting: () => reconnector.reconnecting,
     restart: () => shutdown(1),
     scrobbler,
     serverView,
+    youtubeAuthHealthy: () => youtubeAuthState.healthy,
+    ytdlpDaemon: () => ytDlpResolver.daemonHealth(),
   });
 
   let shutdownStarted = false;

@@ -7,6 +7,9 @@ La normalización de volumen medida funciona por primera vez: los temas con un p
 ## Cambios
 
 - El medidor de sonoridad nunca generaba un perfil: ffmpeg se ejecutaba con `-loglevel error`, que oculta el informe de loudnorm, el informe se leía de stdout en lugar de stderr y sus valores, impresos como texto, se rechazaban. Todos los temas con duración se reproducían con `loudnorm` dinámico en una sola pasada, y cada precarga repetía la medición de 120 segundos. Los temas medidos ahora reciben normalización en dos pasadas, lineal cuando la ganancia entra bajo el techo de -1,5 dBTP.
+- Registrar y contar las fallas del daemon de yt-dlp en lugar de pasar en silencio al respaldo: el bot avisa como máximo una vez por minuto, el daemon escribe las fallas en su journal y `/api/metrics` exporta `rhapsod_ytdlp_daemon_up` y `rhapsod_ytdlp_daemon_fallbacks_total`.
+- Hacer que `/api/health` responda 503 durante la reconexión a TeamSpeak (antes informaba conectado a partir de un id de canal en caché) y agregar a su cuerpo el estado del inicio de sesión de YouTube y del daemon.
+- Vaciar el archivo de log antes de salir, para que la última línea previa a una caída o un reinicio llegue a `data/logs`.
 
 ## Actualización
 
