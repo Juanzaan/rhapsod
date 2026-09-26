@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   formatAutoplayEval,
@@ -42,34 +42,55 @@ describe("autoplay evaluation fixture", () => {
 });
 
 describe("runAutoplayEval", () => {
-  it("reports running dry when the mixes offer nothing new", async () => {
-    const report = await runAutoplayEval({
-      history: [],
-      limits: {
-        maxArtistShare: 1,
-        maxMeanEnergyJump: 1,
-        maxRepeats: 0,
-        minNewShare: 0,
+  const dryFixture: AutoplayEvalFixture = {
+    history: [],
+    limits: {
+      maxArtistShare: 1,
+      maxMeanEnergyJump: 1,
+      maxRepeats: 0,
+      minNewShare: 0,
+    },
+    seedId: "seed0000001",
+    tracks: [
+      {
+        durationSeconds: 200,
+        id: "seed0000001",
+        mix: ["seed0000001", "next0000001"],
+        title: "Artist - Seed",
       },
-      seedId: "seed0000001",
-      tracks: [
-        {
-          durationSeconds: 200,
-          id: "seed0000001",
-          mix: ["seed0000001", "next0000001"],
-          title: "Artist - Seed",
-        },
-        {
-          durationSeconds: 200,
-          id: "next0000001",
-          mix: ["next0000001", "seed0000001"],
-          title: "Other - Next",
-        },
-      ],
-      turns: 5,
-    });
+      {
+        durationSeconds: 200,
+        id: "next0000001",
+        mix: ["next0000001", "seed0000001"],
+        title: "Other - Next",
+      },
+    ],
+    turns: 5,
+  };
+
+  it("reports running dry when the mixes offer nothing new", async () => {
+    const report = await runAutoplayEval(dryFixture);
     expect(report.picks.map((pick) => pick.id)).toEqual(["next0000001"]);
     expect(report.ranDry).toBe(true);
+  });
+
+  it("detects running dry quickly with coarse timers", async () => {
+    // Windows fires timers every ~16 ms; the tick-counted wait took ~8 s
+    // there and hit vitest's 5 s timeout.
+    const original = globalThis.setTimeout;
+    const coarse = vi
+      .spyOn(globalThis, "setTimeout")
+      .mockImplementation((handler: () => void, ms?: number) =>
+        original(handler, Math.max(ms ?? 0, 16)),
+      );
+    try {
+      const startedAt = Date.now();
+      const report = await runAutoplayEval(dryFixture);
+      expect(report.ranDry).toBe(true);
+      expect(Date.now() - startedAt).toBeLessThan(3_000);
+    } finally {
+      coarse.mockRestore();
+    }
   });
 
   it("uses a reproducible random sequence per seed", () => {
