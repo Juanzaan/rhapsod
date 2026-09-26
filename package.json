@@ -33,6 +33,7 @@
     "format:check": "prettier --check .",
     "lint": "eslint . --max-warnings=0",
     "lint:scripts": "node scripts/lint-scripts.mjs",
+    "smoke": "tsx scripts/smoke.ts",
     "lint:docs": "node scripts/lint-docs.mjs && node scripts/release-notes.mjs check",
     "release:notes": "node scripts/release-notes.mjs",
     "start": "node dist/main.js",
