@@ -1,0 +1,186 @@
+import type { AudioPlayerMetrics } from "../audio/audio-player.js";
+import type {
+  PlaybackEndReason,
+  PlaybackKpis,
+} from "../application/playback-controller.js";
+import type { MetricsCounters } from "./metrics.js";
+
+// Seconds. Starts under a second are the goal; the long tail covers slow
+// resolutions up to the 90 s resolve watchdog.
+const LATENCY_BUCKETS = [0.1, 0.25, 0.5, 1, 2, 4, 8, 16, 32, 64];
+
+class Histogram {
+  readonly #buckets: readonly number[];
+  readonly #counts: number[];
+  #sum = 0;
+  #count = 0;
+
+  constructor(buckets: readonly number[]) {
+    this.#buckets = buckets;
+    this.#counts = buckets.map(() => 0);
+  }
+
+  observe(value: number): void {
+    this.#sum += value;
+    this.#count++;
+    this.#buckets.forEach((bound, index) => {
+      if (value <= bound) this.#counts[index]!++;
+    });
+  }
+
+  lines(name: string, help: string): string[] {
+    return [
+      `# HELP ${name} ${help}`,
+      `# TYPE ${name} histogram`,
+      ...this.#buckets.map(
+        (bound, index) =>
+          `${name}_bucket{le="${bound}"} ${this.#counts[index]}`,
+      ),
+      `${name}_bucket{le="+Inf"} ${this.#count}`,
+      `${name}_sum ${round(this.#sum)}`,
+      `${name}_count ${this.#count}`,
+    ];
+  }
+}
+
+/** Per-play outcomes and latency since the process started. */
+export class PlaybackMetrics {
+  readonly #plays = new Map<PlaybackEndReason, number>();
+  readonly #startDelay = new Histogram(LATENCY_BUCKETS);
+  readonly #handoffGap = new Histogram(LATENCY_BUCKETS);
+  readonly #handoffs = { cold: 0, prewarmed: 0 };
+  #underruns = 0;
+  #rebuffers = 0;
+
+  record(
+    reason: PlaybackEndReason,
+    metrics: AudioPlayerMetrics,
+    kpis: PlaybackKpis | undefined,
+  ): void {
+    this.#plays.set(reason, (this.#plays.get(reason) ?? 0) + 1);
+    this.#underruns += metrics.underruns;
+    this.#rebuffers += metrics.rebufferEvents;
+    if (kpis === undefined) return;
+    if (kpis.startDelayMs !== undefined)
+      this.#startDelay.observe(kpis.startDelayMs / 1_000);
+    if (kpis.handoffGapMs !== undefined)
+      this.#handoffGap.observe(kpis.handoffGapMs / 1_000);
+    if (!kpis.coldStart) {
+      if (kpis.prewarmed) this.#handoffs.prewarmed++;
+      else this.#handoffs.cold++;
+    }
+  }
+
+  lines(): string[] {
+    const reasons: PlaybackEndReason[] = [
+      "completed",
+      "skipped",
+      "stopped",
+      "error",
+    ];
+    return [
+      "# HELP rhapsod_plays_total Finished plays by how they ended.",
+      "# TYPE rhapsod_plays_total counter",
+      ...reasons.map(
+        (reason) =>
+          `rhapsod_plays_total{reason="${reason}"} ${this.#plays.get(reason) ?? 0}`,
+      ),
+      ...this.#startDelay.lines(
+        "rhapsod_play_start_delay_seconds",
+        "From picking a track to its first audio frame.",
+      ),
+      ...this.#handoffGap.lines(
+        "rhapsod_handoff_gap_seconds",
+        "Silence between one track's end and the next track's first frame.",
+      ),
+      "# HELP rhapsod_handoffs_total Track changes without idle, by whether the next stream was prewarmed.",
+      "# TYPE rhapsod_handoffs_total counter",
+      `rhapsod_handoffs_total{prewarmed="true"} ${this.#handoffs.prewarmed}`,
+      `rhapsod_handoffs_total{prewarmed="false"} ${this.#handoffs.cold}`,
+      "# HELP rhapsod_underruns_total Audio frames sent as silence because the source fell behind.",
+      "# TYPE rhapsod_underruns_total counter",
+      `rhapsod_underruns_total ${this.#underruns}`,
+      "# HELP rhapsod_rebuffers_total Times playback paused to refill the buffer.",
+      "# TYPE rhapsod_rebuffers_total counter",
+      `rhapsod_rebuffers_total ${this.#rebuffers}`,
+    ];
+  }
+}
+
+export interface PrometheusSnapshot {
+  readonly counters: MetricsCounters;
+  readonly memoryRssBytes: number;
+  readonly playback: PlaybackMetrics;
+  readonly uptimeSeconds: number;
+  readonly version: string;
+}
+
+/** Prometheus text exposition format 0.0.4. */
+export function renderPrometheus(snapshot: PrometheusSnapshot): string {
+  const { counters } = snapshot;
+  const counter = (name: string, help: string, value: number): string[] => [
+    `# HELP ${name} ${help}`,
+    `# TYPE ${name} counter`,
+    `${name} ${value}`,
+  ];
+  const gauge = (name: string, help: string, value: number): string[] => [
+    `# HELP ${name} ${help}`,
+    `# TYPE ${name} gauge`,
+    `${name} ${value}`,
+  ];
+  return [
+    "# HELP rhapsod_build_info Running version.",
+    "# TYPE rhapsod_build_info gauge",
+    `rhapsod_build_info{version="${snapshot.version.replace(/["\\\n]/g, "")}"} 1`,
+    ...gauge(
+      "rhapsod_uptime_seconds",
+      "Seconds since the process started.",
+      Math.round(snapshot.uptimeSeconds),
+    ),
+    ...gauge(
+      "process_resident_memory_bytes",
+      "Resident memory of the bot process.",
+      snapshot.memoryRssBytes,
+    ),
+    ...snapshot.playback.lines(),
+    "# HELP rhapsod_audio_url_cache_total Audio URL cache lookups by result.",
+    "# TYPE rhapsod_audio_url_cache_total counter",
+    `rhapsod_audio_url_cache_total{result="hit"} ${counters.cacheHits}`,
+    `rhapsod_audio_url_cache_total{result="miss"} ${counters.cacheMisses}`,
+    "# HELP rhapsod_prefetch_total Next-track URL prefetch state when the track started.",
+    "# TYPE rhapsod_prefetch_total counter",
+    `rhapsod_prefetch_total{status="hit"} ${counters.prefetchHits}`,
+    `rhapsod_prefetch_total{status="in-flight"} ${counters.prefetchInFlight}`,
+    `rhapsod_prefetch_total{status="miss"} ${counters.prefetchMisses}`,
+    ...counter(
+      "rhapsod_search_queries_total",
+      "Searches run.",
+      counters.searchQueriesTotal,
+    ),
+    ...counter(
+      "rhapsod_errors_total",
+      "Playback errors recorded.",
+      counters.totalErrors,
+    ),
+    ...counter(
+      "rhapsod_ytdlp_runs_total",
+      "yt-dlp processes started.",
+      counters.ytdlpTotalRuns,
+    ),
+    ...gauge(
+      "rhapsod_ytdlp_active_jobs",
+      "yt-dlp processes running now.",
+      counters.ytdlpActiveJobs,
+    ),
+    ...gauge(
+      "rhapsod_ytdlp_queued_jobs",
+      "yt-dlp jobs waiting for a slot.",
+      counters.ytdlpQueuedJobs,
+    ),
+    "",
+  ].join("\n");
+}
+
+function round(value: number): number {
+  return Math.round(value * 1_000) / 1_000;
+}
