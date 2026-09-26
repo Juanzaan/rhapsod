@@ -301,7 +301,10 @@ cat > /etc/systemd/system/rhapsod.service <<UNIT
 Description=Rhapsod TeamSpeak music bot
 After=network-online.target rhapsod-ytdlp-daemon.service
 Wants=network-online.target
-Requires=rhapsod-ytdlp-daemon.service
+# Wants, not Requires: with Requires, the weekly yt-dlp update restarting
+# the daemon also restarted the bot mid-song. The bot falls back to spawning
+# yt-dlp while the daemon is down.
+Wants=rhapsod-ytdlp-daemon.service
 
 [Service]
 Type=simple
@@ -334,7 +337,9 @@ set -euo pipefail
 curl -fL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux -o /tmp/yt-dlp
 install -m 0755 /tmp/yt-dlp /usr/local/bin/yt-dlp
 rm -f /tmp/yt-dlp
-python3 -m pip install --target "$DAEMON_DEPS" --upgrade --quiet "yt-dlp[default]" || true
+# Debian 12 / Ubuntu 24.04 mark the system Python as externally managed;
+# retry like the installer does instead of silently keeping the old version.
+python3 -m pip install --target "$DAEMON_DEPS" --upgrade --quiet "yt-dlp[default]"   || python3 -m pip install --target "$DAEMON_DEPS" --upgrade --quiet --break-system-packages "yt-dlp[default]"   || echo "rhapsod: yt-dlp daemon package update failed" >&2
 systemctl restart rhapsod-ytdlp-daemon || true
 CRON
 chmod 0755 /etc/cron.weekly/rhapsod-ytdlp-update

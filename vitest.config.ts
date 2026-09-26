@@ -12,6 +12,8 @@ export default defineConfig({
         branches: 60,
       },
     },
-    include: ["tests/**/*.test.ts"],
+    // src/ is included so a colocated test can never sit unrun again
+    // (src/observability/__tests__ went unexecuted with 12 failures).
+    include: ["tests/**/*.test.ts", "src/**/*.test.ts"],
   },
 });
