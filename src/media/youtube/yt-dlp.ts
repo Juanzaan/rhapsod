@@ -10,9 +10,9 @@ import { rankYoutubeCandidatesScored } from "./search-ranking.js";
 import type { TimeoutConfig } from "../../lib/timeout-config.js";
 import { fetchInnertubePlayerAudioUrl } from "./innertube-player.js";
 import {
+  pickInnertubeCandidates,
   searchInnertubeMusicVideos,
   searchInnertubeVideos,
-  type InnertubeSearchResult,
 } from "./innertube-search.js";
 
 const MAX_BUFFER_BYTES = 8 * 1024 * 1024;
@@ -560,9 +560,7 @@ export class YoutubeResolver {
   async #searchViaInnertube(
     query: string,
   ): Promise<readonly YoutubeSearchCandidate[] | undefined> {
-    // Generic search is more reliable for 403 (datacenter IP); music search
-    // rescues queries like "poland" where generic returns travel vlogs. Both
-    // run in parallel - the music branch used to wait behind the generic one,
+    // Both searches run in parallel - the music branch used to wait behind the generic one,
     // adding its full latency (up to 5s) whenever it was needed. Ranking is
     // pure CPU over a handful of candidates, so the wider pool (30 results)
     // costs nothing measurable and improves fallback choices.
@@ -570,30 +568,7 @@ export class YoutubeResolver {
       searchInnertubeVideos(query).catch(() => []),
       searchInnertubeMusicVideos(query).catch(() => []),
     ]);
-    const toCandidate = (result: InnertubeSearchResult) => ({
-      ...(result.durationSeconds === undefined
-        ? {}
-        : { durationSeconds: result.durationSeconds }),
-      ...(result.channel === undefined ? {} : { channel: result.channel }),
-      id: result.id,
-      title: result.title,
-      webpageUrl: `https://www.youtube.com/watch?v=${result.id}`,
-    });
-    if (results.length > 0) {
-      const hasMusicLike = results.some(
-        (r) =>
-          /official|audio|lyrics|topic/i.test(r.title) ||
-          /topic|official/i.test(r.channel ?? ""),
-      );
-      if (!hasMusicLike && musicResults.length > 0) {
-        return musicResults.map(toCandidate);
-      }
-      return results.map(toCandidate);
-    }
-    if (musicResults.length > 0) {
-      return musicResults.map(toCandidate);
-    }
-    return undefined;
+    return pickInnertubeCandidates(results, musicResults);
   }
 
   async #searchViaYtDlp(
