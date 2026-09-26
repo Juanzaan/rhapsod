@@ -8,8 +8,11 @@ var S = [
   { id: "optional", r: rO },
   { id: "review", r: rR },
 ];
+// vals is sent as-is to PUT /api/env, which rejects unknown keys: the
+// YouTube check result lives apart in yt.
 var cur = 0,
   vals = {},
+  yt = {},
   shownStep = -1;
 
 function render() {
@@ -118,13 +121,13 @@ function rA() {
 function rY() {
   setTimeout(checkYt, 50);
   var st =
-    vals._ytOk === true
+    yt.ok === true
       ? '<div class="tr ok">YouTube OK' +
-        (vals._ytMs ? " (" + vals._ytMs + " ms)" : "") +
+        (yt.ms ? " (" + yt.ms + " ms)" : "") +
         "</div>"
-      : vals._ytOk === false
+      : yt.ok === false
         ? '<div class="tr fl">Fallo: ' +
-          escJs(vals._ytErr || "desconocido") +
+          escJs(yt.err || "desconocido") +
           "</div>"
         : '<div class="tr ld">Probando YouTube...</div>';
   return (
@@ -155,12 +158,12 @@ function checkYt() {
     })
     .then(function (d) {
       if (d.ok) {
-        vals._ytOk = true;
-        vals._ytMs = d.ms;
+        yt.ok = true;
+        yt.ms = d.ms;
         el.innerHTML = '<div class="tr ok">YouTube OK (' + d.ms + " ms)</div>";
       } else {
-        vals._ytOk = false;
-        vals._ytErr = d.error;
+        yt.ok = false;
+        yt.err = d.error;
         el.innerHTML =
           '<div class="tr fl">Fallo: ' +
           escJs(d.error || "desconocido") +
@@ -168,8 +171,8 @@ function checkYt() {
       }
     })
     .catch(function (e) {
-      vals._ytOk = false;
-      vals._ytErr = e.message;
+      yt.ok = false;
+      yt.err = e.message;
       el.innerHTML =
         '<div class="tr fl">No se pudo probar: ' + escJs(e.message) + "</div>";
     });
@@ -252,9 +255,9 @@ function rR() {
     ["Spotify", vals.RHAPSOD_SPOTIFY_CLIENT_ID ? "Configurado" : "No"],
     [
       "YouTube",
-      vals._ytOk === true
+      yt.ok === true
         ? "OK"
-        : vals._ytOk === false
+        : yt.ok === false
           ? "Falla (ver paso YouTube)"
           : "Sin probar",
     ],
@@ -286,26 +289,37 @@ function bind() {
     };
 }
 
+// Each step renders only its own fields. Reading a missing field as ""
+// blanked what earlier steps collected (the host was gone by the review),
+// so a key is only updated when its field is on screen.
 function g(id) {
   var e = /** @type {HTMLInputElement|null} */ (document.getElementById(id));
-  return e ? e.value.trim() : "";
+  return e ? e.value.trim() : undefined;
+}
+function setField(key, id, fallback) {
+  var value = g(id);
+  if (value !== undefined) vals[key] = value || fallback || "";
+}
+function setIfFilled(key, id) {
+  var value = g(id);
+  if (value) vals[key] = value;
 }
 function collect() {
-  vals.RHAPSOD_TS3_HOST = g("ih");
-  vals.RHAPSOD_TS3_PORT = g("ip") || "9987";
-  vals.RHAPSOD_TS3_NICKNAME = g("in") || "Rhapsod";
-  if (g("iw")) vals.RHAPSOD_TS3_PASSWORD = g("iw");
-  vals.RHAPSOD_TS3_CHANNEL_NAME = g("ic");
-  if (g("icid")) vals.RHAPSOD_TS3_CHANNEL_ID = g("icid");
-  if (g("icp")) vals.RHAPSOD_TS3_CHANNEL_PASSWORD = g("icp");
-  vals.RHAPSOD_OPUS_BITRATE = g("ibr") || "128000";
-  vals.RHAPSOD_LOUDNESS_TARGET_LUFS = g("il") || "-14";
-  vals.RHAPSOD_VERBOSE = g("iv") || "false";
-  if (g("isi")) vals.RHAPSOD_SPOTIFY_CLIENT_ID = g("isi");
-  if (g("iss")) vals.RHAPSOD_SPOTIFY_CLIENT_SECRET = g("iss");
-  if (g("ick")) vals.RHAPSOD_YTDLP_COOKIES_PATH = g("ick");
-  if (g("ida")) vals.RHAPSOD_YTDLP_DAEMON_URL = g("ida");
-  if (g("iua")) vals.RHAPSOD_ADMIN_UIDS = g("iua");
+  setField("RHAPSOD_TS3_HOST", "ih");
+  setField("RHAPSOD_TS3_PORT", "ip", "9987");
+  setField("RHAPSOD_TS3_NICKNAME", "in", "Rhapsod");
+  setIfFilled("RHAPSOD_TS3_PASSWORD", "iw");
+  setField("RHAPSOD_TS3_CHANNEL_NAME", "ic");
+  setIfFilled("RHAPSOD_TS3_CHANNEL_ID", "icid");
+  setIfFilled("RHAPSOD_TS3_CHANNEL_PASSWORD", "icp");
+  setField("RHAPSOD_OPUS_BITRATE", "ibr", "128000");
+  setField("RHAPSOD_LOUDNESS_TARGET_LUFS", "il", "-14");
+  setField("RHAPSOD_VERBOSE", "iv", "false");
+  setIfFilled("RHAPSOD_SPOTIFY_CLIENT_ID", "isi");
+  setIfFilled("RHAPSOD_SPOTIFY_CLIENT_SECRET", "iss");
+  setIfFilled("RHAPSOD_YTDLP_COOKIES_PATH", "ick");
+  setIfFilled("RHAPSOD_YTDLP_DAEMON_URL", "ida");
+  setIfFilled("RHAPSOD_ADMIN_UIDS", "iua");
 }
 
 function next() {
@@ -345,15 +359,23 @@ function testTs3() {
       if (d.ok) {
         el.className = "tr ok";
         el.textContent = "Conexion exitosa: " + d.serverName;
+        next();
       } else {
-        el.className = "tr fl";
-        el.textContent = "Error: " + d.error;
+        testFailed(el, "Error: " + d.error);
       }
     })
     .catch(function (e) {
-      el.className = "tr fl";
-      el.textContent = "No se pudo probar: " + e.message;
+      testFailed(el, "No se pudo probar: " + e.message);
     });
+}
+
+// The probe can fail for reasons that do not stop the bot (a firewall on
+// the panel host, ICMP filtering), so a failed test offers to go on.
+function testFailed(el, message) {
+  el.className = "tr fl";
+  el.innerHTML =
+    escJs(message) +
+    ' <button class="b bs" onclick="next()">Continuar sin probar</button>';
 }
 
 function save() {
