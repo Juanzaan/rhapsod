@@ -2,7 +2,7 @@
 
 [English](install.md)
 
-Usar un servidor Linux permanente con acceso UDP saliente a TeamSpeak. El instalador admite x86_64 con Ubuntu 20.04+, Debian 11+ y sistemas de la familia RHEL 9+. El consumo depende de la cola y la concurrencia de extracción; medir memoria de FFmpeg y yt-dlp junto con Node.
+Usar un servidor Linux permanente con acceso UDP saliente a TeamSpeak. El instalador admite x86_64 y aarch64 (arm64, por ejemplo Oracle Cloud Ampere) con Ubuntu 20.04+, Debian 11+ y sistemas de la familia RHEL 9+. El consumo depende de la cola y la concurrencia de extracción; medir memoria de FFmpeg y yt-dlp junto con Node.
 
 ## Instalador para VPS
 
