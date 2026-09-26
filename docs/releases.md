@@ -6,21 +6,22 @@
 
 ## Archive
 
-| Release                              | Focus                                      |
-| ------------------------------------ | ------------------------------------------ |
-| [Unreleased](releases/unreleased.md) | Pending changes                            |
-| [v3.0.0](releases/v3.0.0.md)         | Preferences, autoplay, radio and instances |
-| [v2.4.1](releases/v2.4.1.md)         | Release automation                         |
-| [v2.4.0](releases/v2.4.0.md)         | Handoffs, loudness and resolver watchdog   |
-| [v2.3.1](releases/v2.3.1.md)         | Panel reliability                          |
-| [v2.3.0](releases/v2.3.0.md)         | Panel and installer                        |
-| [v2.2.0](releases/v2.2.0.md)         | Innertube and daemon                       |
-| [v2.1.0](releases/v2.1.0.md)         | Playlists and effects                      |
-| [v2.0.0](releases/v2.0.0.md)         | Larger-host deployment profile             |
-| [v1.2.1](releases/v1.2.1.md)         | Final low-resource release                 |
-| [v1.2.0](releases/v1.2.0.md)         | Playback and reconnect fixes               |
-| [v1.1.0](releases/v1.1.0.md)         | Audio and queue controls                   |
-| [v1.0.0](releases/v1.0.0.md)         | Initial stable release                     |
+| Release                              | Focus                                                       |
+| ------------------------------------ | ----------------------------------------------------------- |
+| [Unreleased](releases/unreleased.md) | Pending changes                                             |
+| [v4.0.0](releases/v4.0.0.md)         | Autoplay DJ, playback recovery, metrics and panel hardening |
+| [v3.0.0](releases/v3.0.0.md)         | Preferences, autoplay, radio and instances                  |
+| [v2.4.1](releases/v2.4.1.md)         | Release automation                                          |
+| [v2.4.0](releases/v2.4.0.md)         | Handoffs, loudness and resolver watchdog                    |
+| [v2.3.1](releases/v2.3.1.md)         | Panel reliability                                           |
+| [v2.3.0](releases/v2.3.0.md)         | Panel and installer                                         |
+| [v2.2.0](releases/v2.2.0.md)         | Innertube and daemon                                        |
+| [v2.1.0](releases/v2.1.0.md)         | Playlists and effects                                       |
+| [v2.0.0](releases/v2.0.0.md)         | Larger-host deployment profile                              |
+| [v1.2.1](releases/v1.2.1.md)         | Final low-resource release                                  |
+| [v1.2.0](releases/v1.2.0.md)         | Playback and reconnect fixes                                |
+| [v1.1.0](releases/v1.1.0.md)         | Audio and queue controls                                    |
+| [v1.0.0](releases/v1.0.0.md)         | Initial stable release                                      |
 
 Historical summaries describe their tagged code; verification sections are procedures, not claims that old releases were retested today. Original implementation detail remains in [CHANGELOG.md](../CHANGELOG.md) and the linked diffs.
 
