@@ -43,6 +43,19 @@ namespace RhapsodDashboard
 
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
+            // UI-thread errors are logged and shown instead of closing the
+            // app; anything else is at least logged before the process ends.
+            Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+            Application.ThreadException += delegate(object sender, ThreadExceptionEventArgs e)
+            {
+                Log(e.Exception);
+                MessageBox.Show("Error inesperado: " + e.Exception.Message + Environment.NewLine +
+                    "Detalle en " + LogPath, "Rhapsod", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            };
+            AppDomain.CurrentDomain.UnhandledException += delegate(object sender, UnhandledExceptionEventArgs e)
+            {
+                Log(e.ExceptionObject as Exception);
+            };
 
             if (Array.IndexOf(args, "--forget") >= 0)
             {
@@ -94,6 +107,30 @@ namespace RhapsodDashboard
                 GC.KeepAlive(mutex);
             }
             return 0;
+        }
+
+        public static string LogPath
+        {
+            get
+            {
+                return Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "Rhapsod",
+                    "dashboard.log");
+            }
+        }
+
+        public static void Log(Exception error)
+        {
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(LogPath));
+                File.AppendAllText(LogPath, DateTime.Now.ToString("s") + " " + error + Environment.NewLine);
+            }
+            catch (Exception)
+            {
+                // Nowhere else to report it.
+            }
         }
 
         public static void SaveSettings(Settings settings, string password, Settings previous)

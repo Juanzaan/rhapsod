@@ -25,7 +25,11 @@ namespace RhapsodDashboard
         private const int StatusPollSeconds = 5;
         private const int ClipboardSeconds = 30;
 
-        private readonly SynchronizationContext ui;
+        // Work finished on thread-pool threads comes back through this hidden
+        // control. SynchronizationContext.Current is not reliable here (it can
+        // be a plain context that posts to the thread pool), and the
+        // clipboard and the tray must only be touched on the UI thread.
+        private readonly Control marshal = new Control();
         private readonly NotifyIcon tray = new NotifyIcon();
         private readonly ToolStripMenuItem statusItem = new ToolStripMenuItem { Enabled = false };
         private readonly System.Windows.Forms.Timer supervisor = new System.Windows.Forms.Timer { Interval = 1000 };
@@ -50,7 +54,9 @@ namespace RhapsodDashboard
 
         public TrayApp(Settings settings, string password)
         {
-            ui = SynchronizationContext.Current ?? new WindowsFormsSynchronizationContext();
+            // Reading Handle creates the window on this, the UI, thread.
+            var created = marshal.Handle;
+            GC.KeepAlive(created);
             this.settings = settings;
             this.password = password;
             tunnel = new Tunnel(settings);
@@ -80,7 +86,20 @@ namespace RhapsodDashboard
         // Called from another launch of the app (single instance).
         public void OpenPanelFromOtherInstance()
         {
-            ui.Post(delegate { OpenPanel(); }, null);
+            OnUi(delegate { OpenPanel(); });
+        }
+
+        private void OnUi(MethodInvoker action)
+        {
+            if (marshal.IsDisposed) return;
+            try
+            {
+                marshal.BeginInvoke(action);
+            }
+            catch (InvalidOperationException)
+            {
+                // Shutting down: the window is gone.
+            }
         }
 
         private void Connect()
@@ -93,32 +112,63 @@ namespace RhapsodDashboard
             var ownTunnel = tunnel;
             ThreadPool.QueueUserWorkItem(delegate
             {
-                LinkState result;
-                string error = null;
-                if (PortProbe.IsOpen(target.LocalPort))
+                try
                 {
-                    // Only reuse the port when it answers like the panel:
-                    // another program there must not get the password.
-                    if (PanelClient.LooksLikePanel(target.LocalPort))
-                    {
-                        result = LinkState.Shared;
-                    }
-                    else
-                    {
-                        result = LinkState.Retrying;
-                        error = "El puerto " + target.LocalPort + " lo usa otro programa. Cerrarlo o elegir otro puerto en Configuración.";
-                    }
+                    ConnectInBackground(target, ownTunnel);
                 }
-                else
+                catch (Exception failure)
                 {
-                    error = ownTunnel.Start();
-                    result = error == null ? LinkState.Connected : LinkState.Retrying;
+                    // A background exception would end the process; report it
+                    // as a failed attempt and let the retry loop continue.
+                    Program.Log(failure);
+                    OnUi(delegate { Connected(ownTunnel, LinkState.Retrying, "Error inesperado: " + failure.Message, false); });
                 }
-                ui.Post(delegate { Connected(ownTunnel, result, error); }, null);
             });
         }
 
-        private void Connected(Tunnel attempted, LinkState result, string error)
+        private void ConnectInBackground(Settings target, Tunnel ownTunnel)
+        {
+            LinkState result;
+            string error = null;
+            if (PortProbe.IsOpen(target.LocalPort))
+            {
+                // Only reuse the port when it answers like the panel:
+                // another program there must not get the password.
+                if (PanelClient.LooksLikePanel(target.LocalPort))
+                {
+                    result = LinkState.Shared;
+                }
+                else
+                {
+                    result = LinkState.Retrying;
+                    error = "El puerto " + target.LocalPort + " lo usa otro programa. Cerrarlo o elegir otro puerto en Configuración.";
+                }
+            }
+            else
+            {
+                error = ownTunnel.Start();
+                result = error == null ? LinkState.Connected : LinkState.Retrying;
+            }
+            // The tunnel being up does not mean the panel answers (the bot
+            // may be restarting): opening the window then shows a blank
+            // page with no login prompt.
+            var panelReady = result == LinkState.Shared ||
+                (result == LinkState.Connected && WaitForPanel(target.LocalPort));
+            OnUi(delegate { Connected(ownTunnel, result, error, panelReady); });
+        }
+
+        private static bool WaitForPanel(int port)
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(10);
+            while (DateTime.UtcNow < deadline)
+            {
+                if (PanelClient.LooksLikePanel(port)) return true;
+                Thread.Sleep(500);
+            }
+            return false;
+        }
+
+        private void Connected(Tunnel attempted, LinkState result, string error, bool panelReady)
         {
             connecting = false;
             if (attempted != tunnel)
@@ -137,6 +187,13 @@ namespace RhapsodDashboard
             failures = 0;
             lastError = "";
             nextPollAt = DateTime.UtcNow;
+            if (!panelReady)
+            {
+                // Stay connected; the status poll opens the window once the
+                // panel answers.
+                ShowStatus("Túnel abierto; el panel no responde", iconBusy);
+                return;
+            }
             ShowStatus("Conectado", iconIdle);
             if (openWhenReady)
             {
@@ -207,8 +264,17 @@ namespace RhapsodDashboard
             var secret = password;
             ThreadPool.QueueUserWorkItem(delegate
             {
-                var result = PanelClient.GetState(target, secret);
-                ui.Post(delegate { ShowPanelState(result); }, null);
+                PanelState result;
+                try
+                {
+                    result = PanelClient.GetState(target, secret);
+                }
+                catch (Exception failure)
+                {
+                    Program.Log(failure);
+                    result = new PanelState();
+                }
+                OnUi(delegate { ShowPanelState(result); });
             });
         }
 
@@ -232,6 +298,11 @@ namespace RhapsodDashboard
                 return;
             }
             warnedUnauthorized = false;
+            if (openWhenReady)
+            {
+                openWhenReady = false;
+                OpenPanel();
+            }
             if (!panel.Connected)
             {
                 ShowStatus("Bot sin conexión a TeamSpeak", iconBusy);
