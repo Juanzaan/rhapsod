@@ -46,9 +46,10 @@ export const TITLE_PENALTIES: readonly RankingRule[] = [
     condition: (query) => !query.toLowerCase().includes("remix"),
   },
   {
-    term: /\blive\b/i,
+    // Spanish uploads say "en vivo"; unplugged sets are live recordings too.
+    term: /\b(live|en vivo|unplugged)\b/i,
     bonus: -15,
-    condition: (query) => !query.toLowerCase().includes("live"),
+    condition: (query) => !/\b(live|vivo|unplugged)\b/i.test(query),
   },
   {
     term: /\bacoustic\b/i,
@@ -67,9 +68,10 @@ export const TITLE_PENALTIES: readonly RankingRule[] = [
     condition: (query) => !/\b(extended|full)\b/i.test(query),
   },
   {
-    term: /\b(reaction|review)\b/i,
+    term: /\b(reaction|review|reacci[oó]n|reaccionando|reacciones)\b/i,
     bonus: -15,
-    condition: (query) => !/\b(reaction|review)\b/i.test(query),
+    condition: (query) =>
+      !/\b(reaction|review|reacci[oó]n|reaccionando|reacciones)\b/i.test(query),
   },
   {
     term: /\b(karaoke|aoke)\b/i,
