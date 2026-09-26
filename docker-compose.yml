@@ -26,5 +26,17 @@ services:
     environment:
       RHAPSOD_YTDLP_DAEMON_HOST: 127.0.0.1
     command: ["python3", "scripts/yt-dlp-daemon.py"]
+    depends_on:
+      - pot
     volumes:
       - ./data:/app/data:ro
+
+  # YouTube PO token provider the daemon queries at 127.0.0.1:4416. The image
+  # binds 0.0.0.0 by default; with host networking that would publish an
+  # unauthenticated token server on every interface, so bind loopback only.
+  pot:
+    image: brainicism/bgutil-ytdlp-pot-provider:2.0.0
+    restart: unless-stopped
+    network_mode: host
+    init: true
+    command: ["--host", "127.0.0.1"]

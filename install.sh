@@ -18,6 +18,8 @@ set -Eeuo pipefail
 
 REPOSITORY="https://github.com/Juanzaan/rhapsod.git"
 POT_REPOSITORY="https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git"
+# Server checkout and pip plugin must match: they share a protocol version.
+POT_VERSION="2.0.0"
 NODE_VERSION="v22.23.2"
 REF="${RHAPSOD_REF:-}"
 APP_USER="${RHAPSOD_USER:-rhapsod}"
@@ -31,6 +33,21 @@ SKIP_WARP="${RHAPSOD_SKIP_WARP:-0}"
 log() { printf '=== RHAPSOD: %s ===\n' "$1"; }
 warn() { printf '=== RHAPSOD WARNING: %s ===\n' "$1" >&2; }
 fail() { printf '=== RHAPSOD ERROR: %s ===\n' "$1" >&2; exit 1; }
+
+# Downloads go to a private temp dir, never to fixed /tmp paths: as root, a
+# predictable name in a world-writable directory can be pre-planted.
+WORK_DIR="$(mktemp -d)"
+trap 'rm -rf "$WORK_DIR"' EXIT
+
+# Checks $1 against the entry for file name $2 in checksum list $3
+# ("<hash>  <name>" lines); $4 is the tool (sha256sum or md5sum).
+verify_checksum() {
+  local file="$1" name="$2" sums="$3" tool="${4:-sha256sum}" expected
+  expected="$(awk -v n="$name" '$2 == n || $2 == "*" n { print $1; exit }' "$sums")"
+  [[ -n "$expected" ]] || fail "no published checksum for $name"
+  echo "$expected  $file" | "$tool" -c --quiet - \
+    || fail "checksum mismatch for $name; refusing to install it"
+}
 
 [[ "$(id -u)" == "0" ]] || fail "run as root (e.g. sudo bash install.sh)"
 [[ "$(uname -m)" == "x86_64" ]] || fail "only x86_64 is supported (static FFmpeg + WARP client)"
@@ -82,11 +99,13 @@ fi
 # --- Node.js 22 (distro-agnostic tarball) ------------------------------------
 if ! command -v node >/dev/null 2>&1; then
   log "Installing Node.js $NODE_VERSION"
-  NODE_ARCHIVE="/tmp/node-${NODE_VERSION}-linux-x64.tar.xz"
-  curl -fL "https://nodejs.org/dist/${NODE_VERSION}/node-${NODE_VERSION}-linux-x64.tar.xz" \
-    -o "$NODE_ARCHIVE"
-  tar -xJf "$NODE_ARCHIVE" -C /usr/local --strip-components=1
-  rm -f "$NODE_ARCHIVE"
+  NODE_NAME="node-${NODE_VERSION}-linux-x64.tar.xz"
+  curl -fL "https://nodejs.org/dist/${NODE_VERSION}/${NODE_NAME}" \
+    -o "$WORK_DIR/$NODE_NAME"
+  curl -fsSL "https://nodejs.org/dist/${NODE_VERSION}/SHASUMS256.txt" \
+    -o "$WORK_DIR/node-SHASUMS256.txt"
+  verify_checksum "$WORK_DIR/$NODE_NAME" "$NODE_NAME" "$WORK_DIR/node-SHASUMS256.txt"
+  tar -xJf "$WORK_DIR/$NODE_NAME" -C /usr/local --strip-components=1
 fi
 node --version
 node -e 'const [major, minor] = process.versions.node.split(".").map(Number); process.exit(major > 22 || (major === 22 && minor >= 19) ? 0 : 1)' \
@@ -96,38 +115,44 @@ NODE_BIN="$(command -v node)"
 
 # --- yt-dlp standalone binary -------------------------------------------------
 log "Installing yt-dlp binary"
-curl -fL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux \
-  -o /tmp/yt-dlp
-install -m 0755 /tmp/yt-dlp /usr/local/bin/yt-dlp
-rm -f /tmp/yt-dlp
+YTDLP_RELEASE="https://github.com/yt-dlp/yt-dlp/releases/latest/download"
+curl -fL "$YTDLP_RELEASE/yt-dlp_linux" -o "$WORK_DIR/yt-dlp_linux"
+curl -fsSL "$YTDLP_RELEASE/SHA2-256SUMS" -o "$WORK_DIR/yt-dlp-SHA2-256SUMS"
+verify_checksum "$WORK_DIR/yt-dlp_linux" yt-dlp_linux "$WORK_DIR/yt-dlp-SHA2-256SUMS"
+install -m 0755 "$WORK_DIR/yt-dlp_linux" /usr/local/bin/yt-dlp
 /usr/local/bin/yt-dlp --version
 
 # --- Python daemon packages ---------------------------------------------------
 log "Installing yt-dlp daemon packages"
 PIP_INSTALL=(python3 -m pip install --target "$DAEMON_DEPS" --upgrade)
-if ! "${PIP_INSTALL[@]}" "yt-dlp[default]" "bgutil-ytdlp-pot-provider" 2>/dev/null; then
+if ! "${PIP_INSTALL[@]}" "yt-dlp[default]" "bgutil-ytdlp-pot-provider==$POT_VERSION" 2>/dev/null; then
   warn "plain pip install failed, retrying with --break-system-packages"
   "${PIP_INSTALL[@]}" --break-system-packages \
-    "yt-dlp[default]" "bgutil-ytdlp-pot-provider" \
+    "yt-dlp[default]" "bgutil-ytdlp-pot-provider==$POT_VERSION" \
     || warn "daemon Python packages failed; the bot will use slower spawn mode"
 fi
 
 # --- Static FFmpeg ------------------------------------------------------------
 log "Installing static FFmpeg"
-FFMPEG_ARCHIVE="/tmp/ffmpeg-release-amd64-static.tar.xz"
-curl -fL https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz \
-  -o "$FFMPEG_ARCHIVE"
-tar -xJf "$FFMPEG_ARCHIVE" -C /tmp
-FFMPEG_DIR="$(find /tmp -maxdepth 1 -type d -name 'ffmpeg-*-amd64-static' -print -quit)"
-install -m 0755 "$FFMPEG_DIR/ffmpeg" /usr/local/bin/ffmpeg
-install -m 0755 "$FFMPEG_DIR/ffprobe" /usr/local/bin/ffprobe
-rm -rf "$FFMPEG_ARCHIVE" "$FFMPEG_DIR"
+FFMPEG_NAME="ffmpeg-release-amd64-static.tar.xz"
+FFMPEG_URL="https://johnvansickle.com/ffmpeg/releases/$FFMPEG_NAME"
+curl -fL "$FFMPEG_URL" -o "$WORK_DIR/$FFMPEG_NAME"
+# This mirror only publishes an MD5: it catches corrupt or swapped
+# downloads, not a compromised host.
+curl -fsSL "$FFMPEG_URL.md5" -o "$WORK_DIR/ffmpeg.md5"
+verify_checksum "$WORK_DIR/$FFMPEG_NAME" "$FFMPEG_NAME" "$WORK_DIR/ffmpeg.md5" md5sum
+mkdir "$WORK_DIR/ffmpeg"
+tar -xJf "$WORK_DIR/$FFMPEG_NAME" -C "$WORK_DIR/ffmpeg" --strip-components=1
+install -m 0755 "$WORK_DIR/ffmpeg/ffmpeg" /usr/local/bin/ffmpeg
+install -m 0755 "$WORK_DIR/ffmpeg/ffprobe" /usr/local/bin/ffprobe
 /usr/local/bin/ffmpeg -version 2>&1 | head -1
 
 # --- Service user ---------------------------------------------------------------
 log "Creating $APP_USER user"
 if ! id "$APP_USER" >/dev/null 2>&1; then
-  useradd --create-home --shell /bin/bash "$APP_USER"
+  # A service account needs no login shell; the installer runs its commands
+  # through sudo -u, which does not use it. Existing users are left as is.
+  useradd --create-home --shell "$(command -v nologin || echo /usr/sbin/nologin)" "$APP_USER"
 fi
 
 # --- Cloudflare WARP (proxy mode: never touches routing/SSH) -------------------
@@ -177,7 +202,10 @@ fi
 # --- bgutil POT provider ----------------------------------------------------------
 log "Installing bgutil POT provider"
 if [[ ! -d "$POT_DIR/.git" ]]; then
-  sudo -u "$APP_USER" git clone --depth 1 "$POT_REPOSITORY" "$POT_DIR"
+  sudo -u "$APP_USER" git clone --depth 1 --branch "$POT_VERSION" "$POT_REPOSITORY" "$POT_DIR"
+else
+  sudo -u "$APP_USER" git -C "$POT_DIR" fetch --depth 1 origin tag "$POT_VERSION"
+  sudo -u "$APP_USER" git -C "$POT_DIR" checkout --detach "$POT_VERSION"
 fi
 (
   cd "$POT_DIR/server"
@@ -330,18 +358,29 @@ WantedBy=multi-user.target
 UNIT
 
 # --- Weekly yt-dlp updater (SinusBot-style rolling updates) ------------------------------
-cat > /etc/cron.weekly/rhapsod-ytdlp-update <<CRON
-#!/bin/bash
+{
+  printf '#!/bin/bash\nDAEMON_DEPS=%q\n' "$DAEMON_DEPS"
+  cat <<'CRON'
 # Refresh yt-dlp (binary + daemon package) so YouTube extractor fixes land weekly.
 set -euo pipefail
-curl -fL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux -o /tmp/yt-dlp
-install -m 0755 /tmp/yt-dlp /usr/local/bin/yt-dlp
-rm -f /tmp/yt-dlp
+WORK_DIR="$(mktemp -d)"
+trap 'rm -rf "$WORK_DIR"' EXIT
+RELEASE="https://github.com/yt-dlp/yt-dlp/releases/latest/download"
+curl -fsSL "$RELEASE/yt-dlp_linux" -o "$WORK_DIR/yt-dlp_linux"
+curl -fsSL "$RELEASE/SHA2-256SUMS" -o "$WORK_DIR/SHA2-256SUMS"
+# A mismatch aborts the update and keeps the installed binary.
+(cd "$WORK_DIR" && grep ' yt-dlp_linux$' SHA2-256SUMS | sha256sum -c --quiet -)
+install -m 0755 "$WORK_DIR/yt-dlp_linux" /usr/local/bin/yt-dlp
 # Debian 12 / Ubuntu 24.04 mark the system Python as externally managed;
 # retry like the installer does instead of silently keeping the old version.
-python3 -m pip install --target "$DAEMON_DEPS" --upgrade --quiet "yt-dlp[default]"   || python3 -m pip install --target "$DAEMON_DEPS" --upgrade --quiet --break-system-packages "yt-dlp[default]"   || echo "rhapsod: yt-dlp daemon package update failed" >&2
+PIP=(python3 -m pip install --target "$DAEMON_DEPS" --upgrade --quiet)
+if ! "${PIP[@]}" "yt-dlp[default]"; then
+  "${PIP[@]}" --break-system-packages "yt-dlp[default]" \
+    || echo "rhapsod: yt-dlp daemon package update failed" >&2
+fi
 systemctl restart rhapsod-ytdlp-daemon || true
 CRON
+} > /etc/cron.weekly/rhapsod-ytdlp-update
 chmod 0755 /etc/cron.weekly/rhapsod-ytdlp-update
 
 systemctl daemon-reload
