@@ -15,7 +15,7 @@ chat once the TS3 adapter is connected.
 | `!skip`                               | `!s`                  | Skip the current track (only its requester or an admin).                                                                   |
 | `!previous`                           | `!prev`               | Replay the last finished track.                                                                                            |
 | `!seek <seconds>`                     | -                     | Jump to a position in seconds within the current track.                                                                    |
-| `!stop`                               | -                     | Stop playback and disconnect the player from the current track.                                                            |
+| `!stop`                               | -                     | Stop playback and clear the queue (only when every track is yours or an autoplay pick, or as an admin).                    |
 | `!queue [page]`                       | `!q`                  | Show 10 pending tracks per page with per-track durations.                                                                  |
 | `!history`                            | `!hist`               | Show the 10 most recently started tracks (up to 20 are kept in memory).                                                    |
 | `!now-playing`                        | `!np`, `!now`         | Show the current track, duration and requester (live radio shows the on-air title).                                        |
@@ -27,7 +27,7 @@ chat once the TS3 adapter is connected.
 | `!debug-server`                       | `!ds`                 | TeamSpeak server info (admins only).                                                                                       |
 | `!chart`                              | -                     | User telemetry chart (admins only).                                                                                        |
 | `!remove <n\|from-to>`                | `!rm`                 | Remove one position or an inclusive range (requesters may remove only their own tracks).                                   |
-| `!clear`                              | `!c`                  | Clear pending tracks.                                                                                                      |
+| `!clear`                              | `!c`                  | Clear pending tracks (only when every pending track is yours or an autoplay pick, or as an admin).                         |
 | `!shuffle`                            | -                     | Shuffle the pending queue (the current track keeps playing).                                                               |
 | `!loop [off\|track\|queue]`           | -                     | Repeat the current track (`track`) or the whole queue (`queue`); persists in `state.json`.                                 |
 | `!lyrics`                             | `!ly`                 | Show the lyrics of the current track, found via LRCLIB (best-effort, no account).                                          |
@@ -55,7 +55,8 @@ chat once the TS3 adapter is connected.
 
 - **Permissions:** most commands are open to everyone. `RHAPSOD_ADMIN_UIDS`
   grants admins the ability to remove tracks requested by other users with
-  `!remove`, to skip anyone's current track with `!skip`, and to use
+  `!remove`, to skip anyone's current track with `!skip`, to stop or clear a
+  queue that holds other users' tracks with `!stop`/`!clear`, and to use
   `!channel-move`; requesters can always remove their own tracks and skip
   their own current track.
 - **Favorites:** `!fav` saves the current track per TS3 user id (up to 50),

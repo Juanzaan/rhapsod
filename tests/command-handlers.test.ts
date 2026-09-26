@@ -915,6 +915,58 @@ describe("favorites and skip ownership", () => {
 
     expect(playback.skip).toHaveBeenCalledTimes(1);
   });
+
+  it("blocks strangers from stopping someone else's track", async () => {
+    // !stop wiped the current track and the whole queue with no check,
+    // while !skip on the same track was refused.
+    const { ctx, playback, send, sender } = makeHarness({
+      current: { requestedBy: "other", requestedByUid: "uid-9", title: "X" },
+    });
+    await dispatchCommand(ctx, parseChatCommand("!stop")!, sender, send);
+
+    expect(playback.stop).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledWith(
+      "Hay pistas de otros usuarios en reproducción o en cola: solo un admin puede detener todo.",
+    );
+  });
+
+  it("lets the requester stop when everything is theirs or autoplay", async () => {
+    const { ctx, playback, send, sender } = makeHarness({
+      current: { requestedBy: "user", requestedByUid: "uid-1", title: "X" },
+    });
+    playback.queue.mockReturnValue([
+      { requestedBy: "Autoplay", requestedByUid: "autoplay", title: "Y" },
+    ]);
+    await dispatchCommand(ctx, parseChatCommand("!stop")!, sender, send);
+
+    expect(playback.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it("blocks strangers from clearing a queue with someone else's tracks", async () => {
+    const { ctx, playback, send, sender } = makeHarness();
+    playback.queue.mockReturnValue([
+      { requestedBy: "user", requestedByUid: "uid-1", title: "Mine" },
+      { requestedBy: "other", requestedByUid: "uid-9", title: "Theirs" },
+    ]);
+    await dispatchCommand(ctx, parseChatCommand("!clear")!, sender, send);
+
+    expect(playback.clearQueued).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledWith(
+      "La cola tiene pistas de otros usuarios: solo un admin puede vaciarla. Usá !remove para quitar las tuyas.",
+    );
+  });
+
+  it("lets admins clear anyone's tracks", async () => {
+    const { ctx, playback, sender, send } = makeHarness({
+      adminUids: new Set(["uid-1"]),
+    });
+    playback.queue.mockReturnValue([
+      { requestedBy: "other", requestedByUid: "uid-9", title: "Theirs" },
+    ]);
+    await dispatchCommand(ctx, parseChatCommand("!clear")!, sender, send);
+
+    expect(playback.clearQueued).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("now-playing live titles", () => {

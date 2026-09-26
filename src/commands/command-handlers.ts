@@ -22,6 +22,7 @@ import { isAppleMusicPlaylist } from "../media/apple-music.js";
 import {
   canMoveBotToChannel,
   canRemoveTrack,
+  canRemoveTracks,
   isAdminUid,
 } from "./permissions.js";
 import { formatHelpCategory, formatHelpMenu } from "./command-registry.js";
@@ -579,9 +580,22 @@ async function handleRemove(
 async function handleClear(
   ctx: CommandContext,
   _command: Extract<ChatCommand, { name: "clear" }>,
-  _sender: CommandSender,
+  sender: CommandSender,
   send: SendFn,
 ): Promise<void> {
+  if (
+    !canRemoveTracks({
+      adminUids: ctx.adminUids,
+      senderName: sender.name,
+      senderUid: sender.uid,
+      tracks: ctx.playback.queue(),
+    })
+  ) {
+    await send(
+      "La cola tiene pistas de otros usuarios: solo un admin puede vaciarla. Usá !remove para quitar las tuyas.",
+    );
+    return;
+  }
   const cleared = ctx.playback.clearQueued();
   await send(
     cleared === 0
@@ -880,9 +894,26 @@ async function handleChart(
 async function handleStop(
   ctx: CommandContext,
   _command: Extract<ChatCommand, { name: "stop" }>,
-  _sender: CommandSender,
+  sender: CommandSender,
   send: SendFn,
 ): Promise<void> {
+  const current = ctx.playback.current;
+  if (
+    !canRemoveTracks({
+      adminUids: ctx.adminUids,
+      senderName: sender.name,
+      senderUid: sender.uid,
+      tracks: [
+        ...(current === undefined ? [] : [current]),
+        ...ctx.playback.queue(),
+      ],
+    })
+  ) {
+    await send(
+      "Hay pistas de otros usuarios en reproducción o en cola: solo un admin puede detener todo.",
+    );
+    return;
+  }
   ctx.playback.stop();
   ctx.hasStartedPlaying = false;
   await send("Reproducción detenida.");

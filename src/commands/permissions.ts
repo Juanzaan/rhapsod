@@ -102,3 +102,31 @@ export function canRemoveTrack(args: {
   }
   return args.requesterName === args.senderName;
 }
+
+/**
+ * Whole-queue actions (!stop, !clear) follow the same ownership rule as
+ * !skip and !remove: allowed when every affected track is the sender's or
+ * communal, or the sender is an admin. Without it anyone could wipe
+ * everyone's tracks through the back door !skip forbids.
+ */
+export function canRemoveTracks(args: {
+  readonly adminUids: ReadonlySet<string>;
+  readonly senderName: string;
+  readonly senderUid: string;
+  readonly tracks: ReadonlyArray<{
+    readonly requestedBy: string;
+    readonly requestedByUid?: string;
+  }>;
+}): boolean {
+  return args.tracks.every((track) =>
+    canRemoveTrack({
+      adminUids: args.adminUids,
+      requesterName: track.requestedBy,
+      ...(track.requestedByUid === undefined
+        ? {}
+        : { requesterUid: track.requestedByUid }),
+      senderName: args.senderName,
+      senderUid: args.senderUid,
+    }),
+  );
+}
