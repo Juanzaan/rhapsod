@@ -135,6 +135,15 @@ const ENV_DESCRIPTIONS: Record<string, string> = {
   RHAPSOD_YTDLP_COOKIES_PATH: "Ruta a cookies.txt de YouTube",
   RHAPSOD_YTDLP_DAEMON_URL: "URL del daemon yt-dlp (http://127.0.0.1:8765)",
   RHAPSOD_YTDLP_EXTRACTOR_ARGS: "Args extra para yt-dlp",
+  RHAPSOD_YTDLP_SEARCH_TIMEOUT_MS: "Timeout de busqueda yt-dlp (4000-20000 ms)",
+  RHAPSOD_YTDLP_AUDIO_URL_TIMEOUT_MS:
+    "Timeout de URL de audio yt-dlp (5000-30000 ms)",
+  RHAPSOD_YTDLP_DOWNLOAD_TIMEOUT_MS:
+    "Timeout de descarga yt-dlp (30000-300000 ms)",
+  RHAPSOD_YTDLP_METADATA_TIMEOUT_MS:
+    "Timeout de metadatos yt-dlp (10000-60000 ms)",
+  RHAPSOD_YTDLP_PLAYLIST_TIMEOUT_MS:
+    "Timeout de playlists yt-dlp (15000-120000 ms)",
   RHAPSOD_WARP_PROXY: "Egress fallback para 403 (vacio = solo directo)",
   RHAPSOD_FFMPEG_PATH: "Ruta del binario ffmpeg (solo lectura)",
   RHAPSOD_FFMPEG_USER_AGENT: "User-Agent para ffmpeg",
@@ -171,6 +180,10 @@ const ENV_DESCRIPTIONS: Record<string, string> = {
 
 function describeEnvKey(key: string): string {
   return ENV_DESCRIPTIONS[key] ?? "";
+}
+
+export function describedEnvKeys(): readonly string[] {
+  return Object.keys(ENV_DESCRIPTIONS);
 }
 
 function isKnownEnvKey(key: string): boolean {
