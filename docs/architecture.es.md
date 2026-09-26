@@ -50,3 +50,5 @@ El panel permanece en `127.0.0.1` con autenticación básica y acceso por SSH. E
 ## Verificación y ampliación
 
 Ejecutar `npm run check` y `npm run test:coverage`. Las pruebas de proveedores y TeamSpeak usan sustitutos controlados; comprobar audio y despliegue en el entorno de destino. TeamSpeak 6 está previsto y debe conservar el contrato de conexión de la aplicación.
+
+Los cambios en el ranking de búsqueda se miden con `npm run eval:search`, que puntúa `src/media/youtube/search-ranking.ts` contra `tests/fixtures/search-eval.json`: cada caso tiene una búsqueda, la lista de candidatos que vio el ranking y las elecciones aceptables. Las pruebas fallan cuando la precisión baja del `minAccuracy` del archivo; una mejora del ranking sube ese número en el mismo PR. Para agregar casos reales, ejecutar `npm run eval:search -- --record "<búsqueda>"` en un equipo con acceso a YouTube, completar `expected` a mano y agregar el resultado al archivo con `"source": "recorded"`.
