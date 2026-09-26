@@ -28,7 +28,7 @@ Media providers -> PreparedAudioStore -> FFmpeg PCM
 - `src/panel/`: authenticated localhost HTTP endpoints, templates and environment-file editing.
 - `src/observability/`: structured logs, playback metrics and sanitized errors.
 - `src/config.ts`: runtime schema and default settings.
-- `src/bootstrap/`: startup pieces that `src/main.ts` wires in order: exit and crash handling (`exit.ts`), setup mode (`setup-mode.ts`), the JSON stores and their flush (`stores.ts`), the panel's server view sync (`server-view.ts`) and shared yt-dlp options.
+- `src/bootstrap/`: startup pieces that `src/main.ts` wires in order: exit and crash handling (`exit.ts`), setup mode (`setup-mode.ts`), the JSON stores and their flush (`stores.ts`), the panel's server view sync (`server-view.ts`), chat command admission (`chat-commands.ts`: concurrency cap, per-user rate limit, talk-power gate) and shared yt-dlp options.
 
 ## Commands
 
