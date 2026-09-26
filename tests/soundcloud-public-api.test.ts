@@ -350,11 +350,16 @@ describe("SoundCloudPublicApi", () => {
     await new SoundCloudPublicApi({ fetch, clientIdCachePath: file }).getTrack(
       "https://soundcloud.com/artist/track",
     );
-    await vi.waitFor(() => {
-      expect(
-        (JSON.parse(readFileSync(file, "utf8")) as { value: string }).value,
-      ).toBe("abcdefghijklmnopqrstuvwx");
-    });
+    // The save is fire-and-forget; under a loaded full-suite run it can take
+    // longer than waitFor's 1 s default, which failed this test in CI.
+    await vi.waitFor(
+      () => {
+        expect(
+          (JSON.parse(readFileSync(file, "utf8")) as { value: string }).value,
+        ).toBe("abcdefghijklmnopqrstuvwx");
+      },
+      { timeout: 5_000 },
+    );
   });
 
   it("uses the cached client id when the homepage scrape breaks", async () => {
