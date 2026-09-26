@@ -52,6 +52,8 @@ Listening history supplies per-user and global statistics and autoplay ranking s
 
 The panel remains bound to `127.0.0.1` behind basic authentication and is reached through SSH. It edits only permitted settings and writes cookie files locally when requested. Secrets therefore exist in local runtime files; logs and API summaries must redact them. Panel-only setup mode does not connect the bot to TeamSpeak.
 
+The panel's browser code lives in `src/panel/scripts/*.js`: classic scripts that share one global scope per page, inlined into each page by `panelScript()` because the CSP allows inline scripts only. `npm run typecheck` checks them with `tsc -p tsconfig.panel.json` (DOM types, `checkJs`), `npm run lint` runs ESLint on them, and `npm run build` copies them to `dist/panel/scripts`. `tests/panel-scripts.test.ts` fails when a page's inline handler (`onclick="name(..."`) names a function its scripts do not define. Pages not yet moved still carry their script in `src/panel/panel-templates.ts`.
+
 ## Verification and extension
 
 Run `npm run check` and `npm run test:coverage`. Provider and TeamSpeak tests use controlled substitutes; live audio and deployment checks remain necessary in the target environment. TeamSpeak 6 is planned and must preserve the application-facing connection contract.
