@@ -61,6 +61,18 @@ Wait for `playerState` to be `idle`. Paused and buffering sessions also represen
 
 ## Backup, update and rollback
 
+`scripts/deploy.sh` runs the whole procedure below in one command on the host: it waits until the panel reports `playerState: "idle"`, stops the bot, backs up `data/` and the env file, checks out the target, runs `npm ci` and the build as the service user, starts the bot and waits until it stays active and the panel answers. If the build or the start fails, it checks out the previous commit, rebuilds and starts it, and exits with an error. It restarts the yt-dlp daemon only when its script changed and warns when unit templates changed.
+
+```bash
+sudo bash scripts/deploy.sh --dry-run
+sudo bash scripts/deploy.sh
+sudo bash scripts/deploy.sh --ref v4.0.0
+```
+
+The default target is `origin/main`; `--ref` accepts a branch, tag or commit. The idle check reads the panel settings from `APP_DIR/.env` (`--env-file` for `/etc/rhapsod.env`); without an enabled panel it refuses to restart unless `--force` is given. Backups go to `APP_DIR/../backups` (`--backup-dir`), private to root, keeping the newest five (`--keep`). Entries are relative, so a restore is `tar -xzf <backup> -C /home/rhapsod/rhapsod` for `data/` and `.env`. It does not restore data on rollback; use the reported backup when a data migration requires it. `--service rhapsod@blue` deploys a named instance.
+
+The manual procedure:
+
 Record the current commit with `git rev-parse HEAD`. During an idle maintenance window, stop the bot and archive the actual data and configuration paths so the backup is consistent:
 
 ```bash
