@@ -36,12 +36,15 @@ Persistence fixes, dependency updates, deployment repairs and consistent bilingu
 - Use the configured FFmpeg binary and User-Agent for prewarmed next-track streams; they used to fall back to the bundled ffmpeg-static.
 - Space outgoing chat messages one second apart even when several are queued at once, log messages dropped by the anti-flood queue, split texts longer than 1024 characters (such as `!help` or `!debug-server` on large servers) instead of losing them, and detect a heartbeat probe that never answers.
 - Accept `!channel-move` while the bot cannot talk in its channel: it is the command that moves it out, and it used to be ignored with every other command. Move permissions still apply.
+- Verify installer and weekly-update downloads against published checksums, use private temp directories instead of fixed `/tmp` paths, create the service user with a `nologin` shell and pin the POT provider server and plugin to the same release. Docker containers run as the unprivileged `node` user and Compose starts the POT provider on loopback.
 
 ## Upgrade
 
 Node.js >=22.19.0 is required. Back up configuration and data, run `npm ci` and `npm run build`, and restart when `/api/state` reports `playerState: "idle"`.
 
 If the panel uses a default password it will not start; set a unique `RHAPSOD_PANEL_PASSWORD` first. Existing installs keep the old `Requires=` line in `/etc/systemd/system/rhapsod.service` until the installer runs again: change it to `Wants=` and run `systemctl daemon-reload`.
+
+Docker installs: run `sudo chown -R 1000:1000 data .env` before recreating the containers, which now run as uid 1000.
 
 Docker Compose uses Linux host networking to keep the panel and daemon on localhost. Review the deployment guide before recreating containers. Existing data formats remain supported.
 

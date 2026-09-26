@@ -36,12 +36,15 @@ Correcciones de persistencia, actualización de dependencias, reparación del de
 - Usar el binario de FFmpeg y el User-Agent configurados para los flujos precargados de la pista siguiente; antes usaban el ffmpeg-static incluido.
 - Espaciar los mensajes de chat un segundo aunque se encolen varios a la vez, registrar los mensajes descartados por la cola anti-flood, dividir los textos de más de 1024 caracteres (como `!help` o `!debug-server` en servidores grandes) en lugar de perderlos, y detectar un sondeo de heartbeat que nunca responde.
 - Aceptar `!channel-move` mientras el bot no puede hablar en su canal: es el comando que lo saca de ahí y antes se ignoraba junto con todos los demás. Los permisos de movimiento siguen aplicando.
+- Comprobar las descargas del instalador y de la actualización semanal con las sumas publicadas, usar directorios temporales privados en lugar de rutas fijas en `/tmp`, crear el usuario de servicio con shell `nologin` y fijar el servidor y el complemento POT a la misma versión. Los contenedores Docker se ejecutan con el usuario sin privilegios `node` y Compose inicia el proveedor POT en loopback.
 
 ## Actualización
 
 Se requiere Node.js >=22.19.0. Respaldar configuración y datos, ejecutar `npm ci` y `npm run build`, y reiniciar cuando `/api/state` indique `playerState: "idle"`.
 
 Si el panel usa una contraseña por defecto no se iniciará; definir antes una `RHAPSOD_PANEL_PASSWORD` única. Las instalaciones existentes conservan la línea `Requires=` en `/etc/systemd/system/rhapsod.service` hasta volver a ejecutar el instalador: cambiarla por `Wants=` y ejecutar `systemctl daemon-reload`.
+
+Instalaciones con Docker: ejecutar `sudo chown -R 1000:1000 data .env` antes de recrear los contenedores, que ahora se ejecutan con uid 1000.
 
 Docker Compose utiliza la red del host Linux para mantener panel y servicio en localhost. Revisar la guía de despliegue antes de recrear contenedores. Los formatos de datos existentes siguen siendo compatibles.
 

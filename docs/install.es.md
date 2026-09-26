@@ -12,6 +12,8 @@ curl -fsSL https://raw.githubusercontent.com/Juanzaan/rhapsod/main/install.sh | 
 
 El instalador selecciona la última etiqueta estable, instala Node 22 si falta, yt-dlp, FFmpeg, el servicio Python y servicios auxiliares opcionales, y crea unidades systemd. Una instalación existente de Node debe ser >=22.19.0. Las instalaciones nuevas reciben `.env`, un archivo de cookies vacío y una contraseña generada; repetir el instalador conserva configuración y cookies.
 
+Las descargas se comprueban con las sumas que publica cada proyecto: `SHASUMS256.txt` para Node.js, `SHA2-256SUMS` para yt-dlp y el archivo MD5 del espejo de FFmpeg. Una diferencia detiene la instalación; la actualización semanal de yt-dlp conserva el binario instalado. El servidor POT y su complemento de yt-dlp usan la misma versión fijada. Un usuario de servicio nuevo recibe el shell `nologin`; ejecutar las tareas de mantenimiento con `sudo -u rhapsod <comando>`.
+
 El bot inicia solo el panel con `RHAPSOD_TS3_AUTO_CONNECT=false`. Abrir un túnel:
 
 ```bash
@@ -23,8 +25,8 @@ Abrir `http://127.0.0.1:8080/setup`, acceder con las credenciales mostradas y co
 Las opciones del instalador son `RHAPSOD_REF`, `RHAPSOD_APP_DIR`, `RHAPSOD_USER` y `RHAPSOD_SKIP_WARP=1`. Pasarlas explícitamente al proceso privilegiado:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Juanzaan/rhapsod/main/install.sh -o /tmp/rhapsod-install.sh
-sudo env RHAPSOD_SKIP_WARP=1 bash /tmp/rhapsod-install.sh
+curl -fsSL https://raw.githubusercontent.com/Juanzaan/rhapsod/main/install.sh -o "$HOME/rhapsod-install.sh"
+sudo env RHAPSOD_SKIP_WARP=1 bash "$HOME/rhapsod-install.sh"
 ```
 
 El instalador configura una actualización semanal de yt-dlp. Actualizar Rhapsod por separado mediante el [procedimiento de despliegue](deployment.es.md).
