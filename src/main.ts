@@ -7,7 +7,6 @@ import {
   createTs3Connection,
   DUPLICATE_INSTANCE_EXIT_CODE,
   DuplicateBotInstanceError,
-  withTimeout,
 } from "./adapters/ts3/ts3-connection.js";
 import { createRhapsodOpusEncoder } from "./audio/opus-encoder.js";
 import { createPcmStream, playFfmpegUrl } from "./audio/ffmpeg-player.js";
@@ -72,6 +71,7 @@ import {
 } from "./bootstrap/exit.js";
 import { startSetupMode } from "./bootstrap/setup-mode.js";
 import { ChatCommandGate } from "./bootstrap/chat-commands.js";
+import { Reconnector } from "./bootstrap/reconnect.js";
 import { ServerViewSync } from "./bootstrap/server-view.js";
 import { flushStores, openStores } from "./bootstrap/stores.js";
 import { ytDlpStackOptions } from "./bootstrap/yt-dlp-options.js";
@@ -214,10 +214,6 @@ async function main(): Promise<void> {
     telemetry.logSummary("periodic");
     void telemetry.save();
   }, 15 * 60_000).unref();
-  const maxReconnectAttempts = 5;
-  // Reconnect attempts must fail fast: a stuck handshake would otherwise eat
-  // the whole startup-style timeout (minutes) before the next attempt runs.
-  const reconnectConnectTimeoutMs = 30_000;
   const encoder = await createRhapsodOpusEncoder({
     bitrate: config.RHAPSOD_OPUS_BITRATE,
     complexity: config.RHAPSOD_OPUS_COMPLEXITY,
@@ -611,60 +607,34 @@ async function main(): Promise<void> {
     logger.info({ restoredCount }, "Restored queued tracks after restart");
   }
 
-  let reconnecting = false;
   let shuttingDown = false;
-  const stopHeartbeat = connection.onConnectionLost((reason) => {
-    if (reconnecting || shuttingDown) return;
-    reconnecting = true;
-    metrics.recordDisconnect(reason);
-    playback.pause();
-    void (async () => {
-      for (let attempt = 1; attempt <= maxReconnectAttempts; attempt++) {
-        const delayMs = Math.min(80, 5 * 2 ** (attempt - 1)) * 1_000;
-        logger.warn(
-          {
-            attempt,
-            delaySeconds: delayMs / 1_000,
-            maxReconnectAttempts,
-            reason,
-          },
-          "TeamSpeak connection lost; reconnecting",
-        );
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
-        try {
-          await withTimeout(
-            // Skip the duplicate check here: our own ghost can still be
-            // listed right after a dropped connection, and refusing there
-            // would keep a live bot down on every network blip.
-            connection.connect({ skipDuplicateCheck: true }),
-            reconnectConnectTimeoutMs,
-            "Reconnect attempt timed out",
-          );
-          logger.info({ attempt }, "Reconnected to TeamSpeak 3");
-          await serverView.resync();
-          void serverView.resync({ full: true });
-          await logCurrentChannel("reconnect");
-          reconnecting = false;
-          await checkTalkPower("reconnect");
-          playback.resume();
-          return;
-        } catch (error) {
-          logger.error({ attempt, err: error }, "TeamSpeak reconnect failed");
-          // A timed-out attempt may leave a half-open client behind;
-          // make sure the next attempt starts from a clean state.
-          await connection.disconnect().catch(() => undefined);
-        }
-      }
-      logger.error(
-        { maxReconnectAttempts },
-        "Reconnect limit reached; flushing state and stopping bot",
-      );
+  const reconnector = new Reconnector({
+    connection,
+    isShuttingDown: () => shuttingDown,
+    logger,
+    onDisconnect: (reason) => {
+      metrics.recordDisconnect(reason);
+      playback.pause();
+    },
+    onGiveUp: async () => {
       shuttingDown = true;
       stopHeartbeat();
       playback.stop(false);
       await connection.disconnect().catch(() => undefined);
       await exits.exit(1);
-    })();
+    },
+    onReconnected: async () => {
+      await serverView.resync();
+      void serverView.resync({ full: true });
+      await logCurrentChannel("reconnect");
+    },
+    onResumed: async () => {
+      await checkTalkPower("reconnect");
+      playback.resume();
+    },
+  });
+  const stopHeartbeat = connection.onConnectionLost((reason) => {
+    void reconnector.connectionLost(reason);
   });
 
   if (config.RHAPSOD_AUDIO_TEST_TONE_SECONDS > 0) {
