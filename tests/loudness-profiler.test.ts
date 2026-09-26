@@ -38,6 +38,20 @@ describe("LoudnessProfiler", () => {
     );
   });
 
+  it("measures from the music start when an intro is trimmed", async () => {
+    const execFile = vi.fn((_file: string, _args: readonly string[]) =>
+      Promise.resolve({ stdout: MEASURED_JSON }),
+    );
+    const profiler = new LoudnessProfiler({ execFile });
+    profiler.measure("https://youtu.be/abc", "https://media.example/abc", 14);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const args = execFile.mock.calls[0]?.[1] ?? [];
+    expect(args.slice(0, args.indexOf("-i"))).toEqual(
+      expect.arrayContaining(["-ss", "14"]),
+    );
+  });
+
   it("returns undefined for an unmeasured source", () => {
     const profiler = new LoudnessProfiler();
     expect(profiler.cached("https://youtu.be/unknown")).toBeUndefined();

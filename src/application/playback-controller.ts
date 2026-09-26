@@ -134,6 +134,7 @@ interface WarmStream {
   readonly source: string;
   readonly stream: FfmpegPcmStream;
   readonly startSeconds?: number;
+  readonly endSeconds?: number;
 }
 
 const AUDIO_URL_REFRESH_AHEAD_MS = 3 * 60_000;
@@ -224,6 +225,8 @@ export class PlaybackController {
   // Track position where the current session started; framesSent counts
   // from zero in every session.
   #sessionOffsetMs = 0;
+  // Where the current play stops when the music ends before the video does.
+  #sessionEndSeconds: number | undefined;
   // A play whose session was replaced by a restart and whose finish is
   // therefore not reported yet. The resumed session reports it; if the
   // resume never plays (skip, stop, resolution failure) it is reported here.
@@ -733,6 +736,7 @@ export class PlaybackController {
         let session: FfmpegPlaybackSession;
         let prewarmed = false;
         let startOffsetSeconds = seekSeconds ?? 0;
+        let sessionEndSeconds = endSeconds;
         const createdAt = Date.now();
         try {
           if (!resuming) {
@@ -743,6 +747,7 @@ export class PlaybackController {
               // can differ when the segment lookup answered only for one of
               // the two paths.
               startOffsetSeconds = warm.startSeconds ?? 0;
+              sessionEndSeconds = warm.endSeconds;
               session = this.#createPlayback(
                 resolved.url,
                 this.#encoder,
@@ -775,6 +780,7 @@ export class PlaybackController {
         session.player.setVolume(volumeToGain(this.#volumePercent));
         this.#session = session;
         this.#sessionOffsetMs = startOffsetSeconds * 1_000;
+        this.#sessionEndSeconds = sessionEndSeconds;
         this.#autoplayArmed = true;
         this.#driverState = "playing";
         if (resuming) {
@@ -1235,12 +1241,17 @@ export class PlaybackController {
     const framesSent = session.player.metrics.framesSent;
     if (framesSent === 0) return;
     const playedMs = framesSent * FRAME_DURATION_MS;
-    const durationMs = current.durationSeconds
-      ? current.durationSeconds * 1_000
-      : undefined;
+    const endSeconds = this.#sessionEndSeconds ?? current.durationSeconds;
+    // The session plays from its start offset (a trimmed intro or a seek) to
+    // the music end, not the whole video: measured on the full duration, a
+    // long trim put the midpoint past the end and the handoff went cold.
+    const spanMs =
+      endSeconds === undefined
+        ? undefined
+        : endSeconds * 1_000 - this.#sessionOffsetMs;
     // Prewarm only when the current track is past its midpoint or near its end,
     // so the next ffmpeg process is not idle for an entire long track.
-    const halfwayMs = durationMs === undefined ? 30_000 : durationMs / 2;
+    const halfwayMs = spanMs === undefined ? 30_000 : spanMs / 2;
     if (playedMs < halfwayMs) return;
     this.#startPrewarm(next);
   }
@@ -1259,7 +1270,11 @@ export class PlaybackController {
         // Measuring an endless stream would burn a 120s ffmpeg sample for a
         // profile live playback never uses (see the loudnorm bypass above).
         if (next.durationSeconds !== undefined) {
-          this.#loudnessProfiler?.measure(next.source, url);
+          this.#loudnessProfiler?.measure(
+            next.source,
+            url,
+            bounds?.startSeconds,
+          );
         }
         if (
           this.#current === undefined ||
@@ -1292,6 +1307,9 @@ export class PlaybackController {
           source: next.source,
           stream,
           ...(startSeconds === undefined ? {} : { startSeconds }),
+          ...(bounds?.endSeconds === undefined
+            ? {}
+            : { endSeconds: bounds.endSeconds }),
         };
         return stream;
       })

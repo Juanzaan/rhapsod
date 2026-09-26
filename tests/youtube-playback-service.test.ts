@@ -3675,6 +3675,45 @@ describe("YoutubePlaybackService", () => {
     );
   });
 
+  it("prewarms at the midpoint of the trimmed track, not of the video", async () => {
+    const metrics = {
+      bufferedBytes: 0,
+      framesSent: 0,
+      maxBufferedBytes: 3_840,
+      rebufferEvents: 0,
+      underruns: 0,
+    };
+    const { createPcmStreamMock, resolver, service } = setup({
+      metrics,
+      nonMusicSegments: {
+        boundsFor: (track) =>
+          Promise.resolve(
+            track.id === "first"
+              ? { endSeconds: 100, startSeconds: 10 }
+              : undefined,
+          ),
+      },
+      prewarmNext: true,
+    });
+    resolver.getTrack.mockImplementation((resource: { id: string }) =>
+      Promise.resolve({
+        durationSeconds: 240,
+        id: resource.id,
+        title: `Track ${resource.id}`,
+        webpageUrl: `https://www.youtube.com/watch?v=${resource.id}`,
+      }),
+    );
+    await service.enqueue("https://youtu.be/first", "user-1");
+    await service.enqueue("https://youtu.be/second", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+    // 50 s into a play that runs from 10 s to 100 s: past its midpoint, but
+    // short of half the 240 s video.
+    metrics.framesSent = Math.ceil(50_000 / 20);
+    await new Promise((resolve) => setTimeout(resolve, 180));
+
+    expect(createPcmStreamMock).toHaveBeenCalled();
+  });
+
   it("marks a play started from the prewarmed stream", async () => {
     const metrics = {
       bufferedBytes: 0,

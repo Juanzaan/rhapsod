@@ -97,19 +97,27 @@ export class LoudnessProfiler {
     return entry.profile;
   }
 
-  measure(source: string, url: string): void {
+  /**
+   * startSeconds skips a non-music intro, which would otherwise pull the
+   * measured loudness toward speech level.
+   */
+  measure(source: string, url: string, startSeconds?: number): void {
     if (this.cached(source) !== undefined) return;
     if (this.#measuring.has(source)) return;
     if (this.#activeMeasurements >= MAX_CONCURRENT) return;
     this.#measuring.add(source);
     this.#activeMeasurements++;
-    void this.#measureImpl(source, url).finally(() => {
+    void this.#measureImpl(source, url, startSeconds).finally(() => {
       this.#measuring.delete(source);
       this.#activeMeasurements--;
     });
   }
 
-  async #measureImpl(source: string, url: string): Promise<void> {
+  async #measureImpl(
+    source: string,
+    url: string,
+    startSeconds: number | undefined,
+  ): Promise<void> {
     let stdout: string;
     const env = ffmpegEnvironment(this.#egressProxyUrl);
     try {
@@ -121,6 +129,9 @@ export class LoudnessProfiler {
           "error",
           "-nostdin",
           ...ffmpegEgressArguments(this.#egressProxyUrl),
+          ...(startSeconds !== undefined && startSeconds > 0
+            ? ["-ss", String(startSeconds)]
+            : []),
           "-t",
           String(SAMPLE_SECONDS),
           "-i",
