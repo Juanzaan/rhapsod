@@ -314,6 +314,26 @@ class HandlerTest(unittest.TestCase):
         status, body = self.get("/anything?url=https%3A%2F%2Fyoutu.be%2F" + VIDEO)
         self.assertEqual((status, body), (404, {"error": "not found"}))
 
+    def test_each_response_goes_out_in_one_write(self):
+        # Regression: headers and body in two writes left Windows clients
+        # waiting for the body until they timed out.
+        class Recorder:
+            def __init__(self):
+                self.writes = []
+
+            def write(self, data):
+                self.writes.append(bytes(data))
+
+        handler = daemon_module.Handler.__new__(daemon_module.Handler)
+        handler.protocol_version = "HTTP/1.0"
+        handler.wfile = Recorder()
+        handler._json({"error": "missing url"}, status=404)
+        self.assertEqual(len(handler.wfile.writes), 1)
+        head, _, body = handler.wfile.writes[0].partition(b"\r\n\r\n")
+        self.assertTrue(head.startswith(b"HTTP/1.0 404 Not Found\r\n"))
+        self.assertIn(b"Content-Length: %d" % len(body), head)
+        self.assertEqual(json.loads(body), {"error": "missing url"})
+
     def test_missing_url_and_handler_errors_answer_json(self):
         self.assertEqual(self.get("/resolve"), (200, {"error": "missing url"}))
         status, body = self.get("/resolve?url=raise")
