@@ -66,6 +66,7 @@ Correcciones de persistencia, actualización de dependencias, reparación del de
 - Endurecer todas las unidades systemd: dispositivos privados, parámetros, módulos, registros, grupos de control y reloj del kernel protegidos, espacios de nombres y familias de direcciones restringidos, sin capacidades, filtro de llamadas `@system-service` y umask privada. El acceso a archivos no cambia.
 - Actualizar dependencias: dotenv 18 y libopus-wasm 0.4 (salida Opus verificada idéntica byte a byte), además de versiones compatibles de Hono, Zod, undici, Vitest, ESLint y Prettier. Dependabot ya no propone versiones mayores de `@types/node` por encima del entorno Node 22 admitido.
 - Dejar de notificar a un manejador de conexión perdida después de cancelar su suscripción: los eventos de expulsión y desconexión se registran una sola vez en lugar de una por suscripción.
+- Agregar `scripts/deploy.sh`: espera a que no suene nada, detiene el bot, respalda los datos y el archivo de entorno, compila la revisión elegida con el usuario del servicio, la inicia y vuelve sola al commit anterior si la compilación o el inicio fallan.
 
 ## Actualización
 

@@ -66,6 +66,7 @@ Persistence fixes, dependency updates, deployment repairs and consistent bilingu
 - Harden every systemd unit: private devices, protected kernel tunables, modules, logs, control groups and clock, restricted namespaces and address families, no capabilities, `@system-service` syscall filter and a private umask. File access is unchanged.
 - Update dependencies: dotenv 18 and libopus-wasm 0.4 (Opus output verified byte-identical), plus compatible Hono, Zod, undici, Vitest, ESLint and Prettier releases. Dependabot no longer proposes `@types/node` majors beyond the supported Node 22 runtime.
 - Stop notifying a connection-lost handler after it unsubscribes: kicked and disconnected events are bound once instead of once per subscription.
+- Add `scripts/deploy.sh`: waits until nothing is playing, stops the bot, backs up data and the env file, builds the target as the service user, starts it and rolls back to the previous commit on its own when the build or the start fails.
 
 ## Upgrade
 
