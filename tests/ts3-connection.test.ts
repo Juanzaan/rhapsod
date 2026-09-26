@@ -628,3 +628,28 @@ describe("heartbeat", () => {
     }
   });
 });
+
+describe("connection lost subscriptions", () => {
+  it("binds client events once and stops notifying after unsubscribe", async () => {
+    const m = await ts3Mock();
+    const connection = createTs3Connection(testConfig(), identity, logger);
+    const first = vi.fn();
+    const second = vi.fn();
+    const stopFirst = connection.onConnectionLost(first);
+    connection.onConnectionLost(second);
+
+    const kickedBindings = m.__client.on.mock.calls.filter(
+      (call) => call[0] === "kicked",
+    );
+    expect(kickedBindings).toHaveLength(1);
+
+    m.__emit("disconnected", undefined);
+    expect(first).toHaveBeenCalledWith("disconnected");
+    expect(second).toHaveBeenCalledTimes(1);
+
+    stopFirst();
+    m.__emit("kicked", undefined);
+    expect(first).toHaveBeenCalledTimes(1);
+    expect(second).toHaveBeenLastCalledWith("kicked");
+  });
+});

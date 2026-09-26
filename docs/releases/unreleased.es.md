@@ -52,6 +52,7 @@ Correcciones de persistencia, actualización de dependencias, reparación del de
 - Aceptar `!channel-move` mientras el bot no puede hablar en su canal: es el comando que lo saca de ahí y antes se ignoraba junto con todos los demás. Los permisos de movimiento siguen aplicando.
 - Comprobar las descargas del instalador y de la actualización semanal con las sumas publicadas, usar directorios temporales privados en lugar de rutas fijas en `/tmp`, crear el usuario de servicio con shell `nologin` y fijar el servidor y el complemento POT a la misma versión. Los contenedores Docker se ejecutan con el usuario sin privilegios `node` y Compose inicia el proveedor POT en loopback.
 - Enviar seguidas las partes de un mensaje de chat dividido: otro mensaje encolado mientras tanto ya no puede quedar entre ellas.
+- Dejar de notificar a un manejador de conexión perdida después de cancelar su suscripción: los eventos de expulsión y desconexión se registran una sola vez en lugar de una por suscripción.
 
 ## Actualización
 
