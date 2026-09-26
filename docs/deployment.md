@@ -23,7 +23,7 @@ Persist the whole data directory, including `ts3-identity.txt`, `state.json`, pl
 
 ## systemd
 
-The installer creates units appropriate to its paths. Manual-install examples live in `deploy/systemd/`; inspect their `User`, `WorkingDirectory`, executable and dependency paths before copying them. The bot unit requires the optional daemon by default; remove that dependency if using only executable fallback.
+The installer creates units appropriate to its paths. Manual-install examples live in `deploy/systemd/`; inspect their `User`, `WorkingDirectory`, executable and dependency paths before copying them. The bot unit wants the optional daemon (`Wants=`): it starts it when present and keeps running on the executable fallback when it stops.
 
 For `/etc/rhapsod.env`, add an override with `sudo systemctl edit rhapsod`:
 
@@ -40,6 +40,8 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now rhapsod-ytdlp-daemon rhapsod
 journalctl -u rhapsod -n 100 --no-pager
 ```
+
+The units isolate kernel tunables, devices, namespaces and capabilities and filter syscalls to `@system-service`; file access is not narrowed. Review the result with `systemd-analyze security rhapsod`. If a service logs `Operation not permitted` after an update, check `journalctl` for the blocked call before relaxing the unit with `sudo systemctl edit`.
 
 The daemon uses `scripts/yt-dlp-daemon.py`, Python's `yt-dlp[default]` package and optional extraction plugins. Its default address is `127.0.0.1:8765`; set `RHAPSOD_YTDLP_DAEMON_URL=http://127.0.0.1:8765`. It falls back to the executable when unavailable. Set `RHAPSOD_MAX_CONCURRENT_YTDLP_JOBS` to 1-4 only when overriding the CPU-adaptive default.
 

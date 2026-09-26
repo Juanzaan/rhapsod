@@ -53,6 +53,7 @@ Persistence fixes, dependency updates, deployment repairs and consistent bilingu
 - Accept `!channel-move` while the bot cannot talk in its channel: it is the command that moves it out, and it used to be ignored with every other command. Move permissions still apply.
 - Verify installer and weekly-update downloads against published checksums, use private temp directories instead of fixed `/tmp` paths, create the service user with a `nologin` shell and pin the POT provider server and plugin to the same release. Docker containers run as the unprivileged `node` user and Compose starts the POT provider on loopback.
 - Send the parts of a split chat message back to back: another message queued meanwhile can no longer land between them.
+- Harden every systemd unit: private devices, protected kernel tunables, modules, logs, control groups and clock, restricted namespaces and address families, no capabilities, `@system-service` syscall filter and a private umask. File access is unchanged.
 - Update dependencies: dotenv 18 and libopus-wasm 0.4 (Opus output verified byte-identical), plus compatible Hono, Zod, undici, Vitest, ESLint and Prettier releases. Dependabot no longer proposes `@types/node` majors beyond the supported Node 22 runtime.
 - Stop notifying a connection-lost handler after it unsubscribes: kicked and disconnected events are bound once instead of once per subscription.
 
