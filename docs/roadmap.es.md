@@ -20,7 +20,7 @@ Los puntos están ordenados por impacto visible para los usuarios dividido por r
 ### Fase 1: medir
 
 1. **Indicadores de reproducción.** Registrar por pista: tiempo desde el comando en el chat hasta el primer cuadro de audio, pausa entre el final de una pista y el inicio de la siguiente, cortes y recargas del búfer, y si la pista siguiente estaba precargada. Ampliar `scripts/log-stats.mjs` con un informe (p50/p90/p99 por indicador). Impacto: cada cambio posterior de reproducción tiene un número. Riesgo: bajo, solo registros. Archivos: `playback-controller.ts`, `main.ts`, `scripts/log-stats.mjs`.
-2. **Endpoint de métricas.** `GET /api/metrics` en el panel en formato de texto de Prometheus (contadores e histogramas de los indicadores anteriores), con la autenticación y el enlace local actuales. Impacto: paneles y alertas sin leer registros. Riesgo: bajo. Archivos: `panel-server.ts` (coordinado con el carril A antes de empezar), `observability/metrics.ts`.
+2. **Endpoint de métricas.** `GET /api/metrics` en el panel en formato de texto de Prometheus (contadores e histogramas de los indicadores anteriores), con la autenticación y el enlace local actuales. Impacto: paneles y alertas sin leer registros. Riesgo: bajo. Archivos: `panel-server.ts` (acordado con el carril A: solo rutas, el middleware de autenticación no cambia), `observability/metrics.ts`.
 
 ### Fase 2: reproducción
 
@@ -38,7 +38,7 @@ Los puntos están ordenados por impacto visible para los usuarios dividido por r
 
 9. **Módulo central de mensajes.** Mover los 56 textos literales del chat en `command-handlers.ts` y los del controlador a `lib/messages.ts`, con un tono uniforme y listos para un segundo idioma. Riesgo: bajo, cubierto por las pruebas de los manejadores.
 10. **Mejor `!help`.** Ahora que los mensajes largos se dividen, `!help` muestra una categoría por página con un pie que indica la siguiente, y `!help <comando>` explica un solo comando con sus alias. Riesgo: bajo.
-11. **Votación opcional para saltar.** `RHAPSOD_VOTE_SKIP` (desactivado por defecto): cuando alguien que no pidió la pista envía `!skip`, cuenta como voto, y la pista se salta cuando votó más de la mitad de los oyentes del canal del bot. Necesita la lista de miembros del canal del adaptador de TeamSpeak (carril A). Riesgo: medio.
+11. **Votación opcional para saltar.** `RHAPSOD_VOTE_SKIP` (desactivado por defecto): cuando alguien que no pidió la pista envía `!skip`, cuenta como voto, y la pista se salta cuando votó más de la mitad de los oyentes del canal del bot. Necesita un método de la conexión de TeamSpeak que liste los UID de los clientes comunes del canal del bot; lo agrega primero el carril A. Riesgo: medio.
 
 ### Fase 5: arquitectura y herramientas
 
@@ -46,7 +46,13 @@ Los puntos están ordenados por impacto visible para los usuarios dividido por r
 13. **Script de humo.** `scripts/smoke.mjs` compila, inicia el bot en modo de configuración con un directorio de datos temporal, consulta los endpoints de salud y estado del panel y lo detiene. Corre en CI. Riesgo: bajo.
 14. **Dividir `main.ts`.** Extraer la inicialización en módulos con pruebas: almacenamiento, reproducción, panel y apagado. `main.ts` conserva solo el orden de arranque. Riesgo: medio; se hace después de los puntos 12 y 13 para que el script de humo lo proteja.
 15. **Scripts del panel como archivos reales.** Sacar el JavaScript en línea del panel de las cadenas de plantilla a archivos que revisen ESLint y `tsc`, servidos en línea igual que ahora para mantener la CSP actual. Riesgo: medio, el panel es grande; va al final de esta fase.
-16. **Servidor TeamSpeak simulado (carril A).** Un servidor con guion o datos grabados para ejercitar el adaptador de TeamSpeak y la inicialización sin un servidor real. Corresponde a `src/adapters/ts3/`; se propone para la sesión del carril A.
+16. **Servidor TeamSpeak simulado (carril A).** Un servidor con guion o datos grabados para ejercitar el adaptador de TeamSpeak y la inicialización sin un servidor real. Corresponde a `src/adapters/ts3/`; lo toma la sesión del carril A.
+
+### Propuestos por el carril A (abiertos a veto)
+
+18. **Aplicación de escritorio para Windows.** `tools/desktop` (C#, WinForms y WebView2): gestor del túnel SSH, panel integrado, estado en la bandeja del sistema, reinicio y actualización seguros. Inicia sesión con tokens del panel de corta duración emitidos por SSH en lugar de una contraseña guardada en el programa. El soporte de tokens cambia la autenticación del panel después de que se integre el punto 2.
+19. **Script de despliegue.** `scripts/deploy.sh`: esperar a que no suene nada, respaldar, actualizar, compilar, reiniciar y volver atrás si la nueva compilación no arranca.
+20. **Refuerzo de CI.** `systemd-analyze verify` para las unidades, `shellcheck` para los scripts, un runner de Windows y acciones fijadas por SHA de commit.
 
 ### Solo propuesta: almacenamiento
 

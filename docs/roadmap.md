@@ -20,7 +20,7 @@ Items are ordered by user-visible impact divided by risk. Each one ships as its 
 ### Phase 1: measure
 
 1. **Playback KPIs.** Record, per track: time from the chat command to the first audio frame, the gap between the end of one track and the start of the next, underruns and rebuffers, and whether the next track was prewarmed. Extend `scripts/log-stats.mjs` with a KPI report (p50/p90/p99 per metric). Impact: every later playback change gets a number. Risk: low, logging only. Files: `playback-controller.ts`, `main.ts`, `scripts/log-stats.mjs`.
-2. **Metrics endpoint.** `GET /api/metrics` on the panel in Prometheus text format (counters and the KPI histograms above), behind the existing auth and loopback bind. Impact: dashboards and alerts without log scraping. Risk: low. Files: `panel-server.ts` (coordinated with lane A before starting), `observability/metrics.ts`.
+2. **Metrics endpoint.** `GET /api/metrics` on the panel in Prometheus text format (counters and the KPI histograms above), behind the existing auth and loopback bind. Impact: dashboards and alerts without log scraping. Risk: low. Files: `panel-server.ts` (agreed with lane A: routes only, the auth middleware stays as is), `observability/metrics.ts`.
 
 ### Phase 2: playback
 
@@ -38,7 +38,7 @@ Items are ordered by user-visible impact divided by risk. Each one ships as its 
 
 9. **Central messages module.** Move the 56 literal chat strings in `command-handlers.ts` and the ones in the controller into `lib/messages.ts`, one consistent voice, ready for a second language. Risk: low, covered by the handler tests.
 10. **Better `!help`.** Now that long messages split, `!help` shows one category per page with a short footer to the next, and `!help <command>` explains a single command with its aliases. Risk: low.
-11. **Optional vote skip.** `RHAPSOD_VOTE_SKIP` (off by default): when a non-requester sends `!skip`, it counts as a vote, and the track skips when more than half of the listeners in the bot's channel voted. Needs the channel member list from the TeamSpeak adapter (lane A). Risk: medium.
+11. **Optional vote skip.** `RHAPSOD_VOTE_SKIP` (off by default): when a non-requester sends `!skip`, it counts as a vote, and the track skips when more than half of the listeners in the bot's channel voted. Needs a method on the TeamSpeak connection that lists the UIDs of regular clients in the bot's channel; lane A adds it first. Risk: medium.
 
 ### Phase 5: architecture and tooling
 
@@ -46,7 +46,13 @@ Items are ordered by user-visible impact divided by risk. Each one ships as its 
 13. **Smoke script.** `scripts/smoke.mjs` builds, boots the bot in setup mode with a temporary data directory, calls the panel health and state endpoints, and shuts it down. Runs in CI. Risk: low.
 14. **Split `main.ts`.** Extract the wiring into modules with tests: storage, playback stack, panel, shutdown. `main.ts` keeps only the order of startup. Risk: medium; done after items 12 and 13 so the smoke script guards it.
 15. **Panel scripts as real files.** Move the dashboard's inline JavaScript out of template strings into files that ESLint and `tsc` check, still served inline to keep the current CSP. Risk: medium, the dashboard is large; done last in this phase.
-16. **Fake TeamSpeak harness (lane A).** A scripted server or recorded fixtures to exercise the TeamSpeak adapter and the startup wiring without a live server. Belongs to `src/adapters/ts3/`; proposed for the lane A session.
+16. **Fake TeamSpeak harness (lane A).** A scripted server or recorded fixtures to exercise the TeamSpeak adapter and the startup wiring without a live server. Belongs to `src/adapters/ts3/`; taken by the lane A session.
+
+### Proposed by lane A (open for veto)
+
+18. **Windows desktop companion.** `tools/desktop` (C#, WinForms and WebView2): SSH tunnel manager, embedded panel, tray status, safe restart and update. It signs in with short-lived panel tokens issued over SSH instead of a password stored in the program. The token support changes the panel auth after item 2 merges.
+19. **Deploy script.** `scripts/deploy.sh`: wait until nothing plays, back up, pull, build, restart, and roll back when the new build fails to start.
+20. **CI hardening.** `systemd-analyze verify` for the units, `shellcheck` for the scripts, a Windows runner, and actions pinned by commit SHA.
 
 ### Proposal only: storage
 
