@@ -1146,6 +1146,28 @@ export class PlaybackController {
           });
       }
     }
+    this.#measureLoudness(queueSnapshot[0]);
+  }
+
+  // The warm stream is built at the current track's midpoint with whatever
+  // profile is cached by then. Measuring only at that moment meant the
+  // profile was never ready for a first play; starting here gives the
+  // 120 s sample until the midpoint to finish.
+  #measureLoudness(next: Track | undefined): void {
+    const profiler = this.#loudnessProfiler;
+    // With nothing playing, the head of the queue is about to cold-start:
+    // a second download of the same audio would compete with it.
+    if (this.#current === undefined) return;
+    if (profiler === undefined || next?.durationSeconds === undefined) return;
+    if (profiler.cached(next.source) !== undefined) return;
+    void this.#preparedStore
+      .resolve(next, "prefetch", (t, signal) =>
+        this.#resolvePlayableAudio(t, signal),
+      )
+      .then((url) => profiler.measure(next.source, url))
+      .catch(() => {
+        // The prefetch above owns the failure; measuring is best-effort.
+      });
   }
 
   isSessionStable(): boolean {
