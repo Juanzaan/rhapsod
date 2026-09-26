@@ -41,7 +41,7 @@ FFmpeg produce PCM estéreo de 48 kHz. Opus codifica tramas de 20 ms dentro de 4
 
 El estado reside en `RHAPSOD_DATA_DIR`, opcionalmente separado por `RHAPSOD_INSTANCE_ID`. Los almacenes JSON usan reemplazo mediante archivo temporal y escrituras serializadas o agrupadas. El cierre espera escrituras pendientes. Los almacenes sin usar o de solo lectura no deben sobrescribir datos al cerrar.
 
-El historial proporciona estadísticas personales y globales y señales para la reproducción automática. El peso de sesión caduca con la inactividad y las escuchas antiguas pierden peso. Los límites de pistas se aplican en memoria y disco. La energía deducida del título es una estimación de clasificación, no un análisis del audio.
+El historial proporciona estadísticas personales y globales y señales para la reproducción automática; las estadísticas globales solo cuentan pedidos de personas, más los saltos de pistas elegidas por la reproducción automática. El peso de sesión caduca con la inactividad y las escuchas antiguas pierden peso. Los límites de pistas se aplican en memoria y disco. La energía deducida del título es una estimación de clasificación, no un análisis del audio.
 
 ## Administración
 
