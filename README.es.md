@@ -90,6 +90,7 @@ npm run test:coverage
 - [Versiones y publicación](docs/releases.es.md)
 - [Plan de trabajo](docs/roadmap.es.md) e [investigación](docs/research-ts3-bots.es.md)
 - [Enrutamiento opcional de voz](docs/warp-voice-egress.es.md)
+- [Datos y privacidad](docs/privacy.es.md): qué se guarda de cada usuario y cómo borrarlo
 - [Colaboración](CONTRIBUTING.md) y [política de seguridad](SECURITY.es.md)
 
 Informar problemas mediante la [plantilla](https://github.com/Juanzaan/rhapsod/issues/new?template=bug_report.yml), con la versión de `package.json`, registros sin secretos y pasos de reproducción.
