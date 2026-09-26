@@ -19,6 +19,121 @@ afterEach(() => {
     rmSync(dir, { force: true, recursive: true });
 });
 
+describe("ListeningHistory autoplay DJ signals", () => {
+  it("keeps autoplay picks out of channel plays but counts skips on them", () => {
+    const history = new ListeningHistory(makeTempFile());
+    const pick = { id: "pickpickpiK", title: "Artist - Autoplay Pick" };
+    history.recordStart("autoplay", pick);
+    history.recordFinish("autoplay", pick, true);
+    // Nobody asked for it: no plays, no completes, not in !tops.
+    expect(history.topTracks(10)).toEqual([]);
+    expect(history.artistScores().get("artist") ?? 0).toBe(0);
+    expect(history.hasHeard(pick.id)).toBe(true);
+
+    history.recordStart("autoplay", pick);
+    history.recordFinish("autoplay", pick, false);
+    history.recordStart("uid-1", pick);
+    // A person skipping it and a person requesting it both register.
+    expect(history.topTracks(10)).toMatchObject([{ plays: 1, skips: 1 }]);
+  });
+
+  it("returns rested, rarely skipped favorites ranked by completions", () => {
+    vi.useFakeTimers();
+    try {
+      const history = new ListeningHistory(makeTempFile());
+      vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+      const loved = { id: "lovedlovedL", title: "Soda - Loved" };
+      const requested = { id: "requestedrQ", title: "Band - Requested" };
+      const skipped = { id: "skippedskiP", title: "Band - Skipped" };
+      for (let i = 0; i < 3; i++) {
+        history.recordStart("uid-1", loved);
+        history.recordFinish("uid-1", loved, true);
+        history.recordStart("uid-2", requested);
+        history.recordStart("uid-2", skipped);
+        history.recordFinish("uid-2", skipped, false);
+      }
+      history.recordStart("uid-1", { id: "deadbeef1234", title: "Direct" });
+      vi.setSystemTime(new Date("2026-01-01T07:00:00Z"));
+      history.recordStart("uid-1", { id: "freshfreshF", title: "X - Fresh" });
+
+      const ids = history.classicSeeds(10).map((seed) => seed.id);
+      // The fresh track is still resting; skip-heavy and non-YouTube tracks
+      // never come back; completions outrank bare requests.
+      expect(ids).toEqual(["lovedlovedL", "requestedrQ"]);
+      expect(
+        history.classicSeeds(10, Date.parse("2026-01-01T13:00:00Z")),
+      ).toHaveLength(3);
+      expect(history.classicSeeds(1)).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("seeds discovery from the most played artists with their best track", () => {
+    const history = new ListeningHistory(makeTempFile());
+    const hit = { id: "sodahitsodA", title: "Soda Stereo - Hit" };
+    const deep = { id: "sodadeepsoD", title: "Soda Stereo - Deep Cut" };
+    history.recordStart("uid-1", hit);
+    history.recordFinish("uid-1", hit, true);
+    history.recordStart("uid-1", deep);
+    history.recordStart("uid-1", deep);
+    history.recordStart("uid-1", { id: "onceonceonC", title: "Other - Once" });
+    history.recordStart("autoplay", { id: "autoautoauT", title: "Bot - Pick" });
+
+    const seeds = history.channelArtistSeeds(5);
+    expect(seeds.map((seed) => seed.artist)).toEqual(["Soda Stereo", "Other"]);
+    // The artist seed is the track the channel actually finished.
+    expect(seeds[0]?.id).toBe("sodahitsodA");
+  });
+
+  it("removes autoplay's own plays from a version 1 store exactly once", async () => {
+    const file = makeTempFile();
+    writeFileSync(
+      file,
+      JSON.stringify({
+        version: 1,
+        global: {
+          sharedsharE: {
+            artist: "A",
+            title: "A - Shared",
+            plays: 5,
+            completes: 4,
+            skips: 0,
+            lastPlayedAt: 1,
+          },
+        },
+        users: {
+          autoplay: {
+            plays: [{ at: 1, completed: true, id: "sharedsharE" }],
+            tracks: {
+              sharedsharE: {
+                title: "A - Shared",
+                plays: 3,
+                completes: 3,
+                skips: 0,
+                lastPlayedAt: 1,
+              },
+            },
+          },
+        },
+      }),
+    );
+    const upgraded = new ListeningHistory(file);
+    expect(upgraded.topTracks(1)).toMatchObject([{ plays: 2, completes: 1 }]);
+    upgraded.recordStart("uid-1", { id: "otherothrO", title: "B - Other" });
+    await upgraded.flush();
+    const stored = JSON.parse(readFileSync(file, "utf8")) as {
+      version: number;
+    };
+    expect(stored.version).toBe(2);
+
+    const reloaded = new ListeningHistory(file);
+    expect(
+      reloaded.topTracks(5).find((entry) => entry.title === "A - Shared"),
+    ).toMatchObject({ plays: 2, completes: 1 });
+  });
+});
+
 describe("ListeningHistory", () => {
   it("preserves unread history when shutdown flushes the store", async () => {
     const file = makeTempFile();
@@ -130,10 +245,10 @@ describe("ListeningHistory", () => {
       history.recordStart("uid-2", { id: "ccccccccccC", title: "Beto - Dos" });
 
       // YouTube-shaped ids only, most recent first; the 12-hex direct-URL id
-      // is not a mix-expansion seed.
+      // is not a mix-expansion seed, and autoplay's own pick is not a seed
+      // either (it would make autoplay follow itself after a restart).
       expect(history.recentSeeds(3).map((seed) => seed.id)).toEqual([
         "ccccccccccC",
-        "bbbbbbbbbbB",
         "aaaaaaaaaaA",
       ]);
       expect(history.recentSeeds(1).map((seed) => seed.id)).toEqual([

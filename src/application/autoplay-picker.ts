@@ -35,6 +35,70 @@ export interface AutoplayProfileSource {
   recentArtists(limit: number): readonly string[];
   recentSeeds(limit: number): readonly AutoplaySeed[];
   lastRequesterUid(): string | undefined;
+  // The DJ buckets below read the channel's all-time history. Optional so a
+  // source without them still drives the "similar" bucket.
+  classicSeeds?(limit: number): readonly (AutoplaySeed & { score: number })[];
+  channelArtistSeeds?(limit: number): readonly AutoplaySeed[];
+  hasHeard?(id: string): boolean;
+}
+
+// Where an autoplay pick comes from. "similar" follows what just played,
+// "classic" brings back a channel favorite from the all-time history and
+// "discover" plays something new for the channel from the artists it likes.
+export type AutoplayBucket = "similar" | "classic" | "discover";
+
+// Ten-turn rotation: 4 similar, 3 classics, 3 discoveries, spread out so no
+// bucket runs twice in a row.
+export const AUTOPLAY_ROTATION: readonly AutoplayBucket[] = [
+  "similar",
+  "classic",
+  "discover",
+  "similar",
+  "classic",
+  "similar",
+  "discover",
+  "similar",
+  "classic",
+  "discover",
+];
+
+/**
+ * Bucket order for one autoplay turn: the scheduled bucket first, the rest
+ * as fallbacks. A bucket the channel just skipped (cooldown > 0) moves to
+ * the back instead of disappearing, so an empty history never leaves
+ * autoplay silent.
+ */
+export function autoplayBucketOrder(
+  turn: number,
+  cooldowns: ReadonlyMap<AutoplayBucket, number>,
+): readonly AutoplayBucket[] {
+  const scheduled = AUTOPLAY_ROTATION[turn % AUTOPLAY_ROTATION.length]!;
+  const all: AutoplayBucket[] = [
+    scheduled,
+    ...(["similar", "classic", "discover"] as const).filter(
+      (bucket) => bucket !== scheduled,
+    ),
+  ];
+  const ready = all.filter((bucket) => (cooldowns.get(bucket) ?? 0) <= 0);
+  const cooling = all.filter((bucket) => (cooldowns.get(bucket) ?? 0) > 0);
+  return [...ready, ...cooling];
+}
+
+/** Weighted draw: higher weights win more often, every entry can win. */
+export function weightedPick<T>(
+  entries: readonly T[],
+  weight: (entry: T) => number,
+  random: () => number = Math.random,
+): T | undefined {
+  if (entries.length === 0) return undefined;
+  const weights = entries.map((entry) => Math.max(1, weight(entry)));
+  const total = weights.reduce((sum, value) => sum + value, 0);
+  let roll = random() * total;
+  for (let i = 0; i < entries.length; i++) {
+    roll -= weights[i]!;
+    if (roll < 0) return entries[i];
+  }
+  return entries[entries.length - 1];
 }
 
 export interface LastPlayedTrack {
