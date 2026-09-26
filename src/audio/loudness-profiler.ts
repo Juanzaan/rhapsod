@@ -29,33 +29,32 @@ export interface LoudnessProfilerOptions {
       windowsHide: boolean;
       env?: NodeJS.ProcessEnv;
     },
-  ) => Promise<{ stdout: string }>;
+  ) => Promise<{ stderr: string; stdout: string }>;
   readonly targetLufs?: number;
   /** Local egress guard; see lib/egress-guard.ts. */
   readonly egressProxyUrl?: string;
 }
 
-function parseProfile(json: string): LoudnessProfile | undefined {
+/**
+ * Reads loudnorm's pass-1 report out of ffmpeg's stderr. ffmpeg prints every
+ * value as a string ("-13.42"), and "-inf" for silent input, which has no
+ * usable profile.
+ */
+function parseLoudnessReport(stderr: string): LoudnessProfile | undefined {
+  const json = stderr.match(/\{\s*"input_i"[\s\S]*?\}/)?.[0];
+  if (json === undefined) return undefined;
   try {
-    const parsed = JSON.parse(json) as {
-      input_i?: number;
-      input_tp?: number;
-      input_lra?: number;
-      input_thresh?: number;
-    };
-    const { input_i, input_tp, input_lra, input_thresh } = parsed;
+    const parsed = JSON.parse(json) as Record<string, unknown>;
+    const measuredI = Number(parsed.input_i);
+    const measuredTp = Number(parsed.input_tp);
+    const measuredLra = Number(parsed.input_lra);
+    const measuredThresh = Number(parsed.input_thresh);
     if (
-      typeof input_i === "number" &&
-      typeof input_tp === "number" &&
-      typeof input_lra === "number" &&
-      typeof input_thresh === "number"
+      [measuredI, measuredTp, measuredLra, measuredThresh].every((value) =>
+        Number.isFinite(value),
+      )
     ) {
-      return {
-        measuredI: input_i,
-        measuredLra: input_lra,
-        measuredThresh: input_thresh,
-        measuredTp: input_tp,
-      };
+      return { measuredI, measuredLra, measuredThresh, measuredTp };
     }
   } catch {
     // The measurement did not produce usable JSON.
@@ -110,15 +109,18 @@ export class LoudnessProfiler {
   }
 
   async #measureImpl(source: string, url: string): Promise<void> {
-    let stdout: string;
+    let stderr: string;
     const env = ffmpegEnvironment(this.#egressProxyUrl);
     try {
-      const { stdout: output } = await this.#execFile(
+      const { stderr: output } = await this.#execFile(
         this.#binary,
         [
           "-hide_banner",
+          "-nostats",
+          // loudnorm prints its report at info level: with "error" it never
+          // appeared and no track was ever measured.
           "-loglevel",
-          "error",
+          "info",
           "-nostdin",
           ...ffmpegEgressArguments(this.#egressProxyUrl),
           "-t",
@@ -138,14 +140,13 @@ export class LoudnessProfiler {
           ...(env === undefined ? {} : { env }),
         },
       );
-      stdout = output;
+      stderr = output;
     } catch {
       // A failed measurement (network, DRM, non-embeddable) is not fatal;
       // playback falls back to the single-pass filter.
       return;
     }
-    const json = stdout.match(/\{[\s\S]*\}/)?.[0];
-    const profile = json ? parseProfile(json) : undefined;
+    const profile = parseLoudnessReport(stderr);
     if (profile === undefined) return;
     this.#profiles.set(source, {
       expiresAt: Date.now() + MEASURE_TTL_MS,
