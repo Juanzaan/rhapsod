@@ -37,6 +37,7 @@ Persistence fixes, dependency updates, deployment repairs and consistent bilingu
 - Resume 403 retries where the audio stopped instead of replaying the start of the track, retry silently instead of posting an error for each attempt, and rejoin live radio at the live edge. 403 detection matches the HTTP error wording instead of any "403" in URLs.
 - Use the configured FFmpeg binary and User-Agent for prewarmed next-track streams; they used to fall back to the bundled ffmpeg-static.
 - Space outgoing chat messages one second apart even when several are queued at once, log messages dropped by the anti-flood queue, split texts longer than 1024 characters (such as `!help` or `!debug-server` on large servers) instead of losing them, and detect a heartbeat probe that never answers.
+- Validate the yt-dlp timeouts (`RHAPSOD_YTDLP_SEARCH_TIMEOUT_MS`, `_AUDIO_URL_`, `_DOWNLOAD_`, `_METADATA_`, `_PLAYLIST_`) with the rest of the configuration: they are listed in `.env.example`, editable from the panel, and an out-of-range value stops startup instead of being clamped with a console warning.
 - Fix the yt-dlp daemon: youtu.be, `/shorts/` and `/live/` links no longer crash a request, two requests for the same video no longer extract it twice, a request waiting on a stuck extraction gives up after 45 seconds, cached URLs expire at the time signed in the URL (minus 15 minutes) instead of a fixed six hours, and unknown paths answer 404.
 - Keep unreadable data files: playlists, favorites, listening history, the song library, telemetry or playback state that fail to parse are renamed to `<name>.corrupt-<time>` instead of being replaced by the next save. Every data write is flushed to disk before the rename, so a power loss cannot leave an empty file.
 - Accept `!channel-move` while the bot cannot talk in its channel: it is the command that moves it out, and it used to be ignored with every other command. Move permissions still apply.
@@ -46,6 +47,8 @@ Persistence fixes, dependency updates, deployment repairs and consistent bilingu
 Node.js >=22.19.0 is required. Back up configuration and data, run `npm ci` and `npm run build`, and restart when `/api/state` reports `playerState: "idle"`.
 
 If the panel uses a default password it will not start; set a unique `RHAPSOD_PANEL_PASSWORD` first. Existing installs keep the old `Requires=` line in `/etc/systemd/system/rhapsod.service` until the installer runs again: change it to `Wants=` and run `systemctl daemon-reload`.
+
+A yt-dlp timeout outside its range now stops startup. Before restarting, compare any `RHAPSOD_YTDLP_*_TIMEOUT_MS` line from `grep TIMEOUT_MS /etc/rhapsod.env` with the ranges in `.env.example`.
 
 Docker Compose uses Linux host networking to keep the panel and daemon on localhost. Review the deployment guide before recreating containers. Existing data formats remain supported.
 

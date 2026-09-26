@@ -62,6 +62,11 @@ function baseConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     RHAPSOD_YTDLP_COOKIES_PATH: undefined,
     RHAPSOD_YTDLP_EXTRACTOR_ARGS: undefined,
     RHAPSOD_YTDLP_DAEMON_URL: undefined,
+    RHAPSOD_YTDLP_SEARCH_TIMEOUT_MS: 8_000,
+    RHAPSOD_YTDLP_AUDIO_URL_TIMEOUT_MS: 12_000,
+    RHAPSOD_YTDLP_DOWNLOAD_TIMEOUT_MS: 60_000,
+    RHAPSOD_YTDLP_METADATA_TIMEOUT_MS: 30_000,
+    RHAPSOD_YTDLP_PLAYLIST_TIMEOUT_MS: 45_000,
     RHAPSOD_PANEL_ENABLED: true,
     RHAPSOD_PANEL_HOST: "127.0.0.1",
     RHAPSOD_PANEL_PORT: 0,
@@ -637,6 +642,36 @@ describe("panel-server", () => {
       );
       expect(content).toContain("RHAPSOD_TS3_HOST=new.example.com");
       expect(content).toContain("RHAPSOD_PANEL_HOST=127.0.0.1");
+    } finally {
+      await state.close();
+      rmSync(state.dir, { recursive: true, force: true });
+    }
+  });
+
+  it("saves yt-dlp timeouts in range and rejects the rest", async () => {
+    // Regression: the timeouts were read straight from process.env, so the
+    // panel had no description for them and refused every save as unknown.
+    const port = 23612;
+    const state = startTestPanel("RHAPSOD_TS3_HOST=ts.example.com\n", port);
+    const put = (body: Record<string, string>) =>
+      fetch(`${state.baseUrl}/api/env`, {
+        method: "PUT",
+        headers: {
+          authorization: state.auth,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+    try {
+      const saved = await put({ RHAPSOD_YTDLP_AUDIO_URL_TIMEOUT_MS: "20000" });
+      expect(saved.status).toBe(200);
+      const rejected = await put({ RHAPSOD_YTDLP_SEARCH_TIMEOUT_MS: "1000" });
+      expect(rejected.status).toBe(400);
+      const content = await import("node:fs").then((fs) =>
+        fs.readFileSync(state.envPath, "utf8"),
+      );
+      expect(content).toContain("RHAPSOD_YTDLP_AUDIO_URL_TIMEOUT_MS=20000");
+      expect(content).not.toContain("RHAPSOD_YTDLP_SEARCH_TIMEOUT_MS");
     } finally {
       await state.close();
       rmSync(state.dir, { recursive: true, force: true });
