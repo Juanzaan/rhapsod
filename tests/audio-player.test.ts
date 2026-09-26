@@ -6,6 +6,7 @@ import {
   applyGain,
   AudioPlayer,
   type AudioPlayerClock,
+  isMidPlayStall,
 } from "../src/audio/audio-player.js";
 import {
   PCM_FRAME_BYTES,
@@ -312,5 +313,15 @@ describe("applyGain", () => {
     expect(Array.from(applyGain(pcm, 0))).toEqual(
       new Array(PCM_FRAME_BYTES).fill(0),
     );
+  });
+});
+
+describe("isMidPlayStall", () => {
+  it("matches a stall after playback started, not one while buffering", () => {
+    expect(isMidPlayStall("Audio source stalled for 5000ms")).toBe(true);
+    expect(
+      isMidPlayStall("Audio source stalled while buffering for 15000ms"),
+    ).toBe(false);
+    expect(isMidPlayStall("FFmpeg exited with code 1")).toBe(false);
   });
 });
