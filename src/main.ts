@@ -19,7 +19,6 @@ import { AUTOPLAY_UID } from "./application/autoplay-picker.js";
 import {
   normalizeCommandInput,
   parseChatCommand,
-  runsWithoutTalkPower,
 } from "./commands/chat-command.js";
 import { probeTs3Server } from "./adapters/ts3/probe.js";
 import {
@@ -72,10 +71,10 @@ import {
   onStopSignal,
 } from "./bootstrap/exit.js";
 import { startSetupMode } from "./bootstrap/setup-mode.js";
+import { ChatCommandGate } from "./bootstrap/chat-commands.js";
 import { ServerViewSync } from "./bootstrap/server-view.js";
 import { flushStores, openStores } from "./bootstrap/stores.js";
 import { ytDlpStackOptions } from "./bootstrap/yt-dlp-options.js";
-import { userFacingError } from "./lib/user-facing-error.js";
 
 const exits = new ExitCoordinator();
 
@@ -460,64 +459,14 @@ async function main(): Promise<void> {
       return youtubeAuthState.healthy;
     },
   };
-  const maxConcurrentCommands = config.RHAPSOD_MAX_CONCURRENT_COMMANDS;
-  let activeCommands = 0;
-  let busyFeedbackAt = 0;
-  let rateLimitFeedbackAt = 0;
-  let mutedFeedbackAt = 0;
   let canTalk = true;
-  const handleChatCommand = async (
-    message: string,
-    senderUid: string,
-    senderName: string,
-    senderGroups: readonly string[],
-    respond: (message: string) => Promise<void>,
-  ): Promise<void> => {
-    const send = respond;
-    try {
-      const command = parseChatCommand(message);
-      if (!command) return;
-      telemetry.recordCommand(senderUid);
-      if (!canTalk && !runsWithoutTalkPower(command)) {
-        if (Date.now() - mutedFeedbackAt > 10_000) {
-          mutedFeedbackAt = Date.now();
-          await connection
-            .sendChannelMessage(
-              "El bot no puede hablar en este canal: solo acepto !channel-move <canal> hasta que me muevan a un canal donde se escuche.",
-            )
-            .catch(() => undefined);
-        }
-        return;
-      }
-      logger.info({ command: message, senderName, senderUid }, "Chat command");
-      const rateGate = commandRateLimiter.acquire(`user:${senderUid}`, 1_500);
-      if (!rateGate.allowed) {
-        if (Date.now() - rateLimitFeedbackAt > 5_000) {
-          rateLimitFeedbackAt = Date.now();
-          await send(
-            `Esperá un momento entre comandos (${Math.ceil(rateGate.retryAfterMs / 1_000)} s).`,
-          );
-        }
-        return;
-      }
-      const sender = {
-        name: senderName,
-        uid: senderUid,
-        groups: senderGroups,
-      };
-      await dispatchCommand(commandContext, command, sender, send);
-    } catch (error) {
-      logger.warn(
-        { command: message, senderName, senderUid, err: error },
-        "Command failed",
-      );
-      const messageText =
-        error instanceof Error
-          ? userFacingError(error)
-          : "Error procesando comando";
-      await send(messageText).catch(() => undefined);
-    }
-  };
+  const commandGate = new ChatCommandGate({
+    canTalk: () => canTalk,
+    context: commandContext,
+    logger,
+    maxConcurrent: config.RHAPSOD_MAX_CONCURRENT_COMMANDS,
+    privateCommandUids,
+  });
   connection.onTextMessage(
     (message, senderUid, senderName, senderGroups, isPrivate, invokerClid) => {
       if (
@@ -532,28 +481,13 @@ async function main(): Promise<void> {
       ) {
         chatLog.push(senderName, message, false);
       }
-      const privateAllowed = isPrivate && privateCommandUids.has(senderUid);
-      const respond = privateAllowed
-        ? (text: string) => connection.sendPrivateMessage(invokerClid, text)
-        : (text: string) => connection.sendChannelMessage(text);
-      if (activeCommands >= maxConcurrentCommands) {
-        if (Date.now() - busyFeedbackAt > 5_000) {
-          busyFeedbackAt = Date.now();
-          void respond(
-            "El bot está procesando varios pedidos a la vez; probá de nuevo en unos segundos.",
-          ).catch(() => undefined);
-        }
-        return;
-      }
-      activeCommands++;
-      void handleChatCommand(
+      void commandGate.receive({
+        invokerClid,
+        isPrivate,
         message,
-        senderUid,
-        senderName,
         senderGroups,
-        respond,
-      ).finally(() => {
-        activeCommands--;
+        senderName,
+        senderUid,
       });
     },
   );
