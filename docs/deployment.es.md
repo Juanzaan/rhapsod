@@ -23,7 +23,7 @@ Conservar todo el directorio de datos: `ts3-identity.txt`, `state.json`, listas,
 
 ## systemd
 
-El instalador crea unidades adaptadas a sus rutas. Los ejemplos manuales están en `deploy/systemd/`; revisar usuario, directorio de trabajo, ejecutables y dependencias antes de copiarlos. La unidad del bot requiere por defecto el servicio opcional; eliminar esa dependencia si solo se utiliza el ejecutable.
+El instalador crea unidades adaptadas a sus rutas. Los ejemplos manuales están en `deploy/systemd/`; revisar usuario, directorio de trabajo, ejecutables y dependencias antes de copiarlos. La unidad del bot solicita el servicio opcional (`Wants=`): lo inicia si existe y sigue funcionando con el ejecutable si el servicio se detiene.
 
 Para `/etc/rhapsod.env`, añadir una modificación mediante `sudo systemctl edit rhapsod`:
 
@@ -40,6 +40,8 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now rhapsod-ytdlp-daemon rhapsod
 journalctl -u rhapsod -n 100 --no-pager
 ```
+
+Las unidades aíslan parámetros del kernel, dispositivos, espacios de nombres y capacidades, y filtran las llamadas al sistema a `@system-service`; el acceso a archivos no se restringe. Revisar el resultado con `systemd-analyze security rhapsod`. Si un servicio registra `Operation not permitted` después de actualizar, buscar la llamada bloqueada en `journalctl` antes de flexibilizar la unidad con `sudo systemctl edit`.
 
 El servicio usa `scripts/yt-dlp-daemon.py`, el paquete Python `yt-dlp[default]` y complementos opcionales. Escucha por defecto en `127.0.0.1:8765`; configurar `RHAPSOD_YTDLP_DAEMON_URL=http://127.0.0.1:8765`. El bot utiliza el ejecutable si el servicio no está disponible. Establecer `RHAPSOD_MAX_CONCURRENT_YTDLP_JOBS` entre 1 y 4 solo para sustituir el valor adaptable a CPU.
 
