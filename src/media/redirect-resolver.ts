@@ -1,4 +1,5 @@
 import { isPublicHostname, safeFetch } from "../lib/ssrf.js";
+import { rhapsodUserAgent } from "../lib/version.js";
 
 export interface RedirectResolverOptions {
   readonly cacheMaxEntries?: number;
@@ -69,7 +70,7 @@ export class RedirectResolver {
     const timer = setTimeout(() => controller.abort(), this.#timeoutMs);
     try {
       return await this.#fetch(url, {
-        headers: { "user-agent": "Rhapsod/1 (redirect-resolver)" },
+        headers: { "user-agent": rhapsodUserAgent("redirect-resolver") },
         method: "HEAD",
         redirect: "manual",
         signal: controller.signal,
@@ -91,7 +92,7 @@ export class RedirectResolver {
     try {
       const response = await this.#fetch(url, {
         headers: {
-          "user-agent": "Rhapsod/1 (redirect-resolver)",
+          "user-agent": rhapsodUserAgent("redirect-resolver"),
           range: "bytes=0-0",
         },
         method: "GET",
