@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { parseChatCommand } from "../src/commands/chat-command.js";
 import {
+  COMMANDS,
   COMMAND_SPECS,
   formatHelpCategory,
   formatHelpCommand,
@@ -22,6 +23,25 @@ describe("command registry", () => {
     for (const name of unionNames) {
       expect(name.length).toBeGreaterThan(0);
     }
+  });
+
+  it("keys every table entry by its own name, in listing order", () => {
+    for (const [key, entry] of Object.entries(COMMANDS)) {
+      expect(entry.name).toBe(key);
+    }
+    expect(COMMAND_SPECS.map((spec) => spec.name)).toEqual(
+      Object.keys(COMMANDS),
+    );
+  });
+
+  it("parses a command through its own table entry", () => {
+    expect(COMMANDS.volume.parse("40", "v")).toEqual({
+      name: "volume",
+      value: 40,
+    });
+    expect(() => COMMANDS.pause.parse("x", "pausa")).toThrow(
+      "El comando !pausa no acepta argumentos",
+    );
   });
 
   it("has unique non-colliding aliases", () => {

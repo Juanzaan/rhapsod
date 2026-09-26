@@ -29,6 +29,10 @@ Media providers -> PreparedAudioStore -> FFmpeg PCM
 - `src/observability/`: structured logs, playback metrics and sanitized errors.
 - `src/config.ts`: runtime schema and default settings.
 
+## Commands
+
+A command lives in three places, all keyed by its name: its argument shape in the `ChatCommand` union (`src/commands/chat-command.ts`), an entry in `COMMANDS` (`src/commands/command-registry.ts`) with aliases, category, usage, summary and argument parser, and a handler in `COMMAND_HANDLERS` (`src/commands/command-handlers.ts`). `!help` and `GET /api/commands` read `COMMANDS`. A command missing from either table, or a parser that returns another command's shape, fails `npm run typecheck`. Handlers stay in their own table because they need the playback service and the TeamSpeak connection, while the parser and `!help` load without them.
+
 ## Playback and providers
 
 Metadata is resolved at intake; temporary stream URLs are prepared near playback. `PreparedAudioStore` deduplicates lookups and manages expiry and cancellation. `PlaybackEpoch` invalidates stale asynchronous work after transport actions. `PlaybackController` serializes advancement and bounds resolution time.
