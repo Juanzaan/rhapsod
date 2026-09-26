@@ -13,7 +13,7 @@ Los comandos utilizan `!` por defecto y se procesan en el chat de TeamSpeak cuan
 | `!skip`                               | `!s`                  | Saltar la pista actual con permiso de solicitante o administrador.           |
 | `!previous`                           | `!prev`               | Repetir la última pista terminada.                                           |
 | `!seek <segundos>`                    | -                     | Cambiar la posición de reproducción.                                         |
-| `!stop`                               | -                     | Detener la reproducción y vaciar la sesión.                                  |
+| `!stop`                               | -                     | Detener y vaciar la sesión; con pistas ajenas, solo administradores.         |
 | `!queue [página]`                     | `!q`                  | Mostrar 10 pistas por página y tiempo restante conocido.                     |
 | `!history`                            | `!hist`               | Mostrar las 10 últimas pistas iniciadas.                                     |
 | `!now-playing`                        | `!np`, `!now`         | Mostrar pista, duración y solicitante; incluye título de radio.              |
@@ -25,7 +25,7 @@ Los comandos utilizan `!` por defecto y se procesan en el chat de TeamSpeak cuan
 | `!debug-server`                       | `!ds`                 | Información del servidor; solo administradores.                              |
 | `!chart`                              | -                     | Gráfico de actividad; solo administradores.                                  |
 | `!remove <n\|inicio-fin>`             | `!rm`                 | Eliminar pistas propias o, con permisos, ajenas.                             |
-| `!clear`                              | `!c`                  | Vaciar pistas pendientes.                                                    |
+| `!clear`                              | `!c`                  | Vaciar pendientes; con pistas ajenas, solo administradores.                  |
 | `!shuffle`                            | -                     | Mezclar pistas pendientes.                                                   |
 | `!loop [off\|track\|queue]`           | -                     | Repetición persistente de pista o cola.                                      |
 | `!lyrics`                             | `!ly`                 | Buscar letras mediante LRCLIB.                                               |
@@ -44,7 +44,7 @@ Los comandos utilizan `!` por defecto y se procesan en el chat de TeamSpeak cuan
 
 ## Permisos y persistencia
 
-La mayoría de los comandos están disponibles para todos. `RHAPSOD_ADMIN_UIDS` permite saltar o eliminar pistas ajenas y usar comandos administrativos. `!jump` verifica permisos sobre cada pista descartada. Cualquier usuario puede saltar una pista automática.
+La mayoría de los comandos están disponibles para todos. `RHAPSOD_ADMIN_UIDS` permite saltar o eliminar pistas ajenas y usar comandos administrativos. `!jump` verifica permisos sobre cada pista descartada. `!stop` y `!clear` exigen que todas las pistas afectadas sean propias o automáticas, salvo para administradores. Cualquier usuario puede saltar una pista automática. Las pistas de usuarios que ya no están conectados al servidor también son comunes: cualquiera puede saltarlas, quitarlas o vaciarlas.
 
 Los favoritos se guardan por UID en `data/user-preferences.json`, con un máximo de 50 por usuario. Volumen, repetición y reproducción automática se guardan en `data/state.json`. `!stop` y `!clear` desactivan la repetición y cancelan la continuación pendiente. Con `RHAPSOD_INSTANCE_ID`, los archivos están dentro del directorio de instancia.
 
