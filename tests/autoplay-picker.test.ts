@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  AUTOPLAY_ROTATION,
+  autoplayBucketOrder,
+  weightedPick,
   AUTOPLAY_REQUESTER,
   AUTOPLAY_UID,
   energyOfTitle,
@@ -226,5 +229,53 @@ describe("pickAutoplayTrack", () => {
   it("exposes stable autoplay identity constants", () => {
     expect(AUTOPLAY_REQUESTER).toBe("Autoplay");
     expect(AUTOPLAY_UID).toBe("autoplay");
+  });
+});
+
+describe("autoplay DJ rotation", () => {
+  it("rotates similar, classic and discovery picks 4/3/3", () => {
+    const counts = new Map<string, number>();
+    for (let turn = 0; turn < AUTOPLAY_ROTATION.length; turn++) {
+      const bucket = autoplayBucketOrder(turn, new Map())[0]!;
+      counts.set(bucket, (counts.get(bucket) ?? 0) + 1);
+    }
+    expect(Object.fromEntries(counts)).toEqual({
+      similar: 4,
+      classic: 3,
+      discover: 3,
+    });
+    for (let turn = 1; turn < AUTOPLAY_ROTATION.length; turn++) {
+      expect(AUTOPLAY_ROTATION[turn]).not.toBe(AUTOPLAY_ROTATION[turn - 1]);
+    }
+  });
+
+  it("moves a just-skipped bucket to the back without dropping it", () => {
+    expect(autoplayBucketOrder(1, new Map([["classic", 2]]))).toEqual([
+      "similar",
+      "discover",
+      "classic",
+    ]);
+  });
+
+  it("draws weighted entries and never returns undefined for a pool", () => {
+    const pool = [
+      { id: "a", score: 9 },
+      { id: "b", score: 1 },
+    ];
+    expect(
+      weightedPick(
+        pool,
+        (e) => e.score,
+        () => 0,
+      )?.id,
+    ).toBe("a");
+    expect(
+      weightedPick(
+        pool,
+        (e) => e.score,
+        () => 0.95,
+      )?.id,
+    ).toBe("b");
+    expect(weightedPick([], () => 1)).toBeUndefined();
   });
 });

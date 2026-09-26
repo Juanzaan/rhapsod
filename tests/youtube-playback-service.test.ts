@@ -82,6 +82,18 @@ function setup(
         title: string;
       }[];
       lastRequesterUid?(): string | undefined;
+      classicSeeds?(limit: number): readonly {
+        artist?: string;
+        id: string;
+        score: number;
+        title: string;
+      }[];
+      channelArtistSeeds?(limit: number): readonly {
+        artist?: string;
+        id: string;
+        title: string;
+      }[];
+      hasHeard?(id: string): boolean;
     };
     autoplayTimeoutMs?: number;
     relatedVideoId?: (seedVideoId: string) => Promise<string | undefined>;
@@ -763,6 +775,127 @@ describe("YoutubePlaybackService", () => {
         source: "https://www.youtube.com/watch?v=mix22222222",
         title: "Duki - Mix Two",
       });
+    } finally {
+      random.mockRestore();
+    }
+  });
+
+  it("brings back a channel classic when the similar bucket has no seed", async () => {
+    const random = vi.spyOn(Math, "random").mockReturnValue(0);
+    try {
+      const { resolver, service } = setup({
+        autoplayProfile: {
+          artistScores: () => new Map(),
+          tasteProfile: () => ({
+            artistScores: new Map(),
+            tokenScores: new Map<string, number>(),
+          }),
+          recentArtists: () => [],
+          classicSeeds: () => [
+            { artist: "Soda", id: "classicAAAA", score: 9, title: "Soda - A" },
+          ],
+          channelArtistSeeds: () => [],
+          hasHeard: () => true,
+        },
+      });
+      resolver.getTrack.mockResolvedValueOnce({
+        durationSeconds: 245,
+        id: "classicAAAA",
+        title: "Soda - A",
+        webpageUrl: "https://www.youtube.com/watch?v=classicAAAA",
+      });
+
+      const pick = await service.resolveAutoplayTrack();
+
+      // Metadata is re-read so a deleted video is skipped and the duration
+      // keeps the track out of live-radio handling.
+      expect(resolver.getTrack).toHaveBeenCalledWith({
+        id: "classicAAAA",
+        type: "video",
+      });
+      expect(pick).toMatchObject({
+        durationSeconds: 245,
+        id: "classicAAAA",
+        requestedByUid: "autoplay",
+        source: "https://www.youtube.com/watch?v=classicAAAA",
+      });
+    } finally {
+      random.mockRestore();
+    }
+  });
+
+  it("discovers tracks the channel never heard from its favorite artists", async () => {
+    const random = vi.spyOn(Math, "random").mockReturnValue(0.99);
+    try {
+      const { resolver, service } = setup({
+        autoplayProfile: {
+          artistScores: () => new Map([["soda", 4]]),
+          tasteProfile: () => ({
+            artistScores: new Map(),
+            tokenScores: new Map<string, number>(),
+          }),
+          recentArtists: () => [],
+          classicSeeds: () => [],
+          channelArtistSeeds: () => [
+            { artist: "Soda", id: "sodaseedsoD", title: "Soda - Seed" },
+          ],
+          hasHeard: (id: string) => id === "heardheardH",
+        },
+      });
+      resolver.expandPlaylist.mockResolvedValueOnce({
+        tracks: [
+          {
+            id: "heardheardH",
+            title: "Soda - Already Heard",
+            webpageUrl: "https://www.youtube.com/watch?v=heardheardH",
+          },
+          {
+            id: "newnewnewnN",
+            title: "Soda - New One",
+            webpageUrl: "https://www.youtube.com/watch?v=newnewnewnN",
+          },
+        ],
+      });
+
+      const pick = await service.resolveAutoplayTrack();
+
+      expect(resolver.expandPlaylist).toHaveBeenCalledWith(
+        { id: "RDsodaseedsoD", type: "playlist" },
+        25,
+      );
+      expect(pick?.id).toBe("newnewnewnN");
+    } finally {
+      random.mockRestore();
+    }
+  });
+
+  it("reuses a fetched mix instead of calling yt-dlp every turn", async () => {
+    const random = vi.spyOn(Math, "random").mockReturnValue(0.99);
+    try {
+      const { resolver, service } = setup({
+        autoplayProfile: {
+          artistScores: () => new Map(),
+          tasteProfile: () => ({
+            artistScores: new Map(),
+            tokenScores: new Map<string, number>(),
+          }),
+          recentArtists: () => [],
+        },
+      });
+      await service.enqueue("https://youtu.be/seedvideo11", "user-1", "uid-1");
+      await new Promise((resolve) => setImmediate(resolve));
+      resolver.expandPlaylist.mockResolvedValue({
+        tracks: ["mixAAAAAAAA", "mixBBBBBBBB", "mixCCCCCCCC"].map((id) => ({
+          id,
+          title: `Artist ${id} - Song`,
+          webpageUrl: `https://www.youtube.com/watch?v=${id}`,
+        })),
+      });
+
+      await service.resolveAutoplayTrack();
+      await service.resolveAutoplayTrack();
+
+      expect(resolver.expandPlaylist).toHaveBeenCalledTimes(1);
     } finally {
       random.mockRestore();
     }

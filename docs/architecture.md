@@ -41,7 +41,7 @@ FFmpeg produces 48 kHz stereo PCM. Opus encodes 20 ms frames within the 497-byte
 
 State lives under `RHAPSOD_DATA_DIR`, optionally namespaced by `RHAPSOD_INSTANCE_ID`. JSON stores use temporary-file replacement and serialized or debounced writes. Shutdown waits for pending writes. Read-only or unused stores must not overwrite existing data during shutdown.
 
-Listening history supplies per-user and global statistics and autoplay ranking signals. Session weighting expires after inactivity; older plays decay. Track-history limits apply in memory and on disk. Title-derived energy is a ranking heuristic, not audio analysis.
+Listening history supplies per-user and global statistics and autoplay ranking signals; global statistics count only human requests, plus skips of autoplay picks. Session weighting expires after inactivity; older plays decay. Track-history limits apply in memory and on disk. Title-derived energy is a ranking heuristic, not audio analysis.
 
 ## Owner surface
 
