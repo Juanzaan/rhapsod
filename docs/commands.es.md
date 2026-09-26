@@ -44,7 +44,7 @@ Los comandos utilizan `!` por defecto y se procesan en el chat de TeamSpeak cuan
 
 ## Permisos y persistencia
 
-La mayoría de los comandos están disponibles para todos. `RHAPSOD_ADMIN_UIDS` permite saltar o eliminar pistas ajenas y usar comandos administrativos. `!jump` verifica permisos sobre cada pista descartada. `!stop` y `!clear` exigen que todas las pistas afectadas sean propias o automáticas, salvo para administradores. Cualquier usuario puede saltar una pista automática.
+La mayoría de los comandos están disponibles para todos. `RHAPSOD_ADMIN_UIDS` permite saltar o eliminar pistas ajenas y usar comandos administrativos. `!jump` verifica permisos sobre cada pista descartada. `!stop` y `!clear` exigen que todas las pistas afectadas sean propias o automáticas, salvo para administradores. Cualquier usuario puede saltar una pista automática. Las pistas de usuarios que ya no están conectados al servidor también son comunes: cualquiera puede saltarlas, quitarlas o vaciarlas.
 
 Los favoritos se guardan por UID en `data/user-preferences.json`, con un máximo de 50 por usuario. Volumen, repetición y reproducción automática se guardan en `data/state.json`. `!stop` y `!clear` desactivan la repetición y cancelan la continuación pendiente. Con `RHAPSOD_INSTANCE_ID`, los archivos están dentro del directorio de instancia.
 

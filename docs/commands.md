@@ -52,7 +52,9 @@ chat once the TS3 adapter is connected.
   `!remove`, to skip anyone's current track with `!skip`, to stop or clear a
   queue that holds other users' tracks with `!stop`/`!clear`, and to use
   `!channel-move`; requesters can always remove their own tracks and skip
-  their own current track.
+  their own current track. Tracks whose requester is no longer connected to
+  the server are communal, like autoplay picks: anyone may skip, remove or
+  clear them.
 - **Favorites:** `!fav` saves the current track per TS3 user id (up to 50),
   persisted to `data/user-preferences.json` (atomic write) and replayable
   with `!favplay <n>`.

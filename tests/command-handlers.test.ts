@@ -132,6 +132,9 @@ function makeHarness(
     getServerInfo: vi.fn(() => ({})),
     getChannelInfo: vi.fn(() => ({ channel_name: "X" })),
     moveToChannel: vi.fn(() => undefined),
+    listConnectedClientUids: vi.fn((): Promise<readonly string[]> =>
+      Promise.resolve([]),
+    ),
   };
   const metrics = {
     formatStats: vi.fn(() => "stats"),
@@ -847,6 +850,55 @@ describe("favorites and skip ownership", () => {
     expect(send).toHaveBeenCalledWith(
       "La cola tiene pistas de otros usuarios: solo un admin puede vaciarla. Usá !remove para quitar las tuyas.",
     );
+  });
+
+  it("treats tracks of users who left the server as communal", async () => {
+    const { connection, ctx, playback, send, sender } = makeHarness({
+      current: { requestedBy: "gone", requestedByUid: "uid-9", title: "X" },
+    });
+    playback.queue.mockReturnValue([
+      { requestedBy: "gone", requestedByUid: "uid-9", title: "Y" },
+    ]);
+    connection.listConnectedClientUids.mockResolvedValue(["uid-1"]);
+
+    await dispatchCommand(ctx, parseChatCommand("!stop")!, sender, send);
+    expect(playback.stop).toHaveBeenCalledTimes(1);
+
+    await dispatchCommand(ctx, parseChatCommand("!skip")!, sender, send);
+    expect(playback.skip).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a connected user's tracks protected", async () => {
+    const { connection, ctx, playback, sender, send } = makeHarness();
+    playback.queue.mockReturnValue([
+      { requestedBy: "other", requestedByUid: "uid-9", title: "Theirs" },
+    ]);
+    connection.listConnectedClientUids.mockResolvedValue(["uid-1", "uid-9"]);
+    await dispatchCommand(ctx, parseChatCommand("!clear")!, sender, send);
+
+    expect(playback.clearQueued).not.toHaveBeenCalled();
+  });
+
+  it("stays strict when the connected list is unavailable", async () => {
+    const { connection, ctx, playback, sender, send } = makeHarness();
+    playback.queue.mockReturnValue([
+      { requestedBy: "other", requestedByUid: "uid-9", title: "Theirs" },
+    ]);
+    connection.listConnectedClientUids.mockResolvedValue([]);
+    await dispatchCommand(ctx, parseChatCommand("!clear")!, sender, send);
+
+    expect(playback.clearQueued).not.toHaveBeenCalled();
+  });
+
+  it("does not query the server when the sender owns every track", async () => {
+    const { connection, ctx, playback, sender, send } = makeHarness();
+    playback.queue.mockReturnValue([
+      { requestedBy: "user", requestedByUid: "uid-1", title: "Mine" },
+    ]);
+    await dispatchCommand(ctx, parseChatCommand("!clear")!, sender, send);
+
+    expect(playback.clearQueued).toHaveBeenCalledTimes(1);
+    expect(connection.listConnectedClientUids).not.toHaveBeenCalled();
   });
 
   it("lets admins clear anyone's tracks", async () => {

@@ -21,7 +21,6 @@ import { parseMediaInput } from "../media/media-input.js";
 import { isAppleMusicPlaylist } from "../media/apple-music.js";
 import {
   canMoveBotToChannel,
-  canRemoveTrack,
   canRemoveTracks,
   isAdminUid,
 } from "./permissions.js";
@@ -545,22 +544,9 @@ async function handleRemove(
   sender: CommandSender,
   send: SendFn,
 ): Promise<void> {
-  const { playback, adminUids } = ctx;
-  const { name: senderName, uid: senderUid } = sender;
+  const { playback } = ctx;
   const selected = playback.queue().slice(command.from - 1, command.to);
-  const unauthorized = selected.some(
-    (track) =>
-      !canRemoveTrack({
-        adminUids,
-        requesterName: track.requestedBy,
-        ...(track.requestedByUid === undefined
-          ? {}
-          : { requesterUid: track.requestedByUid }),
-        senderName,
-        senderUid,
-      }),
-  );
-  if (unauthorized) {
+  if (!(await senderMayRemove(ctx, sender, selected))) {
     await send(
       "Solo el administrador del bot puede quitar rangos con pistas de otros usuarios.",
     );
@@ -576,20 +562,52 @@ async function handleRemove(
   );
 }
 
+/**
+ * Ownership check shared by !skip, !remove, !jump, !stop and !clear. The
+ * connected-client list is only fetched when the strict rule says no, so
+ * the common case costs no TeamSpeak query.
+ */
+async function senderMayRemove(
+  ctx: CommandContext,
+  sender: CommandSender,
+  tracks: ReadonlyArray<{
+    readonly requestedBy: string;
+    readonly requestedByUid?: string;
+  }>,
+): Promise<boolean> {
+  const base = {
+    adminUids: ctx.adminUids,
+    senderName: sender.name,
+    senderUid: sender.uid,
+    tracks,
+  };
+  if (canRemoveTracks(base)) return true;
+  const connectedUids = await connectedUidsOrUnknown(ctx);
+  return (
+    connectedUids !== undefined && canRemoveTracks({ ...base, connectedUids })
+  );
+}
+
+async function connectedUidsOrUnknown(
+  ctx: CommandContext,
+): Promise<ReadonlySet<string> | undefined> {
+  try {
+    const uids = await ctx.connection.listConnectedClientUids();
+    // The bot itself is always connected: an empty list means the query
+    // failed, and treating everyone as gone would make every track communal.
+    return uids.length === 0 ? undefined : new Set(uids);
+  } catch {
+    return undefined;
+  }
+}
+
 async function handleClear(
   ctx: CommandContext,
   _command: Extract<ChatCommand, { name: "clear" }>,
   sender: CommandSender,
   send: SendFn,
 ): Promise<void> {
-  if (
-    !canRemoveTracks({
-      adminUids: ctx.adminUids,
-      senderName: sender.name,
-      senderUid: sender.uid,
-      tracks: ctx.playback.queue(),
-    })
-  ) {
+  if (!(await senderMayRemove(ctx, sender, ctx.playback.queue()))) {
     await send(
       "La cola tiene pistas de otros usuarios: solo un admin puede vaciarla. Usá !remove para quitar las tuyas.",
     );
@@ -725,15 +743,7 @@ async function handleSkip(
   const current = ctx.playback.current;
   if (
     current !== undefined &&
-    !canRemoveTrack({
-      adminUids: ctx.adminUids,
-      requesterName: current.requestedBy,
-      ...(current.requestedByUid === undefined
-        ? {}
-        : { requesterUid: current.requestedByUid }),
-      senderName: sender.name,
-      senderUid: sender.uid,
-    })
+    !(await senderMayRemove(ctx, sender, [current]))
   ) {
     await send("Solo quien pidió la canción (o un admin) puede saltarla.");
     return;
@@ -748,7 +758,7 @@ async function handleJump(
   sender: CommandSender,
   send: SendFn,
 ): Promise<void> {
-  const { playback, adminUids } = ctx;
+  const { playback } = ctx;
   const current = playback.current;
   const queued = playback.queue();
   const target = queued[command.index - 1];
@@ -758,19 +768,7 @@ async function handleJump(
   }
   const victims = queued.slice(0, command.index - 1);
   if (current !== undefined) victims.unshift(current);
-  const unauthorized = victims.some(
-    (track) =>
-      !canRemoveTrack({
-        adminUids,
-        requesterName: track.requestedBy,
-        ...(track.requestedByUid === undefined
-          ? {}
-          : { requesterUid: track.requestedByUid }),
-        senderName: sender.name,
-        senderUid: sender.uid,
-      }),
-  );
-  if (unauthorized) {
+  if (!(await senderMayRemove(ctx, sender, victims))) {
     await send(
       "Solo quien pidió las pistas (o un admin) puede saltar hasta ahí.",
     );
@@ -898,15 +896,10 @@ async function handleStop(
 ): Promise<void> {
   const current = ctx.playback.current;
   if (
-    !canRemoveTracks({
-      adminUids: ctx.adminUids,
-      senderName: sender.name,
-      senderUid: sender.uid,
-      tracks: [
-        ...(current === undefined ? [] : [current]),
-        ...ctx.playback.queue(),
-      ],
-    })
+    !(await senderMayRemove(ctx, sender, [
+      ...(current === undefined ? [] : [current]),
+      ...ctx.playback.queue(),
+    ]))
   ) {
     await send(
       "Hay pistas de otros usuarios en reproducción o en cola: solo un admin puede detener todo.",
