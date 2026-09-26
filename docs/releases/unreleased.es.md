@@ -74,6 +74,7 @@ Correcciones de persistencia, actualización de dependencias, reparación del de
 - Actualizar dependencias: dotenv 18 y libopus-wasm 0.4 (salida Opus verificada idéntica byte a byte), además de versiones compatibles de Hono, Zod, undici, Vitest, ESLint y Prettier. Dependabot ya no propone versiones mayores de `@types/node` por encima del entorno Node 22 admitido.
 - Dejar de notificar a un manejador de conexión perdida después de cancelar su suscripción: los eventos de expulsión y desconexión se registran una sola vez en lugar de una por suscripción.
 - Agregar `scripts/deploy.sh`: espera a que no suene nada, detiene el bot, respalda los datos y el archivo de entorno, compila la revisión elegida con el usuario del servicio, la inicia y vuelve sola al commit anterior si la compilación o el inicio fallan.
+- Agregar `RHAPSOD_SKIP_NON_MUSIC` (por defecto `false`): los videoclips de YouTube empiezan donde empieza la música y terminan donde termina, según los tramos sin música (intros habladas, escenas, créditos) que los usuarios de SponsorBlock marcan con la categoría `music_offtopic`. Solo se cortan una intro y un final, nunca un tramo del medio, y se ignora un corte que dejaría menos de la mitad de la pista o menos de 30 segundos. La consulta envía un prefijo de 4 caracteres del SHA-256 del id del video, espera como máximo 1,5 segundos y corre en paralelo con la URL de audio; si falla, la pista suena completa.
 
 ## Actualización
 

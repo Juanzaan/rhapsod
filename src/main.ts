@@ -39,6 +39,7 @@ import { DirectUrlClient } from "./media/direct-url.js";
 import { startEgressGuard } from "./lib/egress-guard.js";
 import { PlaybackMetrics } from "./observability/prometheus.js";
 import { LyricsClient } from "./media/lyrics.js";
+import { NonMusicSegments } from "./media/youtube/non-music-segments.js";
 import { SoundCloudPublicApi } from "./media/soundcloud/public-api.js";
 import { SpotifyApi } from "./media/spotify/api.js";
 import { createRhapsodLogger } from "./observability/logger.js";
@@ -254,6 +255,9 @@ async function main(): Promise<void> {
       }),
     prewarmNext: true,
     loudnessProfiler,
+    ...(config.RHAPSOD_SKIP_NON_MUSIC
+      ? { nonMusicSegments: new NonMusicSegments({ logger }) }
+      : {}),
     encoder,
     ...createPlaybackEvents({
       listeningHistory,

@@ -22,6 +22,7 @@ import {
 import { fetchAutoplayVideoId } from "../media/youtube/innertube-related.js";
 import type { createPcmStream, playFfmpegUrl } from "../audio/ffmpeg-player.js";
 import type { LoudnessProfiler } from "../audio/loudness-profiler.js";
+import type { NonMusicSegmentSource } from "../media/youtube/non-music-segments.js";
 import type { RhapsodOpusEncoder } from "../audio/opus-encoder.js";
 import type { VoiceFrameOutput } from "../audio/audio-player.js";
 import type { AudioPlayerMetrics } from "../audio/audio-player.js";
@@ -99,6 +100,7 @@ interface PlaybackServiceOptions {
   readonly proxyUrl?: string;
   readonly prewarmNext?: boolean;
   readonly loudnessProfiler?: LoudnessProfiler;
+  readonly nonMusicSegments?: NonMusicSegmentSource;
   readonly onPlaybackError?: (
     track: Track,
     error: Error,
@@ -270,6 +272,9 @@ export class YoutubePlaybackService {
       ...(options.loudnessProfiler === undefined
         ? {}
         : { loudnessProfiler: options.loudnessProfiler }),
+      ...(options.nonMusicSegments === undefined
+        ? {}
+        : { nonMusicSegments: options.nonMusicSegments }),
       ...(options.onPlaybackError === undefined
         ? {}
         : { onPlaybackError: options.onPlaybackError }),

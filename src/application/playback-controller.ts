@@ -17,6 +17,10 @@ import {
   type VoiceFrameOutput,
 } from "../audio/audio-player.js";
 import type { LoudnessProfiler } from "../audio/loudness-profiler.js";
+import type {
+  MusicBounds,
+  NonMusicSegmentSource,
+} from "../media/youtube/non-music-segments.js";
 import type { YoutubeTrackMetadata } from "../media/youtube/yt-dlp.js";
 import type { DirectUrlResolver } from "../media/direct-url.js";
 import type { SoundCloudResolver } from "../media/soundcloud/public-api.js";
@@ -104,6 +108,7 @@ export interface PlaybackControllerOptions {
   readonly proxyUrl?: string;
   readonly prewarmNext?: boolean;
   readonly loudnessProfiler?: LoudnessProfiler;
+  readonly nonMusicSegments?: NonMusicSegmentSource;
   readonly onPlaybackError?: (
     track: Track,
     error: Error,
@@ -125,6 +130,12 @@ export interface PlaybackControllerOptions {
   readonly persistedQueue?: readonly SerializedQueueTrack[];
 }
 
+interface WarmStream {
+  readonly source: string;
+  readonly stream: FfmpegPcmStream;
+  readonly startSeconds?: number;
+}
+
 const AUDIO_URL_REFRESH_AHEAD_MS = 3 * 60_000;
 const AUTH_REQUIRED_RE =
   /sign in to confirm|cookies for the authentication|request you to sign in|login required/i;
@@ -139,6 +150,7 @@ const PREWARM_CHECK_INTERVAL_MS = 2_000;
 const PREFETCH_DEPTH = 6;
 const PLAYLIST_PREFETCH_DEPTH = 8;
 const PLAYLIST_PREFETCH_BATCH = 3;
+const SEGMENT_PREFETCH_DEPTH = 2;
 const HISTORY_LIMIT = 20;
 
 // Last-resort bound on a single track's URL resolution. Worst-case
@@ -171,6 +183,7 @@ export class PlaybackController {
   readonly #proxyUrl: string | undefined;
   readonly #prewarmEnabled: boolean;
   readonly #loudnessProfiler: LoudnessProfiler | undefined;
+  readonly #nonMusicSegments: NonMusicSegmentSource | undefined;
   readonly #onPlaybackError: (
     track: Track,
     error: Error,
@@ -222,8 +235,7 @@ export class PlaybackController {
   readonly #history: Track[] = [];
   #loopMode: LoopMode = "off";
   #loopPool: Track[] = [];
-  #warmStream:
-    { readonly source: string; readonly stream: FfmpegPcmStream } | undefined;
+  #warmStream: WarmStream | undefined;
   readonly #sessionEndReasons = new WeakMap<
     FfmpegPlaybackSession,
     SessionEndReason
@@ -244,6 +256,7 @@ export class PlaybackController {
     this.#proxyUrl = options.proxyUrl;
     this.#prewarmEnabled = options.prewarmNext ?? false;
     this.#loudnessProfiler = options.loudnessProfiler;
+    this.#nonMusicSegments = options.nonMusicSegments;
     this.#onPlaybackError = options.onPlaybackError ?? (() => undefined);
     this.#onPlaybackStarted = options.onPlaybackStarted ?? (() => undefined);
     this.#onPlaybackFinished = options.onPlaybackFinished ?? (() => undefined);
@@ -679,9 +692,13 @@ export class PlaybackController {
         // A different track taking over means the restarted play was
         // abandoned (for example the restart could not requeue it).
         if (!resuming) this.#reportUnfinished("skipped");
-        const seekSeconds = resuming ? pendingResume?.seconds : undefined;
+        const endSeconds = resolved.bounds?.endSeconds;
+        const seekSeconds = resuming
+          ? pendingResume?.seconds
+          : resolved.bounds?.startSeconds;
         const playbackOptions: {
           readonly seekSeconds?: number;
+          readonly endSeconds?: number;
           readonly live?: boolean;
           readonly stream?: FfmpegPcmStream;
           readonly loudnessTargetLufs?: number;
@@ -693,6 +710,7 @@ export class PlaybackController {
           };
         } = {
           ...(seekSeconds === undefined ? {} : { seekSeconds }),
+          ...(endSeconds === undefined ? {} : { endSeconds }),
           ...(track.durationSeconds === undefined ? { live: true } : {}),
           // Live radio has no measured profile, so it used to play through
           // dynamic single-pass loudnorm forever: the gain rides audibly on
@@ -714,17 +732,22 @@ export class PlaybackController {
         };
         let session: FfmpegPlaybackSession;
         let prewarmed = false;
+        let startOffsetSeconds = seekSeconds ?? 0;
         const createdAt = Date.now();
         try {
-          if (seekSeconds === undefined) {
+          if (!resuming) {
             const warm = this.#takeWarmStream(track.source);
             prewarmed = warm !== undefined;
             if (warm !== undefined) {
+              // The warm stream keeps the start it was spawned with, which
+              // can differ when the segment lookup answered only for one of
+              // the two paths.
+              startOffsetSeconds = warm.startSeconds ?? 0;
               session = this.#createPlayback(
                 resolved.url,
                 this.#encoder,
                 this.#output,
-                { ...playbackOptions, stream: warm },
+                { ...playbackOptions, stream: warm.stream },
               );
             } else {
               session = this.#createPlayback(
@@ -751,7 +774,7 @@ export class PlaybackController {
         }
         session.player.setVolume(volumeToGain(this.#volumePercent));
         this.#session = session;
-        this.#sessionOffsetMs = (seekSeconds ?? 0) * 1_000;
+        this.#sessionOffsetMs = startOffsetSeconds * 1_000;
         this.#autoplayArmed = true;
         this.#driverState = "playing";
         if (resuming) {
@@ -880,6 +903,7 @@ export class PlaybackController {
   ): Promise<
     | {
         audioUrlSource: AudioUrlSource;
+        bounds?: MusicBounds;
         cacheHit: boolean;
         prefetchStatus: PrefetchStatus;
         url: string;
@@ -894,18 +918,21 @@ export class PlaybackController {
       return undefined;
     };
     try {
-      const resolved = await this.#preparedStore.getOrResolve(
-        track,
-        "inline-resolve",
-        (t, signal) => this.#resolvePlayableAudio(t, signal),
-      );
+      // In parallel with the URL, so the lookup costs no start time unless
+      // it is slower than the resolution.
+      const [resolved, bounds] = await Promise.all([
+        this.#preparedStore.getOrResolve(track, "inline-resolve", (t, signal) =>
+          this.#resolvePlayableAudio(t, signal),
+        ),
+        this.#musicBounds(track),
+      ]);
       if (
         !this.#epochs.isGenerationCurrent(generation) ||
         this.#current !== track
       ) {
         return discardInFlight();
       }
-      return resolved;
+      return bounds === undefined ? resolved : { ...resolved, bounds };
     } catch (error) {
       if (
         !this.#epochs.isGenerationCurrent(generation) ||
@@ -1081,6 +1108,11 @@ export class PlaybackController {
     const isPlaylist = queueSnapshot.length > 10;
     const prefetchDepth = isPlaylist ? PLAYLIST_PREFETCH_DEPTH : PREFETCH_DEPTH;
     const prefetchSlice = queueSnapshot.slice(0, prefetchDepth);
+    // A prefetched URL starts at once, so without this the next play would
+    // wait on the segment lookup alone. The cache keeps the answer.
+    for (const next of prefetchSlice.slice(0, SEGMENT_PREFETCH_DEPTH)) {
+      void this.#musicBounds(next);
+    }
 
     const toResolve: Array<{ track: Track; index: number }> = [];
     for (const [index, next] of prefetchSlice.entries()) {
@@ -1219,7 +1251,8 @@ export class PlaybackController {
       .resolve(next, "inline-resolve", (t, signal) =>
         this.#resolvePlayableAudio(t, signal),
       )
-      .then((url) => {
+      .then(async (url) => {
+        const bounds = await this.#musicBounds(next);
         if (!this.#epochs.isCurrent(stamp)) {
           return undefined;
         }
@@ -1239,7 +1272,12 @@ export class PlaybackController {
         // sound different from cold-started ones. Live streams skip loudness
         // on both paths.
         const loudnessProfile = this.#loudnessProfiler?.cached(next.source);
+        const startSeconds = bounds?.startSeconds;
         const stream = this.#createPcmStream(url, {
+          ...(startSeconds === undefined ? {} : { seekSeconds: startSeconds }),
+          ...(bounds?.endSeconds === undefined
+            ? {}
+            : { endSeconds: bounds.endSeconds }),
           ...(next.durationSeconds === undefined ? { live: true } : {}),
           ...(this.#proxyUrl === undefined ? {} : { proxyUrl: this.#proxyUrl }),
           ...(this.#loudnessProfiler === undefined ||
@@ -1250,7 +1288,11 @@ export class PlaybackController {
                 ...(loudnessProfile === undefined ? {} : { loudnessProfile }),
               }),
         });
-        this.#warmStream = { source: next.source, stream };
+        this.#warmStream = {
+          source: next.source,
+          stream,
+          ...(startSeconds === undefined ? {} : { startSeconds }),
+        };
         return stream;
       })
       .catch(() => {
@@ -1258,14 +1300,19 @@ export class PlaybackController {
       });
   }
 
-  #takeWarmStream(source: string): FfmpegPcmStream | undefined {
+  #takeWarmStream(source: string): WarmStream | undefined {
     if (this.#warmStream === undefined || this.#warmStream.source !== source) {
       this.#discardWarmStream();
       return undefined;
     }
-    const { stream } = this.#warmStream;
+    const warm = this.#warmStream;
     this.#warmStream = undefined;
-    return stream;
+    return warm;
+  }
+
+  #musicBounds(track: Track): Promise<MusicBounds | undefined> {
+    if (this.#nonMusicSegments === undefined) return Promise.resolve(undefined);
+    return this.#nonMusicSegments.boundsFor(track).catch(() => undefined);
   }
 
   #discardWarmStream(): void {

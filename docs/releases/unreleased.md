@@ -74,6 +74,7 @@ Persistence fixes, dependency updates, deployment repairs and consistent bilingu
 - Update dependencies: dotenv 18 and libopus-wasm 0.4 (Opus output verified byte-identical), plus compatible Hono, Zod, undici, Vitest, ESLint and Prettier releases. Dependabot no longer proposes `@types/node` majors beyond the supported Node 22 runtime.
 - Stop notifying a connection-lost handler after it unsubscribes: kicked and disconnected events are bound once instead of once per subscription.
 - Add `scripts/deploy.sh`: waits until nothing is playing, stops the bot, backs up data and the env file, builds the target as the service user, starts it and rolls back to the previous commit on its own when the build or the start fails.
+- Add `RHAPSOD_SKIP_NON_MUSIC` (default `false`): YouTube music videos start where the music starts and end where it ends, using the non-music segments (spoken intros, scenes, credits) that SponsorBlock users mark with the `music_offtopic` category. Only an intro and an outro are cut, never a segment in the middle, and a cut that would keep less than half the track or less than 30 seconds is ignored. The lookup sends a 4-character prefix of the SHA-256 of the video id, waits at most 1.5 seconds and runs in parallel with the audio URL; when it fails the track plays whole.
 
 ## Upgrade
 

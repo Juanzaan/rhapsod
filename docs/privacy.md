@@ -22,6 +22,10 @@ Every chat command is logged with its text, the sender's nickname and UID. Logs 
 
 The panel's chat view keeps the last 50 channel messages in memory only; a restart clears them.
 
+## Outside services
+
+With `RHAPSOD_SKIP_NON_MUSIC=true`, each YouTube track is looked up on `sponsor.ajay.app` (SponsorBlock). The request carries the first 4 characters of the SHA-256 of the video id, which match many unrelated videos, and no TeamSpeak user data. With the default `false` no request is made.
+
 ## Delete a user's data
 
 1. Find the UID from a nickname the bot has seen:
