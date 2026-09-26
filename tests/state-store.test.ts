@@ -4,6 +4,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -30,6 +31,12 @@ describe("FilePlaybackStateStore", () => {
     writeFileSync(filePath, "{ not json");
     const store = new FilePlaybackStateStore(filePath);
     expect(store.load()).toEqual({});
+    expect(existsSync(filePath)).toBe(false);
+    expect(
+      readdirSync(directory).some((name) =>
+        name.startsWith("corrupt.json.corrupt-"),
+      ),
+    ).toBe(true);
   });
 
   it("round-trips a saved state through the file", async () => {
@@ -63,12 +70,14 @@ describe("FilePlaybackStateStore", () => {
     expect(store.load()).toEqual({});
   });
 
-  it("round-trips a persisted filter name", async () => {
-    const filePath = join(directory, "filter-state.json");
+  it("ignores a filter saved by versions that still had audio filters", () => {
+    const filePath = join(directory, "filter-legacy.json");
+    writeFileSync(
+      filePath,
+      JSON.stringify({ filter: "bassboost", loopMode: "queue" }),
+    );
     const store = new FilePlaybackStateStore(filePath);
-    store.save({ filter: "bassboost" });
-    await store.flush();
-    expect(store.load()).toEqual({ filter: "bassboost" });
+    expect(store.load()).toEqual({ loopMode: "queue" });
   });
 
   it("drops unknown filter values on load", () => {

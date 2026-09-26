@@ -10,7 +10,10 @@ import { QueueLimitError, TrackQueue } from "./track-queue.js";
 import {
   AUTOPLAY_REQUESTER,
   AUTOPLAY_UID,
+  autoplayBucketOrder,
   pickAutoplayTrack,
+  weightedPick,
+  type AutoplayBucket,
   type AutoplayCandidate,
   type AutoplayProfile,
   type AutoplayProfileSource,
@@ -21,7 +24,6 @@ import type { createPcmStream, playFfmpegUrl } from "../audio/ffmpeg-player.js";
 import type { LoudnessProfiler } from "../audio/loudness-profiler.js";
 import type { RhapsodOpusEncoder } from "../audio/opus-encoder.js";
 import type { VoiceFrameOutput } from "../audio/audio-player.js";
-import type { AudioFilter, FilterParam } from "../audio/filter-chain.js";
 import type { AudioPlayerMetrics } from "../audio/audio-player.js";
 import type { AlternativeSourceResolver } from "../media/song-link.js";
 import {
@@ -77,6 +79,7 @@ interface PlaybackServiceOptions {
   readonly lyricsResolver?: LyricsResolver;
   readonly autoplayProfile?: AutoplayProfileSource;
   readonly autoplayTimeoutMs?: number;
+  readonly autoplayRandom?: () => number;
   readonly relatedVideoId?: (
     seedVideoId: string,
   ) => Promise<string | undefined>;
@@ -140,8 +143,30 @@ interface PlaylistEnqueueResult {
 const DEFAULT_PLAYLIST_MAX_TRACKS = 100;
 const AUTOPLAY_MIX_LIMIT = 25;
 const AUTOPLAY_SEED_LIMIT = 3;
+// Pool sizes for the DJ buckets and how long a fetched YouTube mix is
+// reused: a mix call is a yt-dlp run, and the same seed feeds several turns.
+const AUTOPLAY_CLASSIC_POOL = 40;
+const AUTOPLAY_CLASSIC_ATTEMPTS = 3;
+const AUTOPLAY_DISCOVER_ARTISTS = 8;
+const AUTOPLAY_DISCOVER_ATTEMPTS = 2;
+const AUTOPLAY_MIX_CACHE_TTL_MS = 30 * 60_000;
+const AUTOPLAY_MIX_CACHE_MAX = 24;
+// Turns a bucket sits out after the channel skips one of its picks.
+const AUTOPLAY_SKIP_COOLDOWN = 2;
 const YOUTUBE_VIDEO_ID_RE =
   /(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([\w-]{11})/;
+
+interface AutoplayContext {
+  readonly lastTrack: LastPlayedTrack | undefined;
+  readonly profile: AutoplayProfile;
+  readonly recentArtists: readonly string[];
+  readonly recentIds: ReadonlySet<string>;
+  readonly seeds: readonly string[];
+}
+
+function youtubeWatchUrl(videoId: string): string {
+  return `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`;
+}
 
 function youtubeVideoIdFromSource(source: string): string | undefined {
   return YOUTUBE_VIDEO_ID_RE.exec(source)?.[1];
@@ -163,6 +188,14 @@ export class YoutubePlaybackService {
   readonly #lyricsResolver: LyricsResolver | undefined;
   readonly #autoplayProfile: AutoplayProfileSource | undefined;
   #autoplayUid: string | undefined;
+  readonly #autoplayRandom: () => number;
+  #autoplayTurn = 0;
+  readonly #bucketCooldowns = new Map<AutoplayBucket, number>();
+  readonly #autoplayBuckets = new Map<string, AutoplayBucket>();
+  readonly #mixCache = new Map<
+    string,
+    { readonly at: number; readonly candidates: readonly AutoplayCandidate[] }
+  >();
   readonly #relatedVideoId: (
     seedVideoId: string,
   ) => Promise<string | undefined>;
@@ -186,6 +219,7 @@ export class YoutubePlaybackService {
     this.#spotifyResolver = options.spotifyResolver;
     this.#lyricsResolver = options.lyricsResolver;
     this.#autoplayProfile = options.autoplayProfile;
+    this.#autoplayRandom = options.autoplayRandom ?? (() => Math.random());
     this.#relatedVideoId = options.relatedVideoId ?? fetchAutoplayVideoId;
     this.#stateStore = options.stateStore;
     this.#onTiming = options.onTiming ?? (() => undefined);
@@ -224,9 +258,6 @@ export class YoutubePlaybackService {
         : { directUrlResolver: options.directUrlResolver }),
       encoder: options.encoder,
       ...(restored?.autoplay === true ? { initialAutoplay: true } : {}),
-      ...(restored?.filter === undefined
-        ? {}
-        : { initialFilter: restored.filter }),
       ...(restored?.loopMode === undefined
         ? {}
         : { initialLoopMode: restored.loopMode }),
@@ -239,9 +270,10 @@ export class YoutubePlaybackService {
       ...(options.onPlaybackError === undefined
         ? {}
         : { onPlaybackError: options.onPlaybackError }),
-      ...(options.onPlaybackFinished === undefined
-        ? {}
-        : { onPlaybackFinished: options.onPlaybackFinished }),
+      onPlaybackFinished: (track, metrics, reason) => {
+        this.#noteAutoplayFinish(track, reason);
+        options.onPlaybackFinished?.(track, metrics, reason);
+      },
       ...(options.onPlaybackStarted === undefined
         ? {}
         : { onPlaybackStarted: options.onPlaybackStarted }),
@@ -288,10 +320,6 @@ export class YoutubePlaybackService {
     return this.#controller.loopMode;
   }
 
-  get filter(): AudioFilter {
-    return this.#controller.filter;
-  }
-
   get playerState(): "idle" | "buffering" | "playing" | "paused" {
     return this.#controller.playerState;
   }
@@ -310,10 +338,6 @@ export class YoutubePlaybackService {
 
   setLoopMode(mode: LoopMode): void {
     this.#controller.setLoopMode(mode);
-  }
-
-  setFilter(filter: AudioFilter, param?: FilterParam): void {
-    this.#controller.setFilter(filter, param);
   }
 
   async enqueue(
@@ -1323,23 +1347,200 @@ export class YoutubePlaybackService {
     const current = this.#controller.current;
     if (current !== undefined) recentIds.add(current.id);
     const recentArtists = this.#autoplayProfile?.recentArtists(10) ?? [];
-    for (const seed of seeds) {
+    const context: AutoplayContext = {
+      lastTrack,
+      profile,
+      recentArtists,
+      recentIds,
+      seeds,
+    };
+    const order = autoplayBucketOrder(
+      this.#autoplayTurn,
+      this.#bucketCooldowns,
+    );
+    for (const [bucket, turns] of this.#bucketCooldowns) {
+      if (turns <= 1) this.#bucketCooldowns.delete(bucket);
+      else this.#bucketCooldowns.set(bucket, turns - 1);
+    }
+    for (const bucket of order) {
+      const picked = await this.#pickFromBucket(bucket, context).catch(
+        () => undefined,
+      );
+      if (picked === undefined) continue;
+      this.#autoplayTurn++;
+      this.#autoplayBuckets.set(picked.id, bucket);
+      if (this.#autoplayBuckets.size > 50) {
+        const oldest = this.#autoplayBuckets.keys().next().value;
+        if (oldest !== undefined) this.#autoplayBuckets.delete(oldest);
+      }
+      return picked;
+    }
+    return undefined;
+  }
+
+  // A skipped autoplay pick is the channel saying "not this": its bucket sits
+  // out a couple of turns so the rotation leans on the others meanwhile.
+  #noteAutoplayFinish(track: Track, reason: PlaybackEndReason): void {
+    if (track.requestedByUid !== AUTOPLAY_UID) return;
+    const bucket = this.#autoplayBuckets.get(track.id);
+    this.#autoplayBuckets.delete(track.id);
+    if (bucket !== undefined && reason === "skipped") {
+      this.#bucketCooldowns.set(bucket, AUTOPLAY_SKIP_COOLDOWN);
+    }
+  }
+
+  async #pickFromBucket(
+    bucket: AutoplayBucket,
+    context: AutoplayContext,
+  ): Promise<Track | undefined> {
+    if (bucket === "classic") return this.#pickClassic(context);
+    if (bucket === "discover") return this.#pickDiscovery(context);
+    for (const seed of context.seeds) {
       const mixed = await this.#expandAutoplayMix(
         seed,
-        recentIds,
-        recentArtists,
-        profile,
-        lastTrack,
+        context.recentIds,
+        context.recentArtists,
+        context.profile,
+        context.lastTrack,
       ).catch(() => undefined);
       if (mixed !== undefined) return mixed;
       const related = await this.#resolveRelatedVideo(
         seed,
-        recentIds,
-        recentArtists,
+        context.recentIds,
+        context.recentArtists,
       ).catch(() => undefined);
       if (related !== undefined) return related;
     }
     return undefined;
+  }
+
+  // Brings back a channel favorite: weighted by how much the channel let it
+  // play, so the best-loved come back most without the list going stale.
+  async #pickClassic(context: AutoplayContext): Promise<Track | undefined> {
+    const recentCount = (artist: string | undefined): number =>
+      artist === undefined
+        ? 0
+        : context.recentArtists.filter(
+            (recent) => recent.toLowerCase() === artist.toLowerCase(),
+          ).length;
+    const pool = (
+      this.#autoplayProfile?.classicSeeds?.(AUTOPLAY_CLASSIC_POOL) ?? []
+    ).filter(
+      (seed) => !context.recentIds.has(seed.id) && recentCount(seed.artist) < 2,
+    );
+    const remaining = [...pool];
+    for (let attempt = 0; attempt < AUTOPLAY_CLASSIC_ATTEMPTS; attempt++) {
+      const seed = weightedPick(
+        remaining,
+        (entry) => entry.score,
+        this.#autoplayRandom,
+      );
+      if (seed === undefined) return undefined;
+      remaining.splice(remaining.indexOf(seed), 1);
+      // Re-read metadata: the video may be gone, and the duration decides
+      // loudness handling (a track without one is treated as live radio).
+      const metadata = await this.#resolver
+        .getTrack({ id: seed.id, type: "video" })
+        .catch(() => undefined);
+      if (metadata === undefined) continue;
+      return this.#autoplayTrack(metadata);
+    }
+    return undefined;
+  }
+
+  // Something new for the channel: a mix seeded by one of the artists the
+  // channel plays most, keeping only tracks it has never heard.
+  async #pickDiscovery(context: AutoplayContext): Promise<Track | undefined> {
+    const hasHeard = (id: string): boolean =>
+      this.#autoplayProfile?.hasHeard?.(id) ?? false;
+    const artists = [
+      ...(this.#autoplayProfile?.channelArtistSeeds?.(
+        AUTOPLAY_DISCOVER_ARTISTS,
+      ) ?? []),
+    ];
+    const channelProfile: AutoplayProfile = {
+      artistScores:
+        this.#autoplayProfile?.artistScores() ?? new Map<string, number>(),
+      tokenScores: new Map<string, number>(),
+    };
+    for (let attempt = 0; attempt < AUTOPLAY_DISCOVER_ATTEMPTS; attempt++) {
+      const seed = weightedPick(
+        artists,
+        (entry) => artists.length - artists.indexOf(entry),
+        this.#autoplayRandom,
+      );
+      if (seed === undefined) return undefined;
+      artists.splice(artists.indexOf(seed), 1);
+      const candidates = (await this.#mixCandidates(seed.id)).filter(
+        (candidate) => !hasHeard(candidate.id),
+      );
+      const pick = pickAutoplayTrack(
+        candidates,
+        channelProfile,
+        context.recentIds,
+        context.recentArtists,
+        context.lastTrack,
+        this.#autoplayRandom,
+      );
+      if (pick !== undefined) return this.#autoplayTrack(pick);
+    }
+    return undefined;
+  }
+
+  async #mixCandidates(
+    seedVideoId: string,
+  ): Promise<readonly AutoplayCandidate[]> {
+    const cached = this.#mixCache.get(seedVideoId);
+    if (
+      cached !== undefined &&
+      Date.now() - cached.at < AUTOPLAY_MIX_CACHE_TTL_MS
+    ) {
+      return cached.candidates;
+    }
+    const expansion = await this.#resolver.expandPlaylist(
+      { id: `RD${seedVideoId}`, type: "playlist" },
+      AUTOPLAY_MIX_LIMIT,
+    );
+    const candidates: AutoplayCandidate[] = [];
+    for (const entry of expansion.tracks) {
+      if (!entry.id || !entry.title || !entry.webpageUrl) continue;
+      const { artist } = parseArtistTitle(entry.title);
+      candidates.push({
+        ...(artist === undefined ? {} : { artist }),
+        ...(entry.durationSeconds === undefined
+          ? {}
+          : { durationSeconds: entry.durationSeconds }),
+        id: entry.id,
+        source: entry.webpageUrl,
+        title: entry.title,
+      });
+    }
+    this.#mixCache.delete(seedVideoId);
+    this.#mixCache.set(seedVideoId, { at: Date.now(), candidates });
+    if (this.#mixCache.size > AUTOPLAY_MIX_CACHE_MAX) {
+      const oldest = this.#mixCache.keys().next().value;
+      if (oldest !== undefined) this.#mixCache.delete(oldest);
+    }
+    return candidates;
+  }
+
+  #autoplayTrack(pick: {
+    readonly durationSeconds?: number;
+    readonly id: string;
+    readonly source?: string;
+    readonly title: string;
+    readonly webpageUrl?: string;
+  }): Track {
+    return {
+      ...(pick.durationSeconds === undefined
+        ? {}
+        : { durationSeconds: pick.durationSeconds }),
+      id: pick.id,
+      requestedBy: AUTOPLAY_REQUESTER,
+      requestedByUid: AUTOPLAY_UID,
+      source: pick.source ?? pick.webpageUrl ?? youtubeWatchUrl(pick.id),
+      title: pick.title,
+    };
   }
 
   #resolveAutoplayUid(history: readonly Track[]): string | undefined {
@@ -1361,43 +1562,15 @@ export class YoutubePlaybackService {
     profile: AutoplayProfile,
     lastTrack: LastPlayedTrack | undefined,
   ): Promise<Track | undefined> {
-    const expansion = await this.#resolver.expandPlaylist(
-      { id: `RD${seedVideoId}`, type: "playlist" },
-      AUTOPLAY_MIX_LIMIT,
-    );
-    const candidates: AutoplayCandidate[] = [];
-    for (const entry of expansion.tracks) {
-      if (!entry.id || !entry.title || !entry.webpageUrl) continue;
-      candidates.push({
-        ...(parseArtistTitle(entry.title).artist === undefined
-          ? {}
-          : { artist: parseArtistTitle(entry.title).artist }),
-        ...(entry.durationSeconds === undefined
-          ? {}
-          : { durationSeconds: entry.durationSeconds }),
-        id: entry.id,
-        source: entry.webpageUrl,
-        title: entry.title,
-      });
-    }
     const pick = pickAutoplayTrack(
-      candidates,
+      await this.#mixCandidates(seedVideoId),
       profile,
       recentIds,
       recentArtists,
       lastTrack,
+      this.#autoplayRandom,
     );
-    if (pick === undefined) return undefined;
-    return {
-      ...(pick.durationSeconds === undefined
-        ? {}
-        : { durationSeconds: pick.durationSeconds }),
-      id: pick.id,
-      requestedBy: AUTOPLAY_REQUESTER,
-      requestedByUid: AUTOPLAY_UID,
-      source: pick.source,
-      title: pick.title,
-    };
+    return pick === undefined ? undefined : this.#autoplayTrack(pick);
   }
 
   async #resolveRelatedVideo(
@@ -1480,12 +1653,10 @@ export class YoutubePlaybackService {
 
   #persistState(): void {
     if (this.#persistenceSuppressed) return;
-    const filter = this.#controller.filter;
     this.#safeObserver(() => {
       this.#stateStore?.save({
         ...(this.#controller.autoplayEnabled ? { autoplay: true } : {}),
         loopMode: this.#controller.loopMode,
-        ...(filter === "off" ? {} : { filter }),
         queue: this.#serializedQueue(),
         volumePercent: this.#controller.volume,
       });

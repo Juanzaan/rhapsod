@@ -1,4 +1,11 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -123,6 +130,21 @@ describe("UserPreferences", () => {
     expect(reloaded.listFavorites("uid-1").map((track) => track.title)).toEqual(
       ["Persisted"],
     );
+  });
+
+  it("keeps a copy of unreadable favorites instead of overwriting them", async () => {
+    const file = makeTempFile();
+    const damaged = '{"version":1,"users":{"uid-1":{"favorites":[';
+    writeFileSync(file, damaged, "utf8");
+    const prefs = new UserPreferences(file);
+    prefs.addFavorite("uid-2", makeTrack("b"));
+    await prefs.flush();
+
+    const copies = readdirSync(dirname(file)).filter((name) =>
+      name.startsWith("user-preferences.json.corrupt-"),
+    );
+    expect(copies).toHaveLength(1);
+    expect(readFileSync(join(dirname(file), copies[0]!), "utf8")).toBe(damaged);
   });
 
   it("starts fresh on corrupt or foreign files", () => {

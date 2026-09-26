@@ -31,12 +31,6 @@ chat once the TS3 adapter is connected.
 | `!shuffle`                            | -                     | Shuffle the pending queue (the current track keeps playing).                                                               |
 | `!loop [off\|track\|queue]`           | -                     | Repeat the current track (`track`) or the whole queue (`queue`); persists in `state.json`.                                 |
 | `!lyrics`                             | `!ly`                 | Show the lyrics of the current track, found via LRCLIB (best-effort, no account).                                          |
-| `!bassboost [1-5]`                    | `!bb`                 | Apply the bassboost filter (level 1-5).                                                                                    |
-| `!nightcore [1.05-1.35]`              | `!nc`                 | Apply the nightcore filter (playback speed).                                                                               |
-| `!vaporwave [0.80-0.95]`              | `!vw`                 | Apply the vaporwave filter (playback speed).                                                                               |
-| `!8d`                                 | -                     | Apply the 8D spatial audio filter.                                                                                         |
-| `!filter [off]`                       | -                     | Show the current audio filter, or `off` to disable it.                                                                     |
-| `!effects <effect> [on\|off]`         | -                     | Control audio effects (`8d`, `nightcore`, `bassboost`, `vaporwave`, `list`, `reset`).                                      |
 | `!playlist <subcommand>`              | `!pl`                 | Saved playlists: `save\|load\|list\|show\|delete\|add\|remove\|rename\|info`.                                              |
 | `!fav`                                | -                     | Save the current track to your favorites (max 50 per user).                                                                |
 | `!favs`                               | -                     | List your favorite tracks.                                                                                                 |
@@ -66,20 +60,28 @@ chat once the TS3 adapter is connected.
   searches to SoundCloud; pasted links always use their own provider. Unset
   (or `auto`) means YouTube, and empty SoundCloud results fall back to
   YouTube instead of failing.
-- **Autoplay:** `!autoplay on` keeps the music going after the queue drains:
-  the bot expands the YouTube mix of recently played tracks and picks the
-  best match for whoever has been requesting: artist affinity and title
-  tokens from their recent sessions (today wins over last week), plus
-  energy continuity with the track that just played so transitions flow
-  instead of jumping genres. Same-artist bridges are capped and rotation
-  is pressured so one act cannot lock the rotation; exploration stays
-  within compatible energy. With no personal signal it blends the
-  channel's overall taste; with nothing to seed from it stays silent.
-  Songs heard on live radio join the same history once the station names
-  them in its stream metadata, so the station rotation also feeds autoplay
-  and `!tops`.
-  Anyone may skip an autoplay pick. The flag persists in
-  `data/state.json`.
+- **Autoplay:** `!autoplay on` keeps the music going after the queue drains
+  by rotating three sources, four similar picks, three classics and three
+  discoveries every ten tracks:
+  - **Similar:** the YouTube mix of what just played, ranked for whoever
+    has been requesting (artist affinity and title words from their recent
+    sessions, energy continuity with the last track).
+  - **Classics:** tracks the channel requested and let play before, rested
+    for at least six hours; tracks skipped more often than finished never
+    come back.
+  - **Discoveries:** tracks the channel has never heard, from the YouTube
+    mix of an artist the channel plays most.
+
+  Autoplay's own picks do not count as requests: they never raise `!tops`
+  or the taste profile, so autoplay does not reinforce itself. Skipping an
+  autoplay pick counts against that track, and its source sits out the next
+  two turns. When a source has nothing to offer, the next one fills in; with
+  no history at all autoplay stays silent. Fetched mixes are reused for 30
+  minutes. Songs heard on live radio join the same history once the station
+  names them in its stream metadata, so the station rotation also feeds
+  classics and `!tops`. Anyone may skip an autoplay pick. The flag persists
+  in `data/state.json`.
+
 - **Persistence:** `!volume` (default `50`) and `!loop` are saved to
   `data/state.json` (atomic write) and restored at startup; `!stop`/`!clear`
   reset looping and persist the change.

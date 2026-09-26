@@ -10,7 +10,7 @@ Buscar por título, artista o enlace compatible. Seleccionar la casilla de próx
 
 Al pasar el cursor sobre la barra de progreso se muestra el tiempo de ese punto; pulsar para cambiar de posición. Con el foco en la barra, las flechas avanzan o retroceden cinco segundos; Inicio y Fin seleccionan los extremos. Las transmisiones sin duración conocida no admiten búsqueda de posición. El disco giratorio, el brazo y las barras del ecualizador junto al estado indican la reproducción. Son decorativos, no un espectro de audio ni una portada: las barras se mueven mientras el bot reproduce y se detienen en pausa.
 
-Cada pista tiene su propio color, calculado a partir del título. El reproductor, la barra de progreso, los botones principales, los filtros activos y el brillo del fondo cambian a ese color al cambiar de pista, por lo que la misma canción siempre muestra el mismo color. El último color se guarda en este navegador y lo usan las demás páginas del panel.
+Cada pista tiene su propio color, calculado a partir del título. El reproductor, la barra de progreso, los botones principales, el modo de repetición activo y el brillo del fondo cambian a ese color al cambiar de pista, por lo que la misma canción siempre muestra el mismo color. El último color se guarda en este navegador y lo usan las demás páginas del panel.
 
 La tarjeta de descubrimiento permite buscar radio y activar o desactivar la reproducción automática. Listas y estadísticas utilizan el contexto de comandos del bot; no representan la biblioteca personal de un usuario TeamSpeak. Letras e historial se muestran en la tarjeta de salida.
 
