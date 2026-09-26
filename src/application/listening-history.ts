@@ -1,9 +1,6 @@
-import { dirname } from "node:path";
-import { mkdir, rename, writeFile } from "node:fs/promises";
-
 import type { MinimalLogger } from "../observability/logger.js";
 import { noopLogger } from "../observability/logger.js";
-import { readJsonFile } from "../lib/json-file-store.js";
+import { readJsonFile, writeFileAtomic } from "../lib/json-file-store.js";
 import { parseArtistTitle } from "../media/lyrics.js";
 import {
   tokenizeTitle,
@@ -532,7 +529,7 @@ export class ListeningHistory {
   #ensureLoaded(): void {
     if (this.#loaded) return;
     this.#loaded = true;
-    const parsed = readJsonFile(this.#filePath, parseHistoryFile);
+    const parsed = readJsonFile(this.#filePath, parseHistoryFile, this.#logger);
     if (parsed === undefined) return;
     this.#users = parsed.users;
     this.#global = parsed.global;
@@ -555,7 +552,6 @@ export class ListeningHistory {
 
   async #persistNow(): Promise<void> {
     try {
-      await mkdir(dirname(this.#filePath), { recursive: true });
       const data = {
         global: Object.fromEntries(this.#global),
         users: Object.fromEntries(
@@ -569,12 +565,7 @@ export class ListeningHistory {
         ),
         version: HISTORY_VERSION,
       };
-      const temporary = `${this.#filePath}.tmp`;
-      await writeFile(temporary, JSON.stringify(data), {
-        encoding: "utf8",
-        mode: 0o600,
-      });
-      await rename(temporary, this.#filePath);
+      await writeFileAtomic(this.#filePath, JSON.stringify(data), 0o600);
     } catch (error) {
       this.#logger.warn(
         { err: error },

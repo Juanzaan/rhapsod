@@ -37,6 +37,7 @@ Persistence fixes, dependency updates, deployment repairs and consistent bilingu
 - Resume 403 retries where the audio stopped instead of replaying the start of the track, retry silently instead of posting an error for each attempt, and rejoin live radio at the live edge. 403 detection matches the HTTP error wording instead of any "403" in URLs.
 - Use the configured FFmpeg binary and User-Agent for prewarmed next-track streams; they used to fall back to the bundled ffmpeg-static.
 - Space outgoing chat messages one second apart even when several are queued at once, log messages dropped by the anti-flood queue, split texts longer than 1024 characters (such as `!help` or `!debug-server` on large servers) instead of losing them, and detect a heartbeat probe that never answers.
+- Keep unreadable data files: playlists, favorites, listening history, the song library, telemetry or playback state that fail to parse are renamed to `<name>.corrupt-<time>` instead of being replaced by the next save. Every data write is flushed to disk before the rename, so a power loss cannot leave an empty file.
 - Accept `!channel-move` while the bot cannot talk in its channel: it is the command that moves it out, and it used to be ignored with every other command. Move permissions still apply.
 
 ## Upgrade
