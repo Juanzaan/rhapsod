@@ -152,6 +152,12 @@ export function analyzeLogs(lines) {
   const audioUrlMs = [];
   const metadataMs = [];
   const firstFrameDelayMs = [];
+  const commandToAudioMs = [];
+  const startDelayMs = [];
+  const handoffGapMs = [];
+  const underrunsPerPlay = [];
+  const rebuffersPerPlay = [];
+  const handoffs = { prewarmed: 0, cold: 0 };
   const cacheHits = { hit: 0, miss: 0 };
   const winners = new Map();
   const providerFails = new Map();
@@ -189,6 +195,23 @@ export function analyzeLogs(lines) {
         firstFrameDelayMs.push(record.firstFrameDelayMs);
       if (record.cacheHit === true) cacheHits.hit++;
       else if (record.cacheHit === false) cacheHits.miss++;
+      if (typeof record.startDelayMs === "number") {
+        startDelayMs.push(record.startDelayMs);
+        // A cold start waited for metadata, then resolution and ffmpeg:
+        // together that is what the listener waited after typing !play.
+        if (record.coldStart === true && typeof record.metadataMs === "number")
+          commandToAudioMs.push(record.metadataMs + record.startDelayMs);
+      }
+      if (typeof record.handoffGapMs === "number")
+        handoffGapMs.push(record.handoffGapMs);
+      if (record.coldStart === false) {
+        if (record.prewarmed === true) handoffs.prewarmed++;
+        else handoffs.cold++;
+      }
+      if (typeof record.underruns === "number")
+        underrunsPerPlay.push(record.underruns);
+      if (typeof record.rebufferEvents === "number")
+        rebuffersPerPlay.push(record.rebufferEvents);
     } else if (record.msg === "Playback timing") {
       playbackTimings++;
       if (record.stage === "audio-url") {
@@ -259,6 +282,23 @@ export function analyzeLogs(lines) {
     audioUrlMs: summarize(audioUrlMs),
     metadataMs: summarize(metadataMs),
     firstFrameDelayMs: summarize(firstFrameDelayMs),
+    kpis: {
+      commandToAudioMs: summarize(commandToAudioMs),
+      startDelayMs: summarize(startDelayMs),
+      handoffGapMs: summarize(handoffGapMs),
+      underrunsPerPlay: summarize(underrunsPerPlay),
+      rebuffersPerPlay: summarize(rebuffersPerPlay),
+      handoffs,
+      prewarmRate:
+        handoffs.prewarmed + handoffs.cold > 0
+          ? Number(
+              (
+                (handoffs.prewarmed / (handoffs.prewarmed + handoffs.cold)) *
+                100
+              ).toFixed(1),
+            )
+          : 0,
+    },
     cacheHitRate:
       cacheHits.hit + cacheHits.miss > 0
         ? Number(
@@ -313,6 +353,24 @@ export function formatStats(stats, options = {}) {
   lines.push(`Falls por provider: ${JSON.stringify(stats.providerFails)}`);
   lines.push(`Reintentos (yt-dlp client fallback): ${stats.retries}`);
   lines.push(`Errores level:50: ${JSON.stringify(stats.errorLevel50)}`);
+  lines.push("");
+  lines.push("--- Indicadores de reproducción (ms) ---");
+  lines.push(
+    `  Comando a primer audio (arranque en frío): ${fmtSummary(stats.kpis.commandToAudioMs)}`,
+  );
+  lines.push(
+    `  Elección de pista a primer audio: ${fmtSummary(stats.kpis.startDelayMs)}`,
+  );
+  lines.push(`  Pausa entre pistas: ${fmtSummary(stats.kpis.handoffGapMs)}`);
+  lines.push(
+    `  Cambios precargados: ${stats.kpis.handoffs.prewarmed} de ${stats.kpis.handoffs.prewarmed + stats.kpis.handoffs.cold} (${stats.kpis.prewarmRate}%)`,
+  );
+  lines.push(
+    `  Underruns por pista: ${fmtSummary(stats.kpis.underrunsPerPlay)}`,
+  );
+  lines.push(
+    `  Rebuffers por pista: ${fmtSummary(stats.kpis.rebuffersPerPlay)}`,
+  );
   lines.push("");
   lines.push("--- Guía rápida (qué significa cada tipo de error) ---");
   lines.push(
