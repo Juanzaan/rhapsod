@@ -324,6 +324,22 @@ export function createTs3Connection(
       );
     },
   });
+  // The client library has no `off()`, so kicked/disconnected are bound once
+  // and fanned out; an unsubscribe removes its handler here instead of
+  // leaving a listener that keeps firing into a stale reconnect loop.
+  const connectionLostHandlers = new Set<
+    (reason: "kicked" | "disconnected") => void
+  >();
+  let connectionLostBound = false;
+  const bindConnectionLost = (): void => {
+    if (connectionLostBound) return;
+    connectionLostBound = true;
+    const notify = (reason: "kicked" | "disconnected"): void => {
+      for (const handler of [...connectionLostHandlers]) handler(reason);
+    };
+    client.on("kicked", () => notify("kicked"));
+    client.on("disconnected", () => notify("disconnected"));
+  };
 
   return {
     connect: async (options?: { skipDuplicateCheck?: boolean }) => {
@@ -598,17 +614,21 @@ export function createTs3Connection(
       });
     },
     onConnectionLost: (handler) => {
-      client.on("kicked", () => handler("kicked"));
-      client.on("disconnected", () => handler("disconnected"));
+      bindConnectionLost();
+      connectionLostHandlers.add(handler);
       const heartbeatSeconds = config.RHAPSOD_TS3_HEARTBEAT_SECONDS;
-      if (heartbeatSeconds > 0) {
-        return createHeartbeat(
-          () => listClients(client).then(() => undefined),
-          heartbeatSeconds * 1_000,
-          () => handler("disconnected"),
-        );
-      }
-      return () => undefined;
+      const stopHeartbeat =
+        heartbeatSeconds > 0
+          ? createHeartbeat(
+              () => listClients(client).then(() => undefined),
+              heartbeatSeconds * 1_000,
+              () => handler("disconnected"),
+            )
+          : () => undefined;
+      return () => {
+        connectionLostHandlers.delete(handler);
+        stopHeartbeat();
+      };
     },
     sendChannelMessage: async (text) => {
       await messageGate(
