@@ -154,6 +154,9 @@ describe("parseChatCommand", () => {
     expect(parseChatCommand("!top 2")).toEqual({ name: "tops", page: 2 });
     expect(parseChatCommand("!mystats")).toEqual({ name: "mystats" });
     expect(() => parseChatCommand("!tops x")).toThrow("Usá: !tops [n]");
+    expect(() => parseChatCommand("!loop x")).toThrow(
+      "Usá: !loop [off|track|queue]",
+    );
   });
 
   it("does not treat normal chat as a command", () => {
