@@ -14,11 +14,7 @@ import { createPcmStream, playFfmpegUrl } from "./audio/ffmpeg-player.js";
 import { LoudnessProfiler } from "./audio/loudness-profiler.js";
 import { playTestTone } from "./audio/test-tone-player.js";
 import { YoutubePlaybackService } from "./application/youtube-playback-service.js";
-import { AudioUrlCache } from "./application/audio-url-cache.js";
 import { PlaylistStore } from "./application/playlist-store.js";
-import { UserTelemetry } from "./application/user-telemetry.js";
-import { UserPreferences } from "./application/user-preferences.js";
-import { ListeningHistory } from "./application/listening-history.js";
 import { AUTOPLAY_UID } from "./application/autoplay-picker.js";
 import {
   normalizeCommandInput,
@@ -46,7 +42,6 @@ import { createYtDlpResolverStack } from "./media/youtube/yt-dlp.js";
 import { resolveInstanceDir } from "./lib/instance-dir.js";
 import { RadioTitleCache } from "./media/radio-icy.js";
 import { RadioScrobbler } from "./application/radio-scrobbler.js";
-import { SongLibrary } from "./application/song-library.js";
 import { createPanelServer, type QueueEntry } from "./panel/panel-server.js";
 import { ChatLog, isOwnEcho } from "./application/chat-log.js";
 import {
@@ -83,6 +78,7 @@ import {
   onStopSignal,
 } from "./bootstrap/exit.js";
 import { startSetupMode } from "./bootstrap/setup-mode.js";
+import { flushStores, openStores } from "./bootstrap/stores.js";
 import { ytDlpStackOptions } from "./bootstrap/yt-dlp-options.js";
 import { userFacingError } from "./lib/user-facing-error.js";
 
@@ -210,27 +206,15 @@ async function main(): Promise<void> {
     chatLog.push(config.RHAPSOD_TS3_NICKNAME, text, true);
     return rawSendChannelMessage(text);
   };
-  const telemetry = new UserTelemetry(
-    join(dataDir, "user-telemetry.json"),
-    logger,
-  );
-  telemetry.load();
-  const preferences = new UserPreferences(
-    join(dataDir, "user-preferences.json"),
-  );
+  const stores = openStores({ dataDir, logger, metrics });
+  const {
+    audioUrlCache,
+    listeningHistory,
+    preferences,
+    songLibrary,
+    telemetry,
+  } = stores;
   const radioTitles = new RadioTitleCache();
-  const listeningHistory = new ListeningHistory(
-    join(dataDir, "listening-history.json"),
-    logger,
-  );
-  const songLibrary = new SongLibrary(
-    join(dataDir, "song-library.json"),
-    logger,
-  );
-  // At startup, not inside the first onPlaybackStarted: a large history
-  // parsed there delayed the first track's audio.
-  listeningHistory.load();
-  songLibrary.load();
   const serverSnapshot = new ServerSnapshot();
   const channelDirectory = new ChannelDirectory(async (cid) => {
     try {
@@ -351,14 +335,6 @@ async function main(): Promise<void> {
       onSearchMetrics: (m) => metrics.recordSearchMetrics(m),
     });
   ytDlpMetricsRef.getMetrics = () => ytDlpExecutor.metrics();
-  const audioUrlCache = AudioUrlCache.load(
-    join(dataDir, "audio-url-cache.json"),
-    logger,
-    {
-      onHit: () => metrics.increment("cacheHits"),
-      onMiss: () => metrics.increment("cacheMisses"),
-    },
-  );
   const resolver: YoutubePlaybackResolver = ytDlpResolver;
   const playback = new YoutubePlaybackService({
     createPlayback: (url, playbackEncoder, output, options) =>
@@ -508,16 +484,8 @@ async function main(): Promise<void> {
     lyricsResolver: new LyricsClient({ logger }),
     ...(spotifyResolver ? { spotifyResolver } : {}),
   });
-  const flushState = async (): Promise<void> => {
-    await Promise.all([
-      playback.flushState().catch(() => undefined),
-      audioUrlCache.flush().catch(() => undefined),
-      telemetry.save().catch(() => undefined),
-      preferences.flush().catch(() => undefined),
-      listeningHistory.flush().catch(() => undefined),
-      songLibrary.flush().catch(() => undefined),
-    ]);
-  };
+  const flushState = (): Promise<void> =>
+    flushStores(stores, () => playback.flushState());
   exits.setFlush(flushState);
   const youtubeAuthCheckUrl = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
   const youtubeAuthCheckIntervalMs = 24 * 60 * 60 * 1_000;

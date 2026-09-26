@@ -28,7 +28,7 @@ Proveedores -> PreparedAudioStore -> FFmpeg PCM
 - `src/panel/`: endpoints locales autenticados, plantillas y edición del entorno.
 - `src/observability/`: registros estructurados, métricas y errores sin secretos.
 - `src/config.ts`: esquema de ejecución y valores predeterminados.
-- `src/bootstrap/`: partes del arranque que `src/main.ts` conecta en orden: salida y manejo de fallos (`exit.ts`), modo de configuración (`setup-mode.ts`) y opciones compartidas de yt-dlp.
+- `src/bootstrap/`: partes del arranque que `src/main.ts` conecta en orden: salida y manejo de fallos (`exit.ts`), modo de configuración (`setup-mode.ts`), los almacenes JSON y su guardado (`stores.ts`) y opciones compartidas de yt-dlp.
 
 ## Comandos
 
