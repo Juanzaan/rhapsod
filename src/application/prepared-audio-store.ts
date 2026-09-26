@@ -28,6 +28,29 @@ export function audioUrlExpiresAt(url: string): number {
   return Date.now() + AUDIO_URL_FALLBACK_TTL_MS;
 }
 
+// YouTube signs URLs for about six hours. Requiring more than this would make
+// every URL for a very long mix look stale and re-resolve it on each check.
+const MAX_REQUIRED_COVERAGE_MS = 4 * 60 * 60_000;
+
+/**
+ * Whether a URL expiring at `expiresAt` stays valid for the whole play when
+ * the track starts within `startsWithinMs`. Checking only "not expired yet"
+ * handed a URL with two minutes left to a five-minute track: it died with a
+ * 403 mid-song and the retry filled the gap with silence.
+ */
+export function lastsThroughPlay(
+  expiresAt: number,
+  track: Pick<Track, "durationSeconds">,
+  startsWithinMs = 0,
+  now = Date.now(),
+): boolean {
+  const playMs = Math.min(
+    (track.durationSeconds ?? 0) * 1_000,
+    MAX_REQUIRED_COVERAGE_MS,
+  );
+  return expiresAt > now + startsWithinMs + playMs;
+}
+
 interface PreparedAudio {
   readonly url: string;
   readonly expiresAt: number;
@@ -102,7 +125,7 @@ export class PreparedAudioStore {
   ): Promise<PreparedAudioResolution> {
     const cached = this.#prepared.get(track.source);
     if (cached) {
-      if (cached.expiresAt > Date.now()) {
+      if (lastsThroughPlay(cached.expiresAt, track)) {
         const prefetchStatus =
           cached.origin === "prefetch"
             ? cached.status === "pending"
