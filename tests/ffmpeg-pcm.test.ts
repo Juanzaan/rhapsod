@@ -484,3 +484,94 @@ describe("FFmpeg PCM 403 retry position", () => {
     ).toBe(true);
   });
 });
+
+describe("FFmpeg network guard", () => {
+  it("keeps HLS segments and nested opens on TLS so they cannot reach plain-HTTP hosts", () => {
+    // Regression: a public HTTPS playlist listing http://169.254.169.254/...
+    // or http://127.0.0.1:8765/... made ffmpeg fetch those internal URLs.
+    const args = buildFfmpegPcmArguments("https://radio.example/live.m3u8");
+    const at = args.indexOf("-protocol_whitelist");
+    expect(at).toBeGreaterThan(-1);
+    expect(args[at + 1]).toBe("https,tls,tcp,crypto");
+    expect(at).toBeLessThan(args.indexOf("-i"));
+  });
+
+  it("allows the proxy tunnel only on the proxy egress attempt", () => {
+    const options = { proxyUrl: "http://127.0.0.1:40000" };
+    const direct = buildFfmpegPcmArguments("https://a.example/x", options);
+    const proxied = buildFfmpegPcmArguments(
+      "https://a.example/x",
+      options,
+      true,
+    );
+    expect(direct[direct.indexOf("-protocol_whitelist") + 1]).toBe(
+      "https,tls,tcp,crypto",
+    );
+    expect(proxied[proxied.indexOf("-protocol_whitelist") + 1]).toBe(
+      "https,tls,tcp,crypto,httpproxy",
+    );
+  });
+
+  it("logs only abnormal exits, without the stream URL or tokens", () => {
+    const writes: string[] = [];
+    const writeSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation((chunk: string | Uint8Array) => {
+        writes.push(String(chunk));
+        return true;
+      });
+    try {
+      const closeHandlers: Array<
+        (code: number | null, signal: string | null) => void
+      > = [];
+      const stderrHandlers: Array<(chunk: Buffer) => void> = [];
+      const child = {
+        exitCode: null,
+        signalCode: null,
+        kill: vi.fn(() => true),
+        on: vi.fn(
+          (
+            event: string,
+            handler: (code: number | null, signal: string | null) => void,
+          ) => {
+            if (event === "close") closeHandlers.push(handler);
+          },
+        ),
+        once: vi.fn(),
+        stderr: {
+          on: vi.fn((event: string, handler: (chunk: Buffer) => void) => {
+            if (event === "data") stderrHandlers.push(handler);
+          }),
+        },
+        stdout: { on: vi.fn(), pipe: vi.fn(), unpipe: vi.fn() },
+      };
+      const spawnProcess = vi.fn(() => child) as never;
+
+      const finished = createFfmpegPcmStream(
+        "https://rr1.googlevideo.example/videoplayback?sig=SECRETSIG",
+        { spawnProcess },
+      );
+      closeHandlers[0]?.(0, null);
+      expect(writes).toHaveLength(0);
+      finished.stop();
+
+      const failed = createFfmpegPcmStream(
+        "https://rr1.googlevideo.example/videoplayback?sig=SECRETSIG",
+        { spawnProcess },
+      );
+      failed.stream.on("error", () => {});
+      stderrHandlers[stderrHandlers.length - 1]?.(
+        Buffer.from(
+          "https://rr1.googlevideo.example/videoplayback?sig=SECRETSIG: I/O error authorization: Bearer abc.def",
+        ),
+      );
+      closeHandlers[closeHandlers.length - 1]?.(1, null);
+      expect(writes).toHaveLength(1);
+      expect(writes[0]).toContain("FFmpeg exited");
+      expect(writes[0]).not.toContain("SECRETSIG");
+      expect(writes[0]).not.toContain("abc.def");
+    } finally {
+      writeSpy.mockRestore();
+    }
+  });
+});
