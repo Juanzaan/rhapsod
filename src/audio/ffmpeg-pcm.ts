@@ -4,6 +4,7 @@ import { PassThrough, type Readable } from "node:stream";
 import ffmpegStaticPath from "ffmpeg-static";
 
 import { CHANNELS, SAMPLE_RATE } from "./opus-encoder.js";
+import { sanitizeSensitive, sanitizeUrl } from "../observability/metrics.js";
 import {
   buildFilterChain,
   type AudioFilter,
@@ -47,6 +48,15 @@ export interface FfmpegPcmStream {
 
 const STOP_GRACE_MS = 3_000;
 
+// The input URL is checked to be public HTTPS before ffmpeg runs, but ffmpeg
+// then opens HLS segment and key URLs on its own; a public playlist listing
+// http://169.254.169.254/ or http://127.0.0.1:8765/ made it fetch those.
+// The whitelist keeps every nested open on TLS. It does not stop a 302 to a
+// plain-HTTP host: ffmpeg follows redirects inside its http protocol over
+// tcp, and builds before 7.1 have no option to turn that off.
+// httpproxy is only needed for the 403 fallback egress.
+export const FFMPEG_PROTOCOL_WHITELIST = "https,tls,tcp,crypto";
+
 export function buildFfmpegPcmArguments(
   url: string,
   options: FfmpegPcmOptions = {},
@@ -67,6 +77,10 @@ export function buildFfmpegPcmArguments(
     "1",
     "-reconnect_delay_max",
     "5",
+    "-protocol_whitelist",
+    useProxy && options.proxyUrl !== undefined && options.proxyUrl.length > 0
+      ? `${FFMPEG_PROTOCOL_WHITELIST},httpproxy`
+      : FFMPEG_PROTOCOL_WHITELIST,
     "-rw_timeout",
     "8000000",
     "-timeout",
@@ -196,18 +210,21 @@ export function createFfmpegPcmStream(
       if (!stopped && !stream.destroyed) stream.destroy(error);
     });
     child.on("close", (code, signal) => {
-      console.error(
-        JSON.stringify({
-          msg: "FFmpeg close",
-          code,
-          signal,
-          stopped,
-          retries,
-          proxy: usedProxy,
-          url: url.slice(0, 80),
-          stderr: stderr.trim().slice(0, 200),
-        }),
-      );
+      // Abnormal exits only, scrubbed: the raw line used to print on every
+      // track end with the stream URL and ffmpeg's stderr, which can carry
+      // signed URLs and tokens, straight to the journal.
+      if (!stopped && code !== 0 && signal !== "SIGTERM") {
+        process.stderr.write(
+          `${JSON.stringify({
+            msg: "FFmpeg exited",
+            code,
+            signal,
+            retries,
+            proxy: usedProxy,
+            stderr: sanitizeUrl(sanitizeSensitive(stderr.trim())).slice(0, 200),
+          })}\n`,
+        );
+      }
       if (stopped) {
         if (code === 0 || signal === "SIGTERM" || signal === "SIGKILL") return;
         if (!stream.destroyed) {

@@ -287,6 +287,9 @@ describe("DirectUrlResolver", () => {
           return;
         }
         expect(args).toContain("-max_redirects");
+        expect(args[args.indexOf("-protocol_whitelist") + 1]).toBe(
+          "https,tls,tcp,crypto",
+        );
         expect(args.at(-1)).toBe("https://cdn.example.test/real.mp3");
         callback(null, {
           stdout: JSON.stringify({ format: { duration: "12.4" } }),
