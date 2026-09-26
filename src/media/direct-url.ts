@@ -8,6 +8,7 @@ import {
 } from "../audio/ffmpeg-pcm.js";
 import type { YoutubeTrackMetadata } from "./youtube/yt-dlp.js";
 import { isPublicHostname, safeFetch } from "../lib/ssrf.js";
+import { rhapsodUserAgent } from "../lib/version.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -215,7 +216,7 @@ export class DirectUrlClient implements DirectUrlResolver {
     const timer = setTimeout(() => controller.abort(), HEAD_TIMEOUT_MS);
     try {
       return await this.#fetch(url, {
-        headers: { "user-agent": "Rhapsod/1 (audio-probe)" },
+        headers: { "user-agent": rhapsodUserAgent("audio-probe") },
         method: "HEAD",
         redirect: "manual",
         signal: controller.signal,
@@ -238,7 +239,7 @@ export class DirectUrlClient implements DirectUrlResolver {
       return await this.#fetch(url, {
         headers: {
           range: "bytes=0-1",
-          "user-agent": "Rhapsod/1 (audio-probe)",
+          "user-agent": rhapsodUserAgent("audio-probe"),
         },
         method: "GET",
         redirect: "manual",

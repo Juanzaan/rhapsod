@@ -1,4 +1,5 @@
 import { isPublicHostname, safeFetch } from "../lib/ssrf.js";
+import { rhapsodUserAgent } from "../lib/version.js";
 
 export interface TuneInStation {
   readonly bitrate?: number;
@@ -169,7 +170,7 @@ async function probeLink(
     return await fetchImpl(url, {
       headers: {
         ...(method === "GET" ? { range: "bytes=0-1" } : {}),
-        "user-agent": "Rhapsod/3.0 (tunein-link)",
+        "user-agent": rhapsodUserAgent("tunein-link"),
       },
       method,
       redirect: "manual",
@@ -232,7 +233,7 @@ async function tuneInRequestText(
     const response = await Promise.race([
       fetchImpl(`${API_BASE}${path}`, {
         headers: {
-          "User-Agent": options.userAgent ?? "Rhapsod/3.0",
+          "User-Agent": options.userAgent ?? rhapsodUserAgent(),
         },
         signal: controller.signal,
       }),

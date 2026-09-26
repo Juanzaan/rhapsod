@@ -1,9 +1,61 @@
-import { describe, expect, it, vi } from "vitest";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  CLIENT_ID_UNAVAILABLE_MESSAGE,
   SoundCloudDrmError,
   SoundCloudPublicApi,
 } from "../src/media/soundcloud/public-api.js";
+
+const tempDirs: string[] = [];
+afterEach(() => {
+  for (const dir of tempDirs.splice(0))
+    rmSync(dir, { force: true, recursive: true });
+});
+
+function cachePath(value?: string): string {
+  const dir = mkdtempSync(join(tmpdir(), "rhapsod-sc-"));
+  tempDirs.push(dir);
+  const file = join(dir, "soundcloud-client-id.json");
+  if (value !== undefined)
+    writeFileSync(file, JSON.stringify({ discoveredAt: 1, value }));
+  return file;
+}
+
+/** A fetch where the homepage scrape works or not, and records client_ids. */
+function soundcloud(options: { homepage: "ok" | "broken"; rejects?: string }): {
+  fetch: typeof globalThis.fetch;
+  usedIds: string[];
+} {
+  const usedIds: string[] = [];
+  const fetch = vi.fn<typeof globalThis.fetch>((input) => {
+    const url = requestUrl(input);
+    if (url === "https://soundcloud.com/")
+      return Promise.resolve(
+        options.homepage === "ok"
+          ? response(
+              '<script src="https://a-v2.sndcdn.com/assets/app.js"></script>',
+            )
+          : response("<html>new layout</html>"),
+      );
+    if (url.includes("app.js"))
+      return Promise.resolve(response('client_id="abcdefghijklmnopqrstuvwx"'));
+    const id = new URL(url).searchParams.get("client_id") ?? "";
+    usedIds.push(id);
+    if (id === options.rejects)
+      return Promise.resolve(new Response("", { status: 401 }));
+    if (url.includes("/resolve?")) return Promise.resolve(response(track));
+    if (url.includes("/progressive?"))
+      return Promise.resolve(
+        response({ url: "https://media.example/audio.mp3" }),
+      );
+    return Promise.reject(new Error(`Unexpected URL: ${url}`));
+  });
+  return { fetch, usedIds };
+}
 
 const track = {
   access: "playable",
@@ -290,5 +342,63 @@ describe("SoundCloudPublicApi", () => {
     await expect(
       new SoundCloudPublicApi({ fetch }).searchTracks("zzz no existe"),
     ).resolves.toEqual([]);
+  });
+
+  it("saves a discovered client id for later restarts", async () => {
+    const file = cachePath();
+    const { fetch } = soundcloud({ homepage: "ok" });
+    await new SoundCloudPublicApi({ fetch, clientIdCachePath: file }).getTrack(
+      "https://soundcloud.com/artist/track",
+    );
+    await vi.waitFor(() => {
+      expect(
+        (JSON.parse(readFileSync(file, "utf8")) as { value: string }).value,
+      ).toBe("abcdefghijklmnopqrstuvwx");
+    });
+  });
+
+  it("uses the cached client id when the homepage scrape breaks", async () => {
+    // Regression: a changed soundcloud.com bundle made every SoundCloud
+    // request fail with a generic connection error.
+    const { fetch, usedIds } = soundcloud({ homepage: "broken" });
+    const warn = vi.fn();
+    const api = new SoundCloudPublicApi({
+      fetch,
+      clientIdCachePath: cachePath("cachedclientid0123456789"),
+      logger: { debug: vi.fn(), error: vi.fn(), info: vi.fn(), warn },
+    });
+    await expect(
+      api.getTrack("https://soundcloud.com/artist/track"),
+    ).resolves.toMatchObject({ audioUrl: "https://media.example/audio.mp3" });
+    expect(new Set(usedIds)).toEqual(new Set(["cachedclientid0123456789"]));
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: expect.stringContaining("no client_id") as unknown,
+      }),
+      expect.stringContaining("last known"),
+    );
+  });
+
+  it("explains the failure when no client id is known", async () => {
+    const { fetch } = soundcloud({ homepage: "broken" });
+    await expect(
+      new SoundCloudPublicApi({
+        fetch,
+        clientIdCachePath: cachePath(),
+      }).getTrack("https://soundcloud.com/artist/track"),
+    ).rejects.toThrow(CLIENT_ID_UNAVAILABLE_MESSAGE);
+  });
+
+  it("never falls back to a client id SoundCloud rejected", async () => {
+    const { fetch } = soundcloud({
+      homepage: "broken",
+      rejects: "cachedclientid0123456789",
+    });
+    await expect(
+      new SoundCloudPublicApi({
+        fetch,
+        clientIdCachePath: cachePath("cachedclientid0123456789"),
+      }).getTrack("https://soundcloud.com/artist/track"),
+    ).rejects.toThrow(CLIENT_ID_UNAVAILABLE_MESSAGE);
   });
 });
