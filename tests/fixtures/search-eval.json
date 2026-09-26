@@ -1,0 +1,1184 @@
+{
+  "minAccuracy": 96.1,
+  "cases": [
+    {
+      "query": "duki rockstar",
+      "expected": ["dk_off"],
+      "source": "synthetic",
+      "note": "official over cover",
+      "candidates": [
+        {
+          "id": "dk_cov",
+          "title": "Duki - Rockstar (cover acústico)",
+          "webpageUrl": "https://www.youtube.com/watch?v=dk_cov",
+          "durationSeconds": 201,
+          "channel": "Mateo Covers"
+        },
+        {
+          "id": "dk_off",
+          "title": "DUKI - Rockstar (Video Oficial)",
+          "webpageUrl": "https://www.youtube.com/watch?v=dk_off",
+          "durationSeconds": 195,
+          "channel": "DUKI"
+        },
+        {
+          "id": "dk_live",
+          "title": "Duki - Rockstar (En Vivo Movistar Arena)",
+          "webpageUrl": "https://www.youtube.com/watch?v=dk_live",
+          "durationSeconds": 240,
+          "channel": "DUKI"
+        }
+      ]
+    },
+    {
+      "query": "queen bohemian rhapsody",
+      "expected": ["qbr_off"],
+      "source": "synthetic",
+      "note": "official video over live and karaoke",
+      "candidates": [
+        {
+          "id": "qbr_live",
+          "title": "Queen - Bohemian Rhapsody (Live Aid 1985)",
+          "webpageUrl": "https://www.youtube.com/watch?v=qbr_live",
+          "durationSeconds": 360,
+          "channel": "Queen Official"
+        },
+        {
+          "id": "qbr_off",
+          "title": "Queen – Bohemian Rhapsody (Official Video Remastered)",
+          "webpageUrl": "https://www.youtube.com/watch?v=qbr_off",
+          "durationSeconds": 359,
+          "channel": "Queen Official"
+        },
+        {
+          "id": "qbr_kar",
+          "title": "Bohemian Rhapsody - Queen | Karaoke Version",
+          "webpageUrl": "https://www.youtube.com/watch?v=qbr_kar",
+          "durationSeconds": 357,
+          "channel": "Sing King"
+        }
+      ]
+    },
+    {
+      "query": "the weeknd blinding lights",
+      "expected": ["bl_audio"],
+      "source": "synthetic",
+      "note": "studio audio over sped up",
+      "candidates": [
+        {
+          "id": "bl_sped",
+          "title": "The Weeknd - Blinding Lights (sped up)",
+          "webpageUrl": "https://www.youtube.com/watch?v=bl_sped",
+          "durationSeconds": 170,
+          "channel": "speed songs"
+        },
+        {
+          "id": "bl_audio",
+          "title": "The Weeknd - Blinding Lights (Official Audio)",
+          "webpageUrl": "https://www.youtube.com/watch?v=bl_audio",
+          "durationSeconds": 201,
+          "channel": "TheWeekndVEVO"
+        },
+        {
+          "id": "bl_react",
+          "title": "REACTING to Blinding Lights for the first time",
+          "webpageUrl": "https://www.youtube.com/watch?v=bl_react",
+          "durationSeconds": 900,
+          "channel": "Reaction Hub"
+        }
+      ]
+    },
+    {
+      "query": "bizarrap quevedo",
+      "expected": ["bzq_off"],
+      "source": "synthetic",
+      "note": "official session over reaction",
+      "candidates": [
+        {
+          "id": "bzq_react",
+          "title": "Reacción a QUEVEDO || BZRP Music Sessions #52",
+          "webpageUrl": "https://www.youtube.com/watch?v=bzq_react",
+          "durationSeconds": 720,
+          "channel": "Reacciones Top"
+        },
+        {
+          "id": "bzq_off",
+          "title": "QUEVEDO || BZRP Music Sessions #52",
+          "webpageUrl": "https://www.youtube.com/watch?v=bzq_off",
+          "durationSeconds": 204,
+          "channel": "Bizarrap"
+        },
+        {
+          "id": "bzq_1h",
+          "title": "Quevedo Bzrp Session 52 - 1 HORA",
+          "webpageUrl": "https://www.youtube.com/watch?v=bzq_1h",
+          "durationSeconds": 3600,
+          "channel": "Loops"
+        }
+      ]
+    },
+    {
+      "query": "daft punk get lucky",
+      "expected": ["gl_radio"],
+      "source": "synthetic",
+      "note": "radio edit over 10-hour loop",
+      "candidates": [
+        {
+          "id": "gl_10h",
+          "title": "Daft Punk - Get Lucky 10 hours",
+          "webpageUrl": "https://www.youtube.com/watch?v=gl_10h",
+          "durationSeconds": 36000,
+          "channel": "LoopTube"
+        },
+        {
+          "id": "gl_radio",
+          "title": "Daft Punk - Get Lucky (Official Audio) ft. Pharrell Williams, Nile Rodgers",
+          "webpageUrl": "https://www.youtube.com/watch?v=gl_radio",
+          "durationSeconds": 369,
+          "channel": "Daft Punk"
+        },
+        {
+          "id": "gl_nc",
+          "title": "Get Lucky - Nightcore",
+          "webpageUrl": "https://www.youtube.com/watch?v=gl_nc",
+          "durationSeconds": 250,
+          "channel": "Nightcore Zone"
+        }
+      ]
+    },
+    {
+      "query": "billie eilish bad guy",
+      "expected": ["bg_off"],
+      "source": "synthetic",
+      "note": "official over slowed reverb",
+      "candidates": [
+        {
+          "id": "bg_slow",
+          "title": "billie eilish - bad guy (slowed + reverb)",
+          "webpageUrl": "https://www.youtube.com/watch?v=bg_slow",
+          "durationSeconds": 240,
+          "channel": "vibes"
+        },
+        {
+          "id": "bg_off",
+          "title": "Billie Eilish - bad guy",
+          "webpageUrl": "https://www.youtube.com/watch?v=bg_off",
+          "durationSeconds": 205,
+          "channel": "BillieEilishVEVO"
+        }
+      ]
+    },
+    {
+      "query": "soda stereo de musica ligera",
+      "expected": ["sml_studio"],
+      "source": "synthetic",
+      "note": "studio over live when no live keyword",
+      "candidates": [
+        {
+          "id": "sml_live",
+          "title": "Soda Stereo - De Música Ligera (El Último Concierto)",
+          "webpageUrl": "https://www.youtube.com/watch?v=sml_live",
+          "durationSeconds": 270,
+          "channel": "Soda Stereo"
+        },
+        {
+          "id": "sml_studio",
+          "title": "Soda Stereo - De Música Ligera (Official Audio)",
+          "webpageUrl": "https://www.youtube.com/watch?v=sml_studio",
+          "durationSeconds": 212,
+          "channel": "Soda Stereo"
+        }
+      ]
+    },
+    {
+      "query": "soda stereo de musica ligera en vivo",
+      "expected": ["sml_live"],
+      "source": "synthetic",
+      "note": "live requested explicitly",
+      "candidates": [
+        {
+          "id": "sml_studio",
+          "title": "Soda Stereo - De Música Ligera (Official Audio)",
+          "webpageUrl": "https://www.youtube.com/watch?v=sml_studio",
+          "durationSeconds": 212,
+          "channel": "Soda Stereo"
+        },
+        {
+          "id": "sml_live",
+          "title": "Soda Stereo - De Música Ligera (En Vivo, El Último Concierto)",
+          "webpageUrl": "https://www.youtube.com/watch?v=sml_live",
+          "durationSeconds": 270,
+          "channel": "Soda Stereo"
+        }
+      ]
+    },
+    {
+      "query": "rosalia despecha",
+      "expected": ["desp_off"],
+      "source": "synthetic",
+      "note": "official over lyric video from random channel",
+      "candidates": [
+        {
+          "id": "desp_lyr",
+          "title": "ROSALÍA - DESPECHÁ (Letra/Lyrics)",
+          "webpageUrl": "https://www.youtube.com/watch?v=desp_lyr",
+          "durationSeconds": 157,
+          "channel": "Letras Hits"
+        },
+        {
+          "id": "desp_off",
+          "title": "ROSALÍA - DESPECHÁ (Official Video)",
+          "webpageUrl": "https://www.youtube.com/watch?v=desp_off",
+          "durationSeconds": 157,
+          "channel": "ROSALÍA"
+        }
+      ]
+    },
+    {
+      "query": "bad bunny tití me preguntó",
+      "expected": ["tmp_off"],
+      "source": "synthetic",
+      "note": "official video",
+      "candidates": [
+        {
+          "id": "tmp_off",
+          "title": "Bad Bunny - Tití Me Preguntó (Video Oficial) | Un Verano Sin Ti",
+          "webpageUrl": "https://www.youtube.com/watch?v=tmp_off",
+          "durationSeconds": 251,
+          "channel": "Bad Bunny"
+        },
+        {
+          "id": "tmp_cov",
+          "title": "Titi Me Pregunto - Cover Guitarra",
+          "webpageUrl": "https://www.youtube.com/watch?v=tmp_cov",
+          "durationSeconds": 200,
+          "channel": "Guitar Latino"
+        },
+        {
+          "id": "tmp_inst",
+          "title": "Tití Me Preguntó Instrumental",
+          "webpageUrl": "https://www.youtube.com/watch?v=tmp_inst",
+          "durationSeconds": 243,
+          "channel": "Beats"
+        }
+      ]
+    },
+    {
+      "query": "titi me pregunto bad bunny",
+      "expected": ["tmp_off"],
+      "source": "synthetic",
+      "note": "query without accents, artist last",
+      "candidates": [
+        {
+          "id": "tmp_inst",
+          "title": "Tití Me Preguntó Instrumental",
+          "webpageUrl": "https://www.youtube.com/watch?v=tmp_inst",
+          "durationSeconds": 243,
+          "channel": "Beats"
+        },
+        {
+          "id": "tmp_off",
+          "title": "Bad Bunny - Tití Me Preguntó (Video Oficial) | Un Verano Sin Ti",
+          "webpageUrl": "https://www.youtube.com/watch?v=tmp_off",
+          "durationSeconds": 251,
+          "channel": "Bad Bunny"
+        }
+      ]
+    },
+    {
+      "query": "coldplay yellow",
+      "expected": ["yl_off"],
+      "source": "synthetic",
+      "note": "official over live",
+      "candidates": [
+        {
+          "id": "yl_live",
+          "title": "Coldplay - Yellow (Live in Buenos Aires)",
+          "webpageUrl": "https://www.youtube.com/watch?v=yl_live",
+          "durationSeconds": 330,
+          "channel": "Coldplay"
+        },
+        {
+          "id": "yl_off",
+          "title": "Coldplay - Yellow (Official Video)",
+          "webpageUrl": "https://www.youtube.com/watch?v=yl_off",
+          "durationSeconds": 269,
+          "channel": "Coldplay"
+        }
+      ]
+    },
+    {
+      "query": "arctic monkeys do i wanna know",
+      "expected": ["diwk_off"],
+      "source": "synthetic",
+      "note": "official over lyrics",
+      "candidates": [
+        {
+          "id": "diwk_off",
+          "title": "Arctic Monkeys - Do I Wanna Know? (Official Video)",
+          "webpageUrl": "https://www.youtube.com/watch?v=diwk_off",
+          "durationSeconds": 272,
+          "channel": "ArcticMonkeysVEVO"
+        },
+        {
+          "id": "diwk_lyr",
+          "title": "Do I Wanna Know - Arctic Monkeys (Lyrics)",
+          "webpageUrl": "https://www.youtube.com/watch?v=diwk_lyr",
+          "durationSeconds": 266,
+          "channel": "Lyrics Vault"
+        }
+      ]
+    },
+    {
+      "query": "dua lipa levitating",
+      "expected": ["lev_off"],
+      "source": "synthetic",
+      "note": "original over remix",
+      "candidates": [
+        {
+          "id": "lev_rmx",
+          "title": "Dua Lipa - Levitating (The Blessed Madonna Remix)",
+          "webpageUrl": "https://www.youtube.com/watch?v=lev_rmx",
+          "durationSeconds": 303,
+          "channel": "Dua Lipa"
+        },
+        {
+          "id": "lev_off",
+          "title": "Dua Lipa - Levitating (Official Music Video)",
+          "webpageUrl": "https://www.youtube.com/watch?v=lev_off",
+          "durationSeconds": 231,
+          "channel": "Dua Lipa"
+        }
+      ]
+    },
+    {
+      "query": "dua lipa levitating remix",
+      "expected": ["lev_rmx"],
+      "source": "synthetic",
+      "note": "remix requested explicitly",
+      "candidates": [
+        {
+          "id": "lev_off",
+          "title": "Dua Lipa - Levitating (Official Music Video)",
+          "webpageUrl": "https://www.youtube.com/watch?v=lev_off",
+          "durationSeconds": 231,
+          "channel": "Dua Lipa"
+        },
+        {
+          "id": "lev_rmx",
+          "title": "Dua Lipa - Levitating (The Blessed Madonna Remix)",
+          "webpageUrl": "https://www.youtube.com/watch?v=lev_rmx",
+          "durationSeconds": 303,
+          "channel": "Dua Lipa"
+        }
+      ]
+    },
+    {
+      "query": "kendrick lamar humble",
+      "expected": ["hum_off"],
+      "source": "synthetic",
+      "note": "official over clean version upload",
+      "candidates": [
+        {
+          "id": "hum_clean",
+          "title": "Kendrick Lamar - HUMBLE. (Clean)",
+          "webpageUrl": "https://www.youtube.com/watch?v=hum_clean",
+          "durationSeconds": 177,
+          "channel": "Clean Versions"
+        },
+        {
+          "id": "hum_off",
+          "title": "Kendrick Lamar - HUMBLE.",
+          "webpageUrl": "https://www.youtube.com/watch?v=hum_off",
+          "durationSeconds": 177,
+          "channel": "KendrickLamarVEVO"
+        }
+      ]
+    },
+    {
+      "query": "taylor swift anti hero",
+      "expected": ["ah_off"],
+      "source": "synthetic",
+      "note": "official over tutorial",
+      "candidates": [
+        {
+          "id": "ah_tut",
+          "title": "Anti-Hero Piano Tutorial - Taylor Swift",
+          "webpageUrl": "https://www.youtube.com/watch?v=ah_tut",
+          "durationSeconds": 420,
+          "channel": "Piano Easy"
+        },
+        {
+          "id": "ah_off",
+          "title": "Taylor Swift - Anti-Hero (Official Music Video)",
+          "webpageUrl": "https://www.youtube.com/watch?v=ah_off",
+          "durationSeconds": 200,
+          "channel": "TaylorSwiftVEVO"
+        }
+      ]
+    },
+    {
+      "query": "metallica nothing else matters",
+      "expected": ["nem_off"],
+      "source": "synthetic",
+      "note": "official over cover",
+      "candidates": [
+        {
+          "id": "nem_cov",
+          "title": "Nothing Else Matters - Apocalyptica style cello cover",
+          "webpageUrl": "https://www.youtube.com/watch?v=nem_cov",
+          "durationSeconds": 380,
+          "channel": "Cello Guy"
+        },
+        {
+          "id": "nem_off",
+          "title": "Metallica: Nothing Else Matters (Official Music Video)",
+          "webpageUrl": "https://www.youtube.com/watch?v=nem_off",
+          "durationSeconds": 389,
+          "channel": "Metallica"
+        }
+      ]
+    },
+    {
+      "query": "charly garcia demoliendo hoteles",
+      "expected": ["dh_audio"],
+      "source": "synthetic",
+      "note": "official audio over tv appearance",
+      "candidates": [
+        {
+          "id": "dh_tv",
+          "title": "Charly García - Demoliendo Hoteles (TV 1985)",
+          "webpageUrl": "https://www.youtube.com/watch?v=dh_tv",
+          "durationSeconds": 250,
+          "channel": "Archivo TV"
+        },
+        {
+          "id": "dh_audio",
+          "title": "Demoliendo Hoteles",
+          "webpageUrl": "https://www.youtube.com/watch?v=dh_audio",
+          "durationSeconds": 221,
+          "channel": "Charly García - Topic"
+        }
+      ]
+    },
+    {
+      "query": "shakira bzrp session 53",
+      "expected": ["sh53_off"],
+      "source": "synthetic",
+      "note": "official session",
+      "candidates": [
+        {
+          "id": "sh53_off",
+          "title": "SHAKIRA || BZRP Music Sessions #53",
+          "webpageUrl": "https://www.youtube.com/watch?v=sh53_off",
+          "durationSeconds": 213,
+          "channel": "Bizarrap"
+        },
+        {
+          "id": "sh53_react",
+          "title": "Mi reacción a Shakira BZRP 53",
+          "webpageUrl": "https://www.youtube.com/watch?v=sh53_react",
+          "durationSeconds": 600,
+          "channel": "Reacciones"
+        },
+        {
+          "id": "sh53_kar",
+          "title": "Shakira Bzrp 53 KARAOKE",
+          "webpageUrl": "https://www.youtube.com/watch?v=sh53_kar",
+          "durationSeconds": 213,
+          "channel": "Karaoke Latino"
+        }
+      ]
+    },
+    {
+      "query": "karol g provenza",
+      "expected": ["prov_off"],
+      "source": "synthetic",
+      "note": "official over 8D",
+      "candidates": [
+        {
+          "id": "prov_8d",
+          "title": "KAROL G - PROVENZA (8D AUDIO)",
+          "webpageUrl": "https://www.youtube.com/watch?v=prov_8d",
+          "durationSeconds": 213,
+          "channel": "8D Music"
+        },
+        {
+          "id": "prov_off",
+          "title": "KAROL G - PROVENZA (Official Video)",
+          "webpageUrl": "https://www.youtube.com/watch?v=prov_off",
+          "durationSeconds": 212,
+          "channel": "KarolGVEVO"
+        }
+      ]
+    },
+    {
+      "query": "peso pluma ella baila sola",
+      "expected": ["ebs_off"],
+      "source": "synthetic",
+      "note": "official over sped up",
+      "candidates": [
+        {
+          "id": "ebs_sped",
+          "title": "Ella Baila Sola - sped up",
+          "webpageUrl": "https://www.youtube.com/watch?v=ebs_sped",
+          "durationSeconds": 120,
+          "channel": "speed songs"
+        },
+        {
+          "id": "ebs_off",
+          "title": "Eslabon Armado, Peso Pluma - Ella Baila Sola (Video Oficial)",
+          "webpageUrl": "https://www.youtube.com/watch?v=ebs_off",
+          "durationSeconds": 165,
+          "channel": "Eslabon Armado"
+        }
+      ]
+    },
+    {
+      "query": "tini miénteme",
+      "expected": ["mien_off"],
+      "source": "synthetic",
+      "note": "official video",
+      "candidates": [
+        {
+          "id": "mien_off",
+          "title": "TINI, María Becerra - Miénteme (Official Video)",
+          "webpageUrl": "https://www.youtube.com/watch?v=mien_off",
+          "durationSeconds": 172,
+          "channel": "TINI"
+        },
+        {
+          "id": "mien_live",
+          "title": "TINI - Miénteme (Live Tini Tour)",
+          "webpageUrl": "https://www.youtube.com/watch?v=mien_live",
+          "durationSeconds": 210,
+          "channel": "TINI"
+        }
+      ]
+    },
+    {
+      "query": "maria becerra corazon vacio",
+      "expected": ["cv_off"],
+      "source": "synthetic",
+      "note": "official over lyrics",
+      "candidates": [
+        {
+          "id": "cv_lyr",
+          "title": "Maria Becerra - Corazón Vacío (Letra)",
+          "webpageUrl": "https://www.youtube.com/watch?v=cv_lyr",
+          "durationSeconds": 193,
+          "channel": "LetraMusica"
+        },
+        {
+          "id": "cv_off",
+          "title": "Maria Becerra - CORAZÓN VACÍO (Official Video)",
+          "webpageUrl": "https://www.youtube.com/watch?v=cv_off",
+          "durationSeconds": 193,
+          "channel": "Maria Becerra"
+        }
+      ]
+    },
+    {
+      "query": "gustavo cerati crimen",
+      "expected": ["crim_audio"],
+      "source": "synthetic",
+      "note": "studio over unplugged",
+      "candidates": [
+        {
+          "id": "crim_unp",
+          "title": "Gustavo Cerati - Crimen (MTV Unplugged)",
+          "webpageUrl": "https://www.youtube.com/watch?v=crim_unp",
+          "durationSeconds": 290,
+          "channel": "Cerati"
+        },
+        {
+          "id": "crim_audio",
+          "title": "Gustavo Cerati - Crimen (Official Audio)",
+          "webpageUrl": "https://www.youtube.com/watch?v=crim_audio",
+          "durationSeconds": 232,
+          "channel": "Cerati"
+        }
+      ]
+    },
+    {
+      "query": "los fabulosos cadillacs matador",
+      "expected": ["mat_off"],
+      "source": "synthetic",
+      "note": "official over live",
+      "candidates": [
+        {
+          "id": "mat_live",
+          "title": "Los Fabulosos Cadillacs - Matador (Live River Plate)",
+          "webpageUrl": "https://www.youtube.com/watch?v=mat_live",
+          "durationSeconds": 420,
+          "channel": "Cadillacs"
+        },
+        {
+          "id": "mat_off",
+          "title": "Los Fabulosos Cadillacs - Matador (Video Oficial)",
+          "webpageUrl": "https://www.youtube.com/watch?v=mat_off",
+          "durationSeconds": 270,
+          "channel": "Los Fabulosos Cadillacs"
+        }
+      ]
+    },
+    {
+      "query": "rammstein du hast",
+      "expected": ["dh_off"],
+      "source": "synthetic",
+      "note": "official over lyrics translation",
+      "candidates": [
+        {
+          "id": "dhst_tr",
+          "title": "Rammstein - Du Hast (English lyrics translation)",
+          "webpageUrl": "https://www.youtube.com/watch?v=dhst_tr",
+          "durationSeconds": 235,
+          "channel": "Translations"
+        },
+        {
+          "id": "dh_off",
+          "title": "Rammstein - Du Hast (Official Video)",
+          "webpageUrl": "https://www.youtube.com/watch?v=dh_off",
+          "durationSeconds": 236,
+          "channel": "Rammstein Official"
+        }
+      ]
+    },
+    {
+      "query": "michael jackson billie jean",
+      "expected": ["bj_off"],
+      "source": "synthetic",
+      "note": "official over dance cover",
+      "candidates": [
+        {
+          "id": "bj_dance",
+          "title": "Billie Jean dance cover | school talent show",
+          "webpageUrl": "https://www.youtube.com/watch?v=bj_dance",
+          "durationSeconds": 300,
+          "channel": "Dance Kids"
+        },
+        {
+          "id": "bj_off",
+          "title": "Michael Jackson - Billie Jean (Official Video)",
+          "webpageUrl": "https://www.youtube.com/watch?v=bj_off",
+          "durationSeconds": 294,
+          "channel": "michaeljacksonVEVO"
+        }
+      ]
+    },
+    {
+      "query": "nirvana smells like teen spirit",
+      "expected": ["slts_off"],
+      "source": "synthetic",
+      "note": "official over drum cover",
+      "candidates": [
+        {
+          "id": "slts_drum",
+          "title": "Smells Like Teen Spirit - Drum Cover",
+          "webpageUrl": "https://www.youtube.com/watch?v=slts_drum",
+          "durationSeconds": 301,
+          "channel": "Drummer X"
+        },
+        {
+          "id": "slts_off",
+          "title": "Nirvana - Smells Like Teen Spirit (Official Music Video)",
+          "webpageUrl": "https://www.youtube.com/watch?v=slts_off",
+          "durationSeconds": 301,
+          "channel": "NirvanaVEVO"
+        }
+      ]
+    },
+    {
+      "query": "smells like teen spirit",
+      "expected": ["slts_off"],
+      "source": "synthetic",
+      "note": "song title only",
+      "candidates": [
+        {
+          "id": "slts_drum",
+          "title": "Smells Like Teen Spirit - Drum Cover",
+          "webpageUrl": "https://www.youtube.com/watch?v=slts_drum",
+          "durationSeconds": 301,
+          "channel": "Drummer X"
+        },
+        {
+          "id": "slts_off",
+          "title": "Nirvana - Smells Like Teen Spirit (Official Music Video)",
+          "webpageUrl": "https://www.youtube.com/watch?v=slts_off",
+          "durationSeconds": 301,
+          "channel": "NirvanaVEVO"
+        },
+        {
+          "id": "slts_malia",
+          "title": "Malia J - Smells Like Teen Spirit",
+          "webpageUrl": "https://www.youtube.com/watch?v=slts_malia",
+          "durationSeconds": 240,
+          "channel": "Malia J"
+        }
+      ]
+    },
+    {
+      "query": "imagine dragons believer",
+      "expected": ["bel_off"],
+      "source": "synthetic",
+      "note": "official over 1 hour",
+      "candidates": [
+        {
+          "id": "bel_1h",
+          "title": "Imagine Dragons - Believer 1 HOUR",
+          "webpageUrl": "https://www.youtube.com/watch?v=bel_1h",
+          "durationSeconds": 3600,
+          "channel": "1 Hour Songs"
+        },
+        {
+          "id": "bel_off",
+          "title": "Imagine Dragons - Believer (Official Music Video)",
+          "webpageUrl": "https://www.youtube.com/watch?v=bel_off",
+          "durationSeconds": 217,
+          "channel": "ImagineDragonsVEVO"
+        }
+      ]
+    },
+    {
+      "query": "linkin park in the end",
+      "expected": ["ite_off"],
+      "source": "synthetic",
+      "note": "official over mellen gi remix",
+      "candidates": [
+        {
+          "id": "ite_rmx",
+          "title": "In The End (Mellen Gi Remix)",
+          "webpageUrl": "https://www.youtube.com/watch?v=ite_rmx",
+          "durationSeconds": 225,
+          "channel": "Remix Channel"
+        },
+        {
+          "id": "ite_off",
+          "title": "In The End [Official HD Music Video] - Linkin Park",
+          "webpageUrl": "https://www.youtube.com/watch?v=ite_off",
+          "durationSeconds": 219,
+          "channel": "Linkin Park"
+        }
+      ]
+    },
+    {
+      "query": "adele hello",
+      "expected": ["hel_off"],
+      "source": "synthetic",
+      "note": "official over short clip",
+      "candidates": [
+        {
+          "id": "hel_short",
+          "title": "Adele Hello #shorts",
+          "webpageUrl": "https://www.youtube.com/watch?v=hel_short",
+          "durationSeconds": 30,
+          "channel": "clips"
+        },
+        {
+          "id": "hel_off",
+          "title": "Adele - Hello (Official Music Video)",
+          "webpageUrl": "https://www.youtube.com/watch?v=hel_off",
+          "durationSeconds": 367,
+          "channel": "AdeleVEVO"
+        }
+      ]
+    },
+    {
+      "query": "eminem lose yourself",
+      "expected": ["ly_off"],
+      "source": "synthetic",
+      "note": "official over instrumental",
+      "candidates": [
+        {
+          "id": "ly_inst",
+          "title": "Lose Yourself (Instrumental)",
+          "webpageUrl": "https://www.youtube.com/watch?v=ly_inst",
+          "durationSeconds": 320,
+          "channel": "Instrumentals"
+        },
+        {
+          "id": "ly_off",
+          "title": "Eminem - Lose Yourself [HD]",
+          "webpageUrl": "https://www.youtube.com/watch?v=ly_off",
+          "durationSeconds": 326,
+          "channel": "EminemVEVO"
+        }
+      ]
+    },
+    {
+      "query": "gorillaz feel good inc",
+      "expected": ["fgi_off"],
+      "source": "synthetic",
+      "note": "official video",
+      "candidates": [
+        {
+          "id": "fgi_off",
+          "title": "Gorillaz - Feel Good Inc. (Official Video)",
+          "webpageUrl": "https://www.youtube.com/watch?v=fgi_off",
+          "durationSeconds": 254,
+          "channel": "Gorillaz"
+        },
+        {
+          "id": "fgi_lyr",
+          "title": "Gorillaz - Feel Good Inc (Lyrics)",
+          "webpageUrl": "https://www.youtube.com/watch?v=fgi_lyr",
+          "durationSeconds": 222,
+          "channel": "Lyric Nation"
+        }
+      ]
+    },
+    {
+      "query": "dillom opa",
+      "expected": ["opa_off"],
+      "source": "synthetic",
+      "note": "official short song",
+      "candidates": [
+        {
+          "id": "opa_react",
+          "title": "Dillom - Opa (reacción)",
+          "webpageUrl": "https://www.youtube.com/watch?v=opa_react",
+          "durationSeconds": 480,
+          "channel": "Reacciones AR"
+        },
+        {
+          "id": "opa_off",
+          "title": "Dillom - Opa (Video Oficial)",
+          "webpageUrl": "https://www.youtube.com/watch?v=opa_off",
+          "durationSeconds": 163,
+          "channel": "Dillom"
+        }
+      ]
+    },
+    {
+      "query": "trueno dance crip",
+      "expected": ["dc_off"],
+      "source": "synthetic",
+      "note": "official over live session",
+      "candidates": [
+        {
+          "id": "dc_live",
+          "title": "Trueno - DANCE CRIP (Live Session)",
+          "webpageUrl": "https://www.youtube.com/watch?v=dc_live",
+          "durationSeconds": 220,
+          "channel": "Trueno"
+        },
+        {
+          "id": "dc_off",
+          "title": "TRUENO - DANCE CRIP (Video Oficial)",
+          "webpageUrl": "https://www.youtube.com/watch?v=dc_off",
+          "durationSeconds": 207,
+          "channel": "Trueno"
+        }
+      ]
+    },
+    {
+      "query": "wos canguro",
+      "expected": ["can_off"],
+      "source": "synthetic",
+      "note": "official over freestyle battle",
+      "candidates": [
+        {
+          "id": "can_batt",
+          "title": "WOS vs Aczino - Final FMS (Batalla completa)",
+          "webpageUrl": "https://www.youtube.com/watch?v=can_batt",
+          "durationSeconds": 900,
+          "channel": "Urban Roosters"
+        },
+        {
+          "id": "can_off",
+          "title": "WOS - CANGURO (Video Oficial)",
+          "webpageUrl": "https://www.youtube.com/watch?v=can_off",
+          "durationSeconds": 201,
+          "channel": "WOS"
+        }
+      ]
+    },
+    {
+      "query": "abba dancing queen",
+      "expected": ["dq_off"],
+      "source": "synthetic",
+      "note": "official over glee cover",
+      "candidates": [
+        {
+          "id": "dq_glee",
+          "title": "Dancing Queen (Glee Cast Version)",
+          "webpageUrl": "https://www.youtube.com/watch?v=dq_glee",
+          "durationSeconds": 230,
+          "channel": "GleeCast"
+        },
+        {
+          "id": "dq_off",
+          "title": "Abba - Dancing Queen (Official Music Video Remastered)",
+          "webpageUrl": "https://www.youtube.com/watch?v=dq_off",
+          "durationSeconds": 232,
+          "channel": "ABBA"
+        }
+      ]
+    },
+    {
+      "query": "frank ocean pink + white",
+      "expected": ["pw_audio"],
+      "source": "synthetic",
+      "note": "topic channel audio",
+      "candidates": [
+        {
+          "id": "pw_live",
+          "title": "Frank Ocean - Pink + White (Live at Coachella)",
+          "webpageUrl": "https://www.youtube.com/watch?v=pw_live",
+          "durationSeconds": 260,
+          "channel": "fan cam"
+        },
+        {
+          "id": "pw_audio",
+          "title": "Pink + White",
+          "webpageUrl": "https://www.youtube.com/watch?v=pw_audio",
+          "durationSeconds": 184,
+          "channel": "Frank Ocean - Topic"
+        }
+      ]
+    },
+    {
+      "query": "mana rayando el sol",
+      "expected": ["res_off"],
+      "source": "synthetic",
+      "note": "official over live mtv",
+      "candidates": [
+        {
+          "id": "res_mtv",
+          "title": "Maná - Rayando el Sol (MTV Unplugged)",
+          "webpageUrl": "https://www.youtube.com/watch?v=res_mtv",
+          "durationSeconds": 300,
+          "channel": "Maná"
+        },
+        {
+          "id": "res_off",
+          "title": "Maná - Rayando el Sol (Video Oficial)",
+          "webpageUrl": "https://www.youtube.com/watch?v=res_off",
+          "durationSeconds": 250,
+          "channel": "Maná"
+        }
+      ]
+    },
+    {
+      "query": "los redondos ji ji ji",
+      "expected": ["jjj_live"],
+      "source": "synthetic",
+      "note": "only live versions exist; pick the official one",
+      "candidates": [
+        {
+          "id": "jjj_fan",
+          "title": "Ji Ji Ji - Indio Solari (Tandil 2016 filmado por fan)",
+          "webpageUrl": "https://www.youtube.com/watch?v=jjj_fan",
+          "durationSeconds": 420,
+          "channel": "fan"
+        },
+        {
+          "id": "jjj_live",
+          "title": "Patricio Rey y sus Redonditos de Ricota - Ji Ji Ji (En Vivo, Official)",
+          "webpageUrl": "https://www.youtube.com/watch?v=jjj_live",
+          "durationSeconds": 395,
+          "channel": "Los Redondos"
+        }
+      ]
+    },
+    {
+      "query": "ed sheeran shape of you",
+      "expected": ["soy_off"],
+      "source": "synthetic",
+      "note": "official over acoustic",
+      "candidates": [
+        {
+          "id": "soy_ac",
+          "title": "Ed Sheeran - Shape Of You (Acoustic)",
+          "webpageUrl": "https://www.youtube.com/watch?v=soy_ac",
+          "durationSeconds": 240,
+          "channel": "Ed Sheeran"
+        },
+        {
+          "id": "soy_off",
+          "title": "Ed Sheeran - Shape of You (Official Music Video)",
+          "webpageUrl": "https://www.youtube.com/watch?v=soy_off",
+          "durationSeconds": 263,
+          "channel": "Ed Sheeran"
+        }
+      ]
+    },
+    {
+      "query": "post malone circles",
+      "expected": ["cir_off"],
+      "source": "synthetic",
+      "note": "official over slowed",
+      "candidates": [
+        {
+          "id": "cir_slow",
+          "title": "Post Malone - Circles (slowed)",
+          "webpageUrl": "https://www.youtube.com/watch?v=cir_slow",
+          "durationSeconds": 260,
+          "channel": "slowed songs"
+        },
+        {
+          "id": "cir_off",
+          "title": "Post Malone - Circles",
+          "webpageUrl": "https://www.youtube.com/watch?v=cir_off",
+          "durationSeconds": 215,
+          "channel": "PostMaloneVEVO"
+        }
+      ]
+    },
+    {
+      "query": "bohemian rhapsody",
+      "expected": ["qbr_off"],
+      "source": "synthetic",
+      "note": "song title only",
+      "candidates": [
+        {
+          "id": "qbr_panic",
+          "title": "Panic! At The Disco - Bohemian Rhapsody (Cover)",
+          "webpageUrl": "https://www.youtube.com/watch?v=qbr_panic",
+          "durationSeconds": 370,
+          "channel": "Panic! At The Disco"
+        },
+        {
+          "id": "qbr_off",
+          "title": "Queen – Bohemian Rhapsody (Official Video Remastered)",
+          "webpageUrl": "https://www.youtube.com/watch?v=qbr_off",
+          "durationSeconds": 359,
+          "channel": "Queen Official"
+        }
+      ]
+    },
+    {
+      "query": "bruno mars uptown funk",
+      "expected": ["uf_off"],
+      "source": "synthetic",
+      "note": "official over lyrics",
+      "candidates": [
+        {
+          "id": "uf_lyr",
+          "title": "Mark Ronson - Uptown Funk ft. Bruno Mars (Lyrics)",
+          "webpageUrl": "https://www.youtube.com/watch?v=uf_lyr",
+          "durationSeconds": 270,
+          "channel": "Lyrics"
+        },
+        {
+          "id": "uf_off",
+          "title": "Mark Ronson - Uptown Funk (Official Video) ft. Bruno Mars",
+          "webpageUrl": "https://www.youtube.com/watch?v=uf_off",
+          "durationSeconds": 270,
+          "channel": "Mark Ronson"
+        }
+      ]
+    },
+    {
+      "query": "rels b como dormiste",
+      "expected": ["cd_off"],
+      "source": "synthetic",
+      "note": "official video",
+      "candidates": [
+        {
+          "id": "cd_off",
+          "title": "Rels B - cómo dormiste? (Video Oficial)",
+          "webpageUrl": "https://www.youtube.com/watch?v=cd_off",
+          "durationSeconds": 201,
+          "channel": "Rels B"
+        },
+        {
+          "id": "cd_1h",
+          "title": "como dormiste rels b 1 hora",
+          "webpageUrl": "https://www.youtube.com/watch?v=cd_1h",
+          "durationSeconds": 3600,
+          "channel": "Loops"
+        }
+      ]
+    },
+    {
+      "query": "nicki nicole wapo traketero",
+      "expected": ["wt_off"],
+      "source": "synthetic",
+      "note": "official over sped up",
+      "candidates": [
+        {
+          "id": "wt_sped",
+          "title": "Wapo Traketero (Sped Up)",
+          "webpageUrl": "https://www.youtube.com/watch?v=wt_sped",
+          "durationSeconds": 120,
+          "channel": "speed"
+        },
+        {
+          "id": "wt_off",
+          "title": "Nicki Nicole - Wapo Traketero (Official Video)",
+          "webpageUrl": "https://www.youtube.com/watch?v=wt_off",
+          "durationSeconds": 180,
+          "channel": "Nicki Nicole"
+        }
+      ]
+    },
+    {
+      "query": "the beatles let it be",
+      "expected": ["lib_off"],
+      "source": "synthetic",
+      "note": "remaster over cover",
+      "candidates": [
+        {
+          "id": "lib_cov",
+          "title": "Let It Be - The Beatles (Piano Cover)",
+          "webpageUrl": "https://www.youtube.com/watch?v=lib_cov",
+          "durationSeconds": 240,
+          "channel": "Piano"
+        },
+        {
+          "id": "lib_off",
+          "title": "The Beatles - Let It Be (Remastered 2009)",
+          "webpageUrl": "https://www.youtube.com/watch?v=lib_off",
+          "durationSeconds": 243,
+          "channel": "The Beatles"
+        }
+      ]
+    },
+    {
+      "query": "pink floyd comfortably numb",
+      "expected": ["cn_studio"],
+      "source": "synthetic",
+      "note": "studio over live when expected duration known",
+      "candidates": [
+        {
+          "id": "cn_live",
+          "title": "Pink Floyd - Comfortably Numb (Pulse Live)",
+          "webpageUrl": "https://www.youtube.com/watch?v=cn_live",
+          "durationSeconds": 560,
+          "channel": "Pink Floyd"
+        },
+        {
+          "id": "cn_studio",
+          "title": "Pink Floyd - Comfortably Numb (Official Audio)",
+          "webpageUrl": "https://www.youtube.com/watch?v=cn_studio",
+          "durationSeconds": 382,
+          "channel": "Pink Floyd"
+        }
+      ],
+      "expectedDurationSeconds": 382
+    },
+    {
+      "query": "vicentico los caminos de la vida",
+      "expected": ["lcv_off"],
+      "source": "synthetic",
+      "note": "official over karaoke",
+      "candidates": [
+        {
+          "id": "lcv_kar",
+          "title": "Los Caminos de la Vida - Karaoke",
+          "webpageUrl": "https://www.youtube.com/watch?v=lcv_kar",
+          "durationSeconds": 300,
+          "channel": "Karaoke Latino"
+        },
+        {
+          "id": "lcv_off",
+          "title": "Vicentico - Los Caminos de la Vida (Official Video)",
+          "webpageUrl": "https://www.youtube.com/watch?v=lcv_off",
+          "durationSeconds": 285,
+          "channel": "Vicentico"
+        }
+      ]
+    }
+  ]
+}

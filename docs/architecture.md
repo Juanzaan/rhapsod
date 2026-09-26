@@ -50,3 +50,5 @@ The panel remains bound to `127.0.0.1` behind basic authentication and is reache
 ## Verification and extension
 
 Run `npm run check` and `npm run test:coverage`. Provider and TeamSpeak tests use controlled substitutes; live audio and deployment checks remain necessary in the target environment. TeamSpeak 6 is planned and must preserve the application-facing connection contract.
+
+Search ranking changes are measured with `npm run eval:search`, which scores `src/media/youtube/search-ranking.ts` against `tests/fixtures/search-eval.json`: each case holds a query, the candidate list the ranker saw and the acceptable picks. The test suite fails when accuracy drops below the fixture's `minAccuracy`; a ranking improvement raises that number in the same PR. To add real cases, run `npm run eval:search -- --record "<query>"` on a host that reaches YouTube, fill in `expected` by hand and append the output to the fixture with `"source": "recorded"`.
