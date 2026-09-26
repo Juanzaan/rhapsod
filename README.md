@@ -9,10 +9,10 @@ A self-hosted TeamSpeak 3 music bot with shared queues, adaptive autoplay, radio
 ## Playback
 
 - YouTube videos, playlists and music searches; SoundCloud tracks and sets.
-- Spotify metadata matched to YouTube audio. Apple Music and Amazon Music links resolved to available alternatives through SongLink.
+- Spotify metadata matched to YouTube audio. Apple Music links resolved through the iTunes lookup and Amazon Music links through SongLink.
 - Public HTTPS audio files and radio streams, with station search and live titles.
-- Saved playlists, per-user favorites, preferred search source and listening statistics.
-- Opus stereo audio, loudness normalization, prewarmed transitions and FFmpeg effects.
+- Saved playlists, per-user favorites, preferred search source, listening statistics and autoplay as a channel DJ.
+- Opus stereo audio, loudness normalization and prewarmed transitions.
 
 Spotify never supplies playback. Local files are unsupported. DRM-protected or blocked content is reported rather than bypassed.
 
@@ -22,7 +22,7 @@ Spotify never supplies playback. Local files are unsupported. DRM-protected or b
 - `yt-dlp`, FFmpeg and `ffprobe`; executable paths can be configured in `.env`.
 - A TeamSpeak 3 server reachable over UDP and permission for the bot to join, speak and use channel chat.
 
-The active release line is **3.x**. The 1.x low-resource and 2.x deployment profiles are historical; use [GitHub Releases](https://github.com/Juanzaan/rhapsod/releases) to select a published version. `main` may include changes awaiting release.
+The active release line is **4.x**. The 1.x low-resource, 2.x deployment and 3.x profiles are historical; use [GitHub Releases](https://github.com/Juanzaan/rhapsod/releases) to select a published version. `main` may include changes awaiting release.
 
 ## Install
 

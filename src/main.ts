@@ -7,35 +7,18 @@ import {
   createTs3Connection,
   DUPLICATE_INSTANCE_EXIT_CODE,
   DuplicateBotInstanceError,
-  withTimeout,
 } from "./adapters/ts3/ts3-connection.js";
 import { createRhapsodOpusEncoder } from "./audio/opus-encoder.js";
 import { createPcmStream, playFfmpegUrl } from "./audio/ffmpeg-player.js";
 import { LoudnessProfiler } from "./audio/loudness-profiler.js";
 import { playTestTone } from "./audio/test-tone-player.js";
 import { YoutubePlaybackService } from "./application/youtube-playback-service.js";
-import { AudioUrlCache } from "./application/audio-url-cache.js";
 import { PlaylistStore } from "./application/playlist-store.js";
-import { UserTelemetry } from "./application/user-telemetry.js";
-import { UserPreferences } from "./application/user-preferences.js";
-import { ListeningHistory } from "./application/listening-history.js";
-import { AUTOPLAY_UID } from "./application/autoplay-picker.js";
-import {
-  normalizeCommandInput,
-  parseChatCommand,
-  runsWithoutTalkPower,
-} from "./commands/chat-command.js";
-import { probeTs3Server } from "./adapters/ts3/probe.js";
-import {
-  dispatchCommand,
-  type CommandContext,
-} from "./commands/command-handlers.js";
-import { formatPlaybackError, formatPlaybackStarted } from "./lib/messages.js";
+import type { CommandContext } from "./commands/command-handlers.js";
 import { classifyYoutubeAuthFailure } from "./lib/youtube-auth-health.js";
 import { CommandRateLimiter } from "./commands/command-rate-limiter.js";
 import { SkipVotes } from "./application/skip-votes.js";
 import { loadConfig } from "./config.js";
-import type { Track } from "./domain/track.js";
 import { FilePlaybackStateStore } from "./domain/state-store.js";
 import {
   parseAdminUids,
@@ -43,63 +26,39 @@ import {
   parseMoveGroupIds,
 } from "./commands/permissions.js";
 import { createYtDlpResolverStack } from "./media/youtube/yt-dlp.js";
-import { timeoutConfigFrom } from "./lib/timeout-config.js";
 import { resolveInstanceDir } from "./lib/instance-dir.js";
 import { RadioTitleCache } from "./media/radio-icy.js";
 import { RadioScrobbler } from "./application/radio-scrobbler.js";
-import { SongLibrary } from "./application/song-library.js";
-import { UserError } from "./lib/user-error.js";
-import { createPanelServer, type QueueEntry } from "./panel/panel-server.js";
 import { ChatLog, isOwnEcho } from "./application/chat-log.js";
-import {
-  ChannelDirectory,
-  ServerSnapshot,
-  pickChannels,
-  type ServerViewMode,
-} from "./application/server-snapshot.js";
-import {
-  createCookieSaver,
-  createYoutubeHealthCheck,
-} from "./panel/youtube-setup.js";
 import type { YoutubePlaybackResolver } from "./media/youtube/youtube-resolver.js";
 import { RedirectResolver } from "./media/redirect-resolver.js";
 import { resolveTuneInUrl } from "./media/tunein.js";
 import { SongLinkClient } from "./media/song-link.js";
 import { AppleMusicClient } from "./media/apple-music.js";
 import { DirectUrlClient } from "./media/direct-url.js";
-import { APP_VERSION as packageVersion } from "./lib/version.js";
 import { startEgressGuard } from "./lib/egress-guard.js";
-import {
-  PlaybackMetrics,
-  renderPrometheus,
-} from "./observability/prometheus.js";
-import { LyricsClient, parseArtistTitle } from "./media/lyrics.js";
+import { PlaybackMetrics } from "./observability/prometheus.js";
+import { LyricsClient } from "./media/lyrics.js";
 import { SoundCloudPublicApi } from "./media/soundcloud/public-api.js";
 import { SpotifyApi } from "./media/spotify/api.js";
 import { createRhapsodLogger } from "./observability/logger.js";
 import { MetricsCollector } from "./observability/metrics.js";
 import { startWatchdog, watchdogInterval } from "./watchdog.js";
+import {
+  ExitCoordinator,
+  installCrashHandlers,
+  onStopSignal,
+} from "./bootstrap/exit.js";
+import { startSetupMode } from "./bootstrap/setup-mode.js";
+import { ChatCommandGate } from "./bootstrap/chat-commands.js";
+import { Reconnector } from "./bootstrap/reconnect.js";
+import { startConnectedPanel } from "./bootstrap/panel.js";
+import { createPlaybackEvents } from "./bootstrap/playback-events.js";
+import { ServerViewSync } from "./bootstrap/server-view.js";
+import { flushStores, openStores } from "./bootstrap/stores.js";
+import { ytDlpStackOptions } from "./bootstrap/yt-dlp-options.js";
 
-// Favorites, history, telemetry and the queue are written on a debounce, so
-// a bare process.exit() drops whatever changed since the last write. main()
-// registers the flush once the stores exist; every exit path goes through
-// exitAfterFlush so crashes, the watchdog and panel restarts keep that data.
-let flushBeforeExit: (() => Promise<void>) | undefined;
-
-const EXIT_FLUSH_TIMEOUT_MS = 5_000;
-
-async function exitAfterFlush(code: number): Promise<void> {
-  const flush = flushBeforeExit;
-  // A second crash while flushing must not wait on the same stuck flush.
-  flushBeforeExit = undefined;
-  if (flush !== undefined) {
-    await Promise.race([
-      flush().catch(() => undefined),
-      new Promise((resolve) => setTimeout(resolve, EXIT_FLUSH_TIMEOUT_MS)),
-    ]);
-  }
-  process.exit(code);
-}
+const exits = new ExitCoordinator();
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -114,34 +73,8 @@ async function main(): Promise<void> {
   });
   const metrics = new MetricsCollector();
   const playbackMetrics = new PlaybackMetrics();
-  const trackTimings = new Map<
-    string,
-    { audioUrlMs?: number; cacheHit?: boolean; metadataMs?: number }
-  >();
-  const setTrackTiming = (
-    trackId: string,
-    timing: { audioUrlMs?: number; cacheHit?: boolean; metadataMs?: number },
-  ): void => {
-    // Metadata and audio-URL timings arrive separately for the same track;
-    // merge so the second report does not erase the first.
-    trackTimings.set(trackId, { ...trackTimings.get(trackId), ...timing });
-    if (trackTimings.size > 200) {
-      const oldest = trackTimings.keys().next().value;
-      if (oldest !== undefined) trackTimings.delete(oldest);
-    }
-  };
-  // pino only serializes Error objects under the `err` key; any other key
-  // logs them as `{}`, which is how crash reports lost their message.
-  process.on("unhandledRejection", (reason: unknown) => {
-    logger.error({ err: reason }, "Unhandled promise rejection; restarting");
-    void exitAfterFlush(1);
-  });
-  process.on("uncaughtException", (error: Error) => {
-    logger.error({ err: error }, "Uncaught exception; restarting");
-    void exitAfterFlush(1);
-  });
+  installCrashHandlers(logger, exits);
   const adminUids = parseAdminUids(config.RHAPSOD_ADMIN_UIDS);
-  const panelAdminUids: ReadonlySet<string> = new Set([...adminUids, "panel"]);
   const privateCommandUids =
     config.RHAPSOD_PRIVATE_COMMAND_UIDS === undefined ||
     config.RHAPSOD_PRIVATE_COMMAND_UIDS === ""
@@ -168,62 +101,15 @@ async function main(): Promise<void> {
   );
   if (!config.RHAPSOD_TS3_AUTO_CONNECT) {
     logger.info("TeamSpeak 3 auto-connect is disabled");
-    // Setup mode. The installer ships AUTO_CONNECT=false so the bot can boot
-    // before any TeamSpeak host is configured — the wizard that collects it
-    // is served by the panel, so the panel must come up here. Without this,
-    // the process exited immediately and the wizard was unreachable
-    // out of the box.
-    if (config.RHAPSOD_PANEL_ENABLED) {
-      const { resolver: setupResolver } = createYtDlpResolverStack(logger, {
-        ytdlpPath: config.RHAPSOD_YTDLP_PATH,
-        ...(config.RHAPSOD_YTDLP_COOKIES_PATH === undefined
-          ? {}
-          : { cookiesPath: config.RHAPSOD_YTDLP_COOKIES_PATH }),
-        ...(config.RHAPSOD_YTDLP_EXTRACTOR_ARGS === undefined
-          ? {}
-          : { extractorArgs: config.RHAPSOD_YTDLP_EXTRACTOR_ARGS }),
-        ...(config.RHAPSOD_YTDLP_DAEMON_URL === undefined
-          ? {}
-          : { daemonUrl: config.RHAPSOD_YTDLP_DAEMON_URL }),
-        timeouts: timeoutConfigFrom(config),
-      });
-      createPanelServer({
-        config,
-        envFilePath: config.RHAPSOD_ENV_FILE,
-        logger,
-        status: () => ({
-          connected: false,
-          queueLength: 0,
-          playerState: "idle" as const,
-          uptimeMs: Math.round(process.uptime() * 1000),
-          version: packageVersion,
-        }),
-        queue: (): QueueEntry[] => [],
-        executeCommand: (): Promise<string> =>
-          Promise.reject(
-            new Error("El bot no esta conectado a TeamSpeak todavia"),
-          ),
-        youtubeHealth: createYoutubeHealthCheck((url, signal) =>
-          setupResolver.getAudioUrlFromUrl(url, signal),
-        ),
-        saveCookies: createCookieSaver(
-          config.RHAPSOD_YTDLP_COOKIES_PATH ??
-            join(dataDir, "youtube-cookies.txt"),
-        ),
-        restart: (): void => {
-          logger.info("Panel requested restart");
-          void exitAfterFlush(1);
-        },
-        testConnection: (host: string, port: number) =>
-          probeTs3Server(host, port),
-      });
-      logger.info(
-        "Setup mode: panel running without TeamSpeak; complete the wizard and restart",
-      );
-    }
+    startSetupMode({ config, dataDir, exits, logger });
     return;
   }
 
+  // The TeamSpeak connect timeouts run on unref'd timers. When the UDP
+  // socket closed on ECONNREFUSED mid-connect, nothing held the event loop
+  // and Node exited with code 0, which Restart=on-failure never restarts.
+  // The bot now only stops through exits.exit().
+  setInterval(() => undefined, 2 ** 31 - 1);
   const identity = await new Ts3IdentityStore(
     join(dataDir, "ts3-identity.txt"),
   ).loadOrCreate();
@@ -266,7 +152,7 @@ async function main(): Promise<void> {
       intervalMs: watchdog.intervalMs,
       onTimeout: (driftMs) => {
         logger.error({ driftMs }, "Watchdog: event loop blocked; restarting");
-        void exitAfterFlush(1);
+        void exits.exit(1);
       },
     });
   }
@@ -279,114 +165,20 @@ async function main(): Promise<void> {
     chatLog.push(config.RHAPSOD_TS3_NICKNAME, text, true);
     return rawSendChannelMessage(text);
   };
-  const telemetry = new UserTelemetry(
-    join(dataDir, "user-telemetry.json"),
-    logger,
-  );
-  telemetry.load();
-  const preferences = new UserPreferences(
-    join(dataDir, "user-preferences.json"),
-  );
+  const stores = openStores({ dataDir, logger, metrics });
+  const {
+    audioUrlCache,
+    listeningHistory,
+    preferences,
+    songLibrary,
+    telemetry,
+  } = stores;
   const radioTitles = new RadioTitleCache();
-  const listeningHistory = new ListeningHistory(
-    join(dataDir, "listening-history.json"),
-    logger,
-  );
-  const songLibrary = new SongLibrary(
-    join(dataDir, "song-library.json"),
-    logger,
-  );
-  // At startup, not inside the first onPlaybackStarted: a large history
-  // parsed there delayed the first track's audio.
-  listeningHistory.load();
-  songLibrary.load();
-  const serverSnapshot = new ServerSnapshot();
-  const channelDirectory = new ChannelDirectory(async (cid) => {
-    try {
-      const info = await connection.getChannelInfo(cid);
-      const name = info["channel_name"];
-      // A missing channel surfaces as an error (swallowed to {}) or an
-      // empty row: without a name the cid does not exist, so report it as
-      // unknown instead of caching a `#cid` phantom entry.
-      if (name === undefined || name.length === 0) return undefined;
-      // channellist uses `pid`, channelinfo uses `cpid`.
-      const pid = Number(info["cpid"] ?? info["pid"] ?? Number.NaN);
-      const order = Number(info["channel_order"] ?? Number.NaN);
-      return {
-        name,
-        ...(Number.isSafeInteger(pid) && pid > 0 ? { parentCid: pid } : {}),
-        ...(Number.isSafeInteger(order) ? { order } : {}),
-      };
-    } catch {
-      return undefined;
-    }
-  });
-  const ensureChannel = async (cid: number): Promise<void> => {
-    await channelDirectory.resolve(cid);
-    serverSnapshot.setChannels(channelDirectory.snapshot());
-  };
-  let serverViewMode: ServerViewMode = "partial";
-  // Voice clients cannot run `channellist`, so the full tree (including
-  // empty channels) is discovered by probing `channelinfo` per cid. A full
-  // scan costs ~4 commands/s against the shared flood budget, so it runs in
-  // the background at startup, on reconnect and every tenth resync; the
-  // minute resync only resolves the channels occupied clients sit in.
-  let discoveryInFlight = false;
-  let resyncCount = 0;
-  const runChannelDiscovery = async (): Promise<void> => {
-    if (discoveryInFlight) return;
-    discoveryInFlight = true;
-    try {
-      // TS3 allocates cids increasingly, so max+margin catches new channels.
-      const ceiling = Math.min(
-        1024,
-        Math.max(192, channelDirectory.maxCid() + 32),
-      );
-      const result = await channelDirectory.discover({
-        ceiling,
-        concurrency: 4,
-      });
-      logger.debug(
-        { ceiling: result.ceiling, found: result.found },
-        "TeamSpeak channel discovery finished",
-      );
-    } catch (error) {
-      logger.debug({ err: error }, "TeamSpeak channel discovery failed");
-    } finally {
-      discoveryInFlight = false;
-    }
-  };
-  const resyncServerView = async (
-    options: { full?: boolean } = {},
-  ): Promise<void> => {
-    try {
-      if (options.full) await runChannelDiscovery();
-      const clients = await connection.listClients();
-      // Map explicitly: uids and groups must never reach the panel payload.
-      const mapped = clients.map((client) => ({
-        clid: client.clid,
-        name: client.name,
-        cid: client.cid,
-      }));
-      const cids = [...new Set(mapped.map((client) => client.cid))];
-      const visible = await Promise.all(
-        cids.map((cid) => channelDirectory.resolve(cid)),
-      );
-      const picked = pickChannels(channelDirectory.snapshot(), visible);
-      serverViewMode = picked.mode;
-      serverSnapshot.fullResync(picked.channels, mapped);
-    } catch (error) {
-      logger.debug({ err: error }, "Server view resync failed");
-    }
-  };
+  const serverView = new ServerViewSync(connection, logger);
   setInterval(() => {
     telemetry.logSummary("periodic");
     void telemetry.save();
   }, 15 * 60_000).unref();
-  const maxReconnectAttempts = 5;
-  // Reconnect attempts must fail fast: a stuck handshake would otherwise eat
-  // the whole startup-style timeout (minutes) before the next attempt runs.
-  const reconnectConnectTimeoutMs = 30_000;
   const encoder = await createRhapsodOpusEncoder({
     bitrate: config.RHAPSOD_OPUS_BITRATE,
     complexity: config.RHAPSOD_OPUS_COMPLEXITY,
@@ -413,31 +205,13 @@ async function main(): Promise<void> {
   });
   const { executor: ytDlpExecutor, resolver: ytDlpResolver } =
     createYtDlpResolverStack(logger, {
-      ytdlpPath: config.RHAPSOD_YTDLP_PATH,
-      ...(config.RHAPSOD_YTDLP_COOKIES_PATH === undefined
-        ? {}
-        : { cookiesPath: config.RHAPSOD_YTDLP_COOKIES_PATH }),
-      ...(config.RHAPSOD_YTDLP_EXTRACTOR_ARGS === undefined
-        ? {}
-        : { extractorArgs: config.RHAPSOD_YTDLP_EXTRACTOR_ARGS }),
-      ...(config.RHAPSOD_YTDLP_DAEMON_URL === undefined
-        ? {}
-        : { daemonUrl: config.RHAPSOD_YTDLP_DAEMON_URL }),
+      ...ytDlpStackOptions(config),
       ...(config.RHAPSOD_MAX_CONCURRENT_YTDLP_JOBS === undefined
         ? {}
         : { maxConcurrentJobs: config.RHAPSOD_MAX_CONCURRENT_YTDLP_JOBS }),
-      timeouts: timeoutConfigFrom(config),
       onSearchMetrics: (m) => metrics.recordSearchMetrics(m),
     });
   ytDlpMetricsRef.getMetrics = () => ytDlpExecutor.metrics();
-  const audioUrlCache = AudioUrlCache.load(
-    join(dataDir, "audio-url-cache.json"),
-    logger,
-    {
-      onHit: () => metrics.increment("cacheHits"),
-      onMiss: () => metrics.increment("cacheMisses"),
-    },
-  );
   const resolver: YoutubePlaybackResolver = ytDlpResolver;
   const playback = new YoutubePlaybackService({
     createPlayback: (url, playbackEncoder, output, options) =>
@@ -481,87 +255,19 @@ async function main(): Promise<void> {
     prewarmNext: true,
     loudnessProfiler,
     encoder,
-    onPlaybackStarted: async (track) => {
-      const timings = trackTimings.get(track.id);
-      logger.info(
-        { ...timings, trackId: track.id, title: track.title },
-        "Playback started",
-      );
-      listeningHistory.recordStart(track.requestedByUid ?? track.requestedBy, {
-        id: track.id,
-        title: track.title,
-      });
-      // Endless radio streams are not songs themselves; their songs enter
-      // the library through the scrobbler once the station names them.
-      if (track.durationSeconds !== undefined) {
-        const { artist } = parseArtistTitle(track.title);
-        songLibrary.record({
-          ...(artist === undefined ? {} : { artist }),
-          id: track.id,
-          source: track.source,
-          title: track.title,
-        });
-      }
-      const isFirst = !commandContext.hasStartedPlaying;
-      commandContext.hasStartedPlaying = true;
-      await connection.sendChannelMessage(
-        track.requestedByUid === AUTOPLAY_UID
-          ? `Autoplay: ${track.title}`
-          : formatPlaybackStarted(track.title, isFirst),
-      );
-    },
-    onPlaybackFinished: (track, metrics, reason, kpis) => {
-      playbackMetrics.record(reason, metrics, kpis);
-      const timings = trackTimings.get(track.id);
-      trackTimings.delete(track.id);
-      logger.info(
-        {
-          ...timings,
-          ...metrics,
-          ...kpis,
-          reason,
-          trackId: track.id,
-          title: track.title,
-        },
-        "Playback session",
-      );
-      listeningHistory.recordFinish(
-        track.requestedByUid ?? track.requestedBy,
-        { id: track.id, title: track.title },
-        reason === "completed",
-      );
-    },
-    onTiming: (timing) => {
-      setTrackTiming(timing.trackId, {
-        ...(timing.stage === "metadata"
-          ? { metadataMs: timing.durationMs }
-          : {}),
-        ...(timing.stage === "audio-url"
-          ? {
-              audioUrlMs: timing.durationMs,
-              ...(timing.cacheHit === undefined
-                ? {}
-                : { cacheHit: timing.cacheHit }),
-            }
-          : {}),
-      });
-      if (timing.stage === "audio-url") {
-        const s = timing.prefetchStatus;
-        if (s === "hit") metrics.increment("prefetchHits");
-        else if (s === "in-flight") metrics.increment("prefetchInFlight");
-        else if (s === "miss") metrics.increment("prefetchMisses");
-      }
-      metrics.recordTiming(timing);
-      logger.info(timing, "Playback timing");
-    },
-    onPlaybackError: async (track, error) => {
-      metrics.recordError(track.id, error, track.title);
-      logger.error(
-        { err: error, trackId: track.id },
-        "YouTube playback failed",
-      );
-      await connection.sendChannelMessage(formatPlaybackError(track.title));
-    },
+    ...createPlaybackEvents({
+      listeningHistory,
+      logger,
+      markStarted: () => {
+        const first = !commandContext.hasStartedPlaying;
+        commandContext.hasStartedPlaying = true;
+        return first;
+      },
+      metrics,
+      playbackMetrics,
+      sendChannelMessage: (text) => connection.sendChannelMessage(text),
+      songLibrary,
+    }),
     output: connection,
     resolver,
     stateStore: new FilePlaybackStateStore(join(dataDir, "state.json"), logger),
@@ -587,17 +293,9 @@ async function main(): Promise<void> {
     lyricsResolver: new LyricsClient({ logger }),
     ...(spotifyResolver ? { spotifyResolver } : {}),
   });
-  const flushState = async (): Promise<void> => {
-    await Promise.all([
-      playback.flushState().catch(() => undefined),
-      audioUrlCache.flush().catch(() => undefined),
-      telemetry.save().catch(() => undefined),
-      preferences.flush().catch(() => undefined),
-      listeningHistory.flush().catch(() => undefined),
-      songLibrary.flush().catch(() => undefined),
-    ]);
-  };
-  flushBeforeExit = flushState;
+  const flushState = (): Promise<void> =>
+    flushStores(stores, () => playback.flushState());
+  exits.setFlush(flushState);
   const youtubeAuthCheckUrl = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
   const youtubeAuthCheckIntervalMs = 24 * 60 * 60 * 1_000;
   const youtubeAuthState = { healthy: true };
@@ -654,64 +352,14 @@ async function main(): Promise<void> {
       return youtubeAuthState.healthy;
     },
   };
-  const maxConcurrentCommands = config.RHAPSOD_MAX_CONCURRENT_COMMANDS;
-  let activeCommands = 0;
-  let busyFeedbackAt = 0;
-  let rateLimitFeedbackAt = 0;
-  let mutedFeedbackAt = 0;
   let canTalk = true;
-  const handleChatCommand = async (
-    message: string,
-    senderUid: string,
-    senderName: string,
-    senderGroups: readonly string[],
-    respond: (message: string) => Promise<void>,
-  ): Promise<void> => {
-    const send = respond;
-    try {
-      const command = parseChatCommand(message);
-      if (!command) return;
-      telemetry.recordCommand(senderUid);
-      if (!canTalk && !runsWithoutTalkPower(command)) {
-        if (Date.now() - mutedFeedbackAt > 10_000) {
-          mutedFeedbackAt = Date.now();
-          await connection
-            .sendChannelMessage(
-              "El bot no puede hablar en este canal: solo acepto !channel-move <canal> hasta que me muevan a un canal donde se escuche.",
-            )
-            .catch(() => undefined);
-        }
-        return;
-      }
-      logger.info({ command: message, senderName, senderUid }, "Chat command");
-      const rateGate = commandRateLimiter.acquire(`user:${senderUid}`, 1_500);
-      if (!rateGate.allowed) {
-        if (Date.now() - rateLimitFeedbackAt > 5_000) {
-          rateLimitFeedbackAt = Date.now();
-          await send(
-            `Esperá un momento entre comandos (${Math.ceil(rateGate.retryAfterMs / 1_000)} s).`,
-          );
-        }
-        return;
-      }
-      const sender = {
-        name: senderName,
-        uid: senderUid,
-        groups: senderGroups,
-      };
-      await dispatchCommand(commandContext, command, sender, send);
-    } catch (error) {
-      logger.warn(
-        { command: message, senderName, senderUid, err: error },
-        "Command failed",
-      );
-      const messageText =
-        error instanceof Error
-          ? userFacingError(error)
-          : "Error procesando comando";
-      await send(messageText).catch(() => undefined);
-    }
-  };
+  const commandGate = new ChatCommandGate({
+    canTalk: () => canTalk,
+    context: commandContext,
+    logger,
+    maxConcurrent: config.RHAPSOD_MAX_CONCURRENT_COMMANDS,
+    privateCommandUids,
+  });
   connection.onTextMessage(
     (message, senderUid, senderName, senderGroups, isPrivate, invokerClid) => {
       if (
@@ -726,28 +374,13 @@ async function main(): Promise<void> {
       ) {
         chatLog.push(senderName, message, false);
       }
-      const privateAllowed = isPrivate && privateCommandUids.has(senderUid);
-      const respond = privateAllowed
-        ? (text: string) => connection.sendPrivateMessage(invokerClid, text)
-        : (text: string) => connection.sendChannelMessage(text);
-      if (activeCommands >= maxConcurrentCommands) {
-        if (Date.now() - busyFeedbackAt > 5_000) {
-          busyFeedbackAt = Date.now();
-          void respond(
-            "El bot está procesando varios pedidos a la vez; probá de nuevo en unos segundos.",
-          ).catch(() => undefined);
-        }
-        return;
-      }
-      activeCommands++;
-      void handleChatCommand(
+      void commandGate.receive({
+        invokerClid,
+        isPrivate,
         message,
-        senderUid,
-        senderName,
         senderGroups,
-        respond,
-      ).finally(() => {
-        activeCommands--;
+        senderName,
+        senderUid,
       });
     },
   );
@@ -771,13 +404,10 @@ async function main(): Promise<void> {
     }
   };
   await seedTelemetry();
-  await resyncServerView();
+  await serverView.resync();
   // The minute view stays cheap; the full scan refreshes in the background.
-  void resyncServerView({ full: true });
-  setInterval(() => {
-    resyncCount++;
-    void resyncServerView({ full: resyncCount % 10 === 0 });
-  }, 60_000).unref();
+  void serverView.resync({ full: true });
+  setInterval(() => void serverView.tick(), 60_000).unref();
   const logCurrentChannel = async (reason: string): Promise<void> => {
     const currentChannel = await connection.getCurrentChannel();
     logger.info(
@@ -813,16 +443,16 @@ async function main(): Promise<void> {
       groupIds: event.groups,
       channelId: event.cid,
     });
-    serverSnapshot.applyEnter({
+    serverView.snapshot.applyEnter({
       clid: event.clid,
       name: event.name,
       cid: event.cid,
     });
-    void ensureChannel(event.cid).catch(() => undefined);
+    void serverView.ensureChannel(event.cid).catch(() => undefined);
   });
   connection.onClientLeave((clid) => {
     telemetry.clientLeft(clid);
-    serverSnapshot.applyLeave(clid);
+    serverView.snapshot.applyLeave(clid);
   });
   connection.onClientMoved((event) => {
     if (event.self) {
@@ -852,8 +482,8 @@ async function main(): Promise<void> {
         "User joined the bot's channel",
       );
     }
-    serverSnapshot.applyMove(event.movedClid, event.targetCid);
-    void ensureChannel(event.targetCid).catch(() => undefined);
+    serverView.snapshot.applyMove(event.movedClid, event.targetCid);
+    void serverView.ensureChannel(event.targetCid).catch(() => undefined);
   });
 
   const listConnectedClientUids = async (): Promise<readonly string[]> => {
@@ -874,60 +504,34 @@ async function main(): Promise<void> {
     logger.info({ restoredCount }, "Restored queued tracks after restart");
   }
 
-  let reconnecting = false;
   let shuttingDown = false;
-  const stopHeartbeat = connection.onConnectionLost((reason) => {
-    if (reconnecting || shuttingDown) return;
-    reconnecting = true;
-    metrics.recordDisconnect(reason);
-    playback.pause();
-    void (async () => {
-      for (let attempt = 1; attempt <= maxReconnectAttempts; attempt++) {
-        const delayMs = Math.min(80, 5 * 2 ** (attempt - 1)) * 1_000;
-        logger.warn(
-          {
-            attempt,
-            delaySeconds: delayMs / 1_000,
-            maxReconnectAttempts,
-            reason,
-          },
-          "TeamSpeak connection lost; reconnecting",
-        );
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
-        try {
-          await withTimeout(
-            // Skip the duplicate check here: our own ghost can still be
-            // listed right after a dropped connection, and refusing there
-            // would keep a live bot down on every network blip.
-            connection.connect({ skipDuplicateCheck: true }),
-            reconnectConnectTimeoutMs,
-            "Reconnect attempt timed out",
-          );
-          logger.info({ attempt }, "Reconnected to TeamSpeak 3");
-          await resyncServerView();
-          void resyncServerView({ full: true });
-          await logCurrentChannel("reconnect");
-          reconnecting = false;
-          await checkTalkPower("reconnect");
-          playback.resume();
-          return;
-        } catch (error) {
-          logger.error({ attempt, err: error }, "TeamSpeak reconnect failed");
-          // A timed-out attempt may leave a half-open client behind;
-          // make sure the next attempt starts from a clean state.
-          await connection.disconnect().catch(() => undefined);
-        }
-      }
-      logger.error(
-        { maxReconnectAttempts },
-        "Reconnect limit reached; flushing state and stopping bot",
-      );
+  const reconnector = new Reconnector({
+    connection,
+    isShuttingDown: () => shuttingDown,
+    logger,
+    onDisconnect: (reason) => {
+      metrics.recordDisconnect(reason);
+      playback.pause();
+    },
+    onGiveUp: async () => {
       shuttingDown = true;
       stopHeartbeat();
       playback.stop(false);
       await connection.disconnect().catch(() => undefined);
-      await exitAfterFlush(1);
-    })();
+      await exits.exit(1);
+    },
+    onReconnected: async () => {
+      await serverView.resync();
+      void serverView.resync({ full: true });
+      await logCurrentChannel("reconnect");
+    },
+    onResumed: async () => {
+      await checkTalkPower("reconnect");
+      playback.resume();
+    },
+  });
+  const stopHeartbeat = connection.onConnectionLost((reason) => {
+    void reconnector.connectionLost(reason);
   });
 
   if (config.RHAPSOD_AUDIO_TEST_TONE_SECONDS > 0) {
@@ -953,10 +557,6 @@ async function main(): Promise<void> {
     "Rhapsod is ready",
   );
 
-  const currentDisplayTitle = (current: Track): string => {
-    if (current.durationSeconds !== undefined) return current.title;
-    return radioTitles.peek(current.source) ?? current.title;
-  };
   // Songs heard on live radio are scrobbled into the same listening history
   // that feeds !tops and autoplay: the station's rotation becomes taste
   // signal instead of evaporating when the stream moves on.
@@ -975,93 +575,22 @@ async function main(): Promise<void> {
     }
   }, 30_000).unref();
 
-  const panel = config.RHAPSOD_PANEL_ENABLED
-    ? createPanelServer({
-        config,
-        envFilePath: config.RHAPSOD_ENV_FILE,
-        logger,
-        status: () => ({
-          connected: connection.getCurrentChannelId() > 0,
-          ...(connection.getCurrentChannelId() > 0
-            ? { currentChannelId: connection.getCurrentChannelId() }
-            : {}),
-          queueLength: playback.queue().length,
-          ...(playback.current === undefined
-            ? {}
-            : { currentTitle: currentDisplayTitle(playback.current) }),
-          ...(playback.current?.durationSeconds === undefined
-            ? {}
-            : { durationMs: playback.current.durationSeconds * 1000 }),
-          positionMs: playback.playbackPositionMs,
-          playerState: playback.playerState,
-          volume: playback.volume,
-          loopMode: playback.loopMode,
-          tracksPlayed: playback.tracksPlayed + scrobbler.confirmedCount,
-          uptimeMs: Math.round(process.uptime() * 1000),
-          disconnects: metrics.disconnectSummary(),
-          version: packageVersion,
-        }),
-        queue: (): QueueEntry[] =>
-          playback.queue().map((track) => ({
-            title: track.title ?? "Sin titulo",
-            source: track.source,
-            requestedBy: track.requestedBy,
-          })),
-        errors: () => metrics.errorSummary(20),
-        metricsText: () =>
-          renderPrometheus({
-            counters: metrics.counters(),
-            memoryRssBytes: process.memoryUsage.rss(),
-            playback: playbackMetrics,
-            uptimeSeconds: process.uptime(),
-            version: packageVersion,
-          }),
-        chat: () => chatLog.snapshot(),
-        sendChat: (text: string) => connection.sendChannelMessage(text),
-        serverView: () => ({
-          ...serverSnapshot.toJSON(),
-          botChannelId: connection.getCurrentChannelId(),
-          mode: serverViewMode,
-        }),
-        moveBot: (cid: number) => connection.moveToChannel(cid),
-        youtubeHealth: createYoutubeHealthCheck((url, signal) =>
-          ytDlpResolver.getAudioUrlFromUrl(url, signal),
-        ),
-        saveCookies: createCookieSaver(
-          config.RHAPSOD_YTDLP_COOKIES_PATH ??
-            join(dataDir, "youtube-cookies.txt"),
-        ),
-        executeCommand: async (raw: string): Promise<string> => {
-          const parsed = parseChatCommand(normalizeCommandInput(raw));
-          if (parsed === undefined) {
-            throw new Error("Comando no valido");
-          }
-          const responses: string[] = [];
-          const send = (text: string): Promise<void> => {
-            responses.push(text);
-            return Promise.resolve();
-          };
-          // The panel is the owner console behind basic auth, so it acts
-          // as an admin: skip/remove on someone else's track must work
-          // from there too. "panel" can never collide with a TS3 uid.
-          const sender = { name: "Panel", uid: "panel", groups: [] };
-          await dispatchCommand(
-            { ...commandContext, adminUids: panelAdminUids },
-            parsed,
-            sender,
-            send,
-          );
-          return responses.join("\n") || "OK";
-        },
-        // Exit code 1 so systemd (Restart=on-failure) brings the bot back.
-        restart: (): void => {
-          logger.info("Panel requested restart");
-          shutdown(1);
-        },
-        testConnection: (host: string, port: number) =>
-          probeTs3Server(host, port),
-      })
-    : undefined;
+  const panel = startConnectedPanel({
+    chatLog,
+    commandContext,
+    config,
+    connection,
+    dataDir,
+    logger,
+    metrics,
+    playback,
+    playbackMetrics,
+    radioTitles,
+    resolver: ytDlpResolver,
+    restart: () => shutdown(1),
+    scrobbler,
+    serverView,
+  });
 
   let shutdownStarted = false;
   const shutdown = (code: number): void => {
@@ -1072,41 +601,27 @@ async function main(): Promise<void> {
     playback.stop(false);
     encoder.close();
     stopHeartbeat();
-    flushBeforeExit = async () => {
+    exits.setFlush(async () => {
       await Promise.all([
         connection.disconnect().catch(() => undefined),
         flushState(),
         ...(panel === undefined ? [] : [panel.close().catch(() => undefined)]),
       ]);
       logger.info("Shutdown complete");
-    };
-    void exitAfterFlush(code);
+    });
+    void exits.exit(code);
   };
-  process.once("SIGINT", () => shutdown(0));
-  process.once("SIGTERM", () => shutdown(0));
-}
-
-export function userFacingError(error: Error): string {
-  if (error instanceof UserError) return error.message;
-  const msg = error.message;
-  if (/DRM protected/i.test(msg))
-    return "SoundCloud no permite reproducir esta pista porque está protegida con DRM. Probá otra versión o una fuente distinta.";
-  if (/Requested format is not available/i.test(msg))
-    return "YouTube no ofrece un formato de audio reproducible para ese video (puede ser un directo o un video restringido). Probá otra versión.";
-  if (/fetch failed/i.test(msg))
-    return "Fallo momentáneo de red con el proveedor (Spotify/YouTube). Probá de nuevo en unos segundos.";
-  if (/ya está en la cola/i.test(msg)) return "Esa canción ya está en la cola.";
-  return "Ocurrió un error. Probá de nuevo en unos segundos.";
+  onStopSignal(() => shutdown(0));
 }
 
 void main().catch((error: unknown) => {
   if (error instanceof DuplicateBotInstanceError) {
     process.stderr.write(`Rhapsod refused to start: ${error.message}\n`);
-    process.exitCode = DUPLICATE_INSTANCE_EXIT_CODE;
+    void exits.exit(DUPLICATE_INSTANCE_EXIT_CODE);
     return;
   }
   const message =
     error instanceof Error ? error.message : "Unknown startup error";
   process.stderr.write(`Rhapsod failed to start: ${message}\n`);
-  process.exitCode = 1;
+  void exits.exit(1);
 });

@@ -1,6 +1,6 @@
 {
   "name": "rhapsod",
-  "version": "3.0.0",
+  "version": "4.0.0",
   "description": "A self-hosted music bot for TeamSpeak 3, designed for future TeamSpeak 6 support.",
   "license": "MIT",
   "private": true,
@@ -24,7 +24,7 @@
     "node": ">=22.19.0"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && node -e \"require('node:fs').cpSync('src/panel/scripts', 'dist/panel/scripts', { recursive: true })\"",
     "check": "npm run format:check && npm run lint && npm run lint:scripts && npm run lint:docs && npm run typecheck && npm test && npm run build",
     "dev": "tsx watch src/main.ts",
     "eval:autoplay": "tsx scripts/autoplay-eval.ts",
@@ -33,13 +33,14 @@
     "format:check": "prettier --check .",
     "lint": "eslint . --max-warnings=0",
     "lint:scripts": "node scripts/lint-scripts.mjs",
+    "smoke": "tsx scripts/smoke.ts",
     "lint:docs": "node scripts/lint-docs.mjs && node scripts/release-notes.mjs check",
     "release:notes": "node scripts/release-notes.mjs",
     "start": "node dist/main.js",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.panel.json"
   },
   "dependencies": {
     "@honeybbq/teamspeak-client": "^0.2.3",
