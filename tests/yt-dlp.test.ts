@@ -16,12 +16,16 @@ import {
   type YtDlpJobPriority,
   type YoutubePlayerClient,
 } from "../src/media/youtube/yt-dlp.js";
+import type * as InnertubeSearch from "../src/media/youtube/innertube-search.js";
 
 vi.mock("../src/media/youtube/innertube-player.js", () => ({
   fetchInnertubePlayerAudioUrl: vi.fn(() => Promise.resolve(undefined)),
 }));
 
-vi.mock("../src/media/youtube/innertube-search.js", () => ({
+vi.mock("../src/media/youtube/innertube-search.js", async (importOriginal) => ({
+  // The candidate selection is pure: keep the real one, stub only the network.
+  pickInnertubeCandidates: (await importOriginal<typeof InnertubeSearch>())
+    .pickInnertubeCandidates,
   searchInnertubeVideos: vi.fn(() => Promise.resolve([])),
   searchInnertubeMusicVideos: vi.fn(() => Promise.resolve([])),
 }));
