@@ -4,6 +4,7 @@ import { CHANNELS, SAMPLE_RATE } from "../src/audio/opus-encoder.js";
 import {
   buildFfmpegPcmArguments,
   createFfmpegPcmStream,
+  ffmpegEnvironment,
   isForbiddenResponse,
 } from "../src/audio/ffmpeg-pcm.js";
 
@@ -510,6 +511,68 @@ describe("FFmpeg network guard", () => {
     expect(proxied[proxied.indexOf("-protocol_whitelist") + 1]).toBe(
       "https,tls,tcp,crypto,httpproxy",
     );
+  });
+
+  it("sends every connection through the egress guard when one is set", () => {
+    const args = buildFfmpegPcmArguments("https://a.example/x", {
+      egressProxyUrl: "http://127.0.0.1:45000",
+    });
+    expect(args[args.indexOf("-protocol_whitelist") + 1]).toBe(
+      "https,tls,tcp,crypto,httpproxy",
+    );
+    expect(args[args.indexOf("-http_proxy") + 1]).toBe(
+      "http://127.0.0.1:45000",
+    );
+    expect(args.indexOf("-http_proxy")).toBeLessThan(args.indexOf("-i"));
+  });
+
+  it("uses the WARP egress instead of the guard on the fallback attempt", () => {
+    const args = buildFfmpegPcmArguments(
+      "https://a.example/x",
+      {
+        egressProxyUrl: "http://127.0.0.1:45000",
+        proxyUrl: "http://127.0.0.1:40000",
+      },
+      true,
+    );
+    expect(args.filter((arg) => arg === "-http_proxy")).toHaveLength(1);
+    expect(args[args.indexOf("-http_proxy") + 1]).toBe(
+      "http://127.0.0.1:40000",
+    );
+  });
+
+  it("drops -timeout whenever a proxy is used", () => {
+    // Regression: ffmpeg exits with "Option timeout not found" when -timeout
+    // and -http_proxy are both set, so every WARP fallback attempt failed
+    // before connecting.
+    const warp = buildFfmpegPcmArguments(
+      "https://a.example/x",
+      { proxyUrl: "http://127.0.0.1:40000" },
+      true,
+    );
+    const guarded = buildFfmpegPcmArguments("https://a.example/x", {
+      egressProxyUrl: "http://127.0.0.1:45000",
+    });
+    const direct = buildFfmpegPcmArguments("https://a.example/x");
+    expect(warp).not.toContain("-timeout");
+    expect(guarded).not.toContain("-timeout");
+    expect(direct).toContain("-timeout");
+    expect(warp).toContain("-rw_timeout");
+    expect(guarded).toContain("-rw_timeout");
+  });
+
+  it("removes no_proxy from ffmpeg's environment when the guard is on", () => {
+    vi.stubEnv("no_proxy", "127.0.0.1");
+    vi.stubEnv("NO_PROXY", "127.0.0.1");
+    try {
+      const env = ffmpegEnvironment("http://127.0.0.1:45000");
+      expect(env?.no_proxy).toBeUndefined();
+      expect(env?.NO_PROXY).toBeUndefined();
+      expect(env?.PATH).toBe(process.env.PATH);
+      expect(ffmpegEnvironment(undefined)).toBeUndefined();
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("logs only abnormal exits, without the stream URL or tokens", () => {

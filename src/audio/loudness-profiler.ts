@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
-import { FFMPEG_PROTOCOL_WHITELIST } from "./ffmpeg-pcm.js";
+import { ffmpegEgressArguments, ffmpegEnvironment } from "./ffmpeg-pcm.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -27,9 +27,12 @@ export interface LoudnessProfilerOptions {
       maxBuffer: number;
       timeout: number;
       windowsHide: boolean;
+      env?: NodeJS.ProcessEnv;
     },
   ) => Promise<{ stdout: string }>;
   readonly targetLufs?: number;
+  /** Local egress guard; see lib/egress-guard.ts. */
+  readonly egressProxyUrl?: string;
 }
 
 function parseProfile(json: string): LoudnessProfile | undefined {
@@ -63,15 +66,8 @@ function parseProfile(json: string): LoudnessProfile | undefined {
 export class LoudnessProfiler {
   readonly #binary: string;
   readonly #targetLufs: number;
-  readonly #execFile: (
-    file: string,
-    args: readonly string[],
-    options: {
-      maxBuffer: number;
-      timeout: number;
-      windowsHide: boolean;
-    },
-  ) => Promise<{ stdout: string }>;
+  readonly #execFile: NonNullable<LoudnessProfilerOptions["execFile"]>;
+  readonly #egressProxyUrl: string | undefined;
   readonly #profiles = new Map<
     string,
     { profile: LoudnessProfile; expiresAt: number }
@@ -83,6 +79,7 @@ export class LoudnessProfiler {
     this.#binary = options.binary ?? DEFAULT_BINARY;
     this.#targetLufs = options.targetLufs ?? -14;
     this.#execFile = options.execFile ?? execFileAsync;
+    this.#egressProxyUrl = options.egressProxyUrl;
   }
 
   /** The LUFS target handed to ffmpeg; used for prewarm option parity. */
@@ -114,6 +111,7 @@ export class LoudnessProfiler {
 
   async #measureImpl(source: string, url: string): Promise<void> {
     let stdout: string;
+    const env = ffmpegEnvironment(this.#egressProxyUrl);
     try {
       const { stdout: output } = await this.#execFile(
         this.#binary,
@@ -122,8 +120,7 @@ export class LoudnessProfiler {
           "-loglevel",
           "error",
           "-nostdin",
-          "-protocol_whitelist",
-          FFMPEG_PROTOCOL_WHITELIST,
+          ...ffmpegEgressArguments(this.#egressProxyUrl),
           "-t",
           String(SAMPLE_SECONDS),
           "-i",
@@ -138,6 +135,7 @@ export class LoudnessProfiler {
           maxBuffer: 4 * 1024 * 1024,
           timeout: 90_000,
           windowsHide: true,
+          ...(env === undefined ? {} : { env }),
         },
       );
       stdout = output;

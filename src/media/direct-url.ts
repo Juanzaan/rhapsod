@@ -2,7 +2,10 @@ import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
-import { FFMPEG_PROTOCOL_WHITELIST } from "../audio/ffmpeg-pcm.js";
+import {
+  ffmpegEgressArguments,
+  ffmpegEnvironment,
+} from "../audio/ffmpeg-pcm.js";
 import type { YoutubeTrackMetadata } from "./youtube/yt-dlp.js";
 import { isPublicHostname, safeFetch } from "../lib/ssrf.js";
 
@@ -66,6 +69,8 @@ export interface DirectUrlResolverOptions {
   readonly fetch?: typeof fetch;
   readonly ffprobeBinary?: string;
   readonly timeoutMs?: number;
+  /** Local egress guard; see lib/egress-guard.ts. */
+  readonly egressProxyUrl?: string;
 }
 
 interface ValidatedUrl {
@@ -78,6 +83,7 @@ export class DirectUrlClient implements DirectUrlResolver {
   readonly #fetch: typeof fetch;
   readonly #ffprobeBinary: string;
   readonly #timeoutMs: number;
+  readonly #egressProxyUrl: string | undefined;
   readonly #matchCache = new Map<string, boolean>();
   readonly #validatedUrls = new Map<string, ValidatedUrl>();
   #maxRedirectsSupport: Promise<boolean> | undefined;
@@ -86,6 +92,7 @@ export class DirectUrlClient implements DirectUrlResolver {
     this.#fetch = options.fetch ?? safeFetch;
     this.#ffprobeBinary = options.ffprobeBinary ?? "ffprobe";
     this.#timeoutMs = options.timeoutMs ?? PROBE_TIMEOUT_MS;
+    this.#egressProxyUrl = options.egressProxyUrl;
   }
 
   async match(url: string): Promise<boolean> {
@@ -251,6 +258,7 @@ export class DirectUrlClient implements DirectUrlResolver {
   }
 
   async #probe(url: string): Promise<FfprobeFormat> {
+    const env = ffmpegEnvironment(this.#egressProxyUrl);
     const { stdout } = await execFileAsync(
       this.#ffprobeBinary,
       [
@@ -260,14 +268,18 @@ export class DirectUrlClient implements DirectUrlResolver {
         "json",
         "-show_entries",
         "format=duration:format_tags=title,artist",
-        "-protocol_whitelist",
-        FFMPEG_PROTOCOL_WHITELIST,
+        ...ffmpegEgressArguments(this.#egressProxyUrl),
         ...((await this.#supportsMaxRedirects())
           ? ["-max_redirects", "0"]
           : []),
         url,
       ],
-      { maxBuffer: 1024 * 1024, timeout: this.#timeoutMs, windowsHide: true },
+      {
+        maxBuffer: 1024 * 1024,
+        timeout: this.#timeoutMs,
+        windowsHide: true,
+        ...(env === undefined ? {} : { env }),
+      },
     );
     try {
       const parsed = JSON.parse(stdout) as FfprobeJson;

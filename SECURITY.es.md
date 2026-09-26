@@ -45,7 +45,10 @@ para la corrección y la divulgación una vez publicada.
   arranque.
 - **Solicitudes salientes**: las URL que envían los usuarios pasan por una
   protección SSRF que rechaza direcciones privadas, de loopback y de enlace
-  local en cada redirección.
+  local en cada redirección. `ffmpeg` y `ffprobe` se conectan a través de un
+  proxy de salida local con la misma regla, que cubre las redirecciones, los
+  segmentos HLS y las claves que abren por su cuenta. Sus solicitudes HTTP
+  sin cifrar se rechazan.
 - **Derechos de contenido**: las pistas protegidas con DRM o bloqueadas se
   informan con un mensaje claro y nunca se eluden.
 - **Spotify**: solo metadatos, nunca fuente de reproducción. El flujo de
