@@ -70,6 +70,12 @@ La cola usa posiciones desde 1. `!remove inicio-fin` incluye ambos extremos y li
 
 ## Reproducción automática
 
-`!autoplay on` usa mezclas y pistas relacionadas de YouTube, señales de escucha personal y del canal, coincidencias de títulos y continuidad de energía estimada. Limita repeticiones y concentración de artistas. Sin pistas iniciales permanece en silencio; las solicitudes a proveedores tienen tiempo limitado. Las canciones de la radio en directo entran al mismo historial cuando la emisora las nombra en sus metadatos, para que la rotación también alimente la reproducción automática y `!tops`.
+`!autoplay on` mantiene la música al vaciarse la cola rotando tres fuentes: cada diez pistas elige cuatro parecidas, tres clásicas y tres descubrimientos.
+
+- **Parecidas:** la mezcla de YouTube de lo que acaba de sonar, ordenada según quien viene pidiendo (afinidad por artista y palabras del título en sus sesiones recientes, continuidad de energía con la última pista).
+- **Clásicas:** pistas que el canal pidió y dejó sonar antes, con al menos seis horas de descanso; las que se saltan más de lo que se terminan no vuelven.
+- **Descubrimientos:** pistas que el canal nunca escuchó, tomadas de la mezcla de YouTube de un artista de los más escuchados en el canal.
+
+Las elecciones de la reproducción automática no cuentan como pedidos: no suben en `!tops` ni en el perfil de gustos, así que no se refuerza a sí misma. Saltar una de sus pistas cuenta en contra de esa pista, y su fuente queda fuera los dos turnos siguientes. Si una fuente no tiene nada para ofrecer, la siguiente la reemplaza; sin historial permanece en silencio. Las mezclas obtenidas se reutilizan durante 30 minutos y las solicitudes a proveedores tienen tiempo limitado. Las canciones de la radio en directo entran al mismo historial cuando la emisora las nombra en sus metadatos, para que la rotación también alimente las clásicas y `!tops`.
 
 Rhapsod pasa argumentos directamente a los procesos hijos; los comandos de chat no ejecutan sintaxis de shell.
