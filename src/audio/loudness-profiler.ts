@@ -1,6 +1,8 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
+import { FFMPEG_PROTOCOL_WHITELIST } from "./ffmpeg-pcm.js";
+
 const execFileAsync = promisify(execFile);
 
 const DEFAULT_BINARY = "ffmpeg";
@@ -120,6 +122,8 @@ export class LoudnessProfiler {
           "-loglevel",
           "error",
           "-nostdin",
+          "-protocol_whitelist",
+          FFMPEG_PROTOCOL_WHITELIST,
           "-t",
           String(SAMPLE_SECONDS),
           "-i",

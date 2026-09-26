@@ -27,6 +27,8 @@ describe("LoudnessProfiler", () => {
     expect(execFile).toHaveBeenCalledWith(
       "ffmpeg",
       expect.arrayContaining([
+        "-protocol_whitelist",
+        "https,tls,tcp,crypto",
         "-i",
         "https://media.example/abc",
         "-af",
