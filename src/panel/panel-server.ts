@@ -67,7 +67,6 @@ export interface PanelStatus {
   readonly playerState?: "idle" | "buffering" | "playing" | "paused";
   readonly volume?: number;
   readonly loopMode?: string;
-  readonly currentFilter?: string;
   readonly tracksPlayed?: number;
   readonly uptimeMs?: number;
   readonly disconnects?: DisconnectSummary;

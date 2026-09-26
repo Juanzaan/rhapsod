@@ -220,42 +220,6 @@ describe("parseChatCommand", () => {
     );
   });
 
-  it("parses audio filter commands and aliases", () => {
-    expect(parseChatCommand("!bassboost")).toEqual({ name: "bassboost" });
-    expect(parseChatCommand("!bassboost 4")).toEqual({
-      name: "bassboost",
-      level: 4,
-    });
-    expect(parseChatCommand("!bb")).toEqual({ name: "bassboost" });
-    expect(parseChatCommand("!nightcore")).toEqual({ name: "nightcore" });
-    expect(parseChatCommand("!nightcore 1.25")).toEqual({
-      name: "nightcore",
-      rate: 1.25,
-    });
-    expect(parseChatCommand("!nc")).toEqual({ name: "nightcore" });
-    expect(parseChatCommand("!vaporwave")).toEqual({ name: "vaporwave" });
-    expect(parseChatCommand("!vaporwave 0.9")).toEqual({
-      name: "vaporwave",
-      rate: 0.9,
-    });
-    expect(parseChatCommand("!vw")).toEqual({ name: "vaporwave" });
-    expect(parseChatCommand("!8d")).toEqual({ name: "8d" });
-    expect(parseChatCommand("!filter")).toEqual({ name: "filter" });
-    expect(parseChatCommand("!filter off")).toEqual({
-      name: "filter",
-      off: true,
-    });
-  });
-
-  it("rejects invalid audio filter parameters", () => {
-    expect(() => parseChatCommand("!bassboost 9")).toThrow("Usá: !bassboost");
-    expect(() => parseChatCommand("!bassboost abc")).toThrow("Usá: !bassboost");
-    expect(() => parseChatCommand("!nightcore 3")).toThrow("Usá: !nightcore");
-    expect(() => parseChatCommand("!vaporwave 0.5")).toThrow("Usá: !vaporwave");
-    expect(() => parseChatCommand("!8d 5")).toThrow("no acepta argumentos");
-    expect(() => parseChatCommand("!filter custom")).toThrow("Usá: !filter");
-  });
-
   it("parses playlist commands and the pl alias", () => {
     expect(parseChatCommand("!playlist")).toEqual({ name: "playlist" });
     expect(parseChatCommand("!playlist save fiesta")).toEqual({
@@ -360,63 +324,6 @@ describe("parseChatCommand", () => {
     });
     expect(() => parseChatCommand("!playlist info")).toThrow(
       "Usá: !playlist info <nombre>",
-    );
-  });
-
-  it("parses !effects subcommands", () => {
-    expect(parseChatCommand("!effects")).toEqual({ name: "effects" });
-    expect(parseChatCommand("!effects 8d")).toEqual({
-      name: "effects",
-      action: "toggle",
-      effect: "8d",
-    });
-    expect(parseChatCommand("!effects 8d on")).toEqual({
-      name: "effects",
-      action: "on",
-      effect: "8d",
-    });
-    expect(parseChatCommand("!effects 8d off")).toEqual({
-      name: "effects",
-      action: "off",
-      effect: "8d",
-    });
-    expect(parseChatCommand("!effects nightcore")).toEqual({
-      name: "effects",
-      action: "toggle",
-      effect: "nightcore",
-    });
-    expect(parseChatCommand("!effects bassboost on")).toEqual({
-      name: "effects",
-      action: "on",
-      effect: "bassboost",
-    });
-    expect(parseChatCommand("!effects vaporwave off")).toEqual({
-      name: "effects",
-      action: "off",
-      effect: "vaporwave",
-    });
-    expect(parseChatCommand("!effects list")).toEqual({
-      name: "effects",
-      action: "list",
-    });
-    expect(parseChatCommand("!effects reset")).toEqual({
-      name: "effects",
-      action: "reset",
-    });
-    expect(parseChatCommand("!effects test-tone")).toEqual({
-      name: "effects",
-      action: "test-tone",
-    });
-    expect(parseChatCommand("!effects chart")).toEqual({
-      name: "effects",
-      action: "chart",
-    });
-  });
-
-  it("rejects invalid !effects invocations", () => {
-    expect(() => parseChatCommand("!effects bogus")).toThrow(/Usá: !effects/);
-    expect(() => parseChatCommand("!effects 8d maybe")).toThrow(
-      /Usá: !effects <efecto>/,
     );
   });
 });

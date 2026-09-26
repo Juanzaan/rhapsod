@@ -5,7 +5,6 @@ import { dirname } from "node:path";
 import type { MinimalLogger } from "../observability/logger.js";
 import { noopLogger } from "../observability/logger.js";
 import type { LoopMode } from "../application/youtube-playback-service.js";
-import { isAudioFilter, type AudioFilter } from "../audio/filter-chain.js";
 
 export interface SerializedQueueTrack {
   readonly durationSeconds?: number;
@@ -22,7 +21,6 @@ export interface PlaybackState {
   readonly loopMode?: LoopMode;
   readonly queue?: readonly SerializedQueueTrack[];
   readonly volumePercent?: number;
-  readonly filter?: AudioFilter;
 }
 
 export interface PlaybackStateStore {
@@ -116,13 +114,11 @@ export class FilePlaybackStateStore implements PlaybackStateStore {
         parsed.loopMode === "track"
           ? parsed.loopMode
           : undefined;
-      const filter = isAudioFilter(parsed.filter) ? parsed.filter : undefined;
       const queue = parseQueue(parsed.queue);
       return {
         ...(parsed.autoplay === true ? { autoplay: true } : {}),
         ...(volumePercent === undefined ? {} : { volumePercent }),
         ...(loopMode === undefined ? {} : { loopMode }),
-        ...(filter === undefined ? {} : { filter }),
         ...(queue === undefined ? {} : { queue }),
       };
     } catch {
