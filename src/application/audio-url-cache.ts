@@ -1,7 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
-import { mkdir, rename, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
 
+import { writeFileAtomic } from "../lib/json-file-store.js";
 import type { MinimalLogger } from "../observability/logger.js";
 import { noopLogger } from "../observability/logger.js";
 
@@ -152,14 +151,10 @@ export class AudioUrlCache {
     if (filePath === undefined) return Promise.resolve();
     const write = this.#writeChain.then(async () => {
       try {
-        await mkdir(dirname(filePath), { recursive: true });
-        const temporary = `${filePath}.tmp`;
-        await writeFile(
-          temporary,
+        await writeFileAtomic(
+          filePath,
           JSON.stringify({ entries: Object.fromEntries(this.#entries) }),
-          "utf8",
         );
-        await rename(temporary, filePath);
       } catch (error) {
         this.#logger.warn(
           { err: error },

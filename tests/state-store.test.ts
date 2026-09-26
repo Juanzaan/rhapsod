@@ -4,6 +4,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -30,6 +31,12 @@ describe("FilePlaybackStateStore", () => {
     writeFileSync(filePath, "{ not json");
     const store = new FilePlaybackStateStore(filePath);
     expect(store.load()).toEqual({});
+    expect(existsSync(filePath)).toBe(false);
+    expect(
+      readdirSync(directory).some((name) =>
+        name.startsWith("corrupt.json.corrupt-"),
+      ),
+    ).toBe(true);
   });
 
   it("round-trips a saved state through the file", async () => {
