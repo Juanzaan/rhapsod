@@ -37,7 +37,7 @@ Cada punto se entrega en su propio PR con una prueba de regresión, documentaci�
 
 - **5. Ajuste del cambio sin pausa.** Con las pausas medidas en el punto 1, ajustar cuándo se precarga la pista siguiente y conservar el flujo precargado ante saltos de posición y ediciones de la cola que no cambian la pista siguiente. El objetivo y el alcance dependen de los datos de producción de `scripts/log-stats.mjs`; se omite si la pausa ya es menor a 200 ms en p90. Riesgo: medio.
 - **6. Revisión del volumen.** Informar la dispersión del volumen medido por sesión a partir del perfilador de volumen y ajustar el objetivo por defecto o el camino alternativo solo si la diferencia es audible. Riesgo: bajo.
-- **15. Scripts del panel como archivos reales.** En curso: los scripts de ambiente, árbol del servidor, Comandos, Servidor, Ajustes y asistente de configuración están en `src/panel/scripts/` (#151 a #155), lo que además dejó ver los errores del asistente corregidos en #156. Falta el script del tablero. Riesgo: medio, el tablero es grande.
+- **15. Scripts del panel como archivos reales.** Hecho: todos los scripts de las páginas (ambiente, árbol del servidor, tablero, Comandos, Servidor, Ajustes, asistente de configuración) están en `src/panel/scripts/`, revisados con ESLint y `tsc -p tsconfig.panel.json` y todavía incluidos en línea por la CSP. Al moverlos aparecieron los errores del asistente corregidos en #156.
 - **16. Servidor TeamSpeak simulado (carril A).** Un servidor con guion o datos grabados para ejercitar el adaptador de TeamSpeak y la inicialización sin un servidor real. Corresponde a `src/adapters/ts3/`; lo toma la sesión del carril A.
 
 ### Propuestos por el carril A (abiertos a veto)
