@@ -29,6 +29,10 @@ Proveedores -> PreparedAudioStore -> FFmpeg PCM
 - `src/observability/`: registros estructurados, métricas y errores sin secretos.
 - `src/config.ts`: esquema de ejecución y valores predeterminados.
 
+## Comandos
+
+Un comando está en tres lugares, todos indexados por su nombre: la forma de sus argumentos en la unión `ChatCommand` (`src/commands/chat-command.ts`), una entrada en `COMMANDS` (`src/commands/command-registry.ts`) con alias, categoría, uso, resumen y analizador de argumentos, y un manejador en `COMMAND_HANDLERS` (`src/commands/command-handlers.ts`). `!help` y `GET /api/commands` leen `COMMANDS`. Si falta un comando en alguna de las tablas, o un analizador devuelve la forma de otro comando, `npm run typecheck` falla. Los manejadores van en su propia tabla porque necesitan el servicio de reproducción y la conexión de TeamSpeak, mientras que el analizador y `!help` se cargan sin ellos.
+
 ## Reproducción y proveedores
 
 Los metadatos se resuelven al recibir solicitudes; las URL temporales se preparan cerca de la reproducción. `PreparedAudioStore` evita consultas duplicadas y gestiona caducidad y cancelación. `PlaybackEpoch` invalida trabajo asíncrono antiguo tras acciones de transporte. `PlaybackController` serializa el avance y limita el tiempo de resolución.
