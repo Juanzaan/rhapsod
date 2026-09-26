@@ -10,6 +10,21 @@ import {
 import type { PanelStatus } from "../src/panel/panel-server.js";
 import { AMBIENCE_JS, songHue } from "../src/panel/dashboard-design.js";
 
+// The templates emit bare <script> tags; plain index lookups read them back
+// without a tag-matching regexp, which CodeQL flags as an incomplete HTML
+// filter even in tests.
+function scriptBlocks(html: string): string[] {
+  const blocks: string[] = [];
+  let start = html.indexOf("<script>");
+  while (start !== -1) {
+    const end = html.indexOf("</script>", start);
+    if (end === -1) break;
+    blocks.push(html.slice(start + "<script>".length, end));
+    start = html.indexOf("<script>", end);
+  }
+  return blocks;
+}
+
 function render(status: Partial<PanelStatus> = {}): string {
   return renderDashboard({
     connected: true,
@@ -152,9 +167,7 @@ describe("renderDashboard console", () => {
 
   it("inline dashboard script parses without syntax errors", () => {
     const html = render();
-    const blocks = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(
-      (m) => m[1] ?? "",
-    );
+    const blocks = scriptBlocks(html);
     expect(blocks.length).toBeGreaterThan(0);
     for (const code of blocks) {
       // Intentional: validates generated template JS parses in a browser.
@@ -275,9 +288,7 @@ describe("renderDashboard console", () => {
       return Promise.resolve({ json: () => state });
     };
     const html = render();
-    const code = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
-      .map((m) => m[1] ?? "")
-      .join("\n");
+    const code = scriptBlocks(html).join("\n");
     // Intentional: executes generated template JS against fake DOM globals.
     // eslint-disable-next-line @typescript-eslint/no-implied-eval
     const factory = new Function(
@@ -406,9 +417,7 @@ describe("renderDashboard console", () => {
         return res;
       });
     const html = renderServerPage();
-    const code = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
-      .map((m) => m[1] ?? "")
-      .join("\n");
+    const code = scriptBlocks(html).join("\n");
     // Intentional: executes generated template JS against fake DOM globals.
     // eslint-disable-next-line @typescript-eslint/no-implied-eval
     const factory = new Function(
@@ -523,9 +532,7 @@ describe("renderDashboard console", () => {
       return el;
     };
     const html = renderServerPage();
-    const code = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
-      .map((m) => m[1] ?? "")
-      .join("\n");
+    const code = scriptBlocks(html).join("\n");
     // Intentional: executes generated template JS against fake DOM globals.
     // eslint-disable-next-line @typescript-eslint/no-implied-eval
     const factory = new Function(
@@ -670,9 +677,7 @@ describe("renderDashboard console", () => {
         return Promise.resolve({ json: () => Promise.resolve({ ok: true }) });
       };
       const html = renderSetupWizard();
-      const code = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
-        .map((m) => m[1] ?? "")
-        .join("\n");
+      const code = scriptBlocks(html).join("\n");
       // eslint-disable-next-line @typescript-eslint/no-implied-eval
       const factory = new Function(
         "document",
@@ -753,9 +758,7 @@ describe("renderDashboard console", () => {
       querySelectorAll: () => inputs,
     };
     const html = renderSettingsPage();
-    const code = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
-      .map((m) => m[1] ?? "")
-      .join("\n");
+    const code = scriptBlocks(html).join("\n");
     // eslint-disable-next-line @typescript-eslint/no-implied-eval
     const factory = new Function(
       "document",
@@ -808,9 +811,7 @@ describe("renderDashboard console", () => {
         },
       };
       const html = renderSettingsPage();
-      const code = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
-        .map((m) => m[1] ?? "")
-        .join("\n");
+      const code = scriptBlocks(html).join("\n");
       // eslint-disable-next-line @typescript-eslint/no-implied-eval
       const factory = new Function(
         "document",
@@ -1033,18 +1034,8 @@ describe("dashboard motion", () => {
 });
 
 describe("panel pages motion and feedback", () => {
-  // The templates emit bare <script> tags; plain index lookups read them
-  // back without a tag-matching regexp.
   function pageScript(html: string): string {
-    const blocks: string[] = [];
-    let start = html.indexOf("<script>");
-    while (start !== -1) {
-      const end = html.indexOf("</script>", start);
-      if (end === -1) break;
-      blocks.push(html.slice(start + "<script>".length, end));
-      start = html.indexOf("<script>", end);
-    }
-    return blocks.join("\n");
+    return scriptBlocks(html).join("\n");
   }
 
   const quietWindow = { matchMedia: () => ({ matches: false }) };
