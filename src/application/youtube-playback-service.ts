@@ -68,6 +68,7 @@ import {
   type SavedPlaylist,
   type StoredPlaylistTrack,
 } from "./playlist-store.js";
+import { messages } from "../lib/messages.js";
 
 interface PlaybackServiceOptions {
   readonly encoder: RhapsodOpusEncoder;
@@ -351,27 +352,21 @@ export class YoutubePlaybackService {
     const media = parseMediaInput(input);
     if (media.kind === "file") {
       if (input.trim().startsWith("file:")) {
-        throw new UserError(
-          "Los archivos locales no están soportados: pegá un link de YouTube o SoundCloud, o buscá con !yt.",
-        );
+        throw new UserError(messages.enqueueLosArchivosLocalesNo);
       }
       return this.enqueueSearch(media.value, requestedBy, requestedByUid);
     }
     if (media.kind === "spotify") {
       if (!this.#spotifyResolver) {
-        throw new UserError(
-          "Spotify no está configurado en este bot: pegá un link de YouTube o SoundCloud, o buscá con !yt.",
-        );
+        throw new UserError(messages.enqueueSpotifyNoEstaConfigurado);
       }
       if (media.resource.type !== "track") {
-        throw new UserError(
-          "Las playlists y álbumes de Spotify se expanden con !play desde el canal.",
-        );
+        throw new UserError(messages.enqueueLasPlaylistsYAlbumes);
       }
       const spotifyTrack = await this.#spotifyResolver.getTrack(media.resource);
       const query = `${spotifyTrack.artist} ${spotifyTrack.title}`.trim();
       if (!query) {
-        throw new UserError("No encontré los datos del track de Spotify.");
+        throw new UserError(messages.enqueueNoEncontreLosDatos);
       }
       const metadata = await this.#resolver.search(
         query,
@@ -413,9 +408,7 @@ export class YoutubePlaybackService {
       if (tuneInStream !== undefined) {
         return this.enqueue(tuneInStream, requestedBy, requestedByUid);
       }
-      throw new UserError(
-        "No reconozco ese link: pegá un link de YouTube o SoundCloud, una URL de audio directa (mp3, ogg, m3u8…), o buscá con !yt.",
-      );
+      throw new UserError(messages.enqueueNoReconozcoEseLink);
     }
     if (media.kind === "soundcloud") {
       if (/\/sets\//i.test(media.value)) {
@@ -426,9 +419,7 @@ export class YoutubePlaybackService {
         );
         const first = result.added[0];
         if (!first) {
-          throw new UserError(
-            "No pude encontrar ese set de SoundCloud en YouTube o SoundCloud.",
-          );
+          throw new UserError(messages.enqueueNoPudeEncontrarEse);
         }
         return first;
       }
@@ -510,19 +501,15 @@ export class YoutubePlaybackService {
     }
     if (media.kind === "apple-music") {
       if (isAppleMusicPlaylist(media.value)) {
-        throw new UserError(
-          "Las playlists de Apple Music se expanden con !play desde el canal.",
-        );
+        throw new UserError(messages.enqueueLasPlaylistsDeApple);
       }
       if (!this.#appleMusicResolver) {
-        throw new UserError(
-          "Este bot no tiene resolución de links de Apple Music configurada.",
-        );
+        throw new UserError(messages.enqueueEsteBotNoTiene);
       }
       const appleTrack = await this.#appleMusicResolver.getTrack(media.value);
       const query = `${appleTrack.artist} ${appleTrack.title}`.trim();
       if (!query) {
-        throw new UserError("No encontré los datos del track de Apple Music.");
+        throw new UserError(messages.enqueueNoEncontreLosDatos2);
       }
       const metadata = await this.#resolver.search(
         query,
@@ -545,16 +532,12 @@ export class YoutubePlaybackService {
       );
       const first = result.added[0];
       if (!first) {
-        throw new UserError(
-          "No pude encontrar esa canción en YouTube o SoundCloud.",
-        );
+        throw new UserError(messages.enqueueNoPudeEncontrarEsa);
       }
       return first;
     }
     if (media.kind !== "youtube" || media.resource.type !== "video") {
-      throw new UserError(
-        "Solo se soportan videos de YouTube, links de SoundCloud y playlists de YouTube por ahora.",
-      );
+      throw new UserError(messages.enqueueSoloSeSoportanVideos);
     }
     const metadata = await this.#resolver.getTrack(media.resource);
     this.#recordMetadataTiming(metadata, startedAt);
@@ -598,7 +581,7 @@ export class YoutubePlaybackService {
     const top = results[0];
     if (!top) {
       throw new UserError(
-        "No encontré esa búsqueda en SoundCloud. Probá con !yt para buscar en YouTube.",
+        messages.enqueueSoundcloudSearchNoEncontreEsaBusqueda,
       );
     }
     const metadata: YoutubeTrackMetadata = {
@@ -634,7 +617,7 @@ export class YoutubePlaybackService {
     );
     const selected = candidates[index - 1];
     if (!selected) {
-      throw new UserError(`No hay resultado ${index} para esa búsqueda.`);
+      throw new UserError(messages.enqueueSearchIndexNoHayResultadoPara(index));
     }
     this.#recordMetadataTiming(selected, startedAt);
     return this.#enqueueMetadata(
@@ -652,9 +635,7 @@ export class YoutubePlaybackService {
   ): Promise<Track> {
     const media = parseMediaInput(input);
     if (media.kind === "youtube" && media.resource.type === "playlist") {
-      throw new UserError(
-        "Las playlists se encolan con !play, no con !playnext.",
-      );
+      throw new UserError(messages.enqueueNextLasPlaylistsSeEncolan);
     }
     const track = await this.enqueue(input, requestedBy, requestedByUid);
     this.#queue.moveToHead(track.id);
@@ -698,9 +679,7 @@ export class YoutubePlaybackService {
         title: track.title,
       }));
     if (tracks.length === 0) {
-      throw new UserError(
-        "La cola está vacía: no hay nada para guardar en la playlist.",
-      );
+      throw new UserError(messages.savePlaylistLaColaEstaVacia);
     }
     return store.save(requestedByUid, rawName, tracks);
   }
@@ -713,10 +692,10 @@ export class YoutubePlaybackService {
     const store = this.#requirePlaylistStore();
     const playlist = store.load(requestedByUid, rawName);
     if (playlist === undefined) {
-      throw new UserError(`No encontré la playlist "${rawName}".`);
+      throw new UserError(messages.loadPlaylistNoEncontreLaPlaylist(rawName));
     }
     if (playlist.tracks.length === 0) {
-      throw new UserError(`La playlist "${rawName}" está vacía.`);
+      throw new UserError(messages.loadPlaylistLaPlaylistEstaVacia(rawName));
     }
     let added = 0;
     for (const track of playlist.tracks) {
@@ -778,9 +757,7 @@ export class YoutubePlaybackService {
   }> {
     const media = parseMediaInput(url);
     if (media.kind !== "youtube") {
-      throw new UserError(
-        "Solo se soportan URLs de YouTube (video o playlist) para agregar.",
-      );
+      throw new UserError(messages.resolvePlaylistTracksSoloSeSoportanUrls);
     }
     if (media.resource.type === "playlist") {
       const expansion = await this.#resolver.expandPlaylist(
@@ -867,7 +844,7 @@ export class YoutubePlaybackService {
 
   #requirePlaylistStore(): PlaylistStore {
     if (this.#playlistStore === undefined) {
-      throw new UserError("Las playlists no están configuradas en este bot.");
+      throw new UserError(messages.requirePlaylistStoreLasPlaylistsNoEstan);
     }
     return this.#playlistStore;
   }
@@ -884,9 +861,7 @@ export class YoutubePlaybackService {
     requestedByUid?: string,
   ): Promise<PlaylistEnqueueResult> {
     if (resource.type !== "playlist")
-      throw new UserError(
-        "Solo se pueden expandir playlists de YouTube con !play.",
-      );
+      throw new UserError(messages.enqueuePlaylistSoloSePuedenExpandir);
     return this.#withExpansionSlot(async () => {
       const stopEpoch = this.#controller.captureStopEpoch();
       const expansion = await this.#resolver.expandPlaylist(
@@ -910,9 +885,7 @@ export class YoutubePlaybackService {
     return this.#withExpansionSlot(async () => {
       const stopEpoch = this.#controller.captureStopEpoch();
       if (!this.#alternativeResolver) {
-        throw new UserError(
-          "Este bot no tiene resolución de links de Apple Music o Amazon Music configurada.",
-        );
+        throw new UserError(messages.enqueueMusicLinkEsteBotNoTiene);
       }
       const alternative =
         await this.#alternativeResolver.findAlternative(input);
@@ -920,15 +893,11 @@ export class YoutubePlaybackService {
         return { added: [] };
       }
       if (!alternative) {
-        throw new UserError(
-          "No pude encontrar ese link en YouTube o SoundCloud. Probá pegando el link directo de YouTube.",
-        );
+        throw new UserError(messages.enqueueMusicLinkNoPudeEncontrarEse);
       }
       if (alternative.provider === "soundcloud") {
         if (!this.#soundcloudResolver) {
-          throw new UserError(
-            "El link solo existe en SoundCloud, pero ese proveedor no está configurado.",
-          );
+          throw new UserError(messages.enqueueMusicLinkElLinkSoloExiste);
         }
         const metadata = await this.#soundcloudResolver.getTrack(
           alternative.url,
@@ -986,9 +955,7 @@ export class YoutubePlaybackService {
           ],
         };
       }
-      throw new UserError(
-        "El link alternativo no apunta a una fuente reproducible.",
-      );
+      throw new UserError(messages.enqueueMusicLinkElLinkAlternativoNo);
     });
   }
 
@@ -1055,9 +1022,7 @@ export class YoutubePlaybackService {
 
   async #withExpansionSlot<T>(operation: () => Promise<T>): Promise<T> {
     if (this.#expansionActive) {
-      throw new UserError(
-        "Ya hay una playlist o álbum expandiéndose; esperá un momento.",
-      );
+      throw new UserError(messages.withExpansionSlotYaHayUnaPlaylist);
     }
     this.#expansionActive = true;
     try {
@@ -1076,12 +1041,12 @@ export class YoutubePlaybackService {
       const stopEpoch = this.#controller.captureStopEpoch();
       if (!this.#spotifyResolver) {
         throw new UserError(
-          "Spotify no está configurado en este bot: pegá un link de YouTube o SoundCloud, o buscá con !yt.",
+          messages.enqueueSpotifyCollectionSpotifyNoEstaConfigurado,
         );
       }
       if (resource.type !== "playlist" && resource.type !== "album") {
         throw new UserError(
-          "Solo se pueden expandir colecciones de Spotify con !play.",
+          messages.enqueueSpotifyCollectionSoloSePuedenExpandir,
         );
       }
       const expansion =
@@ -1173,9 +1138,7 @@ export class YoutubePlaybackService {
     return this.#withExpansionSlot(async () => {
       const stopEpoch = this.#controller.captureStopEpoch();
       if (!this.#appleMusicResolver) {
-        throw new UserError(
-          "Este bot no tiene resolución de links de Apple Music configurada.",
-        );
+        throw new UserError(messages.enqueueAppleMusicCollectionEsteBotNoTiene);
       }
       const playlist = await this.#appleMusicResolver.getPlaylist(input);
       if (!this.#controller.isStopEpochCurrent(stopEpoch)) {

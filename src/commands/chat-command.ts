@@ -4,6 +4,7 @@ import {
   type CommandGroup,
 } from "./command-registry.js";
 import { UserError } from "../lib/user-error.js";
+import { messages } from "../lib/messages.js";
 
 export type ChatCommand =
   | { readonly name: "channel-move"; readonly input: string }
@@ -128,34 +129,33 @@ export function parseChatCommand(
     .split(/\s+/);
   const name = lookupCommandName(rawName);
   if (!name)
-    throw new UserError(
-      "No reconozco ese comando. Escribí !help para ver los disponibles.",
-    );
+    throw new UserError(messages.parseChatCommandNoReconozcoEseComando);
 
   const argument = unwrapTeamSpeakUrl(argumentsList.join(" ").trim());
   switch (name) {
     case "channel-move":
       if (!argument)
-        throw new UserError("Usá: !channel-move <nombre o id del canal>");
+        throw new UserError(messages.parseChatCommandUsaChannelMoveNombre);
       return { input: argument, name };
     case "play":
-      if (!argument)
-        throw new UserError("Usá: !play <link o término de búsqueda>");
+      if (!argument) throw new UserError(messages.parseChatCommandUsaPlayLinkO);
       return { input: argument, name };
     case "search": {
       const first = argument.split(/\s+/)[0] ?? "";
       if (/^\d+$/.test(first)) {
         const index = parsePosition(first, "!yt <n> <búsqueda>");
         const query = argument.split(/\s+/).slice(1).join(" ").trim();
-        if (!query) throw new UserError("Usá: !yt <n> <búsqueda>");
+        if (!query)
+          throw new UserError(messages.parseChatCommandUsaYtNBusqueda);
         return { index, input: query, name };
       }
-      if (!argument) throw new UserError("Usá: !yt <término de búsqueda>");
+      if (!argument)
+        throw new UserError(messages.parseChatCommandUsaYtTerminoDe);
       return { input: argument, name };
     }
     case "playnext":
       if (!argument)
-        throw new UserError("Usá: !playnext <link o término de búsqueda>");
+        throw new UserError(messages.parseChatCommandUsaPlaynextLinkO);
       return { input: argument, name };
     case "queue":
       return argument ? { name, page: parsePage(argument) } : { name };
@@ -168,11 +168,12 @@ export function parseChatCommand(
     case "loop":
       if (!argument) return { name };
       if (argument !== "off" && argument !== "queue" && argument !== "track") {
-        throw new UserError("Usage: !loop [off|track|queue]");
+        throw new UserError(messages.parseChatCommandUsageLoopOffTrack);
       }
       return { mode: argument, name };
     case "seek":
-      if (!/^\d+$/.test(argument)) throw new UserError("Usá: !seek <segundos>");
+      if (!/^\d+$/.test(argument))
+        throw new UserError(messages.parseChatCommandUsaSeekSegundos);
       return { name, seconds: Number(argument) };
     case "unfav":
       return { name, index: parsePosition(argument, "!unfav <n>") };
@@ -185,12 +186,15 @@ export function parseChatCommand(
         argument !== "soundcloud" &&
         argument !== "auto"
       ) {
-        throw new UserError("Usá: !fuente [youtube|soundcloud|auto]");
+        throw new UserError(
+          messages.parseChatCommandUsaFuenteYoutubeSoundcloud,
+        );
       }
       return { name, source: argument };
     }
     case "radio":
-      if (!argument) throw new UserError("Usá: !radio <nombre, género o link>");
+      if (!argument)
+        throw new UserError(messages.parseChatCommandUsaRadioNombreGenero);
       return { input: argument, name };
     case "jump":
       return { name, index: parsePosition(argument, "!jump <posición>") };
@@ -201,7 +205,7 @@ export function parseChatCommand(
     case "autoplay": {
       if (!argument) return { name };
       if (argument !== "on" && argument !== "off") {
-        throw new UserError("Usá: !autoplay [on|off]");
+        throw new UserError(messages.parseChatCommandUsaAutoplayOnOff);
       }
       return { enabled: argument === "on", name };
     }
@@ -223,7 +227,9 @@ export function parseChatCommand(
       ) {
         const nameArg = parts[1];
         if (!nameArg) {
-          throw new UserError(`Usá: !playlist ${action} <nombre>`);
+          throw new UserError(
+            messages.parseChatCommandUsaPlaylistNombre(action),
+          );
         }
         if (action === "show") {
           return parts[2] === undefined
@@ -236,7 +242,7 @@ export function parseChatCommand(
         const nameArg = parts[1];
         const urlArg = unwrapTeamSpeakUrl(parts.slice(2).join(" ").trim());
         if (!nameArg || !urlArg) {
-          throw new UserError("Usá: !playlist add <nombre> <url>");
+          throw new UserError(messages.parseChatCommandUsaPlaylistAddNombre);
         }
         return { name, action: "add", nameArg, urlArg };
       }
@@ -244,7 +250,7 @@ export function parseChatCommand(
         const nameArg = parts[1];
         const rawIndex = parts[2];
         if (!nameArg || rawIndex === undefined) {
-          throw new UserError("Usá: !playlist remove <nombre> <índice>");
+          throw new UserError(messages.parseChatCommandUsaPlaylistRemoveNombre);
         }
         return {
           name,
@@ -257,26 +263,24 @@ export function parseChatCommand(
         const oldName = parts[1];
         const newName = parts[2];
         if (!oldName || !newName) {
-          throw new UserError("Usá: !playlist rename <viejo> <nuevo>");
+          throw new UserError(messages.parseChatCommandUsaPlaylistRenameViejo);
         }
         return { name, action: "rename", oldName, newName };
       }
-      throw new UserError(
-        "Usá: !playlist save|load|list|show|delete|add|remove|rename|info <nombre>",
-      );
+      throw new UserError(messages.parseChatCommandUsaPlaylistSaveLoad);
     }
     case "help": {
       const category = resolveHelpCategory(argument);
       if (argument && category === undefined) {
-        throw new UserError(
-          "Usá: !help [1-4 | reproducción | cola | administración | otros]",
-        );
+        throw new UserError(messages.parseChatCommandUsaHelp14);
       }
       return category === undefined ? { name } : { category, name };
     }
     default:
       if (argument)
-        throw new UserError(`El comando !${rawName} no acepta argumentos`);
+        throw new UserError(
+          messages.parseChatCommandElComandoNoAcepta(rawName),
+        );
       return { name };
   }
 }
@@ -295,10 +299,11 @@ function parsePosition(
   argument: string,
   usage = "!remove <queue position>",
 ): number {
-  if (!/^\d+$/.test(argument)) throw new UserError(`Usá: ${usage}`);
+  if (!/^\d+$/.test(argument))
+    throw new UserError(messages.parsePositionUsa(usage));
   const position = Number(argument);
   if (!Number.isSafeInteger(position) || position < 1) {
-    throw new UserError("La posición tiene que ser mayor a 0.");
+    throw new UserError(messages.parsePositionLaPosicionTieneQue);
   }
   return position;
 }
@@ -308,20 +313,21 @@ function parseRange(
   command: "remove",
 ): { from: number; to: number } {
   const match = argument.match(/^(\d+)(?:-(\d+))?$/);
-  if (!match) throw new UserError(`Usá: !${command} <posición|desde-hasta>`);
+  if (!match)
+    throw new UserError(messages.parseRangeUsaPosicionDesdeHasta(command));
   const from = parsePosition(match[1] ?? "", "!remove <posición|desde-hasta>");
   const to =
     match[2] === undefined
       ? from
       : parsePosition(match[2], "!remove <posición|desde-hasta>");
-  if (to < from)
-    throw new UserError("El rango tiene que ser ascendente (ej: 2-5).");
+  if (to < from) throw new UserError(messages.parseRangeElRangoTieneQue);
   return { from, to };
 }
 
 function parseMove(argument: string): { from: number; to: number } {
   const parts = argument.split(/\s+/);
-  if (parts.length !== 2) throw new UserError("Usá: !move <desde> <hasta>");
+  if (parts.length !== 2)
+    throw new UserError(messages.parseMoveUsaMoveDesdeHasta);
   const from = parsePosition(parts[0] ?? "", "!move <desde> <hasta>");
   const to = parsePosition(parts[1] ?? "", "!move <desde> <hasta>");
   return { from, to };
@@ -333,9 +339,10 @@ function parsePage(argument: string, usage = "!queue [page]"): number {
 }
 
 function parseVolume(argument: string): number {
-  if (!/^\d+$/.test(argument)) throw new UserError("Usá: !volume <0-100>");
+  if (!/^\d+$/.test(argument))
+    throw new UserError(messages.parseVolumeUsaVolume0100);
   const value = Number(argument);
   if (value < 0 || value > 100)
-    throw new UserError("El volumen tiene que estar entre 0 y 100.");
+    throw new UserError(messages.parseVolumeElVolumenTieneQue);
   return value;
 }
