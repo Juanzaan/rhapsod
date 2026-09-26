@@ -28,7 +28,7 @@ Proveedores -> PreparedAudioStore -> FFmpeg PCM
 - `src/panel/`: endpoints locales autenticados, plantillas y edición del entorno.
 - `src/observability/`: registros estructurados, métricas y errores sin secretos.
 - `src/config.ts`: esquema de ejecución y valores predeterminados.
-- `src/bootstrap/`: partes del arranque que `src/main.ts` conecta en orden: salida y manejo de fallos (`exit.ts`), modo de configuración (`setup-mode.ts`), los almacenes JSON y su guardado (`stores.ts`), la sincronización de la vista del servidor del panel (`server-view.ts`), la admisión de comandos del chat (`chat-commands.ts`: límite de comandos simultáneos, límite por usuario y control de permiso para hablar) y opciones compartidas de yt-dlp.
+- `src/bootstrap/`: partes del arranque que `src/main.ts` conecta en orden: salida y manejo de fallos (`exit.ts`), modo de configuración (`setup-mode.ts`), los almacenes JSON y su guardado (`stores.ts`), la sincronización de la vista del servidor del panel (`server-view.ts`), la admisión de comandos del chat (`chat-commands.ts`: límite de comandos simultáneos, límite por usuario y control de permiso para hablar), el ciclo de reconexión a TeamSpeak (`reconnect.ts`: 5 intentos con esperas de 5 a 80 s, luego guardar y salir con 1) y opciones compartidas de yt-dlp.
 
 ## Comandos
 
