@@ -14,9 +14,7 @@ import { LoudnessProfiler } from "./audio/loudness-profiler.js";
 import { playTestTone } from "./audio/test-tone-player.js";
 import { YoutubePlaybackService } from "./application/youtube-playback-service.js";
 import { PlaylistStore } from "./application/playlist-store.js";
-import { AUTOPLAY_UID } from "./application/autoplay-picker.js";
 import type { CommandContext } from "./commands/command-handlers.js";
-import { formatPlaybackError, formatPlaybackStarted } from "./lib/messages.js";
 import { classifyYoutubeAuthFailure } from "./lib/youtube-auth-health.js";
 import { CommandRateLimiter } from "./commands/command-rate-limiter.js";
 import { SkipVotes } from "./application/skip-votes.js";
@@ -40,7 +38,7 @@ import { AppleMusicClient } from "./media/apple-music.js";
 import { DirectUrlClient } from "./media/direct-url.js";
 import { startEgressGuard } from "./lib/egress-guard.js";
 import { PlaybackMetrics } from "./observability/prometheus.js";
-import { LyricsClient, parseArtistTitle } from "./media/lyrics.js";
+import { LyricsClient } from "./media/lyrics.js";
 import { SoundCloudPublicApi } from "./media/soundcloud/public-api.js";
 import { SpotifyApi } from "./media/spotify/api.js";
 import { createRhapsodLogger } from "./observability/logger.js";
@@ -55,6 +53,7 @@ import { startSetupMode } from "./bootstrap/setup-mode.js";
 import { ChatCommandGate } from "./bootstrap/chat-commands.js";
 import { Reconnector } from "./bootstrap/reconnect.js";
 import { startConnectedPanel } from "./bootstrap/panel.js";
+import { createPlaybackEvents } from "./bootstrap/playback-events.js";
 import { ServerViewSync } from "./bootstrap/server-view.js";
 import { flushStores, openStores } from "./bootstrap/stores.js";
 import { ytDlpStackOptions } from "./bootstrap/yt-dlp-options.js";
@@ -74,22 +73,6 @@ async function main(): Promise<void> {
   });
   const metrics = new MetricsCollector();
   const playbackMetrics = new PlaybackMetrics();
-  const trackTimings = new Map<
-    string,
-    { audioUrlMs?: number; cacheHit?: boolean; metadataMs?: number }
-  >();
-  const setTrackTiming = (
-    trackId: string,
-    timing: { audioUrlMs?: number; cacheHit?: boolean; metadataMs?: number },
-  ): void => {
-    // Metadata and audio-URL timings arrive separately for the same track;
-    // merge so the second report does not erase the first.
-    trackTimings.set(trackId, { ...trackTimings.get(trackId), ...timing });
-    if (trackTimings.size > 200) {
-      const oldest = trackTimings.keys().next().value;
-      if (oldest !== undefined) trackTimings.delete(oldest);
-    }
-  };
   installCrashHandlers(logger, exits);
   const adminUids = parseAdminUids(config.RHAPSOD_ADMIN_UIDS);
   const privateCommandUids =
@@ -272,87 +255,19 @@ async function main(): Promise<void> {
     prewarmNext: true,
     loudnessProfiler,
     encoder,
-    onPlaybackStarted: async (track) => {
-      const timings = trackTimings.get(track.id);
-      logger.info(
-        { ...timings, trackId: track.id, title: track.title },
-        "Playback started",
-      );
-      listeningHistory.recordStart(track.requestedByUid ?? track.requestedBy, {
-        id: track.id,
-        title: track.title,
-      });
-      // Endless radio streams are not songs themselves; their songs enter
-      // the library through the scrobbler once the station names them.
-      if (track.durationSeconds !== undefined) {
-        const { artist } = parseArtistTitle(track.title);
-        songLibrary.record({
-          ...(artist === undefined ? {} : { artist }),
-          id: track.id,
-          source: track.source,
-          title: track.title,
-        });
-      }
-      const isFirst = !commandContext.hasStartedPlaying;
-      commandContext.hasStartedPlaying = true;
-      await connection.sendChannelMessage(
-        track.requestedByUid === AUTOPLAY_UID
-          ? `Autoplay: ${track.title}`
-          : formatPlaybackStarted(track.title, isFirst),
-      );
-    },
-    onPlaybackFinished: (track, metrics, reason, kpis) => {
-      playbackMetrics.record(reason, metrics, kpis);
-      const timings = trackTimings.get(track.id);
-      trackTimings.delete(track.id);
-      logger.info(
-        {
-          ...timings,
-          ...metrics,
-          ...kpis,
-          reason,
-          trackId: track.id,
-          title: track.title,
-        },
-        "Playback session",
-      );
-      listeningHistory.recordFinish(
-        track.requestedByUid ?? track.requestedBy,
-        { id: track.id, title: track.title },
-        reason === "completed",
-      );
-    },
-    onTiming: (timing) => {
-      setTrackTiming(timing.trackId, {
-        ...(timing.stage === "metadata"
-          ? { metadataMs: timing.durationMs }
-          : {}),
-        ...(timing.stage === "audio-url"
-          ? {
-              audioUrlMs: timing.durationMs,
-              ...(timing.cacheHit === undefined
-                ? {}
-                : { cacheHit: timing.cacheHit }),
-            }
-          : {}),
-      });
-      if (timing.stage === "audio-url") {
-        const s = timing.prefetchStatus;
-        if (s === "hit") metrics.increment("prefetchHits");
-        else if (s === "in-flight") metrics.increment("prefetchInFlight");
-        else if (s === "miss") metrics.increment("prefetchMisses");
-      }
-      metrics.recordTiming(timing);
-      logger.info(timing, "Playback timing");
-    },
-    onPlaybackError: async (track, error) => {
-      metrics.recordError(track.id, error, track.title);
-      logger.error(
-        { err: error, trackId: track.id },
-        "YouTube playback failed",
-      );
-      await connection.sendChannelMessage(formatPlaybackError(track.title));
-    },
+    ...createPlaybackEvents({
+      listeningHistory,
+      logger,
+      markStarted: () => {
+        const first = !commandContext.hasStartedPlaying;
+        commandContext.hasStartedPlaying = true;
+        return first;
+      },
+      metrics,
+      playbackMetrics,
+      sendChannelMessage: (text) => connection.sendChannelMessage(text),
+      songLibrary,
+    }),
     output: connection,
     resolver,
     stateStore: new FilePlaybackStateStore(join(dataDir, "state.json"), logger),

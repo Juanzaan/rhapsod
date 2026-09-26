@@ -28,7 +28,7 @@ Media providers -> PreparedAudioStore -> FFmpeg PCM
 - `src/panel/`: authenticated localhost HTTP endpoints, templates and environment-file editing.
 - `src/observability/`: structured logs, playback metrics and sanitized errors.
 - `src/config.ts`: runtime schema and default settings.
-- `src/bootstrap/`: startup pieces that `src/main.ts` wires in order: exit and crash handling (`exit.ts`), setup mode (`setup-mode.ts`), the JSON stores and their flush (`stores.ts`), the panel's server view sync (`server-view.ts`), chat command admission (`chat-commands.ts`: concurrency cap, per-user rate limit, talk-power gate), the TeamSpeak reconnect loop (`reconnect.ts`: 5 attempts backing off from 5 to 80 s, then flush and exit 1), the connected panel's wiring (`panel.ts`: status, metrics and commands run as the panel admin) and shared yt-dlp options.
+- `src/bootstrap/`: startup pieces that `src/main.ts` wires in order: exit and crash handling (`exit.ts`), setup mode (`setup-mode.ts`), the JSON stores and their flush (`stores.ts`), the panel's server view sync (`server-view.ts`), chat command admission (`chat-commands.ts`: concurrency cap, per-user rate limit, talk-power gate), the TeamSpeak reconnect loop (`reconnect.ts`: 5 attempts backing off from 5 to 80 s, then flush and exit 1), the connected panel's wiring (`panel.ts`: status, metrics and commands run as the panel admin), the playback service's callbacks (`playback-events.ts`: logs, listening history, song library, metrics and chat announcements) and shared yt-dlp options.
 
 ## Commands
 
