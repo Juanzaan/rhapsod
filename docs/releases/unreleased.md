@@ -42,6 +42,7 @@ Persistence fixes, dependency updates, deployment repairs and consistent bilingu
 - Fix the yt-dlp daemon: youtu.be, `/shorts/` and `/live/` links no longer crash a request, two requests for the same video no longer extract it twice, a request waiting on a stuck extraction gives up after 45 seconds, cached URLs expire at the time signed in the URL (minus 15 minutes) instead of a fixed six hours, and unknown paths answer 404.
 - Keep unreadable data files: playlists, favorites, listening history, the song library, telemetry or playback state that fail to parse are renamed to `<name>.corrupt-<time>` instead of being replaced by the next save. Every data write is flushed to disk before the rename, so a power loss cannot leave an empty file.
 - Accept `!channel-move` while the bot cannot talk in its channel: it is the command that moves it out, and it used to be ignored with every other command. Move permissions still apply.
+- Send the parts of a split chat message back to back: another message queued meanwhile can no longer land between them.
 
 ## Upgrade
 

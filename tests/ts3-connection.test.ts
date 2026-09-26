@@ -501,14 +501,48 @@ describe("message gate", () => {
       const sentAt: number[] = [];
       const start = Date.now();
       const sends = Array.from({ length: 5 }, () =>
-        gate(() => {
-          sentAt.push(Date.now() - start);
-          return Promise.resolve();
-        }),
+        gate([
+          () => {
+            sentAt.push(Date.now() - start);
+            return Promise.resolve();
+          },
+        ]),
       );
       await vi.advanceTimersByTimeAsync(5_000);
       await Promise.all(sends);
       expect(sentAt).toEqual([0, 1_100, 2_200, 3_300, 4_400]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the parts of a split message together", async () => {
+    // Each part used to reserve its slot only when the loop reached it, so a
+    // message queued during the first wait ("Reproduciendo: ...") could land
+    // between part 1 and part 2.
+    const m = await ts3Mock();
+    vi.useFakeTimers();
+    try {
+      const connection = createTs3Connection(testConfig(), identity, logger);
+      const long = `${"a".repeat(900)}
+${"b".repeat(600)}`;
+      const sendingFirst = connection.sendChannelMessage("previo");
+      const sendingLong = connection.sendChannelMessage(long);
+      await vi.advanceTimersByTimeAsync(500);
+      const sendingShort = connection.sendChannelMessage("otro");
+      await vi.advanceTimersByTimeAsync(5_000);
+      await Promise.all([sendingFirst, sendingLong, sendingShort]);
+      const sent = m.__client.execCommand.mock.calls.map((call) => {
+        const cmd = String(call[0]);
+        return cmd.includes("msg=a")
+          ? "part1"
+          : cmd.includes("msg=b")
+            ? "part2"
+            : cmd.includes("msg=previo")
+              ? "previo"
+              : "otro";
+      });
+      expect(sent).toEqual(["previo", "part1", "part2", "otro"]);
     } finally {
       vi.useRealTimers();
     }
@@ -524,10 +558,11 @@ describe("message gate", () => {
         onDrop: (queued) => drops.push(queued),
       });
       const send = () => Promise.resolve();
-      const pending = [gate(send), gate(send), gate(send), gate(send)];
+      const pending = [gate([send]), gate([send]), gate([send]), gate([send])];
       await vi.advanceTimersByTimeAsync(5_000);
       await Promise.all(pending);
-      expect(drops).toEqual([2]);
+      // Two messages fill the queue; the third and fourth are dropped.
+      expect(drops).toEqual([2, 2]);
     } finally {
       vi.useRealTimers();
     }
