@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 
 /** Browser scripts under src/panel/scripts, copied to dist by the build. */
 export type PanelScriptName =
-  "ambience" | "commands" | "server" | "server-tree" | "settings";
+  "ambience" | "commands" | "server" | "server-tree" | "settings" | "setup";
 
 const cache = new Map<PanelScriptName, string>();
 
