@@ -2,7 +2,7 @@
 
 [English](roadmap.md)
 
-La próxima versión es 4.0.0. El comportamiento publicado se registra en [versiones](releases.es.md); los cambios pendientes corresponden a [notas sin publicar](releases/unreleased.es.md). Los perfiles 1.x, 2.x y 3.x se conservan como referencia histórica.
+La versión actual es 4.0.0. El comportamiento publicado se registra en [versiones](releases.es.md); los cambios pendientes corresponden a [notas sin publicar](releases/unreleased.es.md). Los perfiles 1.x, 2.x y 3.x se conservan como referencia histórica.
 
 ## Entregado
 
@@ -13,46 +13,37 @@ La próxima versión es 4.0.0. El comportamiento publicado se registra en [versi
 - Módulos de cola y controlador separados, URL preparadas, épocas de cancelación y esperas limitadas.
 - Control de salida para ffmpeg y ffprobe, cuarentena de archivos de datos ilegibles y escrituras agrupadas.
 
-## Trabajo planificado (propuesta, abierta a veto)
+### Entregado en 4.0.0 del plan de la ronda 3
 
-Los puntos están ordenados por impacto visible para los usuarios dividido por riesgo. Cada uno se entrega en su propio PR con una prueba de regresión, documentación bilingüe y notas sin publicar. Primero se mide, para que los ajustes posteriores muestren un antes y un después. Para quitar o reordenar un punto, comentar en el PR de este plan; nada de lo siguiente empieza hasta que el plan se integre.
+Los números conservan el orden del plan aprobado en #124.
 
-### Fase 1: medir
+- **1.** Indicadores de reproducción por pista e informe en `scripts/log-stats.mjs` (#126).
+- **2.** `GET /api/metrics` en formato de texto de Prometheus (#127).
+- **3.** Reanudar un flujo que se detiene a mitad de canción (#128).
+- **4.** Reutilizar URL preparadas solo mientras duren toda la pista (#129).
+- **7.** Evaluación de búsqueda sin conexión con un piso contra regresiones (#130, #131).
+- **8.** Evaluación de la reproducción automática (#132).
+- **9.** Un catálogo único para los textos del chat (#133).
+- **10.** `!help <comando>` y la indicación de la categoría siguiente (#135).
+- **11.** Votación opcional para saltar, `RHAPSOD_VOTE_SKIP` (#136, con #125 del carril A).
+- **12.** Registro de comandos basado en tablas (#137).
+- **13.** `npm run smoke`, ejecutado por las pruebas (#140).
+- **14.** `src/main.ts` dividido en módulos con pruebas dentro de `src/bootstrap/` (#142 a #149).
+- **19.** `scripts/deploy.sh` con vuelta atrás automática (#138, carril A).
 
-1. **Indicadores de reproducción.** Registrar por pista: tiempo desde el comando en el chat hasta el primer cuadro de audio, pausa entre el final de una pista y el inicio de la siguiente, cortes y recargas del búfer, y si la pista siguiente estaba precargada. Ampliar `scripts/log-stats.mjs` con un informe (p50/p90/p99 por indicador). Impacto: cada cambio posterior de reproducción tiene un número. Riesgo: bajo, solo registros. Archivos: `playback-controller.ts`, `main.ts`, `scripts/log-stats.mjs`.
-2. **Endpoint de métricas.** `GET /api/metrics` en el panel en formato de texto de Prometheus (contadores e histogramas de los indicadores anteriores), con la autenticación y el enlace local actuales. Impacto: paneles y alertas sin leer registros. Riesgo: bajo. Archivos: `panel-server.ts` (acordado con el carril A: solo rutas, el middleware de autenticación no cambia), `observability/metrics.ts`.
+## Trabajo planificado
 
-### Fase 2: reproducción
+Cada punto se entrega en su propio PR con una prueba de regresión, documentación bilingüe y notas sin publicar.
 
-3. **Recuperar un flujo detenido a mitad de canción.** Hoy un origen detenido termina la pista como error y la salta. Reiniciar ffmpeg una vez en la posición actual, como ya hace el reintento ante un 403, antes de abandonarla. Prueba de regresión: un flujo que se detiene a la mitad se reanuda en vez de saltarse. Riesgo: bajo a medio, reutiliza la reanudación existente.
-4. **Ciclo de vida de URL según su vencimiento.** Las URL de googlevideo preparadas y en caché llevan un `expire` firmado. Renovar una URL preparada que vence dentro de la duración de la pista siguiente más un margen, antes del cambio de pista y no después de un 403. Riesgo: medio. Archivos: `prepared-audio-store.ts`, `audio-url-cache.ts`.
-5. **Ajuste del cambio sin pausa.** Con las pausas medidas en el punto 1, ajustar cuándo se precarga la pista siguiente y conservar el flujo precargado ante saltos de posición y ediciones de la cola que no cambian la pista siguiente. El objetivo y el alcance dependen de los datos de la fase 1; se omite si la pausa ya es menor a 200 ms en p90. Riesgo: medio.
-6. **Revisión del volumen.** Informar la dispersión del volumen medido por sesión a partir del perfilador de volumen y ajustar el objetivo por defecto o el camino alternativo solo si la diferencia es audible. Riesgo: bajo.
-
-### Fase 3: calidad de búsqueda y reproducción automática
-
-7. **Evaluación de búsqueda sin conexión.** `scripts/search-eval.mjs` más un conjunto de listas de candidatos grabadas para al menos 50 búsquedas reales (versiones, en vivo, videos con letra, artista y título invertidos, títulos en español e inglés) con la elección esperada. Puntúa `search-ranking.ts` y corre como prueba que falla ante una regresión. Los cambios de ranking posteriores se integran con la diferencia de puntaje. Riesgo: bajo, herramienta.
-8. **Evaluación de la reproducción automática.** Un arnés que ejecuta la rotación del DJ durante muchos turnos sobre listas relacionadas grabadas e historiales sintéticos, e informa repeticiones dentro de una ventana, la mayor proporción de un mismo artista y los saltos de energía entre elecciones seguidas. Los ajustes siguen la misma regla de antes y después. Riesgo: bajo.
-
-### Fase 4: experiencia en el chat
-
-9. **Módulo central de mensajes.** Mover los 56 textos literales del chat en `command-handlers.ts` y los del controlador a `lib/messages.ts`, con un tono uniforme y listos para un segundo idioma. Riesgo: bajo, cubierto por las pruebas de los manejadores.
-10. **Mejor `!help`.** Ahora que los mensajes largos se dividen, `!help` muestra una categoría por página con un pie que indica la siguiente, y `!help <comando>` explica un solo comando con sus alias. Riesgo: bajo.
-11. **Votación opcional para saltar.** `RHAPSOD_VOTE_SKIP` (desactivado por defecto): cuando alguien que no pidió la pista envía `!skip`, cuenta como voto, y la pista se salta cuando votó más de la mitad de los oyentes del canal del bot. Necesita un método de la conexión de TeamSpeak que liste los UID de los clientes comunes del canal del bot; lo agrega primero el carril A. Riesgo: medio.
-
-### Fase 5: arquitectura y herramientas
-
-12. **Tabla de registro de comandos.** Una entrada por comando con su especificación, su analizador y su manejador, en lugar del `switch` de análisis de `chat-command.ts` y el de despacho de `command-handlers.ts`. `!help` y la lista de comandos del panel leen la misma tabla. Riesgo: medio, toca todos los comandos; las pruebas actuales del analizador y los manejadores deben pasar sin cambios.
-13. **Script de humo.** `scripts/smoke.mjs` compila, inicia el bot en modo de configuración con un directorio de datos temporal, consulta los endpoints de salud y estado del panel y lo detiene. Corre en CI. Riesgo: bajo.
-14. **Dividir `main.ts`.** Extraer la inicialización en módulos con pruebas: almacenamiento, reproducción, panel y apagado. `main.ts` conserva solo el orden de arranque. Riesgo: medio; se hace después de los puntos 12 y 13 para que el script de humo lo proteja.
-15. **Scripts del panel como archivos reales.** Sacar el JavaScript en línea del panel de las cadenas de plantilla a archivos que revisen ESLint y `tsc`, servidos en línea igual que ahora para mantener la CSP actual. Riesgo: medio, el panel es grande; va al final de esta fase.
-16. **Servidor TeamSpeak simulado (carril A).** Un servidor con guion o datos grabados para ejercitar el adaptador de TeamSpeak y la inicialización sin un servidor real. Corresponde a `src/adapters/ts3/`; lo toma la sesión del carril A.
+- **5. Ajuste del cambio sin pausa.** Con las pausas medidas en el punto 1, ajustar cuándo se precarga la pista siguiente y conservar el flujo precargado ante saltos de posición y ediciones de la cola que no cambian la pista siguiente. El objetivo y el alcance dependen de los datos de producción de `scripts/log-stats.mjs`; se omite si la pausa ya es menor a 200 ms en p90. Riesgo: medio.
+- **6. Revisión del volumen.** Informar la dispersión del volumen medido por sesión a partir del perfilador de volumen y ajustar el objetivo por defecto o el camino alternativo solo si la diferencia es audible. Riesgo: bajo.
+- **15. Scripts del panel como archivos reales.** En curso: los scripts de ambiente, árbol del servidor, Comandos, Servidor, Ajustes y asistente de configuración están en `src/panel/scripts/` (#151 a #155), lo que además dejó ver los errores del asistente corregidos en #156. Falta el script del tablero. Riesgo: medio, el tablero es grande.
+- **16. Servidor TeamSpeak simulado (carril A).** Un servidor con guion o datos grabados para ejercitar el adaptador de TeamSpeak y la inicialización sin un servidor real. Corresponde a `src/adapters/ts3/`; lo toma la sesión del carril A.
 
 ### Propuestos por el carril A (abiertos a veto)
 
-18. **Aplicación de escritorio para Windows.** `tools/desktop` (C#, WinForms y WebView2): gestor del túnel SSH, panel integrado, estado en la bandeja del sistema, reinicio y actualización seguros. Inicia sesión con tokens del panel de corta duración emitidos por SSH en lugar de una contraseña guardada en el programa. El soporte de tokens cambia la autenticación del panel después de que se integre el punto 2.
-19. **Script de despliegue.** `scripts/deploy.sh`: esperar a que no suene nada, respaldar, actualizar, compilar, reiniciar y volver atrás si la nueva compilación no arranca.
-20. **Refuerzo de CI.** `systemd-analyze verify` para las unidades, `shellcheck` para los scripts, un runner de Windows y acciones fijadas por SHA de commit.
+- **18. Aplicación de escritorio para Windows.** `tools/desktop` (C#, WinForms y WebView2): gestor del túnel SSH, panel integrado, estado en la bandeja del sistema, reinicio y actualización seguros. Inicia sesión con tokens del panel de corta duración emitidos por SSH en lugar de una contraseña guardada en el programa. El soporte de tokens cambia la autenticación del panel después de que se integre el punto 2.
+- **20. Refuerzo de CI.** `systemd-analyze verify` para las unidades, `shellcheck` para los scripts, un runner de Windows y acciones fijadas por SHA de commit.
 
 ### Solo propuesta: almacenamiento
 
