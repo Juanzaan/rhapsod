@@ -47,6 +47,8 @@ Correcciones de persistencia, actualización de dependencias, reparación del de
 
 ## Actualización
 
+Es una versión mayor porque quita comandos: `!bassboost`, `!nightcore`, `!vaporwave`, `!8d`, `!filter` y `!effects` ahora reciben la respuesta de comando desconocido. `!test-tone` y `!chart`, que también se podían usar como `!effects test-tone` y `!effects chart`, siguen como comandos propios. Un filtro guardado en `data/state.json` se ignora.
+
 Se requiere Node.js >=22.19.0. Respaldar configuración y datos, ejecutar `npm ci` y `npm run build`, y reiniciar cuando `/api/state` indique `playerState: "idle"`.
 
 Si el panel usa una contraseña por defecto no se iniciará; definir antes una `RHAPSOD_PANEL_PASSWORD` única. Las instalaciones existentes conservan la línea `Requires=` en `/etc/systemd/system/rhapsod.service` hasta volver a ejecutar el instalador: cambiarla por `Wants=` y ejecutar `systemctl daemon-reload`.

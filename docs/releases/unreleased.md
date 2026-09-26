@@ -47,6 +47,8 @@ Persistence fixes, dependency updates, deployment repairs and consistent bilingu
 
 ## Upgrade
 
+This is a major release because it removes commands: `!bassboost`, `!nightcore`, `!vaporwave`, `!8d`, `!filter` and `!effects` now get the unknown-command reply. `!test-tone` and `!chart`, previously also reachable as `!effects test-tone` and `!effects chart`, remain as their own commands. A filter saved in `data/state.json` is ignored.
+
 Node.js >=22.19.0 is required. Back up configuration and data, run `npm ci` and `npm run build`, and restart when `/api/state` reports `playerState: "idle"`.
 
 If the panel uses a default password it will not start; set a unique `RHAPSOD_PANEL_PASSWORD` first. Existing installs keep the old `Requires=` line in `/etc/systemd/system/rhapsod.service` until the installer runs again: change it to `Wants=` and run `systemctl daemon-reload`.
