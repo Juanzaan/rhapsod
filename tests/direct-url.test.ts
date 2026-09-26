@@ -305,6 +305,50 @@ describe("DirectUrlResolver", () => {
     expect(track.durationSeconds).toBe(12);
   });
 
+  it("probes through the egress guard without no_proxy", async () => {
+    vi.stubEnv("no_proxy", "cdn.example.test");
+    audioFetch.mockResolvedValueOnce(
+      fetchResponse({ contentType: "audio/mpeg" }),
+    );
+    let probeArgs: string[] = [];
+    let probeEnv: NodeJS.ProcessEnv | undefined;
+    execFileMock.mockImplementation(
+      (
+        _binary: string,
+        args: string[],
+        options: { env?: NodeJS.ProcessEnv },
+        callback: (error: Error | null, result: { stdout: string }) => void,
+      ) => {
+        if (args.includes("-version")) {
+          callback(null, { stdout: "ffprobe version 8.0" });
+          return;
+        }
+        probeArgs = args;
+        probeEnv = options.env;
+        callback(null, {
+          stdout: JSON.stringify({ format: { duration: "12.4" } }),
+        });
+      },
+    );
+    try {
+      const resolver = new DirectUrlClient({
+        fetch: audioFetch,
+        egressProxyUrl: "http://127.0.0.1:45000",
+      });
+      await resolver.getTrack("https://cdn.example.test/audio.mp3");
+      expect(probeArgs[probeArgs.indexOf("-http_proxy") + 1]).toBe(
+        "http://127.0.0.1:45000",
+      );
+      expect(probeArgs[probeArgs.indexOf("-protocol_whitelist") + 1]).toBe(
+        "https,tls,tcp,crypto,httpproxy",
+      );
+      expect(probeEnv).toBeDefined();
+      expect(probeEnv?.no_proxy).toBeUndefined();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("probes without -max_redirects when ffprobe rejects the option", async () => {
     // Older static builds (7.0.x) fail every probe with "Option not found":
     // detect once, then probe without the flag instead of erroring.
