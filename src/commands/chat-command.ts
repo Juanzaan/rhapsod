@@ -32,11 +32,6 @@ export type ChatCommand =
   | { readonly name: "stop" }
   | { readonly name: "test-tone" }
   | { readonly name: "volume"; readonly value: number }
-  | { readonly name: "bassboost"; readonly level?: number }
-  | { readonly name: "nightcore"; readonly rate?: number }
-  | { readonly name: "vaporwave"; readonly rate?: number }
-  | { readonly name: "8d" }
-  | { readonly name: "filter"; readonly off?: boolean }
   | { readonly name: "fav" }
   | { readonly name: "favs" }
   | { readonly index: number; readonly name: "unfav" }
@@ -99,16 +94,6 @@ export type ChatCommand =
       readonly action: "info";
       readonly name: "playlist";
       readonly nameArg: string;
-    }
-  | { readonly name: "effects"; readonly action?: undefined }
-  | {
-      readonly action: "chart" | "list" | "reset" | "test-tone";
-      readonly name: "effects";
-    }
-  | {
-      readonly action: "off" | "on" | "toggle";
-      readonly effect: "8d" | "bassboost" | "nightcore" | "vaporwave";
-      readonly name: "effects";
     };
 
 /**
@@ -189,21 +174,6 @@ export function parseChatCommand(
     case "seek":
       if (!/^\d+$/.test(argument)) throw new UserError("Usá: !seek <segundos>");
       return { name, seconds: Number(argument) };
-    case "bassboost":
-      return argument
-        ? { name, level: parseBassboostLevel(argument) }
-        : { name };
-    case "nightcore":
-      return argument ? { name, rate: parseNightcoreRate(argument) } : { name };
-    case "vaporwave":
-      return argument ? { name, rate: parseVaporwaveRate(argument) } : { name };
-    case "8d":
-      if (argument) throw new UserError("El comando !8d no acepta argumentos");
-      return { name };
-    case "filter":
-      if (!argument) return { name };
-      if (argument === "off") return { name, off: true };
-      throw new UserError("Usá: !filter [off]");
     case "unfav":
       return { name, index: parsePosition(argument, "!unfav <n>") };
     case "favplay":
@@ -234,35 +204,6 @@ export function parseChatCommand(
         throw new UserError("Usá: !autoplay [on|off]");
       }
       return { enabled: argument === "on", name };
-    }
-    case "effects": {
-      const parts = argument.split(/\s+/).filter(Boolean);
-      const sub = parts[0];
-      if (!sub) return { name };
-      if (
-        sub === "list" ||
-        sub === "reset" ||
-        sub === "test-tone" ||
-        sub === "chart"
-      ) {
-        return { name, action: sub };
-      }
-      if (
-        sub !== "8d" &&
-        sub !== "bassboost" &&
-        sub !== "nightcore" &&
-        sub !== "vaporwave"
-      ) {
-        throw new UserError(
-          "Usá: !effects <8d|bassboost|nightcore|vaporwave|list|reset|test-tone|chart> [on|off]",
-        );
-      }
-      const state = parts[1];
-      if (state === undefined) return { name, action: "toggle", effect: sub };
-      if (state === "on" || state === "off") {
-        return { name, action: state, effect: sub };
-      }
-      throw new UserError("Usá: !effects <efecto> [on|off]");
     }
     case "playlist": {
       const parts = argument.split(/\s+/).filter(Boolean);
@@ -397,27 +338,4 @@ function parseVolume(argument: string): number {
   if (value < 0 || value > 100)
     throw new UserError("El volumen tiene que estar entre 0 y 100.");
   return value;
-}
-
-function parseBassboostLevel(argument: string): number {
-  if (!/^\d+$/.test(argument)) throw new UserError("Usá: !bassboost [1-5]");
-  const level = Number(argument);
-  if (level < 1 || level > 5) throw new UserError("Usá: !bassboost [1-5]");
-  return level;
-}
-
-function parseNightcoreRate(argument: string): number {
-  const rate = Number(argument);
-  if (!Number.isFinite(rate) || rate < 1.05 || rate > 1.35) {
-    throw new UserError("Usá: !nightcore [1.05-1.35]");
-  }
-  return rate;
-}
-
-function parseVaporwaveRate(argument: string): number {
-  const rate = Number(argument);
-  if (!Number.isFinite(rate) || rate < 0.8 || rate > 0.95) {
-    throw new UserError("Usá: !vaporwave [0.80-0.95]");
-  }
-  return rate;
 }

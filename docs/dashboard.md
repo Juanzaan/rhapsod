@@ -10,7 +10,7 @@ Search by title, artist or supported link. Select the next-track checkbox to ins
 
 Hover the progress bar to see the time under the cursor, then click to seek. When focused, arrow keys move five seconds; Home and End move to the beginning and end. Live streams without a known duration cannot be sought. The rotating record, the tonearm and the equalizer bars next to the state label indicate playback state. They are decorative, not an audio spectrum or album cover: the bars move while the bot plays and rest when it pauses.
 
-Each track gets its own color, derived from its title. The player, progress bar, primary buttons, active filters and the background glow change to that color when the track changes, so the same song always shows the same color. The last color is stored in this browser and reused by the other panel pages.
+Each track gets its own color, derived from its title. The player, progress bar, primary buttons, active loop mode and the background glow change to that color when the track changes, so the same song always shows the same color. The last color is stored in this browser and reused by the other panel pages.
 
 The discovery card provides radio search and explicit autoplay on/off commands. Playlist and statistics buttons use the panel's bot command context; they do not impersonate a TeamSpeak user's personal library. Lyrics and history open in the output card.
 

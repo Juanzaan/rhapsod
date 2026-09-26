@@ -124,7 +124,6 @@ describe("renderDashboard console", () => {
     const html = render({ queueLength: 2 });
     for (const id of [
       "loopSeg",
-      "fxRow",
       "srvTree",
       "srvCount",
       "chat",
@@ -219,16 +218,10 @@ describe("renderDashboard console", () => {
     const loopButtons = ["off", "track", "queue"].map((v) =>
       makeEl({ "data-l": v }),
     );
-    const fxButtons = ["bassboost", "nightcore", "vaporwave", "8d"].map((v) =>
-      makeEl({ "data-f": v }),
-    );
     const byId = new Map<string, FakeEl>();
     const loopSeg = makeEl();
     loopSeg.querySelectorAll = () => loopButtons;
-    const fxRow = makeEl();
-    fxRow.querySelectorAll = () => fxButtons;
     byId.set("loopSeg", loopSeg);
-    byId.set("fxRow", fxRow);
     const getEl = (id: string): FakeEl => {
       let el = byId.get(id);
       if (!el) {
@@ -255,7 +248,6 @@ describe("renderDashboard console", () => {
       playerState: "playing",
       volume: 25,
       loopMode: "track",
-      currentFilter: "bassboost",
       tracksPlayed: 7,
       uptimeMs: 3_600_000,
       disconnects: { count: 2 },
@@ -326,11 +318,6 @@ describe("renderDashboard console", () => {
     expect(
       loopButtons
         .find((b) => b.attrs["data-l"] === "track")
-        ?.classList.set.has("on"),
-    ).toBe(true);
-    expect(
-      fxButtons
-        .find((b) => b.attrs["data-f"] === "bassboost")
         ?.classList.set.has("on"),
     ).toBe(true);
     expect(getEl("stTracks").textContent).toBe("7");
@@ -1013,6 +1000,19 @@ describe("dashboard motion", () => {
     expect(attrs.get("data-live")).toBe("false");
     expect(render({ playerState: "playing" })).toContain('data-live="true"');
     expect(render({ playerState: "paused" })).toContain('data-live="false"');
+  });
+
+  it("offers no audio filter controls", () => {
+    const html = render({ playerState: "playing", currentTitle: "Song" });
+    for (const removed of [
+      "fxRow",
+      "bassboost",
+      "nightcore",
+      "vaporwave",
+      "filter off",
+    ]) {
+      expect(html).not.toContain(removed);
+    }
   });
 
   it("renders the turntable, equalizer and local motion without a library", () => {

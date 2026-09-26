@@ -25,7 +25,6 @@ import {
   isAdminUid,
 } from "./permissions.js";
 import { formatHelpCategory, formatHelpMenu } from "./command-registry.js";
-import { FILTER_DISPLAY_NAMES } from "../audio/filter-chain.js";
 
 export interface CommandContext {
   readonly playback: YoutubePlaybackService;
@@ -990,121 +989,6 @@ async function handleLyrics(
   await send(`${title}\n${body}`);
 }
 
-async function handleBassboost(
-  ctx: CommandContext,
-  command: Extract<ChatCommand, { name: "bassboost" }>,
-  _sender: CommandSender,
-  send: SendFn,
-): Promise<void> {
-  const level = command.level;
-  ctx.playback.setFilter("bassboost", level === undefined ? {} : { level });
-  await send(
-    level === undefined
-      ? "Filtro bassboost activado."
-      : `Filtro bassboost nivel ${level} activado.`,
-  );
-}
-
-async function handleNightcore(
-  ctx: CommandContext,
-  command: Extract<ChatCommand, { name: "nightcore" }>,
-  _sender: CommandSender,
-  send: SendFn,
-): Promise<void> {
-  ctx.playback.setFilter(
-    "nightcore",
-    command.rate === undefined ? {} : { rate: command.rate },
-  );
-  await send("Filtro nightcore activado.");
-}
-
-async function handleVaporwave(
-  ctx: CommandContext,
-  command: Extract<ChatCommand, { name: "vaporwave" }>,
-  _sender: CommandSender,
-  send: SendFn,
-): Promise<void> {
-  ctx.playback.setFilter(
-    "vaporwave",
-    command.rate === undefined ? {} : { rate: command.rate },
-  );
-  await send("Filtro vaporwave activado.");
-}
-
-async function handle8d(
-  ctx: CommandContext,
-  _command: Extract<ChatCommand, { name: "8d" }>,
-  _sender: CommandSender,
-  send: SendFn,
-): Promise<void> {
-  ctx.playback.setFilter("8d");
-  await send("Filtro 8D activado.");
-}
-
-async function handleFilter(
-  ctx: CommandContext,
-  command: Extract<ChatCommand, { name: "filter" }>,
-  _sender: CommandSender,
-  send: SendFn,
-): Promise<void> {
-  if (command.off) {
-    ctx.playback.setFilter("off");
-    await send("Filtro desactivado.");
-    return;
-  }
-  await send(`Filtro actual: ${FILTER_DISPLAY_NAMES[ctx.playback.filter]}`);
-}
-
-async function handleEffects(
-  ctx: CommandContext,
-  command: Extract<ChatCommand, { name: "effects" }>,
-  sender: CommandSender,
-  send: SendFn,
-): Promise<void> {
-  switch (command.action) {
-    case "list": {
-      const active = ctx.playback.filter;
-      await send(
-        active === "off"
-          ? "Sin efectos activos."
-          : `Efectos activos: ${FILTER_DISPLAY_NAMES[active]}.`,
-      );
-      return;
-    }
-    case "reset":
-      ctx.playback.setFilter("off");
-      await send("Todos los efectos fueron desactivados.");
-      return;
-    case "test-tone":
-      return handleTestTone(ctx, { name: "test-tone" }, sender, send);
-    case "chart":
-      return handleChart(ctx, { name: "chart" }, sender, send);
-    case "on":
-    case "off":
-    case "toggle": {
-      const display = FILTER_DISPLAY_NAMES[command.effect];
-      if (command.action === "off") {
-        ctx.playback.setFilter("off");
-        await send(`Efecto ${display} desactivado.`);
-        return;
-      }
-      const isActive = ctx.playback.filter === command.effect;
-      if (command.action === "toggle" && isActive) {
-        ctx.playback.setFilter("off");
-        await send(`Efecto ${display} desactivado.`);
-        return;
-      }
-      ctx.playback.setFilter(command.effect);
-      await send(`Efecto ${display} activado.`);
-      return;
-    }
-    default:
-      await send(
-        "Efectos: 8d, nightcore, bassboost, vaporwave, test-tone, chart. Usá !effects <efecto> [on|off] para controlar.",
-      );
-  }
-}
-
 async function handlePlaylist(
   ctx: CommandContext,
   command: Extract<ChatCommand, { name: "playlist" }>,
@@ -1352,18 +1236,6 @@ export async function dispatchCommand(
       return handleVolume(ctx, command, sender, send);
     case "lyrics":
       return handleLyrics(ctx, command, sender, send);
-    case "bassboost":
-      return handleBassboost(ctx, command, sender, send);
-    case "nightcore":
-      return handleNightcore(ctx, command, sender, send);
-    case "vaporwave":
-      return handleVaporwave(ctx, command, sender, send);
-    case "8d":
-      return handle8d(ctx, command, sender, send);
-    case "filter":
-      return handleFilter(ctx, command, sender, send);
-    case "effects":
-      return handleEffects(ctx, command, sender, send);
     case "playlist":
       return handlePlaylist(ctx, command, sender, send);
     case "fav":

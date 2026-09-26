@@ -551,11 +551,6 @@ export function renderDashboard(status: PanelStatus): string {
     .sg{display:flex;border:1px solid #3a3a40;border-radius:8px;overflow:hidden}
     .sg button{flex:1;background:transparent;border:none;color:var(--dm);padding:.55rem .2rem;font-size:.72rem;letter-spacing:.12em;cursor:pointer}
     .sg button.on{background:var(--ac);color:#0b0b0d;font-weight:700}
-    .swl{display:grid;grid-template-columns:1fr 1fr;gap:.5rem}
-    .sw{display:flex;align-items:center;gap:.55rem;background:#0f0f12;border:1px solid var(--ln);border-radius:8px;padding:.55rem .7rem;cursor:pointer;color:var(--dm);font-size:.8rem;width:100%;text-align:left}
-    .sw .led{width:8px;height:8px;border-radius:50%;background:#3a3a40;flex-shrink:0}
-    .sw.on{color:var(--tx);border-color:var(--ac)}
-    .sw.on .led{background:var(--ac);box-shadow:0 0 8px rgba(30,215,96,.7)}
     .ql{list-style:none;max-height:230px;overflow-y:auto}
     .qi{padding:.45rem 0;border-bottom:1px solid #232327;font-size:.85rem;display:flex;gap:.6rem;align-items:center}
     .qi:last-child{border-bottom:none}
@@ -654,15 +649,7 @@ export function renderDashboard(status: PanelStatus): string {
         <div class="sg" id="loopSeg" style="margin-bottom:1rem">
           <button data-l="off" onclick="cmd('loop off')">SIN REPETIR</button><button data-l="track" onclick="cmd('loop track')">PISTA</button><button data-l="queue" onclick="cmd('loop queue')">COLA</button>
         </div>
-        <div class="ct" style="margin-bottom:.5rem"><span style="letter-spacing:.1em">Filtros</span></div>
-        <div class="swl" id="fxRow">
-          <button class="sw" data-f="bassboost" onclick="cmd('bassboost')"><span class="led"></span>Bass</button>
-          <button class="sw" data-f="nightcore" onclick="cmd('nightcore')"><span class="led"></span>Nightcore</button>
-          <button class="sw" data-f="vaporwave" onclick="cmd('vaporwave')"><span class="led"></span>Vapor</button>
-          <button class="sw" data-f="8d" onclick="cmd('8d')"><span class="led"></span>8D</button>
-        </div>
         <div class="fc" style="margin-top:1rem">
-          <button class="ch" onclick="cmd('filter off')">Quitar filtro</button>
           <button class="ch" onclick="cmd('shuffle')">Mezclar</button>
           <button class="ch" onclick="cmd('clear')">Vaciar</button>
           <button class="ch" onclick="cmd('test-tone')">Tono</button>
@@ -979,7 +966,6 @@ export function renderDashboard(status: PanelStatus): string {
           paintVolume(d.volume);
         }
         syncSeg('loopSeg','data-l',d.loopMode||'off');
-        syncSeg('fxRow','data-f',d.currentFilter||'off');
         if(typeof d.tracksPlayed==='number'&&d.tracksPlayed!==lastTracks){
           lastTracks=d.tracksPlayed;
           fxCount(document.getElementById('stTracks'),d.tracksPlayed);
