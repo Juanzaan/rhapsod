@@ -25,6 +25,7 @@ import {
   isAdminUid,
 } from "./permissions.js";
 import { formatHelpCategory, formatHelpMenu } from "./command-registry.js";
+import { messages } from "../lib/messages.js";
 
 export interface CommandContext {
   readonly playback: YoutubePlaybackService;
@@ -86,7 +87,7 @@ async function handlePlay(
 ): Promise<void> {
   const { playback, preferences, verbose } = ctx;
   const { name: senderName, uid: senderUid } = sender;
-  if (verbose) await send("Preparando la reproducción...");
+  if (verbose) await send(messages.playPreparandoLaReproduccion);
   const media = parseMediaInput(command.input);
   if (media.kind === "youtube" && media.resource.type === "playlist") {
     const result = await playback.enqueuePlaylist(
@@ -146,11 +147,13 @@ async function handlePlay(
         senderName,
         senderUid,
       );
-      await send(`En cola (SoundCloud): ${track.title}`);
+      await send(messages.playEnColaSoundcloud(track.title));
       return;
     }
     const track = await playback.enqueue(command.input, senderName, senderUid);
-    await send(`En cola: ${track.title}${viaSearch ? " (búsqueda)" : ""}`);
+    await send(
+      messages.playEnCola(track.title, viaSearch ? " (búsqueda)" : ""),
+    );
   }
 }
 
@@ -162,13 +165,13 @@ async function handlePlayNext(
 ): Promise<void> {
   const { playback, verbose } = ctx;
   const { name: senderName, uid: senderUid } = sender;
-  if (verbose) await send("Preparando la próxima pista...");
+  if (verbose) await send(messages.playNextPreparandoLaProximaPista);
   const track = await playback.enqueueNext(
     command.input,
     senderName,
     senderUid,
   );
-  await send(`Próxima en cola: ${track.title}`);
+  await send(messages.playNextProximaEnCola(track.title));
 }
 
 async function handleSearch(
@@ -186,7 +189,7 @@ async function handleSearch(
       senderName,
       senderUid,
     );
-    await send(`En cola (resultado ${command.index}): ${track.title}`);
+    await send(messages.searchEnColaResultado(command.index, track.title));
     return;
   }
   if (preferences.getPreferredSource(senderUid) === "soundcloud") {
@@ -195,16 +198,16 @@ async function handleSearch(
       senderName,
       senderUid,
     );
-    await send(`En cola (SoundCloud): ${track.title}`);
+    await send(messages.searchEnColaSoundcloud(track.title));
     return;
   }
-  if (verbose) await send("Buscando en YouTube...");
+  if (verbose) await send(messages.searchBuscandoEnYoutube);
   const track = await playback.enqueueSearch(
     command.input,
     senderName,
     senderUid,
   );
-  await send(`En cola: ${track.title}`);
+  await send(messages.searchEnCola(track.title));
 }
 
 async function handlePause(
@@ -214,7 +217,7 @@ async function handlePause(
   send: SendFn,
 ): Promise<void> {
   ctx.playback.pause();
-  await send("Reproducción pausada.");
+  await send(messages.pauseReproduccionPausada);
 }
 
 async function handlePrevious(
@@ -224,7 +227,7 @@ async function handlePrevious(
   send: SendFn,
 ): Promise<void> {
   const track = ctx.playback.replayPrevious();
-  await send(`Reproduciendo de nuevo: ${track.title}`);
+  await send(messages.previousReproduciendoDeNuevo(track.title));
 }
 
 async function handleResume(
@@ -234,7 +237,7 @@ async function handleResume(
   send: SendFn,
 ): Promise<void> {
   ctx.playback.resume();
-  await send("Reproducción reanudada.");
+  await send(messages.resumeReproduccionReanudada);
 }
 
 async function handleSeek(
@@ -244,7 +247,7 @@ async function handleSeek(
   send: SendFn,
 ): Promise<void> {
   ctx.playback.seek(command.seconds);
-  await send(`Reproduciendo desde el segundo ${command.seconds}…`);
+  await send(messages.seekReproduciendoDesdeElSegundo(command.seconds));
 }
 
 async function handleQueue(
@@ -259,9 +262,9 @@ async function handleQueue(
   const page = command.page ?? 1;
   await send(
     tracks.length === 0
-      ? "La cola está vacía."
+      ? messages.queueLaColaEstaVacia
       : page > pages
-        ? `La cola tiene ${pages} página(s). Usá !queue ${pages}.`
+        ? messages.queueLaColaTienePagina(pages, pages)
         : [
             `Cola de reproducción (página ${page}/${pages}):`,
             ...tracks
@@ -307,7 +310,7 @@ async function handleHistory(
   const history = ctx.playback.history().slice(0, 10);
   await send(
     history.length === 0
-      ? "Todavía no se reprodujo ninguna pista."
+      ? messages.historyTodaviaNoSeReprodujo
       : [
           "Historial reciente:",
           ...history.map(
@@ -326,7 +329,7 @@ async function handleFav(
 ): Promise<void> {
   const current = ctx.playback.current;
   if (!current) {
-    await send("No hay nada sonando para guardar en favoritos.");
+    await send(messages.favNoHayNadaSonando);
     return;
   }
   const favorite = ctx.preferences.addFavorite(sender.uid, {
@@ -338,7 +341,7 @@ async function handleFav(
     title: current.title,
   });
   await ctx.preferences.flush();
-  await send(`Guardada en tus favoritos: ${favorite.title}`);
+  await send(messages.favGuardadaEnTusFavoritos(favorite.title));
 }
 
 async function handleFavs(
@@ -350,7 +353,7 @@ async function handleFavs(
   const favorites = ctx.preferences.listFavorites(sender.uid);
   await send(
     favorites.length === 0
-      ? "Todavía no tenés favoritos. Guardá la canción actual con !fav."
+      ? messages.favsTodaviaNoTenesFavoritos
       : [
           "Tus favoritos:",
           ...favorites.map((track, index) => `${index + 1}. ${track.title}`),
@@ -366,11 +369,11 @@ async function handleUnfav(
 ): Promise<void> {
   const removed = ctx.preferences.removeFavorite(sender.uid, command.index);
   if (!removed) {
-    await send("No existe ese favorito. Mirá tu lista con !favs.");
+    await send(messages.unfavNoExisteEseFavorito);
     return;
   }
   await ctx.preferences.flush();
-  await send(`Quitada de tus favoritos: ${removed.title}`);
+  await send(messages.unfavQuitadaDeTusFavoritos(removed.title));
 }
 
 async function handleFuente(
@@ -381,16 +384,12 @@ async function handleFuente(
 ): Promise<void> {
   if (command.source === undefined) {
     const current = ctx.preferences.getPreferredSource(sender.uid);
-    await send(
-      `Tu fuente preferida es: ${current}. Cambiala con !fuente [youtube|soundcloud|auto].`,
-    );
+    await send(messages.fuenteTuFuentePreferidaEs(current));
     return;
   }
   ctx.preferences.setPreferredSource(sender.uid, command.source);
   await ctx.preferences.flush();
-  await send(
-    `Fuente preferida: ${command.source}. Tus búsquedas con !play y !yt van ahí.`,
-  );
+  await send(messages.fuenteFuentePreferidaTusBusquedas(command.source));
 }
 
 async function handleTops(
@@ -403,7 +402,7 @@ async function handleTops(
   const tops = ctx.listeningHistory.topTracks(limit);
   await send(
     tops.length === 0
-      ? "Todavía no hay reproducciones registradas."
+      ? messages.topsTodaviaNoHayReproducciones
       : [
           "Top global:",
           ...tops.map(
@@ -423,7 +422,7 @@ async function handleMyStats(
   const summary = ctx.listeningHistory.userSummary(sender.uid);
   const favorites = ctx.preferences.listFavorites(sender.uid).length;
   if (summary.plays === 0 && favorites === 0) {
-    await send("Todavía no tenés reproducciones ni favoritos.");
+    await send(messages.myStatsTodaviaNoTenesReproducciones);
     return;
   }
   await send(
@@ -446,16 +445,16 @@ async function handleAutoplay(
   if (command.enabled === undefined) {
     await send(
       ctx.playback.autoplayEnabled
-        ? "Autoplay activado: cuando se vacíe la cola sigo con temas parecidos."
-        : "Autoplay desactivado. Prendelo con !autoplay on.",
+        ? messages.autoplayAutoplayActivadoCuandoSe
+        : messages.autoplayAutoplayDesactivadoPrendeloCon,
     );
     return;
   }
   ctx.playback.setAutoplay(command.enabled);
   await send(
     command.enabled
-      ? "Autoplay activado: cuando se vacíe la cola sigo con temas parecidos."
-      : "Autoplay desactivado.",
+      ? messages.autoplayAutoplayActivadoCuandoSe2
+      : messages.autoplayAutoplayDesactivado,
   );
 }
 
@@ -471,7 +470,7 @@ async function handleRadio(
   const tuneInLink = await resolveTuneInUrl(command.input);
   if (tuneInLink !== undefined) {
     await ctx.playback.enqueue(tuneInLink, sender.name, sender.uid);
-    await send(`Sintonizando: ${command.input}.`);
+    await send(messages.radioSintonizando(command.input));
     return;
   }
   const stations = await searchStations(command.input);
@@ -481,7 +480,10 @@ async function handleRadio(
   if (station !== undefined) {
     await ctx.playback.enqueue(station.url, sender.name, sender.uid);
     await send(
-      `Sintonizando: ${station.name}${station.bitrate ? ` (${station.bitrate} kbps)` : ""}.`,
+      messages.radioSintonizandoKbps(
+        station.name,
+        station.bitrate ? ` (${station.bitrate} kbps)` : "",
+      ),
     );
     return;
   }
@@ -492,14 +494,15 @@ async function handleRadio(
       ? undefined
       : await resolveTuneInStream(tuneInStation.id);
   if (tuneInStation === undefined || streamUrl === undefined) {
-    await send(
-      `No encontré emisoras para "${command.input}". Probá con otro nombre, género o link de TuneIn.`,
-    );
+    await send(messages.radioNoEncontreEmisorasPara(command.input));
     return;
   }
   await ctx.playback.enqueue(streamUrl, sender.name, sender.uid);
   await send(
-    `Sintonizando: ${tuneInStation.name}${tuneInStation.bitrate ? ` (${tuneInStation.bitrate} kbps)` : ""}.`,
+    messages.radioSintonizandoKbps2(
+      tuneInStation.name,
+      tuneInStation.bitrate ? ` (${tuneInStation.bitrate} kbps)` : "",
+    ),
   );
 }
 
@@ -511,7 +514,7 @@ async function handleFavPlay(
 ): Promise<void> {
   const favorite = ctx.preferences.listFavorites(sender.uid)[command.index - 1];
   if (!favorite) {
-    await send("No existe ese favorito. Mirá tu lista con !favs.");
+    await send(messages.favPlayNoExisteEseFavorito);
     return;
   }
   const track = await ctx.playback.enqueue(
@@ -519,7 +522,7 @@ async function handleFavPlay(
     sender.name,
     sender.uid,
   );
-  await send(`Agregada a la cola: ${track.title}`);
+  await send(messages.favPlayAgregadaALaCola(track.title));
 }
 
 async function handleMove(
@@ -531,10 +534,10 @@ async function handleMove(
   const moved = ctx.playback.moveQueued(command.from, command.to);
   await send(
     moved
-      ? `Movida a la posición ${command.to}: ${moved.title}`
+      ? messages.moveMovidaALaPosicion(command.to, moved.title)
       : command.from === command.to
-        ? "La pista ya está en esa posición."
-        : "No existe alguna de esas posiciones en la cola.",
+        ? messages.moveLaPistaYaEsta
+        : messages.moveNoExisteAlgunaDe,
   );
 }
 
@@ -547,18 +550,16 @@ async function handleRemove(
   const { playback } = ctx;
   const selected = playback.queue().slice(command.from - 1, command.to);
   if (!(await senderMayRemove(ctx, sender, selected))) {
-    await send(
-      "Solo el administrador del bot puede quitar rangos con pistas de otros usuarios.",
-    );
+    await send(messages.removeSoloElAdministradorDel);
     return;
   }
   const removed = playback.removeQueuedRange(command.from, command.to);
   await send(
     removed.length === 0
-      ? "No existe esa posición en la cola."
+      ? messages.removeNoExisteEsaPosicion
       : removed.length === 1
-        ? `Quitada de la cola: ${removed[0]?.title}`
-        : `Se quitaron ${removed.length} pistas de la cola.`,
+        ? messages.removeQuitadaDeLaCola(removed[0]?.title ?? "")
+        : messages.removeSeQuitaronPistasDe(removed.length),
   );
 }
 
@@ -608,16 +609,14 @@ async function handleClear(
   send: SendFn,
 ): Promise<void> {
   if (!(await senderMayRemove(ctx, sender, ctx.playback.queue()))) {
-    await send(
-      "La cola tiene pistas de otros usuarios: solo un admin puede vaciarla. Usá !remove para quitar las tuyas.",
-    );
+    await send(messages.clearLaColaTienePistas);
     return;
   }
   const cleared = ctx.playback.clearQueued();
   await send(
     cleared === 0
-      ? "La cola ya estaba vacía."
-      : `Se quitaron ${cleared} pistas de la cola.`,
+      ? messages.clearLaColaYaEstaba
+      : messages.clearSeQuitaronPistasDe(cleared),
   );
 }
 
@@ -651,7 +650,7 @@ async function handleChannelMove(
       ch.name.toLowerCase().includes(query),
     );
     if (matches.length === 0) {
-      await send(`No encontré ningún canal con "${command.input}".`);
+      await send(messages.channelMoveNoEncontreNingunCanal(command.input));
       return;
     }
     if (matches.length > 1) {
@@ -659,7 +658,7 @@ async function handleChannelMove(
         .slice(0, 5)
         .map((ch) => ch.name)
         .join(", ");
-      await send(`Encontré varios canales: ${list}. Sé más específico.`);
+      await send(messages.channelMoveEncontreVariosCanalesSe(list));
       return;
     }
     target = matches[0]!;
@@ -676,15 +675,15 @@ async function handleChannelMove(
     targetCid: target.cid,
   });
   if (decision === "deny-rank") {
-    await send("No tenés permisos para mover el bot de canal.");
+    await send(messages.channelMoveNoTenesPermisosPara);
     return;
   }
   if (decision === "deny-admin") {
-    await send("Ese canal requiere rango Admin o superior.");
+    await send(messages.channelMoveEseCanalRequiereRango);
     return;
   }
   if (decision === "deny-senior") {
-    await send("Ese canal requiere rango Senior Admin o superior.");
+    await send(messages.channelMoveEseCanalRequiereRango2);
     return;
   }
   try {
@@ -694,9 +693,9 @@ async function handleChannelMove(
       numericCid !== undefined
         ? (await connection.getChannelInfo(numericCid)).channel_name
         : undefined;
-    await send(`Movido al canal: ${resolvedName ?? target.name}`);
+    await send(messages.channelMoveMovidoAlCanal(resolvedName ?? target.name));
   } catch {
-    await send("No pude moverme a ese canal (¿permisos?).");
+    await send(messages.channelMoveNoPudeMovermeA);
   }
 }
 
@@ -709,8 +708,8 @@ async function handleShuffle(
   const shuffled = ctx.playback.shuffleQueued();
   await send(
     shuffled === 0
-      ? "No hay pistas en la cola para mezclar."
-      : `Cola mezclada (${shuffled} pistas).`,
+      ? messages.shuffleNoHayPistasEn
+      : messages.shuffleColaMezcladaPistas(shuffled),
   );
 }
 
@@ -722,7 +721,7 @@ async function handleNowPlaying(
 ): Promise<void> {
   const current = ctx.playback.current;
   if (!current) {
-    await send("No hay nada reproduciéndose.");
+    await send(messages.nowPlayingNoHayNadaReproduciendose);
     return;
   }
   const liveTitle =
@@ -730,7 +729,11 @@ async function handleNowPlaying(
       ? await ctx.radioTitles.get(current.source)
       : undefined;
   await send(
-    `Reproduciendo: ${liveTitle ?? current.title} (${formatDuration(current.durationSeconds)} - por ${current.requestedBy})`,
+    messages.nowPlayingReproduciendoPor(
+      liveTitle ?? current.title,
+      formatDuration(current.durationSeconds),
+      current.requestedBy,
+    ),
   );
 }
 
@@ -745,11 +748,11 @@ async function handleSkip(
     current !== undefined &&
     !(await senderMayRemove(ctx, sender, [current]))
   ) {
-    await send("Solo quien pidió la canción (o un admin) puede saltarla.");
+    await send(messages.skipSoloQuienPidioLa);
     return;
   }
   ctx.playback.skip();
-  await send("Pista saltada.");
+  await send(messages.skipPistaSaltada);
 }
 
 async function handleJump(
@@ -763,19 +766,17 @@ async function handleJump(
   const queued = playback.queue();
   const target = queued[command.index - 1];
   if (target === undefined) {
-    await send("No existe esa posición en la cola.");
+    await send(messages.jumpNoExisteEsaPosicion);
     return;
   }
   const victims = queued.slice(0, command.index - 1);
   if (current !== undefined) victims.unshift(current);
   if (!(await senderMayRemove(ctx, sender, victims))) {
-    await send(
-      "Solo quien pidió las pistas (o un admin) puede saltar hasta ahí.",
-    );
+    await send(messages.jumpSoloQuienPidioLas);
     return;
   }
   playback.jumpTo(command.index);
-  await send(`Saltando a la posición ${command.index}: ${target.title}.`);
+  await send(messages.jumpSaltandoALaPosicion(command.index, target.title));
 }
 
 async function handleStats(
@@ -812,7 +813,7 @@ async function handleStats(
   const authLine = ctx.youtubeAuthHealthy
     ? ""
     : "\n⚠ Autenticación de YouTube FALLANDO — revisá las cookies del bot.";
-  await send(`${statsOutput}${authLine}`);
+  await send(messages.statsText(statsOutput, authLine));
 }
 
 async function handleDiag(
@@ -822,7 +823,7 @@ async function handleDiag(
   send: SendFn,
 ): Promise<void> {
   if (!isAdminUid(sender.uid, ctx.adminUids)) {
-    await send("Solo los administradores pueden usar este comando.");
+    await send(messages.diagSoloLosAdministradoresPueden);
     return;
   }
   await send(ctx.metrics.formatDiag());
@@ -835,7 +836,7 @@ async function handleDebugServer(
   send: SendFn,
 ): Promise<void> {
   if (!isAdminUid(sender.uid, ctx.adminUids)) {
-    await send("Solo los administradores pueden usar este comando.");
+    await send(messages.debugServerSoloLosAdministradoresPueden);
     return;
   }
   const [serverInfo, clients, channels] = await Promise.all([
@@ -870,12 +871,12 @@ async function handleChart(
   send: SendFn,
 ): Promise<void> {
   if (!isAdminUid(sender.uid, ctx.adminUids)) {
-    await send("Solo los administradores pueden usar este comando.");
+    await send(messages.chartSoloLosAdministradoresPueden);
     return;
   }
   const top = ctx.telemetry.snapshot().slice(0, 20);
   if (top.length === 0) {
-    await send("Todavía no hay datos de telemetría de usuarios.");
+    await send(messages.chartTodaviaNoHayDatos);
     return;
   }
   const lines = [
@@ -901,14 +902,12 @@ async function handleStop(
       ...ctx.playback.queue(),
     ]))
   ) {
-    await send(
-      "Hay pistas de otros usuarios en reproducción o en cola: solo un admin puede detener todo.",
-    );
+    await send(messages.stopHayPistasDeOtros);
     return;
   }
   ctx.playback.stop();
   ctx.hasStartedPlaying = false;
-  await send("Reproducción detenida.");
+  await send(messages.stopReproduccionDetenida);
 }
 
 async function handleTestTone(
@@ -919,9 +918,7 @@ async function handleTestTone(
 ): Promise<void> {
   const { playback, commandRateLimiter, encoder, connection } = ctx;
   if (playback.current) {
-    await send(
-      "No puedo reproducir el tono mientras hay música. Probá con !stop o esperá a que termine la pista.",
-    );
+    await send(messages.testToneNoPuedoReproducirEl);
     return;
   }
   const toneLimit = commandRateLimiter.acquire("global:test-tone", 30_000);
@@ -930,14 +927,16 @@ async function handleTestTone(
       commandRateLimiter.acquire("global:test-tone-feedback", 5_000).allowed
     ) {
       await send(
-        `El tono estará disponible en ${Math.ceil(toneLimit.retryAfterMs / 1_000)} s.`,
+        messages.testToneElTonoEstaraDisponible(
+          Math.ceil(toneLimit.retryAfterMs / 1_000),
+        ),
       );
     }
     return;
   }
-  await send("Reproduciendo tono de prueba (3 s)...");
+  await send(messages.testToneReproduciendoTonoDePrueba);
   await playTestTone(3, encoder, connection);
-  await send("Tono de prueba terminado.");
+  await send(messages.testToneTonoDePruebaTerminado);
 }
 
 async function handleHelp(
@@ -964,15 +963,13 @@ async function handleLoop(
     ctx.playback.setLoopMode(command.mode);
     await send(
       command.mode === "off"
-        ? "Modo loop desactivado."
+        ? messages.loopModoLoopDesactivado
         : command.mode === "track"
-          ? "Modo loop: pista actual en repetición."
-          : "Modo loop: cola en repetición.",
+          ? messages.loopModoLoopPistaActual
+          : messages.loopModoLoopColaEn,
     );
   } else {
-    await send(
-      `Modo loop actual: ${ctx.playback.loopMode}. Usá !loop [off|track|queue].`,
-    );
+    await send(messages.loopModoLoopActualUsa(ctx.playback.loopMode));
   }
 }
 
@@ -983,7 +980,7 @@ async function handleVolume(
   send: SendFn,
 ): Promise<void> {
   ctx.playback.setVolume(command.value);
-  await send(`Volumen ajustado a ${ctx.playback.volume}%.`);
+  await send(messages.volumeVolumenAjustadoA(ctx.playback.volume));
 }
 
 async function handleLyrics(
@@ -993,13 +990,13 @@ async function handleLyrics(
   send: SendFn,
 ): Promise<void> {
   if (!ctx.playback.current) {
-    await send("No hay nada reproduciéndose.");
+    await send(messages.lyricsNoHayNadaReproduciendose);
     return;
   }
-  await send("Buscando la letra...");
+  await send(messages.lyricsBuscandoLaLetra);
   const lyrics = await ctx.playback.getLyrics();
   if (!lyrics) {
-    await send(`No encontré la letra de: ${ctx.playback.current.title}`);
+    await send(messages.lyricsNoEncontreLaLetra(ctx.playback.current.title));
     return;
   }
   const title = lyrics.artist
@@ -1010,7 +1007,7 @@ async function handleLyrics(
     lyrics.plainLyrics.length > maxChars
       ? `${lyrics.plainLyrics.slice(0, maxChars)}…`
       : lyrics.plainLyrics;
-  await send(`${title}\n${body}`);
+  await send(messages.lyricsN(title, body));
 }
 
 async function handlePlaylist(
@@ -1022,7 +1019,9 @@ async function handlePlaylist(
   switch (command.action) {
     case "save": {
       const count = ctx.playback.savePlaylist(command.nameArg, sender.uid);
-      await send(`Playlist "${command.nameArg}" guardada (${count} pistas).`);
+      await send(
+        messages.playlistPlaylistGuardadaPistas(command.nameArg, count),
+      );
       return;
     }
     case "load": {
@@ -1031,22 +1030,20 @@ async function handlePlaylist(
         sender.name,
         sender.uid,
       );
-      await send(`Cargando "${command.nameArg}" (${count} pistas).`);
+      await send(messages.playlistCargandoPistas(command.nameArg, count));
       return;
     }
     case "list": {
       const playlists = ctx.playback.listPlaylists(sender.uid);
       if (playlists.length === 0) {
-        await send("No tenés playlists guardadas.");
+        await send(messages.playlistNoTenesPlaylistsGuardadas);
         return;
       }
       const pageSize = 10;
       const pages = Math.max(1, Math.ceil(playlists.length / pageSize));
       const page = command.page ?? 1;
       if (page > pages) {
-        await send(
-          `La lista tiene ${pages} página(s). Usá !playlist list ${pages}.`,
-        );
+        await send(messages.playlistLaListaTienePagina(pages, pages));
         return;
       }
       await send(
@@ -1065,11 +1062,11 @@ async function handlePlaylist(
     case "show": {
       const playlist = ctx.playback.showPlaylist(command.nameArg, sender.uid);
       if (playlist === undefined) {
-        await send(`No encontré la playlist "${command.nameArg}".`);
+        await send(messages.playlistNoEncontreLaPlaylist(command.nameArg));
         return;
       }
       if (playlist.tracks.length === 0) {
-        await send(`La playlist "${command.nameArg}" está vacía.`);
+        await send(messages.playlistLaPlaylistEstaVacia(command.nameArg));
         return;
       }
       const pageSize = 10;
@@ -1077,7 +1074,7 @@ async function handlePlaylist(
       const page = command.page ?? 1;
       if (page > pages) {
         await send(
-          `La playlist tiene ${pages} página(s). Usá !playlist show ${command.nameArg} ${pages}.`,
+          messages.playlistLaPlaylistTienePagina(pages, command.nameArg, pages),
         );
         return;
       }
@@ -1102,8 +1099,8 @@ async function handlePlaylist(
       );
       await send(
         removed
-          ? `Playlist "${command.nameArg}" eliminada.`
-          : `No encontré la playlist "${command.nameArg}".`,
+          ? messages.playlistPlaylistEliminada(command.nameArg)
+          : messages.playlistNoEncontreLaPlaylist2(command.nameArg),
       );
       return;
     }
@@ -1114,15 +1111,21 @@ async function handlePlaylist(
         command.urlArg,
       );
       if (tracks.length === 0) {
-        await send("No encontré pistas en esa URL.");
+        await send(messages.playlistNoEncontrePistasEn);
         return;
       }
       await send(
         exists
           ? source === "playlist"
-            ? `Agregando ${tracks.length} pistas de la playlist a "${command.nameArg}"...`
-            : `Agregando ${tracks.length} pista(s) a "${command.nameArg}"...`
-          : `Playlist "${command.nameArg}" creada. Agregando ${tracks.length} pistas...`,
+            ? messages.playlistAgregandoPistasDeLa(
+                tracks.length,
+                command.nameArg,
+              )
+            : messages.playlistAgregandoPistaSA(tracks.length, command.nameArg)
+          : messages.playlistPlaylistCreadaAgregandoPistas(
+              command.nameArg,
+              tracks.length,
+            ),
       );
       const result = ctx.playback.addPlaylistTracks(
         command.nameArg,
@@ -1147,17 +1150,20 @@ async function handlePlaylist(
         isAdminUid(sender.uid, ctx.adminUids),
       );
       if (result.status === "not-found") {
-        await send(`No encontré la playlist "${command.nameArg}".`);
+        await send(messages.playlistNoEncontreLaPlaylist3(command.nameArg));
         return;
       }
       if (result.status === "invalid-index") {
         await send(
-          `Índice inválido. La playlist "${command.nameArg}" tiene ${result.total} pistas.`,
+          messages.playlistIndiceInvalidoLaPlaylist(
+            command.nameArg,
+            result.total,
+          ),
         );
         return;
       }
       await send(
-        `Track eliminado de "${command.nameArg}". Tiene ${result.total} pistas.`,
+        messages.playlistTrackEliminadoDeTiene(command.nameArg, result.total),
       );
       return;
     }
@@ -1169,33 +1175,36 @@ async function handlePlaylist(
         isAdminUid(sender.uid, ctx.adminUids),
       );
       if (result.status === "not-found") {
-        await send(`No encontré la playlist "${command.oldName}".`);
+        await send(messages.playlistNoEncontreLaPlaylist4(command.oldName));
         return;
       }
       if (result.status === "name-exists") {
-        await send(`Ya existe una playlist llamada "${result.name}".`);
+        await send(messages.playlistYaExisteUnaPlaylist(result.name));
         return;
       }
       await send(
-        `Playlist "${command.oldName}" renombrada a "${command.newName}".`,
+        messages.playlistPlaylistRenombradaA(command.oldName, command.newName),
       );
       return;
     }
     case "info": {
       const info = ctx.playback.getPlaylistInfo(command.nameArg, sender.uid);
       if (info === undefined) {
-        await send(`No encontré la playlist "${command.nameArg}".`);
+        await send(messages.playlistNoEncontreLaPlaylist5(command.nameArg));
         return;
       }
       await send(
-        `Playlist "${info.name}": ${info.trackCount} pistas, duración total ~${formatLongDuration(info.totalDurationSeconds)}. Creada el ${formatDate(info.createdAt)}.`,
+        messages.playlistPlaylistPistasDuracionTotal(
+          info.name,
+          info.trackCount,
+          formatLongDuration(info.totalDurationSeconds),
+          formatDate(info.createdAt),
+        ),
       );
       return;
     }
     default:
-      await send(
-        "Usá: !playlist save|load|list|show|delete|add|remove|rename|info <nombre>",
-      );
+      await send(messages.playlistUsaPlaylistSaveLoad);
   }
 }
 
