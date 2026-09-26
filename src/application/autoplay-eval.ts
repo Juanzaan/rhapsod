@@ -53,6 +53,10 @@ export interface AutoplayEvalReport {
 }
 
 const REPEAT_WINDOW = 20;
+// How long a turn may take to start before autoplay counts as dry. Bounded
+// by wall-clock time, not timer ticks: a tick is ~16 ms on Windows, where
+// 500 ticks ran past vitest's 5 s test timeout.
+const DRY_WAIT_MS = 500;
 const ARTIST_WINDOW = 10;
 const LISTENER_UID = "uid-eval";
 
@@ -190,7 +194,8 @@ async function waitForSessions(
   finishers: readonly unknown[],
   wanted: number,
 ): Promise<number> {
-  for (let tick = 0; tick < 500 && finishers.length < wanted; tick++) {
+  const deadline = Date.now() + DRY_WAIT_MS;
+  while (finishers.length < wanted && Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
   return Math.min(finishers.length, wanted);
