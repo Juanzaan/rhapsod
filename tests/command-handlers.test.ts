@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, type Mock } from "vitest";
 
+import { SkipVotes } from "../src/application/skip-votes.js";
 import { parseChatCommand } from "../src/commands/chat-command.js";
 import {
   dispatchCommand,
@@ -31,6 +32,8 @@ function makeHarness(
     adminUids?: ReadonlySet<string>;
     current?: unknown;
     hasStartedPlaying?: boolean;
+    listenerUids?: readonly string[];
+    voteSkip?: boolean;
   } = {},
 ) {
   const playback = {
@@ -135,6 +138,9 @@ function makeHarness(
     listConnectedClientUids: vi.fn((): Promise<readonly string[]> =>
       Promise.resolve([]),
     ),
+    listChannelListenerUids: vi.fn((): Promise<readonly string[] | undefined> =>
+      Promise.resolve(overrides.listenerUids),
+    ),
   };
   const metrics = {
     formatStats: vi.fn(() => "stats"),
@@ -177,7 +183,10 @@ function makeHarness(
   const commandRateLimiter = {
     acquire: vi.fn(() => ({ allowed: true, retryAfterMs: 0 })),
   };
-  const config = { RHAPSOD_TS3_NICKNAME: "Bot" };
+  const config = {
+    RHAPSOD_TS3_NICKNAME: "Bot",
+    RHAPSOD_VOTE_SKIP: overrides.voteSkip ?? false,
+  };
   const ctx = {
     playback,
     connection,
@@ -189,6 +198,7 @@ function makeHarness(
     listeningHistory,
     ytDlpExecutor,
     commandRateLimiter,
+    skipVotes: new SkipVotes(),
     encoder: {},
     adminUids: overrides.adminUids ?? new Set(),
     moveGroupIds: new Set(),
@@ -793,6 +803,72 @@ describe("favorites and skip ownership", () => {
   it("blocks strangers from skipping someone else's track", async () => {
     const { ctx, playback, send, sender } = makeHarness({
       current: { requestedBy: "other", requestedByUid: "uid-9", title: "X" },
+    });
+    await dispatchCommand(ctx, parseChatCommand("!skip")!, sender, send);
+
+    expect(playback.skip).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledWith(
+      "Solo quien pidió la canción (o un admin) puede saltarla.",
+    );
+  });
+
+  it("keeps the ownership rule when vote skip is off", async () => {
+    const { ctx, connection, playback, send, sender } = makeHarness({
+      current: { requestedBy: "other", requestedByUid: "uid-9", title: "X" },
+      listenerUids: ["uid-1", "uid-9"],
+    });
+    await dispatchCommand(ctx, parseChatCommand("!skip")!, sender, send);
+
+    expect(connection.listChannelListenerUids).not.toHaveBeenCalled();
+    expect(playback.skip).not.toHaveBeenCalled();
+  });
+
+  it("skips someone else's track once most listeners vote", async () => {
+    const current = {
+      requestedBy: "other",
+      requestedByUid: "uid-9",
+      title: "X",
+    };
+    const { ctx, playback, send, sender } = makeHarness({
+      current,
+      listenerUids: ["uid-1", "uid-2", "uid-3", "uid-9"],
+      voteSkip: true,
+    });
+    await dispatchCommand(ctx, parseChatCommand("!skip")!, sender, send);
+    await dispatchCommand(ctx, parseChatCommand("!skip")!, sender, send);
+    expect(playback.skip).not.toHaveBeenCalled();
+    expect(send).toHaveBeenLastCalledWith("Voto para saltar registrado (1/3).");
+
+    const second = { groups: [], name: "dos", uid: "uid-2" };
+    await dispatchCommand(ctx, parseChatCommand("!skip")!, second, send);
+    expect(playback.skip).not.toHaveBeenCalled();
+
+    const third = { groups: [], name: "tres", uid: "uid-3" };
+    await dispatchCommand(ctx, parseChatCommand("!skip")!, third, send);
+    expect(playback.skip).toHaveBeenCalledTimes(1);
+    expect(send).toHaveBeenLastCalledWith(
+      "Votación aprobada (3/3): pista saltada.",
+    );
+  });
+
+  it("only counts votes from the bot's channel", async () => {
+    const { ctx, playback, send, sender } = makeHarness({
+      current: { requestedBy: "other", requestedByUid: "uid-9", title: "X" },
+      listenerUids: ["uid-9"],
+      voteSkip: true,
+    });
+    await dispatchCommand(ctx, parseChatCommand("!skip")!, sender, send);
+
+    expect(playback.skip).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledWith(
+      "Para votar tenés que estar en el canal del bot.",
+    );
+  });
+
+  it("falls back to the ownership rule when listeners cannot be read", async () => {
+    const { ctx, playback, send, sender } = makeHarness({
+      current: { requestedBy: "other", requestedByUid: "uid-9", title: "X" },
+      voteSkip: true,
     });
     await dispatchCommand(ctx, parseChatCommand("!skip")!, sender, send);
 

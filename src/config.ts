@@ -150,6 +150,10 @@ const configSchema = z.object({
   RHAPSOD_PANEL_HOST: z.string().min(1).default("127.0.0.1"),
   RHAPSOD_PANEL_USER: z.string().min(1).default("admin"),
   RHAPSOD_PANEL_PASSWORD: z.string().min(1).default("rhapsod"),
+  RHAPSOD_VOTE_SKIP: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
   RHAPSOD_VERBOSE: z
     .enum(["true", "false"])
     .default("false")

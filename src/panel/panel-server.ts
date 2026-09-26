@@ -166,6 +166,8 @@ const ENV_DESCRIPTIONS: Record<string, string> = {
   RHAPSOD_MAX_CONCURRENT_YTDLP_JOBS: "Jobs yt-dlp concurrentes (1-4)",
   RHAPSOD_MAX_QUEUE_TRACKS: "Tracks max en cola (1-1000)",
   RHAPSOD_MAX_TRACKS_PER_USER: "Tracks por usuario (1-200)",
+  RHAPSOD_VOTE_SKIP:
+    "Votacion para saltar: mas de la mitad del canal (true/false, default false)",
   RHAPSOD_MOVE_GROUP_IDS: "Group IDs para !move",
   RHAPSOD_MOVE_ADMIN_CHANNELS: "Channels para move admin",
   RHAPSOD_MOVE_SENIOR_CHANNELS: "Channels para move senior",

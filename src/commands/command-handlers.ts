@@ -11,6 +11,7 @@ import type { SystemYtDlpExecutor } from "../media/youtube/yt-dlp.js";
 import type { YoutubePlaybackService } from "../application/youtube-playback-service.js";
 import type { ChatCommand } from "./chat-command.js";
 import type { CommandRateLimiter } from "./command-rate-limiter.js";
+import type { SkipVotes } from "../application/skip-votes.js";
 import { searchStations } from "../media/radio-directory.js";
 import {
   resolveTuneInStream,
@@ -48,6 +49,7 @@ export interface CommandContext {
   readonly radioTitles: RadioTitleCache;
   readonly ytDlpExecutor: SystemYtDlpExecutor;
   readonly commandRateLimiter: CommandRateLimiter;
+  readonly skipVotes: SkipVotes;
   readonly encoder: RhapsodOpusEncoder;
   readonly verbose: boolean;
   hasStartedPlaying: boolean;
@@ -752,11 +754,39 @@ async function handleSkip(
     current !== undefined &&
     !(await senderMayRemove(ctx, sender, [current]))
   ) {
-    await send(messages.skipSoloQuienPidioLa);
+    await voteToSkip(ctx, current, sender, send);
     return;
   }
   ctx.playback.skip();
   await send(messages.skipPistaSaltada);
+}
+
+async function voteToSkip(
+  ctx: CommandContext,
+  current: object,
+  sender: CommandSender,
+  send: SendFn,
+): Promise<void> {
+  const listeners = ctx.config.RHAPSOD_VOTE_SKIP
+    ? await ctx.connection.listChannelListenerUids()
+    : undefined;
+  // Without a listener count there is no majority to reach: keep the
+  // ownership rule instead of letting one vote decide.
+  if (listeners === undefined || listeners.length === 0) {
+    await send(messages.skipSoloQuienPidioLa);
+    return;
+  }
+  if (!listeners.includes(sender.uid)) {
+    await send(messages.skipVotoSoloOyentes);
+    return;
+  }
+  const result = ctx.skipVotes.vote(current, sender.uid, listeners);
+  if (!result.passed) {
+    await send(messages.skipVotoRegistrado(result.votes, result.needed));
+    return;
+  }
+  ctx.playback.skip();
+  await send(messages.skipVotacionAprobada(result.votes, result.needed));
 }
 
 async function handleJump(
