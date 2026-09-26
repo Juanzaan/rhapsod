@@ -8,7 +8,7 @@ import {
   renderSetupWizard,
 } from "../src/panel/panel-templates.js";
 import type { PanelStatus } from "../src/panel/panel-server.js";
-import { AMBIENCE_JS } from "../src/panel/dashboard-design.js";
+import { AMBIENCE_JS, songHue } from "../src/panel/dashboard-design.js";
 
 function render(status: Partial<PanelStatus> = {}): string {
   return renderDashboard({
@@ -243,7 +243,6 @@ describe("renderDashboard console", () => {
       addEventListener: () => {},
     };
     const fakeWindow = {
-      gsap: undefined,
       matchMedia: () => ({ matches: true }),
       addEventListener: () => {},
     };
@@ -336,8 +335,8 @@ describe("renderDashboard console", () => {
     ).toBe(true);
     expect(getEl("stTracks").textContent).toBe("7");
     expect(getEl("uptime").textContent).toBe("up 1 h · 2 cortes");
-    expect(getEl("ql").innerHTML).toContain("rmQ(1)");
-    expect(getEl("ql").innerHTML).toContain("rmQ(2)");
+    expect(getEl("ql").innerHTML).toContain("rmQ(1,this)");
+    expect(getEl("ql").innerHTML).toContain("rmQ(2,this)");
     expect(getEl("ql").innerHTML).toContain('class="qr"');
     expect(getEl("ql").innerHTML).toContain("Dj");
     expect(getEl("chat").innerHTML).toContain("hola!");
@@ -898,5 +897,243 @@ describe("panel credentials", () => {
       expect(html).not.toContain("btoa(");
       expect(html).not.toMatch(/authorization/i);
     }
+  });
+});
+
+describe("dashboard motion", () => {
+  interface MotionApi {
+    hashHue(title: string): number;
+    setSongHue(title: string): number;
+    restoreSongHue(): void;
+    fx(el: unknown, frames: unknown, opts: unknown): unknown;
+    fxCount(el: unknown, to: number, suffix?: string): void;
+    setLive(on: boolean): void;
+  }
+
+  function motionHarness(options: { paused?: boolean; inlineHue?: string }) {
+    const styles = new Map<string, string>();
+    if (options.inlineHue !== undefined)
+      styles.set("--song-h", options.inlineHue);
+    const attrs = new Map<string, string>([
+      ["data-motion", options.paused ? "paused" : "running"],
+    ]);
+    const stored = new Map<string, string>();
+    const document = {
+      documentElement: {
+        getAttribute: (key: string) => attrs.get(key) ?? null,
+        setAttribute: (key: string, value: string) => attrs.set(key, value),
+        style: {
+          setProperty: (key: string, value: string) => styles.set(key, value),
+          getPropertyValue: (key: string) => styles.get(key) ?? "",
+        },
+      },
+    };
+    const window = {
+      localStorage: {
+        getItem: (key: string) => stored.get(key) ?? null,
+        setItem: (key: string, value: string) => stored.set(key, value),
+      },
+    };
+    // Generated browser code is exercised against controlled globals.
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval
+    const factory = new Function(
+      "window",
+      "document",
+      `${AMBIENCE_JS};return {hashHue,setSongHue,restoreSongHue,fx,fxCount,setLive};`,
+    ) as (window: unknown, document: unknown) => MotionApi;
+    return { api: factory(window, document), attrs, styles, stored };
+  }
+
+  it("colors each track the same way on the server and in the browser", () => {
+    const { api } = motionHarness({});
+    for (const title of [
+      "Daft Punk - Something About Us",
+      "Khruangbin - María También",
+      "a",
+      "",
+    ]) {
+      expect(api.hashHue(title)).toBe(songHue(title));
+    }
+    expect(songHue(undefined)).toBe(142);
+    const html = render({ currentTitle: "Bonobo - Kerala" });
+    expect(html).toContain(`style="--song-h:${songHue("Bonobo - Kerala")}"`);
+  });
+
+  it("stores the track color and reuses it on pages without a track", () => {
+    const dashboard = motionHarness({});
+    const hue = dashboard.api.setSongHue("Tycho - Awake");
+    expect(dashboard.styles.get("--song-h")).toBe(String(hue));
+    expect(dashboard.stored.get("rhapsod.hue")).toBe(String(hue));
+
+    const other = motionHarness({});
+    other.stored.set("rhapsod.hue", "210");
+    other.api.restoreSongHue();
+    expect(other.styles.get("--song-h")).toBe("210");
+
+    // A server-rendered color for the current track wins over the stored one.
+    const rendered = motionHarness({ inlineHue: "33" });
+    rendered.stored.set("rhapsod.hue", "210");
+    rendered.api.restoreSongHue();
+    expect(rendered.styles.get("--song-h")).toBe("33");
+  });
+
+  it("skips script animations while motion is paused", () => {
+    const calls: unknown[] = [];
+    const el = {
+      animate: (frames: unknown) => {
+        calls.push(frames);
+        return {};
+      },
+    };
+    const running = motionHarness({});
+    expect(running.api.fx(el, [{ opacity: 0 }], {})).not.toBeNull();
+    const paused = motionHarness({ paused: true });
+    expect(paused.api.fx(el, [{ opacity: 0 }], {})).toBeNull();
+    expect(calls).toHaveLength(1);
+  });
+
+  it("sets counters directly when animation is unavailable", () => {
+    const { api } = motionHarness({});
+    const attrs = new Map<string, string>([["data-v", "3"]]);
+    const el = {
+      textContent: "3",
+      getAttribute: (key: string) => attrs.get(key) ?? null,
+      setAttribute: (key: string, value: string) => attrs.set(key, value),
+    };
+    api.fxCount(el, 12, " pistas");
+    expect(el.textContent).toBe("12 pistas");
+    expect(attrs.get("data-v")).toBe("12");
+  });
+
+  it("marks the page live only while playing", () => {
+    const { api, attrs } = motionHarness({});
+    api.setLive(true);
+    expect(attrs.get("data-live")).toBe("true");
+    api.setLive(false);
+    expect(attrs.get("data-live")).toBe("false");
+    expect(render({ playerState: "playing" })).toContain('data-live="true"');
+    expect(render({ playerState: "paused" })).toContain('data-live="false"');
+  });
+
+  it("renders the turntable, equalizer and local motion without a library", () => {
+    const html = render({ playerState: "playing", currentTitle: "Song" });
+    expect(html).toContain('class="tonearm"');
+    expect(html).toContain('class="eq"');
+    expect(html).toContain('class="orb"');
+    expect(html).not.toContain("gsap");
+    for (const page of [
+      renderServerPage(),
+      renderSettingsPage(),
+      renderCommandsPage(),
+    ]) {
+      expect(page).not.toContain("gsap");
+      expect(page).toContain("function initMotion");
+    }
+  });
+});
+
+describe("panel pages motion and feedback", () => {
+  // The templates emit bare <script> tags; plain index lookups read them
+  // back without a tag-matching regexp.
+  function pageScript(html: string): string {
+    const blocks: string[] = [];
+    let start = html.indexOf("<script>");
+    while (start !== -1) {
+      const end = html.indexOf("</script>", start);
+      if (end === -1) break;
+      blocks.push(html.slice(start + "<script>".length, end));
+      start = html.indexOf("<script>", end);
+    }
+    return blocks.join("\n");
+  }
+
+  const quietWindow = { matchMedia: () => ({ matches: false }) };
+  const pendingFetch = () => new Promise(() => undefined);
+
+  it("highlights command search matches without trusting the text", () => {
+    const document = {
+      getElementById: () => ({ addEventListener: () => {} }),
+      addEventListener: () => {},
+    };
+    // Generated browser code is exercised against controlled globals.
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval
+    const factory = new Function(
+      "window",
+      "document",
+      "fetch",
+      "btoa",
+      `${pageScript(renderCommandsPage())};return {hl};`,
+    ) as (...args: unknown[]) => { hl: (text: string, q: string) => string };
+    const { hl } = factory(quietWindow, document, pendingFetch, () => "");
+    expect(hl("Buscar una radio y sintonizar la radio", "radio")).toBe(
+      "Buscar una <mark>radio</mark> y sintonizar la <mark>radio</mark>",
+    );
+    expect(hl('<img src=x onerror="x">radio', "radio")).toBe(
+      "&lt;img src=x onerror=&quot;x&quot;&gt;<mark>radio</mark>",
+    );
+    expect(hl("Play", "")).toBe("Play");
+  });
+
+  it("counts unsaved settings and clears them after saving", () => {
+    const fieldClasses = new Map<unknown, boolean>();
+    const makeInput = (value: string, defaultValue: string) => {
+      const parentNode = {
+        classList: {
+          toggle: (_name: string, on: boolean) =>
+            fieldClasses.set(parentNode, on),
+        },
+      };
+      return { value, defaultValue, parentNode };
+    };
+    const inputs = [
+      makeInput("Rhapsod DJ", "Rhapsod"),
+      makeInput("9987", "9987"),
+    ];
+    const note = { textContent: "" };
+    const barClasses = new Set<string>();
+    const bar = {
+      classList: {
+        toggle: (name: string, on: boolean) =>
+          on ? barClasses.add(name) : barClasses.delete(name),
+        add: (name: string) => barClasses.add(name),
+        remove: (name: string) => barClasses.delete(name),
+      },
+    };
+    const document = {
+      getElementById: (id: string) =>
+        id === "saveNote"
+          ? note
+          : id === "saveBar"
+            ? bar
+            : { addEventListener: () => {} },
+      querySelectorAll: () => inputs,
+      addEventListener: () => {},
+    };
+    // Generated browser code is exercised against controlled globals.
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval
+    const factory = new Function(
+      "window",
+      "document",
+      "fetch",
+      "btoa",
+      `${pageScript(renderSettingsPage())};return {markDirty,markSaved};`,
+    ) as (...args: unknown[]) => { markDirty(): void; markSaved(): void };
+    const api = factory(quietWindow, document, pendingFetch, () => "");
+    api.markDirty();
+    expect(note.textContent).toContain("1 cambio sin guardar");
+    expect(barClasses.has("dirty")).toBe(true);
+    expect(fieldClasses.get(inputs[0]?.parentNode)).toBe(true);
+    expect(fieldClasses.get(inputs[1]?.parentNode)).toBe(false);
+    api.markSaved();
+    expect(barClasses.has("dirty")).toBe(false);
+    expect(barClasses.has("saved")).toBe(true);
+    expect(inputs[0]?.defaultValue).toBe("Rhapsod DJ");
+    expect(note.textContent).toContain("Guardado");
+  });
+
+  it("labels settings by meaning and keeps the variable name visible", () => {
+    const html = renderSettingsPage();
+    expect(html).toContain('class="fk"');
+    expect(html).toContain("e.description||e.key");
   });
 });

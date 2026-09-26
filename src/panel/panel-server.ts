@@ -16,6 +16,7 @@ import {
   maskSecret,
   saveEnvFile,
 } from "./env-file.js";
+import { FAVICON_SVG } from "./dashboard-design.js";
 import {
   renderDashboard,
   renderSetupWizard,
@@ -338,6 +339,10 @@ export function createPanelServer(options: PanelOptions): {
   app.get("/server", (c) => {
     return c.html(renderServerPage());
   });
+
+  app.get("/favicon.ico", (c) =>
+    c.body(FAVICON_SVG, 200, { "Content-Type": "image/svg+xml" }),
+  );
 
   app.get("/api/health", (c) => c.json(options.status()));
 
