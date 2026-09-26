@@ -98,6 +98,9 @@ jobs:
           $output
           if ($LASTEXITCODE -ne 1) { throw "expected exit code 1, got $LASTEXITCODE" }
           if (-not ($output -match 'SSH key not found')) { throw 'missing key was not reported' }
+          # The runner ends pwsh steps with the last native exit code, which is
+          # the expected 1 from the launcher; the checks above passed.
+          exit 0
       - uses: actions/upload-artifact@v7
         with:
           name: rhapsod-dashboard
