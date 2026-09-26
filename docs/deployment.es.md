@@ -61,6 +61,18 @@ Esperar a que `playerState` sea `idle`. Los estados de pausa y carga también in
 
 ## Respaldo, actualización y reversión
 
+`scripts/deploy.sh` ejecuta en el servidor todo el procedimiento siguiente con un solo comando: espera a que el panel indique `playerState: "idle"`, detiene el bot, respalda `data/` y el archivo de entorno, obtiene la revisión elegida, ejecuta `npm ci` y la compilación con el usuario del servicio, inicia el bot y espera a que siga activo y el panel responda. Si la compilación o el inicio fallan, vuelve al commit anterior, lo compila, lo inicia y termina con error. Reinicia el servicio de yt-dlp solo si cambió su script y avisa si cambiaron las plantillas de unidades.
+
+```bash
+sudo bash scripts/deploy.sh --dry-run
+sudo bash scripts/deploy.sh
+sudo bash scripts/deploy.sh --ref v4.0.0
+```
+
+El destino por defecto es `origin/main`; `--ref` acepta una rama, una etiqueta o un commit. La comprobación de reposo lee la configuración del panel de `APP_DIR/.env` (`--env-file` para `/etc/rhapsod.env`); sin un panel activo no reinicia salvo con `--force`. Los respaldos se guardan en `APP_DIR/../backups` (`--backup-dir`), solo legibles por root, y se conservan los cinco más recientes (`--keep`). Las rutas son relativas, así que para restaurar `data/` y `.env` se usa `tar -xzf <respaldo> -C /home/rhapsod/rhapsod`. No restaura datos al revertir; usar el respaldo indicado si una migración de datos lo requiere. `--service rhapsod@blue` actualiza una instancia con nombre.
+
+El procedimiento manual:
+
 Registrar el commit actual con `git rev-parse HEAD`. Durante una ventana de mantenimiento en reposo, detener el bot y respaldar las rutas reales de datos y configuración:
 
 ```bash
