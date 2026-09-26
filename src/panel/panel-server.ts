@@ -82,6 +82,8 @@ export interface PanelOptions {
   readonly serverView?: () => ServerView;
   readonly moveBot?: (cid: number) => Promise<void>;
   readonly errors?: () => ErrorSummary;
+  /** Prometheus text for GET /api/metrics; the route 404s without it. */
+  readonly metricsText?: () => string;
   readonly youtubeHealth?: () => Promise<{
     readonly ok: boolean;
     readonly ms?: number;
@@ -356,6 +358,13 @@ export function createPanelServer(options: PanelOptions): {
   );
 
   app.get("/api/health", (c) => c.json(options.status()));
+
+  app.get("/api/metrics", (c) => {
+    if (options.metricsText === undefined) return c.notFound();
+    return c.body(options.metricsText(), 200, {
+      "Content-Type": "text/plain; version=0.0.4; charset=utf-8",
+    });
+  });
 
   app.get("/api/state", (c) => {
     const status = options.status();
