@@ -4,6 +4,7 @@ import { CHANNELS, SAMPLE_RATE } from "../src/audio/opus-encoder.js";
 import {
   buildFfmpegPcmArguments,
   createFfmpegPcmStream,
+  isForbiddenResponse,
 } from "../src/audio/ffmpeg-pcm.js";
 
 describe("FFmpeg PCM source", () => {
@@ -181,7 +182,7 @@ describe("FFmpeg PCM source", () => {
       on: vi.fn(),
       once: vi.fn(),
       stderr: { on: vi.fn() },
-      stdout: { pipe: vi.fn(), unpipe: vi.fn() },
+      stdout: { on: vi.fn(), pipe: vi.fn(), unpipe: vi.fn() },
     };
     const spawnProcess = vi.fn((...spawnArgs: [string, readonly string[]]) => {
       void spawnArgs;
@@ -233,7 +234,7 @@ describe("FFmpeg PCM source", () => {
             if (event === "data") stderrHandlers.push(handler);
           }),
         },
-        stdout: { pipe: vi.fn(), unpipe: vi.fn() },
+        stdout: { on: vi.fn(), pipe: vi.fn(), unpipe: vi.fn() },
       };
       const spawnProcess = vi.fn((...spawnArgs: [string, string[]]) => {
         spawns.push([...spawnArgs[1]]);
@@ -318,7 +319,7 @@ describe("FFmpeg PCM source", () => {
             if (event === "data") stderrHandlers.push(handler);
           }),
         },
-        stdout: { pipe: vi.fn(), unpipe: vi.fn() },
+        stdout: { on: vi.fn(), pipe: vi.fn(), unpipe: vi.fn() },
       });
       const child = makeChild();
       const spawnProcess = vi.fn(() => {
@@ -359,7 +360,7 @@ describe("FFmpeg PCM source", () => {
         on: vi.fn(),
         once: vi.fn(),
         stderr: { on: vi.fn() },
-        stdout: { pipe: vi.fn(), unpipe: vi.fn() },
+        stdout: { on: vi.fn(), pipe: vi.fn(), unpipe: vi.fn() },
       };
       const spawnProcess = vi.fn(() => child) as never;
       const ffmpeg = createFfmpegPcmStream("https://cdn.example.test/audio", {
@@ -376,5 +377,110 @@ describe("FFmpeg PCM source", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("FFmpeg PCM 403 retry position", () => {
+  function fakeSpawn() {
+    const spawns: string[][] = [];
+    const closeHandlers: Array<(code: number | null, signal: null) => void> =
+      [];
+    const stderrHandlers: Array<(chunk: Buffer) => void> = [];
+    const stdoutHandlers: Array<(chunk: Buffer) => void> = [];
+    const child = {
+      exitCode: null,
+      signalCode: null,
+      kill: vi.fn(),
+      on: vi.fn((event: string, handler: (code: number | null) => void) => {
+        if (event === "close") closeHandlers.push(handler);
+      }),
+      once: vi.fn(),
+      stderr: {
+        on: vi.fn((event: string, handler: (chunk: Buffer) => void) => {
+          if (event === "data") stderrHandlers.push(handler);
+        }),
+      },
+      stdout: {
+        on: vi.fn((event: string, handler: (chunk: Buffer) => void) => {
+          if (event === "data") stdoutHandlers.push(handler);
+        }),
+        pipe: vi.fn(),
+        unpipe: vi.fn(),
+      },
+    };
+    const spawnProcess = vi.fn((_binary: string, args: string[]) => {
+      spawns.push([...args]);
+      return child;
+    }) as never;
+    const emitSeconds = (seconds: number) =>
+      stdoutHandlers.at(-1)?.(Buffer.alloc(48_000 * 2 * 2 * seconds));
+    const failWith403 = () => {
+      stderrHandlers.at(-1)?.(
+        Buffer.from("Server returned 403 Forbidden (access denied)"),
+      );
+      closeHandlers.at(-1)?.(1, null);
+    };
+    return { spawns, spawnProcess, emitSeconds, failWith403 };
+  }
+
+  const seekOf = (args: string[] | undefined) =>
+    args?.includes("-ss") ? args[args.indexOf("-ss") + 1] : undefined;
+
+  it("resumes where the audio stopped instead of replaying the start", async () => {
+    vi.useFakeTimers();
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const fake = fakeSpawn();
+      const ffmpeg = createFfmpegPcmStream("https://cdn.example.test/audio", {
+        binary: "ffmpeg",
+        seekSeconds: 30,
+        spawnProcess: fake.spawnProcess,
+      });
+      ffmpeg.stream.on("error", () => {});
+      expect(seekOf(fake.spawns[0])).toBe("30");
+      fake.emitSeconds(12);
+      fake.failWith403();
+      await vi.advanceTimersByTimeAsync(1_500);
+      expect(seekOf(fake.spawns[1])).toBe("42");
+      ffmpeg.stop();
+    } finally {
+      errorSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it("rejoins live streams without seeking", async () => {
+    vi.useFakeTimers();
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const fake = fakeSpawn();
+      const ffmpeg = createFfmpegPcmStream("https://radio.example.test/live", {
+        binary: "ffmpeg",
+        live: true,
+        spawnProcess: fake.spawnProcess,
+      });
+      ffmpeg.stream.on("error", () => {});
+      fake.emitSeconds(60);
+      fake.failWith403();
+      await vi.advanceTimersByTimeAsync(1_500);
+      expect(fake.spawns).toHaveLength(2);
+      expect(seekOf(fake.spawns[1])).toBeUndefined();
+      ffmpeg.stop();
+    } finally {
+      errorSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not treat URL digits as a 403", () => {
+    expect(
+      isForbiddenResponse(
+        "Error opening input https://rr4.googlevideo.com/videoplayback?itag=140&expire=1740312403: Connection reset",
+      ),
+    ).toBe(false);
+    expect(isForbiddenResponse("HTTP Error 403: Forbidden")).toBe(true);
+    expect(
+      isForbiddenResponse("Server returned 403 Forbidden (access denied)"),
+    ).toBe(true);
   });
 });
