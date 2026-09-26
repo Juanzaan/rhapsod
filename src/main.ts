@@ -43,12 +43,10 @@ import {
   parseMoveGroupIds,
 } from "./commands/permissions.js";
 import { createYtDlpResolverStack } from "./media/youtube/yt-dlp.js";
-import { timeoutConfigFrom } from "./lib/timeout-config.js";
 import { resolveInstanceDir } from "./lib/instance-dir.js";
 import { RadioTitleCache } from "./media/radio-icy.js";
 import { RadioScrobbler } from "./application/radio-scrobbler.js";
 import { SongLibrary } from "./application/song-library.js";
-import { UserError } from "./lib/user-error.js";
 import { createPanelServer, type QueueEntry } from "./panel/panel-server.js";
 import { ChatLog, isOwnEcho } from "./application/chat-log.js";
 import {
@@ -79,29 +77,17 @@ import { SpotifyApi } from "./media/spotify/api.js";
 import { createRhapsodLogger } from "./observability/logger.js";
 import { MetricsCollector } from "./observability/metrics.js";
 import { startWatchdog, watchdogInterval } from "./watchdog.js";
-
-// Favorites, history, telemetry and the queue are written on a debounce, so
-// a bare process.exit() drops whatever changed since the last write. main()
-// registers the flush once the stores exist; every exit path goes through
-// exitAfterFlush so crashes, the watchdog and panel restarts keep that data.
-let flushBeforeExit: (() => Promise<void>) | undefined;
-
-const EXIT_FLUSH_TIMEOUT_MS = 5_000;
-
-async function exitAfterFlush(code: number): Promise<void> {
-  const flush = flushBeforeExit;
-  // A second crash while flushing must not wait on the same stuck flush.
-  flushBeforeExit = undefined;
-  if (flush !== undefined) {
-    await Promise.race([
-      flush().catch(() => undefined),
-      new Promise((resolve) => setTimeout(resolve, EXIT_FLUSH_TIMEOUT_MS)),
-    ]);
-  }
-  process.exit(code);
-}
+import {
+  ExitCoordinator,
+  installCrashHandlers,
+  onStopSignal,
+} from "./bootstrap/exit.js";
+import { startSetupMode } from "./bootstrap/setup-mode.js";
+import { ytDlpStackOptions } from "./bootstrap/yt-dlp-options.js";
+import { userFacingError } from "./lib/user-facing-error.js";
 
 async function main(): Promise<void> {
+  const exits = new ExitCoordinator();
   const config = loadConfig();
   const dataDir = resolveInstanceDir(
     config.RHAPSOD_DATA_DIR,
@@ -130,16 +116,7 @@ async function main(): Promise<void> {
       if (oldest !== undefined) trackTimings.delete(oldest);
     }
   };
-  // pino only serializes Error objects under the `err` key; any other key
-  // logs them as `{}`, which is how crash reports lost their message.
-  process.on("unhandledRejection", (reason: unknown) => {
-    logger.error({ err: reason }, "Unhandled promise rejection; restarting");
-    void exitAfterFlush(1);
-  });
-  process.on("uncaughtException", (error: Error) => {
-    logger.error({ err: error }, "Uncaught exception; restarting");
-    void exitAfterFlush(1);
-  });
+  installCrashHandlers(logger, exits);
   const adminUids = parseAdminUids(config.RHAPSOD_ADMIN_UIDS);
   const panelAdminUids: ReadonlySet<string> = new Set([...adminUids, "panel"]);
   const privateCommandUids =
@@ -168,68 +145,7 @@ async function main(): Promise<void> {
   );
   if (!config.RHAPSOD_TS3_AUTO_CONNECT) {
     logger.info("TeamSpeak 3 auto-connect is disabled");
-    // Setup mode. The installer ships AUTO_CONNECT=false so the bot can boot
-    // before any TeamSpeak host is configured — the wizard that collects it
-    // is served by the panel, so the panel must come up here. Without this,
-    // the process exited immediately and the wizard was unreachable
-    // out of the box.
-    if (config.RHAPSOD_PANEL_ENABLED) {
-      const { resolver: setupResolver } = createYtDlpResolverStack(logger, {
-        ytdlpPath: config.RHAPSOD_YTDLP_PATH,
-        ...(config.RHAPSOD_YTDLP_COOKIES_PATH === undefined
-          ? {}
-          : { cookiesPath: config.RHAPSOD_YTDLP_COOKIES_PATH }),
-        ...(config.RHAPSOD_YTDLP_EXTRACTOR_ARGS === undefined
-          ? {}
-          : { extractorArgs: config.RHAPSOD_YTDLP_EXTRACTOR_ARGS }),
-        ...(config.RHAPSOD_YTDLP_DAEMON_URL === undefined
-          ? {}
-          : { daemonUrl: config.RHAPSOD_YTDLP_DAEMON_URL }),
-        timeouts: timeoutConfigFrom(config),
-      });
-      const setupPanel = createPanelServer({
-        config,
-        envFilePath: config.RHAPSOD_ENV_FILE,
-        logger,
-        status: () => ({
-          connected: false,
-          queueLength: 0,
-          playerState: "idle" as const,
-          uptimeMs: Math.round(process.uptime() * 1000),
-          version: packageVersion,
-        }),
-        queue: (): QueueEntry[] => [],
-        executeCommand: (): Promise<string> =>
-          Promise.reject(
-            new Error("El bot no esta conectado a TeamSpeak todavia"),
-          ),
-        youtubeHealth: createYoutubeHealthCheck((url, signal) =>
-          setupResolver.getAudioUrlFromUrl(url, signal),
-        ),
-        saveCookies: createCookieSaver(
-          config.RHAPSOD_YTDLP_COOKIES_PATH ??
-            join(dataDir, "youtube-cookies.txt"),
-        ),
-        restart: (): void => {
-          logger.info("Panel requested restart");
-          void exitAfterFlush(1);
-        },
-        testConnection: (host: string, port: number) =>
-          probeTs3Server(host, port),
-      });
-      logger.info(
-        "Setup mode: panel running without TeamSpeak; complete the wizard and restart",
-      );
-      // Without these, `systemctl stop` during setup killed the process
-      // with the panel open and the log unflushed.
-      const stopSetup = (): void => {
-        logger.info("Shutdown initiated in setup mode");
-        flushBeforeExit = () => setupPanel.close().catch(() => undefined);
-        void exitAfterFlush(0);
-      };
-      process.once("SIGINT", stopSetup);
-      process.once("SIGTERM", stopSetup);
-    }
+    startSetupMode({ config, dataDir, exits, logger });
     return;
   }
 
@@ -275,7 +191,7 @@ async function main(): Promise<void> {
       intervalMs: watchdog.intervalMs,
       onTimeout: (driftMs) => {
         logger.error({ driftMs }, "Watchdog: event loop blocked; restarting");
-        void exitAfterFlush(1);
+        void exits.exit(1);
       },
     });
   }
@@ -422,20 +338,10 @@ async function main(): Promise<void> {
   });
   const { executor: ytDlpExecutor, resolver: ytDlpResolver } =
     createYtDlpResolverStack(logger, {
-      ytdlpPath: config.RHAPSOD_YTDLP_PATH,
-      ...(config.RHAPSOD_YTDLP_COOKIES_PATH === undefined
-        ? {}
-        : { cookiesPath: config.RHAPSOD_YTDLP_COOKIES_PATH }),
-      ...(config.RHAPSOD_YTDLP_EXTRACTOR_ARGS === undefined
-        ? {}
-        : { extractorArgs: config.RHAPSOD_YTDLP_EXTRACTOR_ARGS }),
-      ...(config.RHAPSOD_YTDLP_DAEMON_URL === undefined
-        ? {}
-        : { daemonUrl: config.RHAPSOD_YTDLP_DAEMON_URL }),
+      ...ytDlpStackOptions(config),
       ...(config.RHAPSOD_MAX_CONCURRENT_YTDLP_JOBS === undefined
         ? {}
         : { maxConcurrentJobs: config.RHAPSOD_MAX_CONCURRENT_YTDLP_JOBS }),
-      timeouts: timeoutConfigFrom(config),
       onSearchMetrics: (m) => metrics.recordSearchMetrics(m),
     });
   ytDlpMetricsRef.getMetrics = () => ytDlpExecutor.metrics();
@@ -606,7 +512,7 @@ async function main(): Promise<void> {
       songLibrary.flush().catch(() => undefined),
     ]);
   };
-  flushBeforeExit = flushState;
+  exits.setFlush(flushState);
   const youtubeAuthCheckUrl = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
   const youtubeAuthCheckIntervalMs = 24 * 60 * 60 * 1_000;
   const youtubeAuthState = { healthy: true };
@@ -935,7 +841,7 @@ async function main(): Promise<void> {
       stopHeartbeat();
       playback.stop(false);
       await connection.disconnect().catch(() => undefined);
-      await exitAfterFlush(1);
+      await exits.exit(1);
     })();
   });
 
@@ -1081,31 +987,17 @@ async function main(): Promise<void> {
     playback.stop(false);
     encoder.close();
     stopHeartbeat();
-    flushBeforeExit = async () => {
+    exits.setFlush(async () => {
       await Promise.all([
         connection.disconnect().catch(() => undefined),
         flushState(),
         ...(panel === undefined ? [] : [panel.close().catch(() => undefined)]),
       ]);
       logger.info("Shutdown complete");
-    };
-    void exitAfterFlush(code);
+    });
+    void exits.exit(code);
   };
-  process.once("SIGINT", () => shutdown(0));
-  process.once("SIGTERM", () => shutdown(0));
-}
-
-export function userFacingError(error: Error): string {
-  if (error instanceof UserError) return error.message;
-  const msg = error.message;
-  if (/DRM protected/i.test(msg))
-    return "SoundCloud no permite reproducir esta pista porque está protegida con DRM. Probá otra versión o una fuente distinta.";
-  if (/Requested format is not available/i.test(msg))
-    return "YouTube no ofrece un formato de audio reproducible para ese video (puede ser un directo o un video restringido). Probá otra versión.";
-  if (/fetch failed/i.test(msg))
-    return "Fallo momentáneo de red con el proveedor (Spotify/YouTube). Probá de nuevo en unos segundos.";
-  if (/ya está en la cola/i.test(msg)) return "Esa canción ya está en la cola.";
-  return "Ocurrió un error. Probá de nuevo en unos segundos.";
+  onStopSignal(() => shutdown(0));
 }
 
 void main().catch((error: unknown) => {
