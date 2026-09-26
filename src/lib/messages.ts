@@ -138,6 +138,18 @@ export const messages = {
     statsOutput: string | number,
     authLine: string | number,
   ): string => `${statsOutput}${authLine}`,
+  parseChatCommandUsaClaimCodigo:
+    "Usá !claim <código>. El código lo muestra la instalación y está en data/admin-claim-code en el servidor.",
+  claimListo: "Listo, ahora sos admin de Rhapsod.",
+  claimListoSinGuardar: (uid: string): string =>
+    `Sos admin hasta el próximo reinicio: no pude guardar el cambio. Agregá ${uid} a RHAPSOD_ADMIN_UIDS en el archivo .env para que quede.`,
+  claimCerrado:
+    "Rhapsod ya tiene admin; !claim solo sirve en una instalación nueva.",
+  claimCodigoIncorrecto: "Código incorrecto.",
+  claimBloqueado:
+    "Demasiados intentos con un código incorrecto. Reiniciá el bot en el servidor para volver a intentar.",
+  claimAvisoCanal:
+    "Hola, soy Rhapsod. Todavía no tengo admin: quien me instaló puede escribir !claim <código> con el código que mostró la instalación.",
   diagSoloLosAdministradoresPueden:
     "Solo los administradores pueden usar este comando.",
   debugServerSoloLosAdministradoresPueden:
