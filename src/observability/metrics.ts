@@ -51,7 +51,7 @@ const ERROR_PATTERNS: ReadonlyArray<{
     category: "auth",
     pattern: /sign in|cookies|login.?required|authentication/i,
   },
-  { category: "timeout", pattern: /timed? ?out|abort|ETIMEDED|ECONNRESET/i },
+  { category: "timeout", pattern: /timed? ?out|abort|ETIMEDOUT|ECONNRESET/i },
   { category: "rate-limit", pattern: /429|rate.?limit|too many/i },
   { category: "not-found", pattern: /404|not.?found|Video.*unavailable/i },
   { category: "playback", pattern: /playback|streaming|underrun|stall/i },
