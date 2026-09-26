@@ -45,12 +45,6 @@ import { RadioScrobbler } from "./application/radio-scrobbler.js";
 import { createPanelServer, type QueueEntry } from "./panel/panel-server.js";
 import { ChatLog, isOwnEcho } from "./application/chat-log.js";
 import {
-  ChannelDirectory,
-  ServerSnapshot,
-  pickChannels,
-  type ServerViewMode,
-} from "./application/server-snapshot.js";
-import {
   createCookieSaver,
   createYoutubeHealthCheck,
 } from "./panel/youtube-setup.js";
@@ -78,6 +72,7 @@ import {
   onStopSignal,
 } from "./bootstrap/exit.js";
 import { startSetupMode } from "./bootstrap/setup-mode.js";
+import { ServerViewSync } from "./bootstrap/server-view.js";
 import { flushStores, openStores } from "./bootstrap/stores.js";
 import { ytDlpStackOptions } from "./bootstrap/yt-dlp-options.js";
 import { userFacingError } from "./lib/user-facing-error.js";
@@ -215,85 +210,7 @@ async function main(): Promise<void> {
     telemetry,
   } = stores;
   const radioTitles = new RadioTitleCache();
-  const serverSnapshot = new ServerSnapshot();
-  const channelDirectory = new ChannelDirectory(async (cid) => {
-    try {
-      const info = await connection.getChannelInfo(cid);
-      const name = info["channel_name"];
-      // A missing channel surfaces as an error (swallowed to {}) or an
-      // empty row: without a name the cid does not exist, so report it as
-      // unknown instead of caching a `#cid` phantom entry.
-      if (name === undefined || name.length === 0) return undefined;
-      // channellist uses `pid`, channelinfo uses `cpid`.
-      const pid = Number(info["cpid"] ?? info["pid"] ?? Number.NaN);
-      const order = Number(info["channel_order"] ?? Number.NaN);
-      return {
-        name,
-        ...(Number.isSafeInteger(pid) && pid > 0 ? { parentCid: pid } : {}),
-        ...(Number.isSafeInteger(order) ? { order } : {}),
-      };
-    } catch {
-      return undefined;
-    }
-  });
-  const ensureChannel = async (cid: number): Promise<void> => {
-    await channelDirectory.resolve(cid);
-    serverSnapshot.setChannels(channelDirectory.snapshot());
-  };
-  let serverViewMode: ServerViewMode = "partial";
-  // Voice clients cannot run `channellist`, so the full tree (including
-  // empty channels) is discovered by probing `channelinfo` per cid. A full
-  // scan costs ~4 commands/s against the shared flood budget, so it runs in
-  // the background at startup, on reconnect and every tenth resync; the
-  // minute resync only resolves the channels occupied clients sit in.
-  let discoveryInFlight = false;
-  let resyncCount = 0;
-  const runChannelDiscovery = async (): Promise<void> => {
-    if (discoveryInFlight) return;
-    discoveryInFlight = true;
-    try {
-      // TS3 allocates cids increasingly, so max+margin catches new channels.
-      const ceiling = Math.min(
-        1024,
-        Math.max(192, channelDirectory.maxCid() + 32),
-      );
-      const result = await channelDirectory.discover({
-        ceiling,
-        concurrency: 4,
-      });
-      logger.debug(
-        { ceiling: result.ceiling, found: result.found },
-        "TeamSpeak channel discovery finished",
-      );
-    } catch (error) {
-      logger.debug({ err: error }, "TeamSpeak channel discovery failed");
-    } finally {
-      discoveryInFlight = false;
-    }
-  };
-  const resyncServerView = async (
-    options: { full?: boolean } = {},
-  ): Promise<void> => {
-    try {
-      if (options.full) await runChannelDiscovery();
-      const clients = await connection.listClients();
-      // Map explicitly: uids and groups must never reach the panel payload.
-      const mapped = clients.map((client) => ({
-        clid: client.clid,
-        name: client.name,
-        cid: client.cid,
-      }));
-      const cids = [...new Set(mapped.map((client) => client.cid))];
-      const visible = await Promise.all(
-        cids.map((cid) => channelDirectory.resolve(cid)),
-      );
-      const picked = pickChannels(channelDirectory.snapshot(), visible);
-      serverViewMode = picked.mode;
-      serverSnapshot.fullResync(picked.channels, mapped);
-    } catch (error) {
-      logger.debug({ err: error }, "Server view resync failed");
-    }
-  };
+  const serverView = new ServerViewSync(connection, logger);
   setInterval(() => {
     telemetry.logSummary("periodic");
     void telemetry.save();
@@ -660,13 +577,10 @@ async function main(): Promise<void> {
     }
   };
   await seedTelemetry();
-  await resyncServerView();
+  await serverView.resync();
   // The minute view stays cheap; the full scan refreshes in the background.
-  void resyncServerView({ full: true });
-  setInterval(() => {
-    resyncCount++;
-    void resyncServerView({ full: resyncCount % 10 === 0 });
-  }, 60_000).unref();
+  void serverView.resync({ full: true });
+  setInterval(() => void serverView.tick(), 60_000).unref();
   const logCurrentChannel = async (reason: string): Promise<void> => {
     const currentChannel = await connection.getCurrentChannel();
     logger.info(
@@ -702,16 +616,16 @@ async function main(): Promise<void> {
       groupIds: event.groups,
       channelId: event.cid,
     });
-    serverSnapshot.applyEnter({
+    serverView.snapshot.applyEnter({
       clid: event.clid,
       name: event.name,
       cid: event.cid,
     });
-    void ensureChannel(event.cid).catch(() => undefined);
+    void serverView.ensureChannel(event.cid).catch(() => undefined);
   });
   connection.onClientLeave((clid) => {
     telemetry.clientLeft(clid);
-    serverSnapshot.applyLeave(clid);
+    serverView.snapshot.applyLeave(clid);
   });
   connection.onClientMoved((event) => {
     if (event.self) {
@@ -741,8 +655,8 @@ async function main(): Promise<void> {
         "User joined the bot's channel",
       );
     }
-    serverSnapshot.applyMove(event.movedClid, event.targetCid);
-    void ensureChannel(event.targetCid).catch(() => undefined);
+    serverView.snapshot.applyMove(event.movedClid, event.targetCid);
+    void serverView.ensureChannel(event.targetCid).catch(() => undefined);
   });
 
   const listConnectedClientUids = async (): Promise<readonly string[]> => {
@@ -793,8 +707,8 @@ async function main(): Promise<void> {
             "Reconnect attempt timed out",
           );
           logger.info({ attempt }, "Reconnected to TeamSpeak 3");
-          await resyncServerView();
-          void resyncServerView({ full: true });
+          await serverView.resync();
+          void serverView.resync({ full: true });
           await logCurrentChannel("reconnect");
           reconnecting = false;
           await checkTalkPower("reconnect");
@@ -908,9 +822,9 @@ async function main(): Promise<void> {
         chat: () => chatLog.snapshot(),
         sendChat: (text: string) => connection.sendChannelMessage(text),
         serverView: () => ({
-          ...serverSnapshot.toJSON(),
+          ...serverView.toJSON(),
           botChannelId: connection.getCurrentChannelId(),
-          mode: serverViewMode,
+          mode: serverView.mode,
         }),
         moveBot: (cid: number) => connection.moveToChannel(cid),
         youtubeHealth: createYoutubeHealthCheck((url, signal) =>
