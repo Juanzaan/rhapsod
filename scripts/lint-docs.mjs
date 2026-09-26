@@ -17,6 +17,8 @@ const files = [
   join(root, "README.es.md"),
   join(root, "CONTRIBUTING.md"),
   join(root, "CONTRIBUTING.es.md"),
+  join(root, "SECURITY.md"),
+  join(root, "SECURITY.es.md"),
   ...markdownFiles(join(root, "docs")),
 ];
 const errors = [];
