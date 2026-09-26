@@ -3,14 +3,19 @@ import { Hono } from "hono";
 import { serve } from "@hono/node-server";
 import type { Logger } from "pino";
 
-import type { AppConfig } from "../config.js";
+import { validateConfig, type AppConfig } from "../config.js";
 import type { ChatEntry } from "../application/chat-log.js";
 import type {
   DisconnectSummary,
   ErrorSummary,
 } from "../observability/metrics.js";
 import { COMMAND_SPECS } from "../commands/command-registry.js";
-import { loadEnvFile, maskSecret, saveEnvFile } from "./env-file.js";
+import {
+  isSafeEnvValue,
+  loadEnvFile,
+  maskSecret,
+  saveEnvFile,
+} from "./env-file.js";
 import {
   renderDashboard,
   renderSetupWizard,
@@ -126,14 +131,14 @@ const ENV_DESCRIPTIONS: Record<string, string> = {
     "ID de instancia (vacio = unica; datos en instances/<id>)",
   RHAPSOD_ENV_FILE: "Ruta del archivo .env (solo desde el entorno real)",
   RHAPSOD_PRIVATE_COMMAND_UIDS: "UIDs con acceso a comandos privados",
-  RHAPSOD_YTDLP_PATH: "Ruta del binario yt-dlp",
+  RHAPSOD_YTDLP_PATH: "Ruta del binario yt-dlp (solo lectura)",
   RHAPSOD_YTDLP_COOKIES_PATH: "Ruta a cookies.txt de YouTube",
   RHAPSOD_YTDLP_DAEMON_URL: "URL del daemon yt-dlp (http://127.0.0.1:8765)",
   RHAPSOD_YTDLP_EXTRACTOR_ARGS: "Args extra para yt-dlp",
   RHAPSOD_WARP_PROXY: "Egress fallback para 403 (vacio = solo directo)",
-  RHAPSOD_FFMPEG_PATH: "Ruta del binario ffmpeg",
+  RHAPSOD_FFMPEG_PATH: "Ruta del binario ffmpeg (solo lectura)",
   RHAPSOD_FFMPEG_USER_AGENT: "User-Agent para ffmpeg",
-  RHAPSOD_FFPROBE_PATH: "Ruta del binario ffprobe",
+  RHAPSOD_FFPROBE_PATH: "Ruta del binario ffprobe (solo lectura)",
   RHAPSOD_LOUDNESS_TARGET_LUFS:
     "Normalizacion de volumen (-30 a 0, default -14)",
   RHAPSOD_OPUS_BITRATE: "Bitrate de Opus (64000-160000)",
@@ -172,9 +177,60 @@ function isKnownEnvKey(key: string): boolean {
   return Object.hasOwn(ENV_DESCRIPTIONS, key);
 }
 
-// The panel bind address is shown but never written from the web: flipping
-// it to 0.0.0.0 by accident would expose a localhost-only surface.
-const READONLY_ENV_KEYS = new Set(["RHAPSOD_PANEL_HOST"]);
+// Shown but never written from the web. The bind address: flipping it to
+// 0.0.0.0 by accident would expose a localhost-only surface. The binary
+// paths: pointing one at any file turns panel credentials into code
+// execution on the next track. The env file path: it is only honored from
+// the real environment.
+const READONLY_ENV_KEYS = new Set([
+  "RHAPSOD_PANEL_HOST",
+  "RHAPSOD_YTDLP_PATH",
+  "RHAPSOD_FFMPEG_PATH",
+  "RHAPSOD_FFPROBE_PATH",
+  "RHAPSOD_ENV_FILE",
+]);
+
+// Defaults shipped in config.ts and .env.example. A panel that edits the env
+// file and restarts the bot must not open with a password anyone can read.
+const WEAK_PANEL_PASSWORDS = new Set([
+  "rhapsod",
+  "change-me",
+  "admin",
+  "password",
+]);
+
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost"]);
+
+/**
+ * Browsers resend cached basic-auth credentials on cross-site requests, and
+ * a form posted with enctype=text/plain reaches a JSON handler without a
+ * CORS preflight. Writes therefore need a JSON content type (a cross-site
+ * page cannot send one without a preflight this server never answers) and,
+ * when the browser reports it, a same-origin source.
+ */
+export function isAllowedPanelWrite(headers: {
+  readonly contentType: string | undefined;
+  readonly fetchSite: string | undefined;
+  readonly origin: string | undefined;
+  readonly host: string | undefined;
+}): boolean {
+  if (!/^application\/json\s*(;|$)/i.test(headers.contentType ?? "")) {
+    return false;
+  }
+  if (
+    headers.fetchSite !== undefined &&
+    headers.fetchSite !== "same-origin" &&
+    headers.fetchSite !== "none"
+  ) {
+    return false;
+  }
+  if (headers.origin === undefined) return true;
+  try {
+    return new URL(headers.origin).host === headers.host;
+  } catch {
+    return false;
+  }
+}
 
 function isEditableEnvKey(key: string): boolean {
   return isKnownEnvKey(key) && !READONLY_ENV_KEYS.has(key);
@@ -194,6 +250,20 @@ export function createPanelServer(options: PanelOptions): {
   const app = new Hono();
   const panelUser = options.config.RHAPSOD_PANEL_USER;
   const panelPassword = options.config.RHAPSOD_PANEL_PASSWORD;
+  const panelHost = options.config.RHAPSOD_PANEL_HOST;
+
+  if (WEAK_PANEL_PASSWORDS.has(panelPassword)) {
+    options.logger.error(
+      "Panel disabled: RHAPSOD_PANEL_PASSWORD is a published default; set a unique password and restart",
+    );
+    return { close: () => Promise.resolve() };
+  }
+  if (!LOOPBACK_HOSTS.has(panelHost)) {
+    options.logger.warn(
+      { host: panelHost },
+      "Panel is bound to a non-loopback address; it is meant to be reached through an SSH tunnel",
+    );
+  }
 
   app.use(
     "*",
@@ -227,6 +297,20 @@ export function createPanelServer(options: PanelOptions): {
     );
   });
 
+  app.use("*", async (c, next) => {
+    if (c.req.method === "GET" || c.req.method === "HEAD") return next();
+    const allowed = isAllowedPanelWrite({
+      contentType: c.req.header("content-type"),
+      fetchSite: c.req.header("sec-fetch-site"),
+      origin: c.req.header("origin"),
+      host: c.req.header("host"),
+    });
+    if (!allowed) {
+      return c.json({ ok: false, error: "Solicitud rechazada" }, 403);
+    }
+    return next();
+  });
+
   app.get("/", (c) => {
     const status = options.status();
     // Served uncompressed on purpose. Compressing here used to set
@@ -236,23 +320,23 @@ export function createPanelServer(options: PanelOptions): {
     // an endless spinner, and a re-prompt for basic auth on every retry.
     // The dashboard is ~31KB of localhost traffic behind an SSH tunnel, so
     // compression buys little and cost a hang.
-    return c.html(renderDashboard(status, panelUser, panelPassword));
+    return c.html(renderDashboard(status));
   });
 
   app.get("/setup", (c) => {
-    return c.html(renderSetupWizard(panelUser, panelPassword));
+    return c.html(renderSetupWizard());
   });
 
   app.get("/settings", (c) => {
-    return c.html(renderSettingsPage(panelUser, panelPassword));
+    return c.html(renderSettingsPage());
   });
 
   app.get("/commands", (c) => {
-    return c.html(renderCommandsPage(panelUser, panelPassword));
+    return c.html(renderCommandsPage());
   });
 
   app.get("/server", (c) => {
-    return c.html(renderServerPage(panelUser, panelPassword));
+    return c.html(renderServerPage());
   });
 
   app.get("/api/health", (c) => c.json(options.status()));
@@ -445,6 +529,18 @@ export function createPanelServer(options: PanelOptions): {
         400,
       );
     }
+    const unsafeKeys = Object.entries(incoming)
+      .filter(([, raw]) => typeof raw === "string" && !isSafeEnvValue(raw))
+      .map(([key]) => key);
+    if (unsafeKeys.length > 0) {
+      return c.json(
+        {
+          ok: false,
+          error: "Valor con saltos de linea: " + unsafeKeys.join(", "),
+        },
+        400,
+      );
+    }
     for (const [key, raw] of Object.entries(incoming)) {
       const value = typeof raw === "string" ? raw : "";
       if (value === "") {
@@ -452,6 +548,25 @@ export function createPanelServer(options: PanelOptions): {
       } else {
         env.values[key] = value;
       }
+    }
+    // Only the keys this request touches can block the save: dotenv strips
+    // quotes the raw parser keeps, so an untouched quoted value elsewhere
+    // must not make every save fail.
+    const invalid = validateConfig(env.values).filter((issue) =>
+      Object.hasOwn(incoming, issue.key),
+    );
+    if (invalid.length > 0) {
+      return c.json(
+        {
+          ok: false,
+          error:
+            "Valor invalido: " +
+            invalid
+              .map((issue) => `${issue.key} (${issue.message})`)
+              .join(", "),
+        },
+        400,
+      );
     }
     try {
       await saveEnvFile(options.envFilePath, env.values);
@@ -492,11 +607,11 @@ export function createPanelServer(options: PanelOptions): {
   });
 
   app.post("/api/restart", (c) => {
-    options.restart();
+    // Let the response reach the browser before the process goes away.
+    setTimeout(() => options.restart(), 250);
     return c.json({ ok: true, message: "Reiniciando..." });
   });
 
-  const panelHost = options.config.RHAPSOD_PANEL_HOST;
   const server = serve({
     fetch: app.fetch,
     hostname: panelHost,

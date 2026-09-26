@@ -22,10 +22,19 @@ Correcciones de persistencia, actualización de dependencias, reparación del de
 - Resolver enlaces de canciones, álbumes y listas de Apple Music con iTunes sin clave tras el retiro del acceso anónimo de SongLink; las listas se expanden como las colecciones de Spotify. Amazon Music sigue en SongLink.
 - Utilizar el mismo fondo animado, selector de ambiente y control de movimiento en todas las páginas del panel, no solo en la consola.
 - Mostrar las etiquetas de los separadores como encabezados simples que no se pueden unir ni mover, y ordenar los hermanos por cadenas de channel_order como el cliente TeamSpeak.
+- Rechazar escrituras al panel que no sean JSON del mismo origen, para que una página abierta con el túnel SSH activo ya no pueda ejecutar comandos ni reiniciar el bot con las credenciales guardadas del navegador. Las páginas del panel ya no incluyen la contraseña.
+- Validar la configuración del panel con las reglas de arranque antes de guardar, rechazar valores con saltos de línea, conservar comentarios y permisos del archivo de entorno, y dejar de solo lectura las rutas de yt-dlp, FFmpeg y ffprobe desde la web.
+- No iniciar el panel con una contraseña por defecto publicada (`rhapsod`, `change-me`, `admin`, `password`).
+- Guardar favoritos, historial, telemetría y cola antes de cada salida: reinicio desde el panel, watchdog, errores no controlados y reconexión fallida. El apagado espera como máximo 5 segundos en lugar de como mínimo 5. Los registros de errores conservan el mensaje.
+- Tratar el panel como administrador, para que saltar o quitar pistas de otros usuarios funcione desde la web.
+- La actualización semanal de yt-dlp ya no reinicia el bot: el servicio usa `Wants=` sobre el servicio auxiliar en lugar de `Requires=`, y la actualización reintenta pip con `--break-system-packages` en Debian 12 y Ubuntu 24.04.
+- Ocultar tokens bearer y cabeceras de cookies completas en registros y diagnósticos.
 
 ## Actualización
 
 Se requiere Node.js >=22.19.0. Respaldar configuración y datos, ejecutar `npm ci` y `npm run build`, y reiniciar cuando `/api/state` indique `playerState: "idle"`.
+
+Si el panel usa una contraseña por defecto no se iniciará; definir antes una `RHAPSOD_PANEL_PASSWORD` única. Las instalaciones existentes conservan la línea `Requires=` en `/etc/systemd/system/rhapsod.service` hasta volver a ejecutar el instalador: cambiarla por `Wants=` y ejecutar `systemctl daemon-reload`.
 
 Docker Compose utiliza la red del host Linux para mantener panel y servicio en localhost. Revisar la guía de despliegue antes de recrear contenedores. Los formatos de datos existentes siguen siendo compatibles.
 

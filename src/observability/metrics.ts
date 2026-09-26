@@ -68,8 +68,10 @@ export function sanitizeUrl(input: string): string {
 
 export function sanitizeSensitive(input: string): string {
   let result = input;
+  // A cookie header carries several `name=value;` pairs, so everything up to
+  // the end of the line is secret, not just the first pair.
   result = result.replace(
-    /cookie[s]?[:=]\s*"[^"]*"|cookie[s]?[:=]\s*[^\s;,"']+/gi,
+    /cookie[s]?[:=]\s*"[^"]*"|cookie[s]?[:=]\s*[^\n"']+/gi,
     "cookie=[redacted]",
   );
   result = result.replace(
@@ -80,8 +82,10 @@ export function sanitizeSensitive(input: string): string {
     /token[s]?[:=]\s*"[^"]*"|token[s]?[:=]\s*[^\s;,"']+/gi,
     "token=[redacted]",
   );
+  // The scheme word ("Bearer", "Basic") precedes the credential: redacting
+  // only the first word used to leave the token itself in the output.
   result = result.replace(
-    /authorization[s]?[:=]\s*"[^"]*"|authorization[s]?[:=]\s*[^\s;,"']+/gi,
+    /authorization[s]?[:=]\s*"[^"]*"|authorization[s]?[:=]\s*(?:(?:bearer|basic|token)\s+)?[^\s;,"']+/gi,
     "authorization=[redacted]",
   );
   result = result.replace(/header[s]?[:=]\s*\{[^}]+\}/gi, "headers=[redacted]");
@@ -97,9 +101,11 @@ export function normalizeError(error: unknown): NormalizedError {
         : "unknown error";
   const sanitized = sanitizeUrl(sanitizeSensitive(raw));
 
+  // Categorize the sanitized text: URLs are full of words like
+  // "videoplayback" that would otherwise pick a category on their own.
   let category: ErrorCategory = "unknown";
   for (const { category: cat, pattern } of ERROR_PATTERNS) {
-    if (pattern.test(raw)) {
+    if (pattern.test(sanitized)) {
       category = cat;
       break;
     }
@@ -327,9 +333,10 @@ export class MetricsCollector {
     const hitRate =
       cacheTotal > 0 ? ((c.cacheHits / cacheTotal) * 100).toFixed(1) : "0.0";
 
-    const currentTitle = args.current
-      ? truncateTitle(args.current.title, 40)
-      : undefined;
+    const currentTitle =
+      args.current === undefined
+        ? undefined
+        : truncateTitle(args.current.title, 40);
     const durationStr =
       args.current?.durationSeconds !== undefined
         ? ` (${formatDuration(args.current.durationSeconds)})`
@@ -355,7 +362,7 @@ export class MetricsCollector {
     const lines = [
       `=== Rhapsod Stats ===`,
       `Uptime: ${hours}h ${minutes}m | RSS: ${Math.round(rss / 1_048_576)} MB`,
-      currentTitle
+      currentTitle !== undefined
         ? `Actual: ${currentTitle}${durationStr} | Cola: ${args.queueLen} | Vol: ${args.volume}% | Loop: ${args.loopMode}`
         : `Nada reproduciéndose | Cola: ${args.queueLen} | Vol: ${args.volume}% | Loop: ${args.loopMode}`,
       `Reproducidas: ${args.tracksPlayed}`,

@@ -2,7 +2,10 @@
 Description=Rhapsod TeamSpeak music bot (instance %i)
 After=network-online.target rhapsod-ytdlp-daemon.service
 Wants=network-online.target
-Requires=rhapsod-ytdlp-daemon.service
+# Wants, not Requires: with Requires, the weekly yt-dlp update restarting
+# the daemon also restarted the bot mid-song. The bot falls back to spawning
+# yt-dlp while the daemon is down.
+Wants=rhapsod-ytdlp-daemon.service
 
 [Service]
 Type=simple
