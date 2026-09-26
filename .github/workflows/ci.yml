@@ -79,3 +79,27 @@ jobs:
           docker run --rm rhapsod:ci yt-dlp --version
           docker run --rm rhapsod:ci python3 -c 'import yt_dlp'
           docker run --rm rhapsod:ci ffmpeg -version
+
+  desktop:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build the Windows launcher
+        shell: pwsh
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File tools\desktop\build.ps1
+      # Non-interactive smoke run: settings from stdin, no password, a key
+      # that does not exist. The launcher must save the settings and stop
+      # with "SSH key not found" instead of hanging on a prompt.
+      - name: Smoke-test first-run setup
+        shell: pwsh
+        run: |
+          $output = "ci@127.0.0.1`nC:\missing-key`nadmin`n18080`n8080`n`n" | & tools\desktop\bin\RhapsodDashboard.exe
+          $output
+          if ($LASTEXITCODE -ne 1) { throw "expected exit code 1, got $LASTEXITCODE" }
+          if (-not ($output -match 'SSH key not found')) { throw 'missing key was not reported' }
+      - uses: actions/upload-artifact@v7
+        with:
+          name: rhapsod-dashboard
+          path: tools/desktop/bin/RhapsodDashboard.exe
+          retention-days: 14

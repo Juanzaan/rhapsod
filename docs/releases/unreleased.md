@@ -57,6 +57,7 @@ Persistence fixes, dependency updates, deployment repairs and consistent bilingu
 - Harden every systemd unit: private devices, protected kernel tunables, modules, logs, control groups and clock, restricted namespaces and address families, no capabilities, `@system-service` syscall filter and a private umask. File access is unchanged.
 - Update dependencies: dotenv 18 and libopus-wasm 0.4 (Opus output verified byte-identical), plus compatible Hono, Zod, undici, Vitest, ESLint and Prettier releases. Dependabot no longer proposes `@types/node` majors beyond the supported Node 22 runtime.
 - Stop notifying a connection-lost handler after it unsubscribes: kicked and disconnected events are bound once instead of once per subscription.
+- Add a Windows launcher for the panel (`tools/desktop`): it opens the SSH tunnel and the browser, keeps the connection settings in `%APPDATA%` and the panel password in the Windows Credential Manager, and embeds no host or password. CI builds it on Windows.
 
 ## Upgrade
 

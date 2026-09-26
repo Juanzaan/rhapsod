@@ -57,6 +57,7 @@ Correcciones de persistencia, actualización de dependencias, reparación del de
 - Endurecer todas las unidades systemd: dispositivos privados, parámetros, módulos, registros, grupos de control y reloj del kernel protegidos, espacios de nombres y familias de direcciones restringidos, sin capacidades, filtro de llamadas `@system-service` y umask privada. El acceso a archivos no cambia.
 - Actualizar dependencias: dotenv 18 y libopus-wasm 0.4 (salida Opus verificada idéntica byte a byte), además de versiones compatibles de Hono, Zod, undici, Vitest, ESLint y Prettier. Dependabot ya no propone versiones mayores de `@types/node` por encima del entorno Node 22 admitido.
 - Dejar de notificar a un manejador de conexión perdida después de cancelar su suscripción: los eventos de expulsión y desconexión se registran una sola vez en lugar de una por suscripción.
+- Agregar un lanzador del panel para Windows (`tools/desktop`): abre el túnel SSH y el navegador, guarda la conexión en `%APPDATA%` y la contraseña del panel en el Administrador de credenciales de Windows, y no incluye servidor ni contraseña en el ejecutable. La integración continua lo compila en Windows.
 
 ## Actualización
 
