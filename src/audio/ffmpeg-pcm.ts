@@ -29,6 +29,13 @@ export interface FfmpegPcmOptions {
    * is always direct; the proxy is never used unless a retry needs it.
    */
   readonly proxyUrl?: string;
+  /**
+   * Local egress guard (lib/egress-guard.ts) that every connection goes
+   * through, including redirects and HLS segments. The WARP fallback
+   * attempt replaces it: that egress leaves through Cloudflare, not this
+   * host's network.
+   */
+  readonly egressProxyUrl?: string;
 }
 
 export interface FfmpegPcmStream {
@@ -42,11 +49,45 @@ const STOP_GRACE_MS = 3_000;
 // The input URL is checked to be public HTTPS before ffmpeg runs, but ffmpeg
 // then opens HLS segment and key URLs on its own; a public playlist listing
 // http://169.254.169.254/ or http://127.0.0.1:8765/ made it fetch those.
-// The whitelist keeps every nested open on TLS. It does not stop a 302 to a
-// plain-HTTP host: ffmpeg follows redirects inside its http protocol over
-// tcp, and builds before 7.1 have no option to turn that off.
-// httpproxy is only needed for the 403 fallback egress.
+// The whitelist keeps nested opens on TLS, but ffmpeg follows a 302 to a
+// plain-HTTP host inside its http protocol, and reuses a keep-alive
+// connection for the next HLS segment, both past the whitelist. The egress
+// guard closes those: see ffmpegEgressArguments.
 export const FFMPEG_PROTOCOL_WHITELIST = "https,tls,tcp,crypto";
+
+/**
+ * Input options that pin ffmpeg's connections: the protocol whitelist, and
+ * the proxy every hop goes through when one is set. They must come before
+ * the input.
+ */
+export function ffmpegEgressArguments(proxyUrl: string | undefined): string[] {
+  if (proxyUrl === undefined || proxyUrl.length === 0) {
+    return ["-protocol_whitelist", FFMPEG_PROTOCOL_WHITELIST];
+  }
+  return [
+    "-protocol_whitelist",
+    `${FFMPEG_PROTOCOL_WHITELIST},httpproxy`,
+    "-http_proxy",
+    proxyUrl,
+  ];
+}
+
+/**
+ * ffmpeg skips its proxy for hosts listed in `no_proxy`, which would let a
+ * matching host bypass the egress guard, so the variable is dropped for
+ * processes that use it.
+ */
+export function ffmpegEnvironment(
+  egressProxyUrl: string | undefined,
+): NodeJS.ProcessEnv | undefined {
+  if (egressProxyUrl === undefined || egressProxyUrl.length === 0) {
+    return undefined;
+  }
+  const env = { ...process.env };
+  delete env.no_proxy;
+  delete env.NO_PROXY;
+  return env;
+}
 
 export function buildFfmpegPcmArguments(
   url: string,
@@ -57,6 +98,11 @@ export function buildFfmpegPcmArguments(
     throw new Error("FFmpeg audio input must use HTTPS");
   }
 
+  const proxy =
+    useProxy && options.proxyUrl !== undefined && options.proxyUrl.length > 0
+      ? options.proxyUrl
+      : options.egressProxyUrl;
+  const viaProxy = proxy !== undefined && proxy.length > 0;
   const args = [
     "-hide_banner",
     "-loglevel",
@@ -68,14 +114,13 @@ export function buildFfmpegPcmArguments(
     "1",
     "-reconnect_delay_max",
     "5",
-    "-protocol_whitelist",
-    useProxy && options.proxyUrl !== undefined && options.proxyUrl.length > 0
-      ? `${FFMPEG_PROTOCOL_WHITELIST},httpproxy`
-      : FFMPEG_PROTOCOL_WHITELIST,
     "-rw_timeout",
     "8000000",
-    "-timeout",
-    "5000000",
+    // With -http_proxy, ffmpeg rejects -timeout ("Option timeout not
+    // found") and exits before connecting: every WARP fallback attempt used
+    // to fail that way. -rw_timeout still bounds stalls, and the egress
+    // guard bounds its own upstream connect.
+    ...(viaProxy ? [] : ["-timeout", "5000000"]),
   ];
   if (options.userAgent !== undefined && options.userAgent.length > 0) {
     args.push("-user_agent", options.userAgent);
@@ -89,13 +134,7 @@ export function buildFfmpegPcmArguments(
   // most YouTube stream formats (WebM/Opus, MP4/AAC).
   args.push("-fflags", "+nobuffer", "-flags", "+low_delay");
   args.push("-analyzeduration", "0", "-probesize", "327680");
-  if (
-    useProxy &&
-    options.proxyUrl !== undefined &&
-    options.proxyUrl.length > 0
-  ) {
-    args.push("-http_proxy", options.proxyUrl);
-  }
+  args.push(...ffmpegEgressArguments(proxy));
   args.push(
     "-i",
     url,
@@ -175,9 +214,13 @@ export function createFfmpegPcmStream(
       useProxy,
     );
     stderr = "";
+    const env = useProxy
+      ? undefined
+      : ffmpegEnvironment(options.egressProxyUrl);
     child = spawnProcess(binary, args, {
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
+      ...(env === undefined ? {} : { env }),
     });
     child.stdout.on("data", (chunk: Buffer) => {
       emittedBytes += chunk.length;

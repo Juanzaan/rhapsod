@@ -43,6 +43,9 @@ and disclosure once a patch is released.
   keys, validated with the startup rules.
 - **Outbound fetches**: user-supplied URLs go through an SSRF guard that
   rejects private, loopback and link-local addresses at every redirect hop.
+  `ffmpeg` and `ffprobe` connect through a local egress proxy with the same
+  rule, which covers the redirects, HLS segments and keys they open on their
+  own. Plain-HTTP requests from them are refused.
 - **Content rights**: DRM-protected or blocked tracks are reported with a
   clear message, never bypassed.
 - **Spotify**: metadata only, never a playback source. The client

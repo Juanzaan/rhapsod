@@ -62,4 +62,25 @@ describe("LoudnessProfiler", () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(profiler.cached("https://youtu.be/abc")).toBeUndefined();
   });
+
+  it("measures through the egress guard when one is set", async () => {
+    const execFile = vi.fn(() => Promise.resolve({ stdout: MEASURED_JSON }));
+    const profiler = new LoudnessProfiler({
+      execFile,
+      egressProxyUrl: "http://127.0.0.1:45000",
+    });
+    profiler.measure("https://youtu.be/abc", "https://media.example/abc");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(execFile).toHaveBeenCalledWith(
+      "ffmpeg",
+      expect.arrayContaining([
+        "-protocol_whitelist",
+        "https,tls,tcp,crypto,httpproxy",
+        "-http_proxy",
+        "http://127.0.0.1:45000",
+      ]),
+      expect.objectContaining({ env: expect.any(Object) as unknown }),
+    );
+  });
 });
