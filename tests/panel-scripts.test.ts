@@ -67,9 +67,7 @@ describe("panel browser scripts", () => {
       }
       handlers.delete("if");
       for (const handler of handlers) {
-        expect(code, `${name}: ${handler}`).toMatch(
-          new RegExp(`function ${handler.replace("$", "\\$")}\\(`),
-        );
+        expect(code, `${name}: ${handler}`).toContain(`function ${handler}(`);
       }
     },
   );
