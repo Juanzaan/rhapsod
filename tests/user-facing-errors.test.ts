@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { userFacingError } from "../src/main.js";
+import { userFacingError } from "../src/lib/user-facing-error.js";
 import { parseChatCommand } from "../src/commands/chat-command.js";
 import { PlaybackQueue } from "../src/domain/playback-queue.js";
 import { UserError } from "../src/lib/user-error.js";

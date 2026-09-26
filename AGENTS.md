@@ -19,8 +19,9 @@ npm run check
 Runs, in order: `format:check` (prettier) → `lint` (eslint, zero warnings
 allowed) → `lint:scripts` (scripts/systemd validation) →
 `lint:docs` (language pairs, links, release notes) →
-`typecheck` (tsc --noEmit) → `test` (vitest) → `build`
-(tsc -p tsconfig.build.json).
+`typecheck` (tsc --noEmit, plus tsconfig.panel.json for the panel's browser
+scripts) → `test` (vitest) → `build` (tsc -p tsconfig.build.json, then copy
+`src/panel/scripts` to `dist`).
 
 **Never report work done without this passing.** CI runs the same gates plus
 coverage; a red CI means the claim of "done" was wrong.

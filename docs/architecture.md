@@ -28,6 +28,7 @@ Media providers -> PreparedAudioStore -> FFmpeg PCM
 - `src/panel/`: authenticated localhost HTTP endpoints, templates and environment-file editing.
 - `src/observability/`: structured logs, playback metrics and sanitized errors.
 - `src/config.ts`: runtime schema and default settings.
+- `src/bootstrap/`: startup pieces that `src/main.ts` wires in order: exit and crash handling (`exit.ts`), setup mode (`setup-mode.ts`), the JSON stores and their flush (`stores.ts`), the panel's server view sync (`server-view.ts`), chat command admission (`chat-commands.ts`: concurrency cap, per-user rate limit, talk-power gate), the TeamSpeak reconnect loop (`reconnect.ts`: 5 attempts backing off from 5 to 80 s, then flush and exit 1), the connected panel's wiring (`panel.ts`: status, metrics and commands run as the panel admin), the playback service's callbacks (`playback-events.ts`: logs, listening history, song library, metrics and chat announcements) and shared yt-dlp options.
 
 ## Commands
 
@@ -51,9 +52,13 @@ Listening history supplies per-user and global statistics and autoplay ranking s
 
 The panel remains bound to `127.0.0.1` behind basic authentication and is reached through SSH. It edits only permitted settings and writes cookie files locally when requested. Secrets therefore exist in local runtime files; logs and API summaries must redact them. Panel-only setup mode does not connect the bot to TeamSpeak.
 
+The panel's browser code lives in `src/panel/scripts/*.js`: classic scripts that share one global scope per page, inlined into each page by `panelScript()` because the CSP allows inline scripts only. `npm run typecheck` checks them with `tsc -p tsconfig.panel.json` (DOM types, `checkJs`), `npm run lint` runs ESLint on them, and `npm run build` copies them to `dist/panel/scripts`. `tests/panel-scripts.test.ts` fails when a page's inline handler (`onclick="name(..."`) names a function its scripts do not define. Pages not yet moved still carry their script in `src/panel/panel-templates.ts`.
+
 ## Verification and extension
 
 Run `npm run check` and `npm run test:coverage`. Provider and TeamSpeak tests use controlled substitutes; live audio and deployment checks remain necessary in the target environment. TeamSpeak 6 is planned and must preserve the application-facing connection contract.
+
+`npm run build && npm run smoke` starts `dist/main.js` in setup mode (panel on, TeamSpeak auto-connect off) with a temporary data directory, a random panel password and a free port. It checks that the panel answers, rejects requests without credentials, serves `/api/state` and the dashboard, and that the process exits with code 0 on SIGTERM. `npm run smoke -- --source` runs `src/main.ts` instead; the test suite runs that variant. A failure prints the bot's last output.
 
 Search ranking changes are measured with `npm run eval:search`, which scores `src/media/youtube/search-ranking.ts` against `tests/fixtures/search-eval.json`: each case holds a query, the candidate list the ranker saw and the acceptable picks. The test suite fails when accuracy drops below the fixture's `minAccuracy`; a ranking improvement raises that number in the same PR. To add real cases, run `npm run eval:search -- --record "<query>"` on a host that reaches YouTube, fill in `expected` by hand and append the output to the fixture with `"source": "recorded"`.
 
