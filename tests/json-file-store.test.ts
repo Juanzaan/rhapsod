@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  DebouncedWriter,
   quarantineUnreadableFile,
   readJsonFile,
   writeFileAtomic,
@@ -126,5 +127,55 @@ describe("writeFileAtomic", () => {
     const file = join(dir, "pretty.json");
     await writeJsonFile(file, { a: 1 });
     expect(readFileSync(file, "utf8")).toBe('{\n  "a": 1\n}');
+  });
+});
+
+describe("DebouncedWriter", () => {
+  it("coalesces a burst of changes into one write of the latest state", async () => {
+    vi.useFakeTimers();
+    try {
+      let state = 0;
+      const written: number[] = [];
+      const writer = new DebouncedWriter(() => {
+        written.push(state);
+        return Promise.resolve();
+      }, 1_000);
+      for (let index = 1; index <= 5; index++) {
+        state = index;
+        writer.schedule();
+      }
+      expect(written).toEqual([]);
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(written).toEqual([5]);
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(written).toEqual([5]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("flush writes pending changes at once and nothing when clean", async () => {
+    const write = vi.fn(() => Promise.resolve());
+    const writer = new DebouncedWriter(write, 60_000);
+    await writer.flush();
+    expect(write).not.toHaveBeenCalled();
+    writer.schedule();
+    await writer.flush();
+    expect(write).toHaveBeenCalledOnce();
+    await writer.flush();
+    expect(write).toHaveBeenCalledOnce();
+  });
+
+  it("keeps writing after a failed write", async () => {
+    const write = vi
+      .fn<() => Promise<void>>()
+      .mockRejectedValueOnce(new Error("disk full"))
+      .mockResolvedValue(undefined);
+    const writer = new DebouncedWriter(write, 60_000);
+    writer.schedule();
+    await writer.flush();
+    writer.schedule();
+    await writer.flush();
+    expect(write).toHaveBeenCalledTimes(2);
   });
 });

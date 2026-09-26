@@ -60,8 +60,6 @@ export interface PanelStatus {
   readonly queueLength: number;
   readonly currentTitle?: string;
   readonly currentArtist?: string;
-  readonly currentDuration?: number;
-  readonly currentPosition?: number;
   readonly durationMs?: number;
   readonly positionMs?: number;
   readonly playerState?: "idle" | "buffering" | "playing" | "paused";
@@ -71,8 +69,6 @@ export interface PanelStatus {
   readonly uptimeMs?: number;
   readonly disconnects?: DisconnectSummary;
   readonly version: string;
-  readonly uptime?: number;
-  readonly hostname?: string;
 }
 
 export interface PanelOptions {
@@ -160,7 +156,10 @@ const ENV_DESCRIPTIONS: Record<string, string> = {
   RHAPSOD_LOG_LEVEL: "Nivel de log (trace/debug/info/warn/error/fatal)",
   RHAPSOD_LOG_RETENTION_DAYS: "Dias de retencion de logs (1-90)",
   RHAPSOD_METRICS_INTERVAL_MINUTES: "Intervalo de metricas (0 = off)",
-  RHAPSOD_WATCHDOG_INTERVAL_MINUTES: "Intervalo de watchdog (0 = off)",
+  RHAPSOD_WATCHDOG_INTERVAL_SECONDS:
+    "Intervalo del watchdog en segundos (0 = off, default 15)",
+  RHAPSOD_WATCHDOG_INTERVAL_MINUTES:
+    "Obsoleto: usar RHAPSOD_WATCHDOG_INTERVAL_SECONDS (solo 0 = off)",
   RHAPSOD_MAX_CONCURRENT_COMMANDS: "Comandos concurrentes max (1-20)",
   RHAPSOD_MAX_CONCURRENT_YTDLP_JOBS: "Jobs yt-dlp concurrentes (1-4)",
   RHAPSOD_MAX_QUEUE_TRACKS: "Tracks max en cola (1-1000)",
@@ -640,7 +639,7 @@ export function createPanelServer(options: PanelOptions): {
       port: options.config.RHAPSOD_PANEL_PORT,
       user: panelUser,
     },
-    "Setup panel listening",
+    "Panel listening",
   );
 
   return {

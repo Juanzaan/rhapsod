@@ -1,20 +1,6 @@
 import "dotenv/config";
 
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { join } from "node:path";
-
-// Read at startup: under systemd Node runs `dist/main.js` directly, so
-// npm_package_version is never set and the panel used to report a stale
-// hardcoded version. package.json sits next to the compiled entrypoint.
-const packageVersion = (
-  JSON.parse(
-    readFileSync(
-      join(fileURLToPath(new URL(".", import.meta.url)), "../package.json"),
-      "utf8",
-    ),
-  ) as { version: string }
-).version;
 
 import { Ts3IdentityStore } from "./adapters/ts3/identity-store.js";
 import {
@@ -80,13 +66,14 @@ import { resolveTuneInUrl } from "./media/tunein.js";
 import { SongLinkClient } from "./media/song-link.js";
 import { AppleMusicClient } from "./media/apple-music.js";
 import { DirectUrlClient } from "./media/direct-url.js";
+import { APP_VERSION as packageVersion } from "./lib/version.js";
 import { startEgressGuard } from "./lib/egress-guard.js";
 import { LyricsClient, parseArtistTitle } from "./media/lyrics.js";
 import { SoundCloudPublicApi } from "./media/soundcloud/public-api.js";
 import { SpotifyApi } from "./media/spotify/api.js";
 import { createRhapsodLogger } from "./observability/logger.js";
 import { MetricsCollector } from "./observability/metrics.js";
-import { startWatchdog } from "./watchdog.js";
+import { startWatchdog, watchdogInterval } from "./watchdog.js";
 
 // Favorites, history, telemetry and the queue are written on a debounce, so
 // a bare process.exit() drops whatever changed since the last write. main()
@@ -261,9 +248,16 @@ async function main(): Promise<void> {
     reportMetrics();
     setInterval(reportMetrics, metricsIntervalMinutes * 60_000).unref();
   }
-  if (config.RHAPSOD_WATCHDOG_INTERVAL_MINUTES > 0) {
+  const watchdog = watchdogInterval(config);
+  if (watchdog.ignoredMinutes) {
+    logger.warn(
+      { intervalSeconds: watchdog.intervalMs / 1_000 },
+      "RHAPSOD_WATCHDOG_INTERVAL_MINUTES is deprecated and ignored except 0 (off); set RHAPSOD_WATCHDOG_INTERVAL_SECONDS instead",
+    );
+  }
+  if (watchdog.intervalMs > 0) {
     startWatchdog({
-      intervalMs: config.RHAPSOD_WATCHDOG_INTERVAL_MINUTES * 60_000,
+      intervalMs: watchdog.intervalMs,
       onTimeout: (driftMs) => {
         logger.error({ driftMs }, "Watchdog: event loop blocked; restarting");
         void exitAfterFlush(1);
@@ -296,6 +290,10 @@ async function main(): Promise<void> {
     join(dataDir, "song-library.json"),
     logger,
   );
+  // At startup, not inside the first onPlaybackStarted: a large history
+  // parsed there delayed the first track's audio.
+  listeningHistory.load();
+  songLibrary.load();
   const serverSnapshot = new ServerSnapshot();
   const channelDirectory = new ChannelDirectory(async (cid) => {
     try {
@@ -574,7 +572,10 @@ async function main(): Promise<void> {
         ? {}
         : { ffprobeBinary: config.RHAPSOD_FFPROBE_PATH }),
     }),
-    soundcloudResolver: new SoundCloudPublicApi({ logger }),
+    soundcloudResolver: new SoundCloudPublicApi({
+      logger,
+      clientIdCachePath: join(dataDir, "soundcloud-client-id.json"),
+    }),
     lyricsResolver: new LyricsClient({ logger }),
     ...(spotifyResolver ? { spotifyResolver } : {}),
   });

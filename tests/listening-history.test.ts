@@ -1,4 +1,10 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -422,5 +428,28 @@ describe("ListeningHistory", () => {
       users: Record<string, { plays: unknown[] }>;
     };
     expect(reloaded.users["uid-1"]?.plays).toHaveLength(50000);
+  });
+
+  it("coalesces the writes of a burst of plays into one", async () => {
+    // Regression: every recordStart and recordFinish serialized and wrote
+    // the whole history file at once.
+    const file = makeTempFile();
+    const history = new ListeningHistory(file);
+    history.load();
+    for (let index = 0; index < 10; index++) {
+      history.recordStart("uid-1", { id: `id-${index}`, title: `T ${index}` });
+      history.recordFinish(
+        "uid-1",
+        { id: `id-${index}`, title: `T ${index}` },
+        true,
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(existsSync(file)).toBe(false);
+    await history.flush();
+    const saved = JSON.parse(readFileSync(file, "utf8")) as {
+      global: Record<string, unknown>;
+    };
+    expect(Object.keys(saved.global)).toHaveLength(10);
   });
 });
