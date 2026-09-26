@@ -70,6 +70,7 @@ Correcciones de persistencia, actualización de dependencias, reparación del de
 - Dejar de notificar a un manejador de conexión perdida después de cancelar su suscripción: los eventos de expulsión y desconexión se registran una sola vez en lugar de una por suscripción.
 - Agregar un lanzador del panel para Windows (`tools/desktop`): abre el túnel SSH y el navegador, guarda la conexión en `%APPDATA%` y la contraseña del panel en el Administrador de credenciales de Windows, y no incluye servidor ni contraseña en el ejecutable. La integración continua lo compila en Windows.
 - Agregar `scripts/deploy.sh`: espera a que no suene nada, detiene el bot, respalda los datos y el archivo de entorno, compila la revisión elegida con el usuario del servicio, la inicia y vuelve sola al commit anterior si la compilación o el inicio fallan.
+- Convertir el lanzador de Windows en una aplicación de bandeja: reconecta sola el túnel SSH, muestra en el icono qué se está reproduciendo, abre el panel en una ventana propia con un perfil separado, ejecuta una sola copia y edita su configuración en una ventana. La integración continua ejecuta su autoprueba.
 
 ## Actualización
 

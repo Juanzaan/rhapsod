@@ -88,19 +88,17 @@ jobs:
       - name: Build the Windows launcher
         shell: pwsh
         run: powershell -NoProfile -ExecutionPolicy Bypass -File tools\desktop\build.ps1
-      # Non-interactive smoke run: settings from stdin, no password, a key
-      # that does not exist. The launcher must save the settings and stop
-      # with "SSH key not found" instead of hanging on a prompt.
-      - name: Smoke-test first-run setup
+      # The app is a tray program with no console; --self-test runs its
+      # non-UI checks (settings round trip, port validation, telling a
+      # foreign HTTP service from the panel) and writes a report.
+      - name: Self-test
         shell: pwsh
         run: |
-          $output = "ci@127.0.0.1`nC:\missing-key`nadmin`n18080`n8080`n`n" | & tools\desktop\bin\RhapsodDashboard.exe
-          $output
-          if ($LASTEXITCODE -ne 1) { throw "expected exit code 1, got $LASTEXITCODE" }
-          if (-not ($output -match 'SSH key not found')) { throw 'missing key was not reported' }
-          # The runner ends pwsh steps with the last native exit code, which is
-          # the expected 1 from the launcher; the checks above passed.
-          exit 0
+          $report = Join-Path $env:RUNNER_TEMP 'dashboard-self-test.txt'
+          $process = Start-Process -FilePath tools/desktop/bin/RhapsodDashboard.exe `
+            -ArgumentList '--self-test', "`"$report`"" -Wait -PassThru
+          Get-Content $report
+          if ($process.ExitCode -ne 0) { throw "self-test failed with exit code $($process.ExitCode)" }
       - uses: actions/upload-artifact@v7
         with:
           name: rhapsod-dashboard

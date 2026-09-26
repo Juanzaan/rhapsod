@@ -70,6 +70,7 @@ Persistence fixes, dependency updates, deployment repairs and consistent bilingu
 - Stop notifying a connection-lost handler after it unsubscribes: kicked and disconnected events are bound once instead of once per subscription.
 - Add a Windows launcher for the panel (`tools/desktop`): it opens the SSH tunnel and the browser, keeps the connection settings in `%APPDATA%` and the panel password in the Windows Credential Manager, and embeds no host or password. CI builds it on Windows.
 - Add `scripts/deploy.sh`: waits until nothing is playing, stops the bot, backs up data and the env file, builds the target as the service user, starts it and rolls back to the previous commit on its own when the build or the start fails.
+- Turn the Windows launcher into a tray app: it reconnects the SSH tunnel on its own, shows what is playing in the icon, opens the panel in its own browser window with a separate profile, runs a single copy and edits its settings in a window. CI runs its self-test.
 
 ## Upgrade
 
