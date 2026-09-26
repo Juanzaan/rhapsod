@@ -110,6 +110,15 @@ export async function runSmoke(options: SmokeOptions): Promise<SmokeResult> {
         page.status === 200 && page.contentType.includes("text/html"),
         `status ${page.status}`,
       );
+
+      // The browser scripts are read from dist/panel/scripts at runtime;
+      // a build that forgot to copy them would fail here, not in a browser.
+      const commands = await fetchPath("/commands");
+      check(
+        "inlines the panel scripts",
+        commands.status === 200 && commands.body.includes("function filter("),
+        `status ${commands.status}`,
+      );
     }
   } finally {
     child.kill("SIGTERM");
