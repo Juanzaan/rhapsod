@@ -22,11 +22,14 @@ Environment:
                                When set, extraction and URL validation retry
                                through the proxy after direct attempts fail.
 
-Endpoint:
-  GET /resolve?url=<encoded youtube watch url>
+Endpoints:
+  GET /resolve?url=<encoded youtube url>
   -> {"url": "...", "id": "...", "format_id": "...", "cached": true?,
       "egress": "warp"?}
   or {"error": "..."}
+  GET /invalidate?url=<encoded youtube url>
+  -> {"invalidated": bool, "id": "..."} or {"error": "..."}
+  Any other path answers 404.
 """
 
 import json
@@ -42,7 +45,8 @@ from urllib.parse import urlparse, parse_qs
 
 import yt_dlp
 
-VIDEO_ID_RE = re.compile(r"[?&]v=([A-Za-z0-9_-]{11})")
+VIDEO_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
+PATH_ID_PREFIXES = ("shorts", "live", "embed", "v")
 COOKIES_PATH = os.environ.get(
     "RHAPSOD_YTDLP_COOKIES_PATH", "/home/rhapsod/youtube-cookies.txt"
 )
@@ -51,6 +55,15 @@ PORT = int(os.environ.get("RHAPSOD_YTDLP_DAEMON_PORT", "8765"))
 # Optional fallback egress (e.g. socks5h://127.0.0.1:40000). Empty = disabled.
 WARP_PROXY = os.environ.get("RHAPSOD_WARP_PROXY", "")
 CURL_BIN = shutil.which("curl")
+# The bot gives up on the daemon after 15 s. Waiting much longer only piles
+# up blocked threads, and an extraction that never returns would otherwise
+# hold every later request for the same video forever.
+WAIT_TIMEOUT_S = 45
+DEFAULT_TTL_S = 6 * 3600
+# googlevideo URLs stop working at `expire`; a track that starts right
+# before that point fails mid-song, so stop handing the URL out early.
+EXPIRY_MARGIN_S = 15 * 60
+MAX_CACHE_ENTRIES = 500
 
 BASE = {
     "quiet": True,
@@ -80,8 +93,9 @@ class _Pending:
         self.event = threading.Event()
         self.result = None
 
-    def wait(self):
-        self.event.wait()
+    def wait(self, timeout):
+        if not self.event.wait(timeout):
+            return None
         return self.result
 
     def set(self, result):
@@ -133,8 +147,20 @@ class Daemon:
 
     @staticmethod
     def _video_id(url):
-        match = VIDEO_ID_RE.search(url)
-        return match.group(1) if match else None
+        try:
+            parsed = urlparse(url)
+        except ValueError:
+            return None
+        candidates = parse_qs(parsed.query).get("v", [])
+        segments = [part for part in parsed.path.split("/") if part]
+        if parsed.hostname == "youtu.be" and segments:
+            candidates.append(segments[0])
+        if len(segments) >= 2 and segments[0] in PATH_ID_PREFIXES:
+            candidates.append(segments[1])
+        for candidate in candidates:
+            if VIDEO_ID_RE.match(candidate):
+                return candidate
+        return None
 
     @staticmethod
     def _allowed(url):
@@ -151,35 +177,54 @@ class Daemon:
         if not self._allowed(url):
             return {"error": "only YouTube URLs are allowed"}
         video_id = self._video_id(url)
+        if not video_id:
+            return self._extract_serialized(url, None)
+        # Cache lookup and in-flight registration share one critical section:
+        # checked separately, two requests could both miss and both extract.
         with self.cache_lock:
-            entry = self.cache.get(video_id)
-            if entry is not None:
-                if entry["expire_ts"] > time.time():
-                    return {
-                        "url": entry["url"],
-                        "id": video_id,
-                        "format_id": entry["format_id"],
-                        "cached": True,
-                    }
-                del self.cache[video_id]
-        if video_id:
-            with self.cache_lock:
-                pending = self.inflight.get(video_id)
-            if pending is not None:
-                return pending.wait()
-            pending = _Pending()
-            with self.cache_lock:
+            cached = self._cached(video_id)
+            if cached is not None:
+                return cached
+            pending = self.inflight.get(video_id)
+            owner = pending is None
+            if owner:
+                pending = _Pending()
                 self.inflight[video_id] = pending
+        if not owner:
+            result = pending.wait(WAIT_TIMEOUT_S)
+            if result is None:
+                return {"error": "timed out waiting for the same video"}
+            return result
+        result = {"error": "resolution failed"}
         try:
-            with self.extract_lock:
-                result = self._extract(url, video_id)
-            if pending is not None:
-                pending.set(result)
+            result = self._extract_serialized(url, video_id)
             return result
         finally:
-            if video_id:
-                with self.cache_lock:
-                    self.inflight.pop(video_id, None)
+            with self.cache_lock:
+                self.inflight.pop(video_id, None)
+            pending.set(result)
+
+    def _extract_serialized(self, url, video_id):
+        if not self.extract_lock.acquire(timeout=WAIT_TIMEOUT_S):
+            return {"error": "timed out waiting for the extractor"}
+        try:
+            return self._extract(url, video_id)
+        finally:
+            self.extract_lock.release()
+
+    def _cached(self, video_id):
+        entry = self.cache.get(video_id)
+        if entry is None:
+            return None
+        if entry["expire_ts"] <= time.time():
+            del self.cache[video_id]
+            return None
+        return {
+            "url": entry["url"],
+            "id": video_id,
+            "format_id": entry["format_id"],
+            "cached": True,
+        }
 
     @staticmethod
     def _head_status(test_url, via_proxy):
@@ -272,39 +317,63 @@ class Daemon:
             removed = self.cache.pop(video_id, None)
         return {"invalidated": removed is not None, "id": video_id}
 
+    @staticmethod
+    def _expire_ts(stream_url, now):
+        """When to stop serving a URL: its signed `expire` minus a margin,
+        capped at the default TTL. yt-dlp does not expose the expiry as an
+        info field; it only lives in the URL."""
+        expire = None
+        try:
+            raw = parse_qs(urlparse(stream_url).query).get("expire", [None])[0]
+            expire = float(raw) if raw is not None else None
+        except ValueError:
+            expire = None
+        ceiling = now + DEFAULT_TTL_S
+        if expire is None:
+            return ceiling
+        return min(expire - EXPIRY_MARGIN_S, ceiling)
+
     def _cache(self, video_id, info):
         if not video_id or not info.get("url"):
             return
-        expire_ts = info.get("expires") or (time.time() + 6 * 3600)
+        now = time.time()
+        expire_ts = self._expire_ts(info["url"], now)
+        if expire_ts <= now:
+            return
         with self.cache_lock:
             self.cache[video_id] = {
                 "expire_ts": expire_ts,
                 "url": info["url"],
                 "format_id": info.get("format_id"),
             }
-            if len(self.cache) > 500:
+            if len(self.cache) > MAX_CACHE_ENTRIES:
                 oldest = min(self.cache, key=lambda k: self.cache[k]["expire_ts"])
                 del self.cache[oldest]
 
 
-daemon = Daemon()
-
-
 class Handler(BaseHTTPRequestHandler):
+    daemon = None
+
     def do_GET(self):
-        qs = parse_qs(urlparse(self.path).query)
-        url = qs.get("url", [""])[0]
+        parsed = urlparse(self.path)
+        if parsed.path not in ("/resolve", "/invalidate"):
+            self._json({"error": "not found"}, status=404)
+            return
+        url = parse_qs(parsed.query).get("url", [""])[0]
         if not url:
             self._json({"error": "missing url"})
             return
-        if self.path.startswith("/invalidate"):
-            self._json(daemon.invalidate(url))
-            return
-        self._json(daemon.resolve(url))
+        try:
+            if parsed.path == "/invalidate":
+                self._json(self.daemon.invalidate(url))
+            else:
+                self._json(self.daemon.resolve(url))
+        except Exception as error:
+            self._json({"error": str(error)}, status=500)
 
-    def _json(self, obj):
+    def _json(self, obj, status=200):
         body = json.dumps(obj).encode()
-        self.send_response(200)
+        self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
@@ -314,4 +383,10 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
 
-ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()
+def main():
+    Handler.daemon = Daemon()
+    ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()
+
+
+if __name__ == "__main__":
+    main()
