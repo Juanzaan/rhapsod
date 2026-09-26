@@ -15,21 +15,12 @@ import { playTestTone } from "./audio/test-tone-player.js";
 import { YoutubePlaybackService } from "./application/youtube-playback-service.js";
 import { PlaylistStore } from "./application/playlist-store.js";
 import { AUTOPLAY_UID } from "./application/autoplay-picker.js";
-import {
-  normalizeCommandInput,
-  parseChatCommand,
-} from "./commands/chat-command.js";
-import { probeTs3Server } from "./adapters/ts3/probe.js";
-import {
-  dispatchCommand,
-  type CommandContext,
-} from "./commands/command-handlers.js";
+import type { CommandContext } from "./commands/command-handlers.js";
 import { formatPlaybackError, formatPlaybackStarted } from "./lib/messages.js";
 import { classifyYoutubeAuthFailure } from "./lib/youtube-auth-health.js";
 import { CommandRateLimiter } from "./commands/command-rate-limiter.js";
 import { SkipVotes } from "./application/skip-votes.js";
 import { loadConfig } from "./config.js";
-import type { Track } from "./domain/track.js";
 import { FilePlaybackStateStore } from "./domain/state-store.js";
 import {
   parseAdminUids,
@@ -40,24 +31,15 @@ import { createYtDlpResolverStack } from "./media/youtube/yt-dlp.js";
 import { resolveInstanceDir } from "./lib/instance-dir.js";
 import { RadioTitleCache } from "./media/radio-icy.js";
 import { RadioScrobbler } from "./application/radio-scrobbler.js";
-import { createPanelServer, type QueueEntry } from "./panel/panel-server.js";
 import { ChatLog, isOwnEcho } from "./application/chat-log.js";
-import {
-  createCookieSaver,
-  createYoutubeHealthCheck,
-} from "./panel/youtube-setup.js";
 import type { YoutubePlaybackResolver } from "./media/youtube/youtube-resolver.js";
 import { RedirectResolver } from "./media/redirect-resolver.js";
 import { resolveTuneInUrl } from "./media/tunein.js";
 import { SongLinkClient } from "./media/song-link.js";
 import { AppleMusicClient } from "./media/apple-music.js";
 import { DirectUrlClient } from "./media/direct-url.js";
-import { APP_VERSION as packageVersion } from "./lib/version.js";
 import { startEgressGuard } from "./lib/egress-guard.js";
-import {
-  PlaybackMetrics,
-  renderPrometheus,
-} from "./observability/prometheus.js";
+import { PlaybackMetrics } from "./observability/prometheus.js";
 import { LyricsClient, parseArtistTitle } from "./media/lyrics.js";
 import { SoundCloudPublicApi } from "./media/soundcloud/public-api.js";
 import { SpotifyApi } from "./media/spotify/api.js";
@@ -72,6 +54,7 @@ import {
 import { startSetupMode } from "./bootstrap/setup-mode.js";
 import { ChatCommandGate } from "./bootstrap/chat-commands.js";
 import { Reconnector } from "./bootstrap/reconnect.js";
+import { startConnectedPanel } from "./bootstrap/panel.js";
 import { ServerViewSync } from "./bootstrap/server-view.js";
 import { flushStores, openStores } from "./bootstrap/stores.js";
 import { ytDlpStackOptions } from "./bootstrap/yt-dlp-options.js";
@@ -109,7 +92,6 @@ async function main(): Promise<void> {
   };
   installCrashHandlers(logger, exits);
   const adminUids = parseAdminUids(config.RHAPSOD_ADMIN_UIDS);
-  const panelAdminUids: ReadonlySet<string> = new Set([...adminUids, "panel"]);
   const privateCommandUids =
     config.RHAPSOD_PRIVATE_COMMAND_UIDS === undefined ||
     config.RHAPSOD_PRIVATE_COMMAND_UIDS === ""
@@ -660,10 +642,6 @@ async function main(): Promise<void> {
     "Rhapsod is ready",
   );
 
-  const currentDisplayTitle = (current: Track): string => {
-    if (current.durationSeconds !== undefined) return current.title;
-    return radioTitles.peek(current.source) ?? current.title;
-  };
   // Songs heard on live radio are scrobbled into the same listening history
   // that feeds !tops and autoplay: the station's rotation becomes taste
   // signal instead of evaporating when the stream moves on.
@@ -682,93 +660,22 @@ async function main(): Promise<void> {
     }
   }, 30_000).unref();
 
-  const panel = config.RHAPSOD_PANEL_ENABLED
-    ? createPanelServer({
-        config,
-        envFilePath: config.RHAPSOD_ENV_FILE,
-        logger,
-        status: () => ({
-          connected: connection.getCurrentChannelId() > 0,
-          ...(connection.getCurrentChannelId() > 0
-            ? { currentChannelId: connection.getCurrentChannelId() }
-            : {}),
-          queueLength: playback.queue().length,
-          ...(playback.current === undefined
-            ? {}
-            : { currentTitle: currentDisplayTitle(playback.current) }),
-          ...(playback.current?.durationSeconds === undefined
-            ? {}
-            : { durationMs: playback.current.durationSeconds * 1000 }),
-          positionMs: playback.playbackPositionMs,
-          playerState: playback.playerState,
-          volume: playback.volume,
-          loopMode: playback.loopMode,
-          tracksPlayed: playback.tracksPlayed + scrobbler.confirmedCount,
-          uptimeMs: Math.round(process.uptime() * 1000),
-          disconnects: metrics.disconnectSummary(),
-          version: packageVersion,
-        }),
-        queue: (): QueueEntry[] =>
-          playback.queue().map((track) => ({
-            title: track.title ?? "Sin titulo",
-            source: track.source,
-            requestedBy: track.requestedBy,
-          })),
-        errors: () => metrics.errorSummary(20),
-        metricsText: () =>
-          renderPrometheus({
-            counters: metrics.counters(),
-            memoryRssBytes: process.memoryUsage.rss(),
-            playback: playbackMetrics,
-            uptimeSeconds: process.uptime(),
-            version: packageVersion,
-          }),
-        chat: () => chatLog.snapshot(),
-        sendChat: (text: string) => connection.sendChannelMessage(text),
-        serverView: () => ({
-          ...serverView.toJSON(),
-          botChannelId: connection.getCurrentChannelId(),
-          mode: serverView.mode,
-        }),
-        moveBot: (cid: number) => connection.moveToChannel(cid),
-        youtubeHealth: createYoutubeHealthCheck((url, signal) =>
-          ytDlpResolver.getAudioUrlFromUrl(url, signal),
-        ),
-        saveCookies: createCookieSaver(
-          config.RHAPSOD_YTDLP_COOKIES_PATH ??
-            join(dataDir, "youtube-cookies.txt"),
-        ),
-        executeCommand: async (raw: string): Promise<string> => {
-          const parsed = parseChatCommand(normalizeCommandInput(raw));
-          if (parsed === undefined) {
-            throw new Error("Comando no valido");
-          }
-          const responses: string[] = [];
-          const send = (text: string): Promise<void> => {
-            responses.push(text);
-            return Promise.resolve();
-          };
-          // The panel is the owner console behind basic auth, so it acts
-          // as an admin: skip/remove on someone else's track must work
-          // from there too. "panel" can never collide with a TS3 uid.
-          const sender = { name: "Panel", uid: "panel", groups: [] };
-          await dispatchCommand(
-            { ...commandContext, adminUids: panelAdminUids },
-            parsed,
-            sender,
-            send,
-          );
-          return responses.join("\n") || "OK";
-        },
-        // Exit code 1 so systemd (Restart=on-failure) brings the bot back.
-        restart: (): void => {
-          logger.info("Panel requested restart");
-          shutdown(1);
-        },
-        testConnection: (host: string, port: number) =>
-          probeTs3Server(host, port),
-      })
-    : undefined;
+  const panel = startConnectedPanel({
+    chatLog,
+    commandContext,
+    config,
+    connection,
+    dataDir,
+    logger,
+    metrics,
+    playback,
+    playbackMetrics,
+    radioTitles,
+    resolver: ytDlpResolver,
+    restart: () => shutdown(1),
+    scrobbler,
+    serverView,
+  });
 
   let shutdownStarted = false;
   const shutdown = (code: number): void => {
