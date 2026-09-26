@@ -1125,6 +1125,6 @@ describe("panel pages motion and feedback", () => {
   it("labels settings by meaning and keeps the variable name visible", () => {
     const html = renderSettingsPage();
     expect(html).toContain('class="fk"');
-    expect(html).toContain("e.description||e.key");
+    expect(html).toContain("e.description || e.key");
   });
 });
