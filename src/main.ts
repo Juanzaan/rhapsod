@@ -24,7 +24,7 @@ import {
   withTimeout,
 } from "./adapters/ts3/ts3-connection.js";
 import { createRhapsodOpusEncoder } from "./audio/opus-encoder.js";
-import { playFfmpegUrl } from "./audio/ffmpeg-player.js";
+import { createPcmStream, playFfmpegUrl } from "./audio/ffmpeg-player.js";
 import { LoudnessProfiler } from "./audio/loudness-profiler.js";
 import { playTestTone } from "./audio/test-tone-player.js";
 import { YoutubePlaybackService } from "./application/youtube-playback-service.js";
@@ -449,6 +449,7 @@ async function main(): Promise<void> {
         ...(options?.seekSeconds === undefined
           ? {}
           : { seekSeconds: options.seekSeconds }),
+        ...(options?.live === undefined ? {} : { live: options.live }),
         ...(options?.audioFilter === undefined
           ? {}
           : { audioFilter: options.audioFilter }),
@@ -460,6 +461,16 @@ async function main(): Promise<void> {
     ...(config.RHAPSOD_WARP_PROXY === undefined
       ? {}
       : { proxyUrl: config.RHAPSOD_WARP_PROXY }),
+    // Prewarmed next-track streams need the same binary and User-Agent as
+    // cold starts; the default factory used to fall back to ffmpeg-static.
+    createPcmStream: (url, options) =>
+      createPcmStream(url, {
+        ...options,
+        ...(ffmpegPath === undefined ? {} : { binary: ffmpegPath }),
+        ...(ffmpegUserAgent === undefined
+          ? {}
+          : { userAgent: ffmpegUserAgent }),
+      }),
     prewarmNext: true,
     loudnessProfiler,
     encoder,

@@ -2924,8 +2924,15 @@ describe("YoutubePlaybackService", () => {
   });
 
   it("restarts playback at the current position when the filter changes", async () => {
-    const { createPlayback, playbackResolvers, service } = setup({
+    const { createPlayback, playbackResolvers, resolver, service } = setup({
       framesSent: 5000,
+    });
+    resolver.getTrack.mockResolvedValueOnce({
+      audioUrl: "https://media.example/audio",
+      durationSeconds: 300,
+      id: "a",
+      title: "Track a",
+      webpageUrl: "https://www.youtube.com/watch?v=a",
     });
 
     await service.enqueue("https://youtu.be/a", "user-1");
@@ -2969,16 +2976,77 @@ describe("YoutubePlaybackService", () => {
     );
   });
 
-  it("reports filter-change as the playback end reason", async () => {
-    const { onPlaybackFinished, playbackResolvers, service } = setup();
+  it("treats a filter change as the same play, not a new track", async () => {
+    // Each restart used to re-announce the track, bump the counter, record
+    // a skipped listen and push the track into history again.
+    const {
+      onPlaybackFinished,
+      onPlaybackStarted,
+      playbackResolvers,
+      service,
+    } = setup();
     await service.enqueue("https://youtu.be/a", "user-1");
     await new Promise((resolve) => setImmediate(resolve));
 
     service.setFilter("bassboost");
     playbackResolvers[0]?.();
     await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
 
-    expect(onPlaybackFinished.mock.calls[0]?.[2]).toBe("filter-change");
+    expect(onPlaybackStarted).toHaveBeenCalledTimes(1);
+    expect(onPlaybackFinished).not.toHaveBeenCalled();
+    expect(service.tracksPlayed).toBe(1);
+
+    playbackResolvers[1]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(onPlaybackFinished).toHaveBeenCalledTimes(1);
+    expect(onPlaybackFinished.mock.calls[0]?.[2]).toBe("completed");
+  });
+
+  it("treats a seek as the same play and keeps !previous on the prior track", async () => {
+    const {
+      onPlaybackFinished,
+      onPlaybackStarted,
+      playbackResolvers,
+      resolver,
+      service,
+    } = setup({ framesSent: 500 });
+    resolver.getTrack.mockResolvedValue({
+      audioUrl: "https://media.example/audio",
+      durationSeconds: 300,
+      id: "a",
+      title: "Track a",
+      webpageUrl: "https://www.youtube.com/watch?v=a",
+    });
+    await service.enqueue("https://youtu.be/a", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    service.seek(90);
+    playbackResolvers[0]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(onPlaybackStarted).toHaveBeenCalledTimes(1);
+    expect(onPlaybackFinished).not.toHaveBeenCalled();
+    expect(service.tracksPlayed).toBe(1);
+    expect(service.history()).toHaveLength(1);
+    // Position continues from the seek target: 90s + 500 frames * 20ms.
+    expect(service.playbackPositionMs).toBe(100_000);
+  });
+
+  it("reports a restarted play as skipped when skipped before it resumes", async () => {
+    const { onPlaybackFinished, playbackResolvers, service } = setup();
+    await service.enqueue("https://youtu.be/a", "user-1");
+    await service.enqueue("https://youtu.be/b", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    service.setFilter("bassboost");
+    service.skip();
+    playbackResolvers[0]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(onPlaybackFinished).toHaveBeenCalledTimes(1);
+    expect(onPlaybackFinished.mock.calls[0]?.[2]).toBe("skipped");
   });
 
   describe("YoutubePlaybackService playlists", () => {
@@ -3620,6 +3688,63 @@ describe("YoutubePlaybackService", () => {
     expect(invalidateEnd).toBeGreaterThan(invalidateStart);
     expect(resolveAfter).toBeGreaterThan(invalidateEnd);
     expect(service.current?.id).toBe("first");
+  });
+
+  it("resumes a 403'd track where it stopped, silently, as the same play", async () => {
+    // The retry used to restart the track from the top, post an error to
+    // the channel and announce "Reproduciendo" again.
+    let failFirstWith403 = true;
+    const createPlayback = vi.fn((): FfmpegPlaybackSession => {
+      const failing = failFirstWith403;
+      failFirstWith403 = false;
+      return {
+        done: failing
+          ? Promise.reject(
+              new Error(
+                "FFmpeg exited with code 1: Server returned 403 Forbidden",
+              ),
+            )
+          : new Promise<void>(() => {}),
+        player: {
+          metrics: {
+            bufferedBytes: 0,
+            framesSent: failing ? 1_500 : 0,
+            maxBufferedBytes: 3_840,
+            rebufferEvents: 0,
+            underruns: 0,
+          },
+          setVolume: vi.fn(),
+        } as unknown as AudioPlayer,
+        stop: vi.fn(),
+      };
+    });
+    const {
+      onPlaybackError,
+      onPlaybackFinished,
+      onPlaybackStarted,
+      resolver,
+      service,
+    } = setup({ createPlayback });
+    resolver.getTrack.mockResolvedValue({
+      audioUrl: "https://media.example/audio",
+      durationSeconds: 200,
+      id: "first",
+      title: "Track first",
+      webpageUrl: "https://www.youtube.com/watch?v=first",
+    });
+
+    await service.enqueue("https://youtu.be/first", "user-1");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(createPlayback).toHaveBeenCalledTimes(2);
+    const retryOptions = (
+      createPlayback.mock.calls[1] as unknown[] | undefined
+    )?.[3] as { seekSeconds?: number } | undefined;
+    expect(retryOptions?.seekSeconds).toBe(30);
+    expect(onPlaybackStarted).toHaveBeenCalledTimes(1);
+    expect(onPlaybackFinished).not.toHaveBeenCalled();
+    expect(onPlaybackError).not.toHaveBeenCalled();
+    expect(service.tracksPlayed).toBe(1);
   });
 });
 
