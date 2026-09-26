@@ -42,6 +42,7 @@ Correcciones de persistencia, actualización de dependencias, reparación del de
 - Corregir el daemon de yt-dlp: los enlaces youtu.be, `/shorts/` y `/live/` ya no rompen la solicitud, dos solicitudes del mismo video ya no lo extraen dos veces, una solicitud que espera una extracción trabada se rinde a los 45 segundos, las URL en caché vencen en la hora firmada en la URL (menos 15 minutos) en vez de a las seis horas fijas, y las rutas desconocidas responden 404.
 - Conservar los archivos de datos ilegibles: listas, favoritos, historial de escucha, biblioteca de canciones, telemetría o estado de reproducción que no se pueden leer se renombran a `<nombre>.corrupt-<hora>` en vez de ser reemplazados por el siguiente guardado. Cada escritura de datos se sincroniza con el disco antes del renombre, así que un corte de energía no puede dejar un archivo vacío.
 - Aceptar `!channel-move` mientras el bot no puede hablar en su canal: es el comando que lo saca de ahí y antes se ignoraba junto con todos los demás. Los permisos de movimiento siguen aplicando.
+- Enviar seguidas las partes de un mensaje de chat dividido: otro mensaje encolado mientras tanto ya no puede quedar entre ellas.
 
 ## Actualización
 
