@@ -4,6 +4,7 @@ import type { Track } from "../src/domain/track.js";
 import { AudioUrlCache } from "../src/application/audio-url-cache.js";
 import {
   audioUrlExpiresAt,
+  lastsThroughPlay,
   PreparedAudioStore,
 } from "../src/application/prepared-audio-store.js";
 
@@ -23,6 +24,31 @@ describe("audioUrlExpiresAt", () => {
     const expiresAt = audioUrlExpiresAt("https://media.example/audio");
     expect(expiresAt).toBeGreaterThan(before);
     expect(expiresAt).toBeLessThan(before + 61 * 60_000);
+  });
+});
+
+describe("lastsThroughPlay", () => {
+  const now = 1_000_000;
+
+  it("requires the URL to outlive the whole track", () => {
+    const fiveMinutes = { durationSeconds: 300 };
+    expect(lastsThroughPlay(now + 120_000, fiveMinutes, 0, now)).toBe(false);
+    expect(lastsThroughPlay(now + 301_000, fiveMinutes, 0, now)).toBe(true);
+  });
+
+  it("adds the time until the track starts", () => {
+    const oneMinute = { durationSeconds: 60 };
+    expect(lastsThroughPlay(now + 200_000, oneMinute, 180_000, now)).toBe(
+      false,
+    );
+    expect(lastsThroughPlay(now + 250_000, oneMinute, 180_000, now)).toBe(true);
+  });
+
+  it("caps the requirement for very long tracks and ignores live ones", () => {
+    const tenHours = { durationSeconds: 10 * 3_600 };
+    expect(lastsThroughPlay(now + 5 * 3_600_000, tenHours, 0, now)).toBe(true);
+    expect(lastsThroughPlay(now + 1_000, {}, 0, now)).toBe(true);
+    expect(lastsThroughPlay(now - 1, {}, 0, now)).toBe(false);
   });
 });
 
@@ -217,5 +243,45 @@ describe("PreparedAudioStore", () => {
       store.persist("src:a", "https://media.example/a"),
     ).not.toThrow();
     store.invalidateAll();
+  });
+
+  it("re-resolves a cached URL that would expire during the track", async () => {
+    // Regression: a URL with two minutes left was reused for a five-minute
+    // track and died with a 403 mid-song.
+    const cache = AudioUrlCache.memoryOnly();
+    cache.set("src:long", "https://media.example/old", Date.now() + 120_000);
+    const store = new PreparedAudioStore({ cache });
+    const resolve = vi.fn(() => Promise.resolve("https://media.example/new"));
+
+    const result = await store.getOrResolve(
+      { ...track("src:long"), durationSeconds: 300 },
+      "inline-resolve",
+      resolve,
+    );
+
+    expect(resolve).toHaveBeenCalledOnce();
+    expect(result).toMatchObject({
+      cacheHit: false,
+      url: "https://media.example/new",
+    });
+  });
+
+  it("reuses a cached URL that outlives a short track", async () => {
+    const cache = AudioUrlCache.memoryOnly();
+    cache.set("src:short", "https://media.example/ok", Date.now() + 120_000);
+    const store = new PreparedAudioStore({ cache });
+    const resolve = vi.fn(() => Promise.resolve("https://media.example/new"));
+
+    const result = await store.getOrResolve(
+      { ...track("src:short"), durationSeconds: 60 },
+      "inline-resolve",
+      resolve,
+    );
+
+    expect(resolve).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      cacheHit: true,
+      url: "https://media.example/ok",
+    });
   });
 });

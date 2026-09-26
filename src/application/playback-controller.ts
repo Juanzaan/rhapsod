@@ -25,7 +25,10 @@ import type {
   PrefetchStatus,
 } from "../observability/metrics.js";
 import { UserError } from "../lib/user-error.js";
-import type { PreparedAudioStore } from "./prepared-audio-store.js";
+import {
+  lastsThroughPlay,
+  type PreparedAudioStore,
+} from "./prepared-audio-store.js";
 import { PlaybackEpoch } from "./playback-epoch.js";
 import type { TrackQueue } from "./track-queue.js";
 
@@ -1084,7 +1087,9 @@ export class PlaybackController {
     for (const [index, next] of prefetchSlice.entries()) {
       const existing = this.#preparedStore.peek(next.source);
       if (existing !== undefined) {
-        if (existing.expiresAt > Date.now() + AUDIO_URL_REFRESH_AHEAD_MS) {
+        if (
+          lastsThroughPlay(existing.expiresAt, next, AUDIO_URL_REFRESH_AHEAD_MS)
+        ) {
           continue;
         }
         this.#preparedStore.invalidate(next.source);
@@ -1115,7 +1120,11 @@ export class PlaybackController {
           const stillPrepared = this.#preparedStore.peek(track.source);
           if (
             stillPrepared === undefined ||
-            stillPrepared.expiresAt <= Date.now() + AUDIO_URL_REFRESH_AHEAD_MS
+            !lastsThroughPlay(
+              stillPrepared.expiresAt,
+              track,
+              AUDIO_URL_REFRESH_AHEAD_MS,
+            )
           ) {
             void this.#preparedStore
               .resolve(track, "prefetch", (t, signal) =>
