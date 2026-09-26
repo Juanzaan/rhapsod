@@ -115,8 +115,16 @@ function scoreCandidate(
     if (filtered.length > 0) queryTerms = filtered;
   }
   const titleTerms = title.split(" ").filter(Boolean);
-  const matchingTerms = queryTerms.filter((term) =>
-    titleTerms.some((titleTerm) => termMatches(term, titleTerm)),
+  // A query term found only in the channel name still describes the upload:
+  // "Topic" channels and series like "QUEVEDO || BZRP Music Sessions #52"
+  // (channel "Bizarrap") leave the artist out of the title.
+  const channelTermsForMatch = candidate.channel
+    ? normalize(candidate.channel).split(" ").filter(Boolean)
+    : [];
+  const matchingTerms = queryTerms.filter(
+    (term) =>
+      titleTerms.some((titleTerm) => termMatches(term, titleTerm)) ||
+      channelTermsForMatch.some((channelTerm) => channelTerm === term),
   ).length;
   const breakdown: Record<string, number> = {};
   let score = queryTerms.length ? (matchingTerms / queryTerms.length) * 45 : 0;
@@ -300,7 +308,14 @@ function median(
 }
 
 function termMatches(queryTerm: string, candidateTerm: string): boolean {
-  if (candidateTerm.includes(queryTerm) || queryTerm.includes(candidateTerm))
+  if (queryTerm === candidateTerm) return true;
+  // Substring matches only between words of three letters or more: the "a"
+  // in "Reacción a QUEVEDO" used to count as a match for "bizarrap", so any
+  // title with a short word matched every query term containing it.
+  if (
+    Math.min(queryTerm.length, candidateTerm.length) >= FUZZY_MIN_TERM_LENGTH &&
+    (candidateTerm.includes(queryTerm) || queryTerm.includes(candidateTerm))
+  )
     return true;
   if (queryTerm.length < FUZZY_MIN_TERM_LENGTH) return false;
   const maxDistance =

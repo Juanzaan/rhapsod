@@ -553,4 +553,74 @@ describe("rankYoutubeCandidates", () => {
 
     expect(ranked.map((c) => c.id)).toEqual(["fuzzy-match"]);
   });
+
+  it("does not let a short title word match a longer query term", () => {
+    // Regression: the "a" in "Reacción a QUEVEDO" matched "bizarrap", so the
+    // reaction video outscored the official session.
+    const selected = rankYoutubeCandidates("bizarrap quevedo", [
+      {
+        channel: "Reacciones Top",
+        durationSeconds: 720,
+        id: "reaction",
+        title: "Reacción a QUEVEDO || BZRP Music Sessions #52",
+        webpageUrl: "https://youtube.com/watch?v=reaction",
+      },
+      {
+        channel: "Bizarrap",
+        durationSeconds: 204,
+        id: "official",
+        title: "QUEVEDO || BZRP Music Sessions #52",
+        webpageUrl: "https://youtube.com/watch?v=official",
+      },
+    ]);
+    expect(selected?.id).toBe("official");
+  });
+
+  it("counts a query term found only in the channel name", () => {
+    const selected = rankYoutubeCandidates("charly garcia demoliendo hoteles", [
+      {
+        channel: "Charly García - Topic",
+        durationSeconds: 221,
+        id: "topic",
+        title: "Demoliendo Hoteles",
+        webpageUrl: "https://youtube.com/watch?v=topic",
+      },
+    ]);
+    expect(selected?.id).toBe("topic");
+  });
+
+  it("treats en vivo and unplugged as live unless the query asks for it", () => {
+    const candidates = [
+      {
+        channel: "Maná",
+        durationSeconds: 300,
+        id: "unplugged",
+        title: "Maná - Rayando el Sol (MTV Unplugged)",
+        webpageUrl: "https://youtube.com/watch?v=unplugged",
+      },
+      {
+        channel: "Maná",
+        durationSeconds: 250,
+        id: "studio",
+        title: "Maná - Rayando el Sol (Video Oficial)",
+        webpageUrl: "https://youtube.com/watch?v=studio",
+      },
+      {
+        channel: "Maná",
+        durationSeconds: 260,
+        id: "envivo",
+        title: "Maná - Rayando el Sol (En Vivo)",
+        webpageUrl: "https://youtube.com/watch?v=envivo",
+      },
+    ];
+    expect(rankYoutubeCandidates("mana rayando el sol", candidates)?.id).toBe(
+      "studio",
+    );
+    expect(
+      rankYoutubeCandidates("mana rayando el sol en vivo", candidates)?.id,
+    ).toBe("envivo");
+    expect(
+      rankYoutubeCandidates("mana rayando el sol unplugged", candidates)?.id,
+    ).toBe("unplugged");
+  });
 });
