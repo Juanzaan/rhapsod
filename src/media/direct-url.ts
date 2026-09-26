@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
+import { FFMPEG_PROTOCOL_WHITELIST } from "../audio/ffmpeg-pcm.js";
 import type { YoutubeTrackMetadata } from "./youtube/yt-dlp.js";
 import { isPublicHostname, safeFetch } from "../lib/ssrf.js";
 
@@ -259,6 +260,8 @@ export class DirectUrlClient implements DirectUrlResolver {
         "json",
         "-show_entries",
         "format=duration:format_tags=title,artist",
+        "-protocol_whitelist",
+        FFMPEG_PROTOCOL_WHITELIST,
         ...((await this.#supportsMaxRedirects())
           ? ["-max_redirects", "0"]
           : []),
