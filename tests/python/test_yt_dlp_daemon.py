@@ -6,6 +6,7 @@
 stubbed, so neither the package nor the network is needed.
 """
 
+import http.client
 import importlib.util
 import json
 import pathlib
@@ -14,8 +15,6 @@ import threading
 import time
 import types
 import unittest
-import urllib.error
-import urllib.request
 from http.server import ThreadingHTTPServer
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -283,7 +282,7 @@ class HandlerTest(unittest.TestCase):
         cls.server = ThreadingHTTPServer(("127.0.0.1", 0), daemon_module.Handler)
         cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
         cls.thread.start()
-        cls.base = f"http://127.0.0.1:{cls.server.server_address[1]}"
+        cls.port = cls.server.server_address[1]
 
     @classmethod
     def tearDownClass(cls):
@@ -292,11 +291,16 @@ class HandlerTest(unittest.TestCase):
         daemon_module.Handler.daemon = None
 
     def get(self, path):
+        # http.client, not urllib: urllib applies the system proxy (the
+        # Windows registry, or http_proxy), which sent these localhost
+        # requests to a proxy and timed out on Windows.
+        connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
         try:
-            with urllib.request.urlopen(self.base + path, timeout=5) as response:
-                return response.status, json.loads(response.read())
-        except urllib.error.HTTPError as error:
-            return error.code, json.loads(error.read())
+            connection.request("GET", path)
+            response = connection.getresponse()
+            return response.status, json.loads(response.read())
+        finally:
+            connection.close()
 
     def test_routes_resolve_and_invalidate(self):
         status, body = self.get("/resolve?url=https%3A%2F%2Fyoutu.be%2F" + VIDEO)
