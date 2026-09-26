@@ -55,12 +55,16 @@ const configSchema = z.object({
     .min(0)
     .max(120)
     .default(15),
-  RHAPSOD_WATCHDOG_INTERVAL_MINUTES: z.coerce
-    .number()
-    .int()
-    .min(0)
-    .max(1440)
-    .default(15),
+  RHAPSOD_WATCHDOG_INTERVAL_SECONDS: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.coerce.number().int().min(0).max(3600).optional(),
+  ),
+  // Deprecated: minute steps could not express a useful interval. Still
+  // parsed so existing env files load and the panel keeps saving them.
+  RHAPSOD_WATCHDOG_INTERVAL_MINUTES: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.coerce.number().int().min(0).max(1440).optional(),
+  ),
   RHAPSOD_MAX_CONCURRENT_COMMANDS: z.coerce
     .number()
     .int()

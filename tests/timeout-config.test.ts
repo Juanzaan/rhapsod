@@ -81,7 +81,11 @@ describe("config keys", () => {
     expect(
       CONFIG_KEYS.filter(
         // Only honored from the real environment, never from the env file.
-        (key) => key !== "RHAPSOD_ENV_FILE" && !exampleKeys.includes(key),
+        (key) =>
+          key !== "RHAPSOD_ENV_FILE" &&
+          // Deprecated: kept parseable for old env files, not advertised.
+          key !== "RHAPSOD_WATCHDOG_INTERVAL_MINUTES" &&
+          !exampleKeys.includes(key),
       ),
     ).toEqual([]);
     expect(CONFIG_KEYS.filter((key) => !panelKeys.has(key))).toEqual([]);

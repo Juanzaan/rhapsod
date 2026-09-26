@@ -73,7 +73,7 @@ import { SoundCloudPublicApi } from "./media/soundcloud/public-api.js";
 import { SpotifyApi } from "./media/spotify/api.js";
 import { createRhapsodLogger } from "./observability/logger.js";
 import { MetricsCollector } from "./observability/metrics.js";
-import { startWatchdog } from "./watchdog.js";
+import { startWatchdog, watchdogInterval } from "./watchdog.js";
 
 // Favorites, history, telemetry and the queue are written on a debounce, so
 // a bare process.exit() drops whatever changed since the last write. main()
@@ -248,9 +248,16 @@ async function main(): Promise<void> {
     reportMetrics();
     setInterval(reportMetrics, metricsIntervalMinutes * 60_000).unref();
   }
-  if (config.RHAPSOD_WATCHDOG_INTERVAL_MINUTES > 0) {
+  const watchdog = watchdogInterval(config);
+  if (watchdog.ignoredMinutes) {
+    logger.warn(
+      { intervalSeconds: watchdog.intervalMs / 1_000 },
+      "RHAPSOD_WATCHDOG_INTERVAL_MINUTES is deprecated and ignored except 0 (off); set RHAPSOD_WATCHDOG_INTERVAL_SECONDS instead",
+    );
+  }
+  if (watchdog.intervalMs > 0) {
     startWatchdog({
-      intervalMs: config.RHAPSOD_WATCHDOG_INTERVAL_MINUTES * 60_000,
+      intervalMs: watchdog.intervalMs,
       onTimeout: (driftMs) => {
         logger.error({ driftMs }, "Watchdog: event loop blocked; restarting");
         void exitAfterFlush(1);
