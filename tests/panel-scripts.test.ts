@@ -51,6 +51,13 @@ describe("panel browser scripts", () => {
     const commands = renderCommandsPage();
     expect(commands).toContain(panelScript("commands"));
     expect(commands).toContain(panelScript("ambience"));
+
+    const server = renderServerPage();
+    expect(server).toContain(panelScript("server"));
+    expect(server).toContain(panelScript("server-tree"));
+    expect(server).toContain(panelScript("ambience"));
+
+    expect(PAGES.dashboard!()).toContain(panelScript("server-tree"));
   });
 
   it.each(Object.keys(PAGES))(
