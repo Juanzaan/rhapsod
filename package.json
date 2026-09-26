@@ -27,6 +27,7 @@
     "build": "tsc -p tsconfig.build.json",
     "check": "npm run format:check && npm run lint && npm run lint:scripts && npm run lint:docs && npm run typecheck && npm test && npm run build",
     "dev": "tsx watch src/main.ts",
+    "eval:autoplay": "tsx scripts/autoplay-eval.ts",
     "eval:search": "tsx scripts/search-eval.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
