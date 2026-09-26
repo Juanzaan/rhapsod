@@ -12,6 +12,9 @@ import type { AppConfig } from "../../config.js";
 const MESSAGE_SEND_TIMEOUT_MS = 10_000;
 const MESSAGE_RATE_INTERVAL_MS = 1_100;
 const MESSAGE_QUEUE_MAX = 50;
+// TeamSpeak rejects text messages longer than 1024 characters.
+export const MAX_TEXT_MESSAGE_LENGTH = 1024;
+const HEARTBEAT_PROBE_TIMEOUT_MS = 15_000;
 
 /**
  * Exit code for a refused duplicate start. The systemd unit lists it in
@@ -32,25 +35,68 @@ export class DuplicateBotInstanceError extends Error {
   }
 }
 
-function createMessageGate() {
-  let lastSendAt = 0;
+/**
+ * Serializes outgoing text messages at one per interval. Each caller
+ * reserves the next free slot before waiting; computing the wait from the
+ * last actual send let every message queued in the same tick wake together
+ * (0, 1101, 1101, 1101...), which is the burst the anti-flood punishes.
+ */
+export function createMessageGate(options: {
+  readonly intervalMs?: number;
+  readonly maxQueue?: number;
+  readonly onDrop?: (queued: number) => void;
+  readonly now?: () => number;
+}) {
+  const intervalMs = options.intervalMs ?? MESSAGE_RATE_INTERVAL_MS;
+  const maxQueue = options.maxQueue ?? MESSAGE_QUEUE_MAX;
+  const now = options.now ?? Date.now;
+  let nextSlotAt = 0;
   let queue = 0;
-  const gate = async (send: () => Promise<void>): Promise<void> => {
-    if (queue >= MESSAGE_QUEUE_MAX) {
+  return async (send: () => Promise<void>): Promise<void> => {
+    if (queue >= maxQueue) {
       // Drop the message instead of piling up against the anti-flood.
+      options.onDrop?.(queue);
       return;
     }
+    const current = now();
+    const slot = Math.max(current, nextSlotAt);
+    nextSlotAt = slot + intervalMs;
+    const waitMs = slot - current;
     queue++;
-    const waitMs = Math.max(
-      0,
-      lastSendAt + MESSAGE_RATE_INTERVAL_MS - Date.now(),
-    );
-    if (waitMs > 0) await new Promise((resolve) => setTimeout(resolve, waitMs));
-    queue--;
-    lastSendAt = Date.now();
+    try {
+      if (waitMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, waitMs));
+      }
+    } finally {
+      queue--;
+    }
     await send();
   };
-  return gate;
+}
+
+/**
+ * Splits text into parts TeamSpeak accepts, preferring line breaks, then
+ * spaces, and cutting mid-word only when a single word is too long. Lengths
+ * count code points, so an emoji is never cut in half.
+ */
+export function splitTextMessage(
+  text: string,
+  maxLength = MAX_TEXT_MESSAGE_LENGTH,
+): string[] {
+  const parts: string[] = [];
+  let rest = [...text];
+  while (rest.length > maxLength) {
+    const window = rest.slice(0, maxLength + 1);
+    let cut = window.lastIndexOf("\n");
+    if (cut <= 0) cut = window.lastIndexOf(" ");
+    if (cut <= 0) cut = maxLength;
+    parts.push(rest.slice(0, cut).join(""));
+    rest = rest.slice(cut);
+    // Drop the separator the cut landed on.
+    if (rest[0] === "\n" || rest[0] === " ") rest = rest.slice(1);
+  }
+  if (rest.length > 0 || parts.length === 0) parts.push(rest.join(""));
+  return parts;
 }
 
 export function withTimeout<T>(
@@ -175,10 +221,17 @@ export function createHeartbeat(
   intervalMs: number,
   onLost: () => void,
   requiredFailures = 2,
+  probeTimeoutMs = Math.min(intervalMs, HEARTBEAT_PROBE_TIMEOUT_MS),
 ): () => void {
   let consecutiveFailures = 0;
+  let probing = false;
   const timer = setInterval(() => {
-    void probe()
+    // A probe that never settles used to count as neither success nor
+    // failure, so a silently dead connection was never detected. Bound it,
+    // and never stack probes on top of a slow one.
+    if (probing) return;
+    probing = true;
+    void withTimeout(probe(), probeTimeoutMs, "Heartbeat probe timed out")
       .then(() => {
         consecutiveFailures = 0;
       })
@@ -188,6 +241,9 @@ export function createHeartbeat(
           consecutiveFailures = 0;
           onLost();
         }
+      })
+      .finally(() => {
+        probing = false;
       });
   }, intervalMs);
   return () => clearInterval(timer);
@@ -249,7 +305,14 @@ export function createTs3Connection(
         : { serverPassword: config.RHAPSOD_TS3_PASSWORD }),
     },
   );
-  const messageGate = createMessageGate();
+  const messageGate = createMessageGate({
+    onDrop: (queued) => {
+      logger.warn(
+        { queued },
+        "Text message dropped: outgoing queue is full (anti-flood)",
+      );
+    },
+  });
 
   return {
     connect: async (options?: { skipDuplicateCheck?: boolean }) => {
@@ -536,41 +599,45 @@ export function createTs3Connection(
       }
       return () => undefined;
     },
-    sendChannelMessage: async (message) => {
-      await messageGate(async () => {
-        try {
-          await withTimeout(
-            client.execCommand(
-              `sendtextmessage targetmode=2 target=${client.channelID()} msg=${escapeClientParam(message)}`,
-            ),
-            MESSAGE_SEND_TIMEOUT_MS,
-            "Sending the channel message timed out",
-          );
-        } catch (error) {
-          logger.error(
-            { err: error, channelId: String(client.channelID()) },
-            "Failed to send channel message",
-          );
-        }
-      });
+    sendChannelMessage: async (text) => {
+      for (const message of splitTextMessage(text)) {
+        await messageGate(async () => {
+          try {
+            await withTimeout(
+              client.execCommand(
+                `sendtextmessage targetmode=2 target=${client.channelID()} msg=${escapeClientParam(message)}`,
+              ),
+              MESSAGE_SEND_TIMEOUT_MS,
+              "Sending the channel message timed out",
+            );
+          } catch (error) {
+            logger.error(
+              { err: error, channelId: String(client.channelID()) },
+              "Failed to send channel message",
+            );
+          }
+        });
+      }
     },
-    sendPrivateMessage: async (clid, message) => {
-      await messageGate(async () => {
-        try {
-          await withTimeout(
-            client.execCommand(
-              `sendtextmessage targetmode=1 target=${clid} msg=${escapeClientParam(message)}`,
-            ),
-            MESSAGE_SEND_TIMEOUT_MS,
-            "Sending the private message timed out",
-          );
-        } catch (error) {
-          logger.error(
-            { err: error, targetClid: clid },
-            "Failed to send private message",
-          );
-        }
-      });
+    sendPrivateMessage: async (clid, text) => {
+      for (const message of splitTextMessage(text)) {
+        await messageGate(async () => {
+          try {
+            await withTimeout(
+              client.execCommand(
+                `sendtextmessage targetmode=1 target=${clid} msg=${escapeClientParam(message)}`,
+              ),
+              MESSAGE_SEND_TIMEOUT_MS,
+              "Sending the private message timed out",
+            );
+          } catch (error) {
+            logger.error(
+              { err: error, targetClid: clid },
+              "Failed to send private message",
+            );
+          }
+        });
+      }
     },
     sendVoiceFrame: (frame) => client.sendVoice(frame, 5),
     onTextMessage: (handler) => {
