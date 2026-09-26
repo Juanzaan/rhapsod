@@ -653,3 +653,53 @@ describe("connection lost subscriptions", () => {
     expect(second).toHaveBeenLastCalledWith("kicked");
   });
 });
+
+describe("listChannelListenerUids", () => {
+  const entry = (
+    id: number,
+    uid: string,
+    channelID: bigint,
+    type = 0,
+  ): {
+    id: number;
+    nickname: string;
+    uid: string;
+    type: number;
+    channelID: bigint;
+    serverGroups: readonly string[];
+  } => ({ id, nickname: `n${id}`, uid, type, channelID, serverGroups: [] });
+
+  it("lists regular clients in the bot's channel, once per identity", async () => {
+    const m = await ts3Mock();
+    // clientID() is 42 and channelID() is 7n in the mocked client.
+    m.listClients
+      .mockReset()
+      .mockResolvedValue([
+        entry(42, "bot-uid", 7n),
+        entry(1, "uid-a", 7n),
+        entry(2, "uid-b", 7n),
+        entry(3, "uid-a", 7n),
+        entry(4, "uid-elsewhere", 9n),
+        entry(5, "query-uid", 7n, 1),
+      ]);
+    const connection = createTs3Connection(testConfig(), identity, logger);
+    await expect(connection.listChannelListenerUids()).resolves.toEqual([
+      "uid-a",
+      "uid-b",
+    ]);
+  });
+
+  it("returns an empty list for a channel with only the bot", async () => {
+    const m = await ts3Mock();
+    m.listClients.mockReset().mockResolvedValue([entry(42, "bot-uid", 7n)]);
+    const connection = createTs3Connection(testConfig(), identity, logger);
+    await expect(connection.listChannelListenerUids()).resolves.toEqual([]);
+  });
+
+  it("returns undefined when the client list cannot be read", async () => {
+    const m = await ts3Mock();
+    m.listClients.mockReset().mockRejectedValue(new Error("timeout"));
+    const connection = createTs3Connection(testConfig(), identity, logger);
+    await expect(connection.listChannelListenerUids()).resolves.toBeUndefined();
+  });
+});
