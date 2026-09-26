@@ -1158,13 +1158,15 @@ export class PlaybackController {
     // With nothing playing, the head of the queue is about to cold-start:
     // a second download of the same audio would compete with it.
     if (this.#current === undefined) return;
-    if (profiler === undefined || next?.durationSeconds === undefined) return;
-    if (profiler.cached(next.source) !== undefined) return;
+    if (profiler === undefined || next === undefined) return;
+    const duration = next.durationSeconds;
+    if (duration === undefined || profiler.cached(next.source) !== undefined)
+      return;
     void this.#preparedStore
       .resolve(next, "prefetch", (t, signal) =>
         this.#resolvePlayableAudio(t, signal),
       )
-      .then((url) => profiler.measure(next.source, url))
+      .then((url) => profiler.measure(next.source, url, duration))
       .catch(() => {
         // The prefetch above owns the failure; measuring is best-effort.
       });
@@ -1245,10 +1247,14 @@ export class PlaybackController {
         if (!this.#epochs.isCurrent(stamp)) {
           return undefined;
         }
-        // Measuring an endless stream would burn a 120s ffmpeg sample for a
-        // profile live playback never uses (see the loudnorm bypass above).
+        // Live playback never uses a profile (see the loudnorm bypass
+        // above), and an endless stream cannot be measured to its end.
         if (next.durationSeconds !== undefined) {
-          this.#loudnessProfiler?.measure(next.source, url);
+          this.#loudnessProfiler?.measure(
+            next.source,
+            url,
+            next.durationSeconds,
+          );
         }
         if (
           this.#current === undefined ||
