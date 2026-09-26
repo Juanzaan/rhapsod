@@ -39,6 +39,7 @@ import shutil
 import subprocess
 import threading
 import time
+from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Lock
 from urllib.parse import urlparse, parse_qs
@@ -373,11 +374,18 @@ class Handler(BaseHTTPRequestHandler):
 
     def _json(self, obj, status=200):
         body = json.dumps(obj).encode()
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+        # One write for status line, headers and body. On some Windows hosts
+        # a response split across two sends (end_headers, then the body)
+        # never delivered the body, and the client timed out reading it.
+        head = (
+            f"{self.protocol_version} {status} {HTTPStatus(status).phrase}\r\n"
+            "Content-Type: application/json\r\n"
+            f"Content-Length: {len(body)}\r\n"
+            "Connection: close\r\n"
+            "\r\n"
+        ).encode("latin-1")
+        self.close_connection = True
+        self.wfile.write(head + body)
 
     def log_message(self, *args):
         pass
