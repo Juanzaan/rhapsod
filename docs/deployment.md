@@ -97,6 +97,21 @@ node /home/rhapsod/rhapsod/scripts/log-stats.mjs --since 2026-09-01T00:00:00Z lo
 
 The "Indicadores de reproducción" block reports p50, p90 and p99 for the time from a command to the first audio on a cold start, the gap between tracks, and underruns per track, plus the share of handoffs that used the prewarmed stream. Compare the same window before and after an update.
 
+The panel also serves the same counters and latency histograms live at `GET /api/metrics` in Prometheus text format, behind the panel's basic auth and loopback bind. A Prometheus running on the same host scrapes it with:
+
+```yaml
+scrape_configs:
+  - job_name: rhapsod
+    metrics_path: /api/metrics
+    basic_auth:
+      username: admin
+      password_file: /etc/prometheus/rhapsod-panel-password
+    static_configs:
+      - targets: ["127.0.0.1:8080"]
+```
+
+`rhapsod_play_start_delay_seconds` and `rhapsod_handoff_gap_seconds` are histograms; `rhapsod_plays_total{reason="error"}` and `rhapsod_underruns_total` are counters. Counters restart at zero when the bot restarts.
+
 ## Docker Compose (Linux)
 
 The Compose file starts separate bot and yt-dlp containers using Linux host networking. Both services bind to localhost; no panel port is published. This layout also lets the bot reach a TeamSpeak server or optional extraction services on the host.

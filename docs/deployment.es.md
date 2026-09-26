@@ -97,6 +97,21 @@ node /home/rhapsod/rhapsod/scripts/log-stats.mjs --since 2026-09-01T00:00:00Z lo
 
 El bloque "Indicadores de reproducción" informa p50, p90 y p99 del tiempo desde un comando hasta el primer audio en un arranque en frío, de la pausa entre pistas y de los cortes por pista, además de la proporción de cambios que usaron el flujo precargado. Comparar la misma ventana antes y después de una actualización.
 
+El panel también expone en vivo los mismos contadores e histogramas de latencia en `GET /api/metrics`, en formato de texto de Prometheus, detrás de la autenticación básica del panel y su enlace local. Un Prometheus en el mismo servidor lo consulta con:
+
+```yaml
+scrape_configs:
+  - job_name: rhapsod
+    metrics_path: /api/metrics
+    basic_auth:
+      username: admin
+      password_file: /etc/prometheus/rhapsod-panel-password
+    static_configs:
+      - targets: ["127.0.0.1:8080"]
+```
+
+`rhapsod_play_start_delay_seconds` y `rhapsod_handoff_gap_seconds` son histogramas; `rhapsod_plays_total{reason="error"}` y `rhapsod_underruns_total` son contadores. Los contadores vuelven a cero cuando el bot se reinicia.
+
 ## Docker Compose (Linux)
 
 Compose inicia contenedores separados para el bot y yt-dlp con la red del host Linux. Ambos servicios escuchan en localhost; no se publica ningún puerto del panel. Esta configuración permite acceder a TeamSpeak o servicios auxiliares del host.

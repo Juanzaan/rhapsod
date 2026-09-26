@@ -78,7 +78,11 @@ function baseConfig(overrides: Partial<AppConfig> = {}): AppConfig {
   };
 }
 
-function startTestPanel(envContent: string, port: number) {
+function startTestPanel(
+  envContent: string,
+  port: number,
+  extra: Partial<Parameters<typeof createPanelServer>[0]> = {},
+) {
   const dir = mkdtempSync(join(tmpdir(), "panel-"));
   const envPath = join(dir, ".env");
   writeFileSync(envPath, envContent);
@@ -90,6 +94,7 @@ function startTestPanel(envContent: string, port: number) {
     queue: () => [],
     executeCommand: () => Promise.resolve("OK"),
     restart: () => undefined,
+    ...extra,
   });
   const baseUrl = `http://127.0.0.1:${port}`;
   const auth = `Basic ${Buffer.from("admin:secret").toString("base64")}`;
@@ -673,6 +678,40 @@ describe("panel-server", () => {
       );
       expect(content).toContain("RHAPSOD_YTDLP_AUDIO_URL_TIMEOUT_MS=20000");
       expect(content).not.toContain("RHAPSOD_YTDLP_SEARCH_TIMEOUT_MS");
+    } finally {
+      await state.close();
+      rmSync(state.dir, { recursive: true, force: true });
+    }
+  });
+
+  it("serves Prometheus metrics behind the panel auth", async () => {
+    const port = 23613;
+    const state = startTestPanel("RHAPSOD_TS3_HOST=ts.example.com\n", port, {
+      metricsText: () => "rhapsod_uptime_seconds 5\n",
+    });
+    try {
+      const anonymous = await fetch(`${state.baseUrl}/api/metrics`);
+      expect(anonymous.status).toBe(401);
+      const res = await fetch(`${state.baseUrl}/api/metrics`, {
+        headers: { authorization: state.auth },
+      });
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type")).toContain("version=0.0.4");
+      expect(await res.text()).toBe("rhapsod_uptime_seconds 5\n");
+    } finally {
+      await state.close();
+      rmSync(state.dir, { recursive: true, force: true });
+    }
+  });
+
+  it("answers 404 for metrics when none are wired", async () => {
+    const port = 23614;
+    const state = startTestPanel("RHAPSOD_TS3_HOST=ts.example.com\n", port);
+    try {
+      const res = await fetch(`${state.baseUrl}/api/metrics`, {
+        headers: { authorization: state.auth },
+      });
+      expect(res.status).toBe(404);
     } finally {
       await state.close();
       rmSync(state.dir, { recursive: true, force: true });
