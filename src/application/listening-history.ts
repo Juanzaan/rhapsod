@@ -1,6 +1,10 @@
 import type { MinimalLogger } from "../observability/logger.js";
 import { noopLogger } from "../observability/logger.js";
-import { readJsonFile, writeFileAtomic } from "../lib/json-file-store.js";
+import {
+  DebouncedWriter,
+  readJsonFile,
+  writeFileAtomic,
+} from "../lib/json-file-store.js";
 import { parseArtistTitle } from "../media/lyrics.js";
 import {
   tokenizeTitle,
@@ -216,7 +220,7 @@ export class ListeningHistory {
   #users = new Map<string, StoredUserData>();
   #global = new Map<string, StoredTrackStats>();
   #loaded = false;
-  #writeChain: Promise<void> = Promise.resolve();
+  readonly #writer = new DebouncedWriter(() => this.#persistNow());
 
   constructor(
     filePath: string,
@@ -227,6 +231,11 @@ export class ListeningHistory {
     this.#logger = logger ?? noopLogger;
     this.#maxGlobalTracks = limits.maxGlobalTracks ?? MAX_GLOBAL_TRACKS;
     this.#maxTracksPerUser = limits.maxTracksPerUser ?? MAX_TRACKS_PER_USER;
+  }
+
+  /** Reads the file now instead of on the first recorded play. */
+  load(): void {
+    this.#ensureLoaded();
   }
 
   recordStart(uid: string, track: ListeningTrackInput): void {
@@ -255,7 +264,7 @@ export class ListeningHistory {
     const plays = this.#userData(uid).plays;
     plays.push({ at, completed: false, id: track.id });
     while (plays.length > MAX_RECENT_PLAYS) plays.shift();
-    void this.#schedulePersist();
+    this.#writer.schedule();
   }
 
   recordFinish(
@@ -294,7 +303,7 @@ export class ListeningHistory {
       plays.push({ at: Date.now(), completed, id: track.id });
       while (plays.length > MAX_RECENT_PLAYS) plays.shift();
     }
-    void this.#schedulePersist();
+    this.#writer.schedule();
   }
 
   topTracks(limit: number): readonly ListeningTrackStats[] {
@@ -514,7 +523,7 @@ export class ListeningHistory {
   }
 
   async flush(): Promise<void> {
-    await this.#writeChain;
+    await this.#writer.flush();
   }
 
   #userData(uid: string): StoredUserData {
@@ -536,13 +545,6 @@ export class ListeningHistory {
     this.#prune();
   }
 
-  #schedulePersist(): Promise<void> {
-    this.#prune();
-    const write = this.#writeChain.then(() => this.#persistNow());
-    this.#writeChain = write.catch(() => undefined);
-    return write;
-  }
-
   #prune(): void {
     this.#global = prune(this.#global, this.#maxGlobalTracks);
     for (const data of this.#users.values()) {
@@ -551,6 +553,7 @@ export class ListeningHistory {
   }
 
   async #persistNow(): Promise<void> {
+    this.#prune();
     try {
       const data = {
         global: Object.fromEntries(this.#global),
