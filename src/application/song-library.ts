@@ -1,9 +1,6 @@
-import { dirname } from "node:path";
-import { mkdir, rename, writeFile } from "node:fs/promises";
-
 import type { MinimalLogger } from "../observability/logger.js";
 import { noopLogger } from "../observability/logger.js";
-import { readJsonFile } from "../lib/json-file-store.js";
+import { readJsonFile, writeFileAtomic } from "../lib/json-file-store.js";
 
 export interface LibraryTrackInput {
   readonly artist?: string;
@@ -138,7 +135,7 @@ export class SongLibrary {
   #ensureLoaded(): void {
     if (this.#loaded) return;
     this.#loaded = true;
-    const parsed = readJsonFile(this.#filePath, parseLibraryFile);
+    const parsed = readJsonFile(this.#filePath, parseLibraryFile, this.#logger);
     if (parsed === undefined) return;
     for (const [id, entry] of parsed) this.#tracks.set(id, entry);
   }
@@ -151,17 +148,14 @@ export class SongLibrary {
 
   async #persistNow(): Promise<void> {
     try {
-      await mkdir(dirname(this.#filePath), { recursive: true });
-      const temporary = `${this.#filePath}.tmp`;
-      await writeFile(
-        temporary,
+      await writeFileAtomic(
+        this.#filePath,
         JSON.stringify({
           tracks: Object.fromEntries(this.#tracks),
           version: 1 as const,
         }),
-        { encoding: "utf8", mode: 0o600 },
+        0o600,
       );
-      await rename(temporary, this.#filePath);
     } catch (error) {
       this.#logger.warn(
         { err: error },

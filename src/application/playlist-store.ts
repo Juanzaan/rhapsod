@@ -1,10 +1,12 @@
-import { existsSync, readFileSync } from "node:fs";
-import { mkdir, rename, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { readFileSync } from "node:fs";
 
 import type { MinimalLogger } from "../observability/logger.js";
 import { noopLogger } from "../observability/logger.js";
 import { UserError } from "../lib/user-error.js";
+import {
+  quarantineUnreadableFile,
+  writeFileAtomic,
+} from "../lib/json-file-store.js";
 
 export interface StoredPlaylistTrack {
   readonly durationSeconds?: number;
@@ -413,11 +415,14 @@ export class PlaylistStore {
   #ensureLoaded(): void {
     if (this.#loaded) return;
     this.#loaded = true;
-    if (!existsSync(this.#filePath)) return;
+    let content: string;
     try {
-      const parsed = JSON.parse(
-        readFileSync(this.#filePath, "utf8"),
-      ) as PlaylistStoreFile;
+      content = readFileSync(this.#filePath, "utf8");
+    } catch {
+      return;
+    }
+    try {
+      const parsed = JSON.parse(content) as PlaylistStoreFile;
       if (
         typeof parsed !== "object" ||
         parsed === null ||
@@ -465,6 +470,7 @@ export class PlaylistStore {
         "PlaylistStore: corrupt store file, starting fresh",
       );
       this.#playlists.clear();
+      quarantineUnreadableFile(this.#filePath, this.#logger);
     }
   }
 
@@ -476,19 +482,13 @@ export class PlaylistStore {
 
   async #persistNow(): Promise<void> {
     try {
-      await mkdir(dirname(this.#filePath), { recursive: true });
       const data: PlaylistStoreFile = {
         version: 1,
         playlists: Object.fromEntries(
           [...this.#playlists.entries()].map(([uid, list]) => [uid, list]),
         ),
       };
-      const temporary = `${this.#filePath}.tmp`;
-      await writeFile(temporary, JSON.stringify(data), {
-        encoding: "utf8",
-        mode: 0o600,
-      });
-      await rename(temporary, this.#filePath);
+      await writeFileAtomic(this.#filePath, JSON.stringify(data), 0o600);
     } catch (error) {
       this.#logger.warn(
         { err: error },

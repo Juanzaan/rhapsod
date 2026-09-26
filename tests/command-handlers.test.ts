@@ -99,7 +99,6 @@ function makeHarness(
     shuffleQueued: vi.fn(() => 0),
     setLoopMode: vi.fn(),
     setVolume: vi.fn(),
-    setFilter: vi.fn(() => undefined),
     getLyrics: vi.fn(() => undefined),
     savePlaylist: vi.fn(() => 0),
     loadPlaylist: vi.fn(() => 0),
@@ -122,7 +121,6 @@ function makeHarness(
     audioHealth: undefined,
     current: overrides.current,
     playbackPositionMs: 0,
-    filter: "off",
     loopMode: "off",
     tracksPlayed: 0,
     volume: 50,
@@ -134,6 +132,9 @@ function makeHarness(
     getServerInfo: vi.fn(() => ({})),
     getChannelInfo: vi.fn(() => ({ channel_name: "X" })),
     moveToChannel: vi.fn(() => undefined),
+    listConnectedClientUids: vi.fn((): Promise<readonly string[]> =>
+      Promise.resolve([]),
+    ),
   };
   const metrics = {
     formatStats: vi.fn(() => "stats"),
@@ -249,12 +250,6 @@ describe("dispatchCommand", () => {
       ["loop", "!loop off"],
       ["volume", "!volume 50"],
       ["lyrics", "!lyrics"],
-      ["bassboost", "!bassboost 2"],
-      ["nightcore", "!nightcore 1.2"],
-      ["vaporwave", "!vaporwave 0.9"],
-      ["8d", "!8d"],
-      ["filter", "!filter"],
-      ["effects", "!effects"],
       ["playlist", "!playlist"],
       ["fav", "!fav"],
       ["favs", "!favs"],
@@ -394,30 +389,6 @@ describe("dispatchCommand", () => {
       "No puedo reproducir el tono mientras hay música. Probá con !stop o esperá a que termine la pista.",
     );
     expect(playback.skip).not.toHaveBeenCalled();
-  });
-
-  it("applies bassboost through setFilter with the parsed level", async () => {
-    const { ctx, playback, send, sender } = makeHarness();
-    const command = parseChatCommand("!bassboost 3")!;
-    await dispatchCommand(ctx, command, sender, send);
-    expect(playback.setFilter).toHaveBeenCalledWith("bassboost", { level: 3 });
-    expect(send).toHaveBeenCalledWith("Filtro bassboost nivel 3 activado.");
-  });
-
-  it("reports the current filter from !filter", async () => {
-    const { ctx, playback, send, sender } = makeHarness();
-    (playback as { filter: string }).filter = "nightcore";
-    const command = parseChatCommand("!filter")!;
-    await dispatchCommand(ctx, command, sender, send);
-    expect(send).toHaveBeenCalledWith("Filtro actual: nightcore");
-  });
-
-  it("disables the filter with !filter off", async () => {
-    const { ctx, playback, send, sender } = makeHarness();
-    const command = parseChatCommand("!filter off")!;
-    await dispatchCommand(ctx, command, sender, send);
-    expect(playback.setFilter).toHaveBeenCalledWith("off");
-    expect(send).toHaveBeenCalledWith("Filtro desactivado.");
   });
 
   it("shows playlist help when !playlist has no arguments", async () => {
@@ -681,81 +652,6 @@ describe("dispatchCommand", () => {
       'Playlist "fiesta": 3 pistas, duración total ~1h 34m. Creada el 15/01/2024.',
     );
   });
-
-  it("lists no active effects with !effects list", async () => {
-    const { ctx, send, sender } = makeHarness();
-    const command = parseChatCommand("!effects list")!;
-    await dispatchCommand(ctx, command, sender, send);
-    expect(send).toHaveBeenCalledWith("Sin efectos activos.");
-  });
-
-  it("lists the active effect with !effects list", async () => {
-    const { ctx, playback, send, sender } = makeHarness();
-    (playback as { filter: string }).filter = "nightcore";
-    const command = parseChatCommand("!effects list")!;
-    await dispatchCommand(ctx, command, sender, send);
-    expect(send).toHaveBeenCalledWith("Efectos activos: nightcore.");
-  });
-
-  it("resets all effects with !effects reset", async () => {
-    const { ctx, playback, send, sender } = makeHarness();
-    (playback as { filter: string }).filter = "8d";
-    const command = parseChatCommand("!effects reset")!;
-    await dispatchCommand(ctx, command, sender, send);
-    expect(playback.setFilter).toHaveBeenCalledWith("off");
-    expect(send).toHaveBeenCalledWith("Todos los efectos fueron desactivados.");
-  });
-
-  it("toggles an effect on with !effects 8d", async () => {
-    const { ctx, playback, send, sender } = makeHarness();
-    const command = parseChatCommand("!effects 8d")!;
-    await dispatchCommand(ctx, command, sender, send);
-    expect(playback.setFilter).toHaveBeenCalledWith("8d");
-    expect(send).toHaveBeenCalledWith("Efecto 8D activado.");
-  });
-
-  it("toggles an active effect off with !effects 8d", async () => {
-    const { ctx, playback, send, sender } = makeHarness();
-    (playback as { filter: string }).filter = "8d";
-    const command = parseChatCommand("!effects 8d")!;
-    await dispatchCommand(ctx, command, sender, send);
-    expect(playback.setFilter).toHaveBeenCalledWith("off");
-    expect(send).toHaveBeenCalledWith("Efecto 8D desactivado.");
-  });
-
-  it("enables an effect explicitly with on", async () => {
-    const { ctx, playback, send, sender } = makeHarness();
-    const command = parseChatCommand("!effects nightcore on")!;
-    await dispatchCommand(ctx, command, sender, send);
-    expect(playback.setFilter).toHaveBeenCalledWith("nightcore");
-    expect(send).toHaveBeenCalledWith("Efecto nightcore activado.");
-  });
-
-  it("disables an effect explicitly with off", async () => {
-    const { ctx, playback, send, sender } = makeHarness();
-    const command = parseChatCommand("!effects bassboost off")!;
-    await dispatchCommand(ctx, command, sender, send);
-    expect(playback.setFilter).toHaveBeenCalledWith("off");
-    expect(send).toHaveBeenCalledWith("Efecto bassboost desactivado.");
-  });
-
-  it("delegates !effects test-tone to the existing handler", async () => {
-    const { ctx, send, sender } = makeHarness({ current: { title: "X" } });
-    const command = parseChatCommand("!effects test-tone")!;
-    await dispatchCommand(ctx, command, sender, send);
-    expect(send).toHaveBeenCalledWith(
-      "No puedo reproducir el tono mientras hay música. Probá con !stop o esperá a que termine la pista.",
-    );
-  });
-
-  it("delegates !effects chart to the existing admin-only handler", async () => {
-    const { ctx, send, sender } = makeHarness();
-    const command = parseChatCommand("!effects chart")!;
-    await dispatchCommand(ctx, command, sender, send);
-    expect(send).toHaveBeenCalledWith(
-      "Solo los administradores pueden usar este comando.",
-    );
-  });
 });
 
 describe("dispatchCommand error handling", () => {
@@ -914,6 +810,107 @@ describe("favorites and skip ownership", () => {
     await dispatchCommand(ctx, parseChatCommand("!skip")!, sender, send);
 
     expect(playback.skip).toHaveBeenCalledTimes(1);
+  });
+
+  it("blocks strangers from stopping someone else's track", async () => {
+    // !stop wiped the current track and the whole queue with no check,
+    // while !skip on the same track was refused.
+    const { ctx, playback, send, sender } = makeHarness({
+      current: { requestedBy: "other", requestedByUid: "uid-9", title: "X" },
+    });
+    await dispatchCommand(ctx, parseChatCommand("!stop")!, sender, send);
+
+    expect(playback.stop).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledWith(
+      "Hay pistas de otros usuarios en reproducción o en cola: solo un admin puede detener todo.",
+    );
+  });
+
+  it("lets the requester stop when everything is theirs or autoplay", async () => {
+    const { ctx, playback, send, sender } = makeHarness({
+      current: { requestedBy: "user", requestedByUid: "uid-1", title: "X" },
+    });
+    playback.queue.mockReturnValue([
+      { requestedBy: "Autoplay", requestedByUid: "autoplay", title: "Y" },
+    ]);
+    await dispatchCommand(ctx, parseChatCommand("!stop")!, sender, send);
+
+    expect(playback.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it("blocks strangers from clearing a queue with someone else's tracks", async () => {
+    const { ctx, playback, send, sender } = makeHarness();
+    playback.queue.mockReturnValue([
+      { requestedBy: "user", requestedByUid: "uid-1", title: "Mine" },
+      { requestedBy: "other", requestedByUid: "uid-9", title: "Theirs" },
+    ]);
+    await dispatchCommand(ctx, parseChatCommand("!clear")!, sender, send);
+
+    expect(playback.clearQueued).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledWith(
+      "La cola tiene pistas de otros usuarios: solo un admin puede vaciarla. Usá !remove para quitar las tuyas.",
+    );
+  });
+
+  it("treats tracks of users who left the server as communal", async () => {
+    const { connection, ctx, playback, send, sender } = makeHarness({
+      current: { requestedBy: "gone", requestedByUid: "uid-9", title: "X" },
+    });
+    playback.queue.mockReturnValue([
+      { requestedBy: "gone", requestedByUid: "uid-9", title: "Y" },
+    ]);
+    connection.listConnectedClientUids.mockResolvedValue(["uid-1"]);
+
+    await dispatchCommand(ctx, parseChatCommand("!stop")!, sender, send);
+    expect(playback.stop).toHaveBeenCalledTimes(1);
+
+    await dispatchCommand(ctx, parseChatCommand("!skip")!, sender, send);
+    expect(playback.skip).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a connected user's tracks protected", async () => {
+    const { connection, ctx, playback, sender, send } = makeHarness();
+    playback.queue.mockReturnValue([
+      { requestedBy: "other", requestedByUid: "uid-9", title: "Theirs" },
+    ]);
+    connection.listConnectedClientUids.mockResolvedValue(["uid-1", "uid-9"]);
+    await dispatchCommand(ctx, parseChatCommand("!clear")!, sender, send);
+
+    expect(playback.clearQueued).not.toHaveBeenCalled();
+  });
+
+  it("stays strict when the connected list is unavailable", async () => {
+    const { connection, ctx, playback, sender, send } = makeHarness();
+    playback.queue.mockReturnValue([
+      { requestedBy: "other", requestedByUid: "uid-9", title: "Theirs" },
+    ]);
+    connection.listConnectedClientUids.mockResolvedValue([]);
+    await dispatchCommand(ctx, parseChatCommand("!clear")!, sender, send);
+
+    expect(playback.clearQueued).not.toHaveBeenCalled();
+  });
+
+  it("does not query the server when the sender owns every track", async () => {
+    const { connection, ctx, playback, sender, send } = makeHarness();
+    playback.queue.mockReturnValue([
+      { requestedBy: "user", requestedByUid: "uid-1", title: "Mine" },
+    ]);
+    await dispatchCommand(ctx, parseChatCommand("!clear")!, sender, send);
+
+    expect(playback.clearQueued).toHaveBeenCalledTimes(1);
+    expect(connection.listConnectedClientUids).not.toHaveBeenCalled();
+  });
+
+  it("lets admins clear anyone's tracks", async () => {
+    const { ctx, playback, sender, send } = makeHarness({
+      adminUids: new Set(["uid-1"]),
+    });
+    playback.queue.mockReturnValue([
+      { requestedBy: "other", requestedByUid: "uid-9", title: "Theirs" },
+    ]);
+    await dispatchCommand(ctx, parseChatCommand("!clear")!, sender, send);
+
+    expect(playback.clearQueued).toHaveBeenCalledTimes(1);
   });
 });
 

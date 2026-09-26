@@ -36,10 +36,12 @@ export class DuplicateBotInstanceError extends Error {
 }
 
 /**
- * Serializes outgoing text messages at one per interval. Each caller
- * reserves the next free slot before waiting; computing the wait from the
- * last actual send let every message queued in the same tick wake together
- * (0, 1101, 1101, 1101...), which is the burst the anti-flood punishes.
+ * Serializes outgoing text messages at one per interval, in call order.
+ * Messages run on a single chain: each part waits for the previous send to
+ * finish and for its interval, so a burst goes out evenly spaced instead of
+ * waking together (0, 1101, 1101, 1101...), and the parts of a split message
+ * go out back to back: another message queued meanwhile can no longer land
+ * between part 1 and part 2.
  */
 export function createMessageGate(options: {
   readonly intervalMs?: number;
@@ -50,27 +52,36 @@ export function createMessageGate(options: {
   const intervalMs = options.intervalMs ?? MESSAGE_RATE_INTERVAL_MS;
   const maxQueue = options.maxQueue ?? MESSAGE_QUEUE_MAX;
   const now = options.now ?? Date.now;
-  let nextSlotAt = 0;
-  let queue = 0;
-  return async (send: () => Promise<void>): Promise<void> => {
-    if (queue >= maxQueue) {
-      // Drop the message instead of piling up against the anti-flood.
-      options.onDrop?.(queue);
-      return;
+  let lastSendAt = Number.NEGATIVE_INFINITY;
+  let queued = 0;
+  let tail: Promise<void> = Promise.resolve();
+  return (sends: ReadonlyArray<() => Promise<void>>): Promise<void> => {
+    if (queued + sends.length > maxQueue) {
+      // Drop the whole message instead of piling up against the anti-flood.
+      options.onDrop?.(queued);
+      return Promise.resolve();
     }
-    const current = now();
-    const slot = Math.max(current, nextSlotAt);
-    nextSlotAt = slot + intervalMs;
-    const waitMs = slot - current;
-    queue++;
-    try {
-      if (waitMs > 0) {
-        await new Promise((resolve) => setTimeout(resolve, waitMs));
+    queued += sends.length;
+    const run = async (): Promise<void> => {
+      let remaining = sends.length;
+      try {
+        for (const send of sends) {
+          const waitMs = lastSendAt + intervalMs - now();
+          if (waitMs > 0) {
+            await new Promise((resolve) => setTimeout(resolve, waitMs));
+          }
+          queued--;
+          remaining--;
+          lastSendAt = now();
+          await send();
+        }
+      } finally {
+        queued -= remaining;
       }
-    } finally {
-      queue--;
-    }
-    await send();
+    };
+    const result = tail.then(run);
+    tail = result.catch(() => undefined);
+    return result;
   };
 }
 
@@ -600,8 +611,8 @@ export function createTs3Connection(
       return () => undefined;
     },
     sendChannelMessage: async (text) => {
-      for (const message of splitTextMessage(text)) {
-        await messageGate(async () => {
+      await messageGate(
+        splitTextMessage(text).map((message) => async () => {
           try {
             await withTimeout(
               client.execCommand(
@@ -616,12 +627,12 @@ export function createTs3Connection(
               "Failed to send channel message",
             );
           }
-        });
-      }
+        }),
+      );
     },
     sendPrivateMessage: async (clid, text) => {
-      for (const message of splitTextMessage(text)) {
-        await messageGate(async () => {
+      await messageGate(
+        splitTextMessage(text).map((message) => async () => {
           try {
             await withTimeout(
               client.execCommand(
@@ -636,8 +647,8 @@ export function createTs3Connection(
               "Failed to send private message",
             );
           }
-        });
-      }
+        }),
+      );
     },
     sendVoiceFrame: (frame) => client.sendVoice(frame, 5),
     onTextMessage: (handler) => {

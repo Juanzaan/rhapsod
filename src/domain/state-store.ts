@@ -1,11 +1,12 @@
 import { readFileSync } from "node:fs";
-import { mkdir, rename, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
 
+import {
+  quarantineUnreadableFile,
+  writeFileAtomic,
+} from "../lib/json-file-store.js";
 import type { MinimalLogger } from "../observability/logger.js";
 import { noopLogger } from "../observability/logger.js";
 import type { LoopMode } from "../application/youtube-playback-service.js";
-import { isAudioFilter, type AudioFilter } from "../audio/filter-chain.js";
 
 export interface SerializedQueueTrack {
   readonly durationSeconds?: number;
@@ -22,7 +23,6 @@ export interface PlaybackState {
   readonly loopMode?: LoopMode;
   readonly queue?: readonly SerializedQueueTrack[];
   readonly volumePercent?: number;
-  readonly filter?: AudioFilter;
 }
 
 export interface PlaybackStateStore {
@@ -86,7 +86,6 @@ export class FilePlaybackStateStore implements PlaybackStateStore {
   #pending: PlaybackState | undefined;
   #flushTimer: NodeJS.Timeout | undefined;
   #writeChain: Promise<void> = Promise.resolve();
-  #directoryChecked = false;
   readonly #logger: MinimalLogger;
 
   constructor(filePath: string, logger?: MinimalLogger) {
@@ -116,16 +115,15 @@ export class FilePlaybackStateStore implements PlaybackStateStore {
         parsed.loopMode === "track"
           ? parsed.loopMode
           : undefined;
-      const filter = isAudioFilter(parsed.filter) ? parsed.filter : undefined;
       const queue = parseQueue(parsed.queue);
       return {
         ...(parsed.autoplay === true ? { autoplay: true } : {}),
         ...(volumePercent === undefined ? {} : { volumePercent }),
         ...(loopMode === undefined ? {} : { loopMode }),
-        ...(filter === undefined ? {} : { filter }),
         ...(queue === undefined ? {} : { queue }),
       };
     } catch {
+      quarantineUnreadableFile(this.filePath, this.#logger);
       return {};
     }
   }
@@ -160,15 +158,8 @@ export class FilePlaybackStateStore implements PlaybackStateStore {
   }
 
   async #doWrite(state: PlaybackState): Promise<void> {
-    const directory = dirname(this.filePath);
-    if (!this.#directoryChecked) {
-      await mkdir(directory, { recursive: true });
-      this.#directoryChecked = true;
-    }
-    const temporary = `${this.filePath}.tmp`;
     try {
-      await writeFile(temporary, JSON.stringify(state), "utf8");
-      await rename(temporary, this.filePath);
+      await writeFileAtomic(this.filePath, JSON.stringify(state));
     } catch (error) {
       this.#logger.warn(
         { err: error },

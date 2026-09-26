@@ -21,11 +21,10 @@ import { parseMediaInput } from "../media/media-input.js";
 import { isAppleMusicPlaylist } from "../media/apple-music.js";
 import {
   canMoveBotToChannel,
-  canRemoveTrack,
+  canRemoveTracks,
   isAdminUid,
 } from "./permissions.js";
 import { formatHelpCategory, formatHelpMenu } from "./command-registry.js";
-import { FILTER_DISPLAY_NAMES } from "../audio/filter-chain.js";
 
 export interface CommandContext {
   readonly playback: YoutubePlaybackService;
@@ -545,22 +544,9 @@ async function handleRemove(
   sender: CommandSender,
   send: SendFn,
 ): Promise<void> {
-  const { playback, adminUids } = ctx;
-  const { name: senderName, uid: senderUid } = sender;
+  const { playback } = ctx;
   const selected = playback.queue().slice(command.from - 1, command.to);
-  const unauthorized = selected.some(
-    (track) =>
-      !canRemoveTrack({
-        adminUids,
-        requesterName: track.requestedBy,
-        ...(track.requestedByUid === undefined
-          ? {}
-          : { requesterUid: track.requestedByUid }),
-        senderName,
-        senderUid,
-      }),
-  );
-  if (unauthorized) {
+  if (!(await senderMayRemove(ctx, sender, selected))) {
     await send(
       "Solo el administrador del bot puede quitar rangos con pistas de otros usuarios.",
     );
@@ -576,12 +562,57 @@ async function handleRemove(
   );
 }
 
+/**
+ * Ownership check shared by !skip, !remove, !jump, !stop and !clear. The
+ * connected-client list is only fetched when the strict rule says no, so
+ * the common case costs no TeamSpeak query.
+ */
+async function senderMayRemove(
+  ctx: CommandContext,
+  sender: CommandSender,
+  tracks: ReadonlyArray<{
+    readonly requestedBy: string;
+    readonly requestedByUid?: string;
+  }>,
+): Promise<boolean> {
+  const base = {
+    adminUids: ctx.adminUids,
+    senderName: sender.name,
+    senderUid: sender.uid,
+    tracks,
+  };
+  if (canRemoveTracks(base)) return true;
+  const connectedUids = await connectedUidsOrUnknown(ctx);
+  return (
+    connectedUids !== undefined && canRemoveTracks({ ...base, connectedUids })
+  );
+}
+
+async function connectedUidsOrUnknown(
+  ctx: CommandContext,
+): Promise<ReadonlySet<string> | undefined> {
+  try {
+    const uids = await ctx.connection.listConnectedClientUids();
+    // The bot itself is always connected: an empty list means the query
+    // failed, and treating everyone as gone would make every track communal.
+    return uids.length === 0 ? undefined : new Set(uids);
+  } catch {
+    return undefined;
+  }
+}
+
 async function handleClear(
   ctx: CommandContext,
   _command: Extract<ChatCommand, { name: "clear" }>,
-  _sender: CommandSender,
+  sender: CommandSender,
   send: SendFn,
 ): Promise<void> {
+  if (!(await senderMayRemove(ctx, sender, ctx.playback.queue()))) {
+    await send(
+      "La cola tiene pistas de otros usuarios: solo un admin puede vaciarla. Usá !remove para quitar las tuyas.",
+    );
+    return;
+  }
   const cleared = ctx.playback.clearQueued();
   await send(
     cleared === 0
@@ -712,15 +743,7 @@ async function handleSkip(
   const current = ctx.playback.current;
   if (
     current !== undefined &&
-    !canRemoveTrack({
-      adminUids: ctx.adminUids,
-      requesterName: current.requestedBy,
-      ...(current.requestedByUid === undefined
-        ? {}
-        : { requesterUid: current.requestedByUid }),
-      senderName: sender.name,
-      senderUid: sender.uid,
-    })
+    !(await senderMayRemove(ctx, sender, [current]))
   ) {
     await send("Solo quien pidió la canción (o un admin) puede saltarla.");
     return;
@@ -735,7 +758,7 @@ async function handleJump(
   sender: CommandSender,
   send: SendFn,
 ): Promise<void> {
-  const { playback, adminUids } = ctx;
+  const { playback } = ctx;
   const current = playback.current;
   const queued = playback.queue();
   const target = queued[command.index - 1];
@@ -745,19 +768,7 @@ async function handleJump(
   }
   const victims = queued.slice(0, command.index - 1);
   if (current !== undefined) victims.unshift(current);
-  const unauthorized = victims.some(
-    (track) =>
-      !canRemoveTrack({
-        adminUids,
-        requesterName: track.requestedBy,
-        ...(track.requestedByUid === undefined
-          ? {}
-          : { requesterUid: track.requestedByUid }),
-        senderName: sender.name,
-        senderUid: sender.uid,
-      }),
-  );
-  if (unauthorized) {
+  if (!(await senderMayRemove(ctx, sender, victims))) {
     await send(
       "Solo quien pidió las pistas (o un admin) puede saltar hasta ahí.",
     );
@@ -880,9 +891,21 @@ async function handleChart(
 async function handleStop(
   ctx: CommandContext,
   _command: Extract<ChatCommand, { name: "stop" }>,
-  _sender: CommandSender,
+  sender: CommandSender,
   send: SendFn,
 ): Promise<void> {
+  const current = ctx.playback.current;
+  if (
+    !(await senderMayRemove(ctx, sender, [
+      ...(current === undefined ? [] : [current]),
+      ...ctx.playback.queue(),
+    ]))
+  ) {
+    await send(
+      "Hay pistas de otros usuarios en reproducción o en cola: solo un admin puede detener todo.",
+    );
+    return;
+  }
   ctx.playback.stop();
   ctx.hasStartedPlaying = false;
   await send("Reproducción detenida.");
@@ -988,121 +1011,6 @@ async function handleLyrics(
       ? `${lyrics.plainLyrics.slice(0, maxChars)}…`
       : lyrics.plainLyrics;
   await send(`${title}\n${body}`);
-}
-
-async function handleBassboost(
-  ctx: CommandContext,
-  command: Extract<ChatCommand, { name: "bassboost" }>,
-  _sender: CommandSender,
-  send: SendFn,
-): Promise<void> {
-  const level = command.level;
-  ctx.playback.setFilter("bassboost", level === undefined ? {} : { level });
-  await send(
-    level === undefined
-      ? "Filtro bassboost activado."
-      : `Filtro bassboost nivel ${level} activado.`,
-  );
-}
-
-async function handleNightcore(
-  ctx: CommandContext,
-  command: Extract<ChatCommand, { name: "nightcore" }>,
-  _sender: CommandSender,
-  send: SendFn,
-): Promise<void> {
-  ctx.playback.setFilter(
-    "nightcore",
-    command.rate === undefined ? {} : { rate: command.rate },
-  );
-  await send("Filtro nightcore activado.");
-}
-
-async function handleVaporwave(
-  ctx: CommandContext,
-  command: Extract<ChatCommand, { name: "vaporwave" }>,
-  _sender: CommandSender,
-  send: SendFn,
-): Promise<void> {
-  ctx.playback.setFilter(
-    "vaporwave",
-    command.rate === undefined ? {} : { rate: command.rate },
-  );
-  await send("Filtro vaporwave activado.");
-}
-
-async function handle8d(
-  ctx: CommandContext,
-  _command: Extract<ChatCommand, { name: "8d" }>,
-  _sender: CommandSender,
-  send: SendFn,
-): Promise<void> {
-  ctx.playback.setFilter("8d");
-  await send("Filtro 8D activado.");
-}
-
-async function handleFilter(
-  ctx: CommandContext,
-  command: Extract<ChatCommand, { name: "filter" }>,
-  _sender: CommandSender,
-  send: SendFn,
-): Promise<void> {
-  if (command.off) {
-    ctx.playback.setFilter("off");
-    await send("Filtro desactivado.");
-    return;
-  }
-  await send(`Filtro actual: ${FILTER_DISPLAY_NAMES[ctx.playback.filter]}`);
-}
-
-async function handleEffects(
-  ctx: CommandContext,
-  command: Extract<ChatCommand, { name: "effects" }>,
-  sender: CommandSender,
-  send: SendFn,
-): Promise<void> {
-  switch (command.action) {
-    case "list": {
-      const active = ctx.playback.filter;
-      await send(
-        active === "off"
-          ? "Sin efectos activos."
-          : `Efectos activos: ${FILTER_DISPLAY_NAMES[active]}.`,
-      );
-      return;
-    }
-    case "reset":
-      ctx.playback.setFilter("off");
-      await send("Todos los efectos fueron desactivados.");
-      return;
-    case "test-tone":
-      return handleTestTone(ctx, { name: "test-tone" }, sender, send);
-    case "chart":
-      return handleChart(ctx, { name: "chart" }, sender, send);
-    case "on":
-    case "off":
-    case "toggle": {
-      const display = FILTER_DISPLAY_NAMES[command.effect];
-      if (command.action === "off") {
-        ctx.playback.setFilter("off");
-        await send(`Efecto ${display} desactivado.`);
-        return;
-      }
-      const isActive = ctx.playback.filter === command.effect;
-      if (command.action === "toggle" && isActive) {
-        ctx.playback.setFilter("off");
-        await send(`Efecto ${display} desactivado.`);
-        return;
-      }
-      ctx.playback.setFilter(command.effect);
-      await send(`Efecto ${display} activado.`);
-      return;
-    }
-    default:
-      await send(
-        "Efectos: 8d, nightcore, bassboost, vaporwave, test-tone, chart. Usá !effects <efecto> [on|off] para controlar.",
-      );
-  }
 }
 
 async function handlePlaylist(
@@ -1352,18 +1260,6 @@ export async function dispatchCommand(
       return handleVolume(ctx, command, sender, send);
     case "lyrics":
       return handleLyrics(ctx, command, sender, send);
-    case "bassboost":
-      return handleBassboost(ctx, command, sender, send);
-    case "nightcore":
-      return handleNightcore(ctx, command, sender, send);
-    case "vaporwave":
-      return handleVaporwave(ctx, command, sender, send);
-    case "8d":
-      return handle8d(ctx, command, sender, send);
-    case "filter":
-      return handleFilter(ctx, command, sender, send);
-    case "effects":
-      return handleEffects(ctx, command, sender, send);
     case "playlist":
       return handlePlaylist(ctx, command, sender, send);
     case "fav":

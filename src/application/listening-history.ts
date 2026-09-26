@@ -1,9 +1,6 @@
-import { dirname } from "node:path";
-import { mkdir, rename, writeFile } from "node:fs/promises";
-
 import type { MinimalLogger } from "../observability/logger.js";
 import { noopLogger } from "../observability/logger.js";
-import { readJsonFile } from "../lib/json-file-store.js";
+import { readJsonFile, writeFileAtomic } from "../lib/json-file-store.js";
 import { parseArtistTitle } from "../media/lyrics.js";
 import {
   tokenizeTitle,
@@ -32,6 +29,10 @@ export interface ListeningArtistStats {
   readonly plays: number;
 }
 
+export interface ClassicSeed extends AutoplaySeed {
+  readonly score: number;
+}
+
 export interface ListeningUserSummary {
   readonly completes: number;
   readonly plays: number;
@@ -57,6 +58,11 @@ const MAX_RECENT_PLAYS = 50000;
 const SESSION_GAP_MS = 30 * 60_000;
 const SESSION_BOOST = 2;
 const DECAY_HALF_LIFE_MS = 5 * 24 * 60 * 60_000;
+const HISTORY_VERSION = 2;
+// A classic rests this long after it played before autoplay brings it back.
+const CLASSIC_REST_MS = 6 * 60 * 60_000;
+// Tracks the channel skips this often never come back as classics.
+const CLASSIC_MAX_SKIP_RATE = 0.5;
 
 export interface PlayEvent {
   readonly at: number;
@@ -126,7 +132,9 @@ function parseHistoryFile(raw: unknown):
     users?: unknown;
     version?: unknown;
   };
-  if (record.version !== 1) return undefined;
+  if (record.version !== 1 && record.version !== HISTORY_VERSION) {
+    return undefined;
+  }
   const users = new Map<string, StoredUserData>();
   if (typeof record.users === "object" && record.users !== null) {
     for (const [uid, data] of Object.entries(
@@ -137,7 +145,26 @@ function parseHistoryFile(raw: unknown):
       if (parsed !== undefined) users.set(uid, parsed);
     }
   }
-  return { global: parseStatsMap(record.global), users };
+  const global = parseStatsMap(record.global);
+  if (record.version === 1) removeAutoplayFromGlobal(global, users);
+  return { global, users };
+}
+
+// Version 1 counted autoplay's own picks as channel plays, so autoplay kept
+// reinforcing whatever it had already chosen. The autoplay pseudo-user holds
+// exactly those plays; subtracting them once leaves only human requests.
+function removeAutoplayFromGlobal(
+  global: Map<string, StoredTrackStats>,
+  users: ReadonlyMap<string, StoredUserData>,
+): void {
+  const autoplay = users.get(AUTOPLAY_UID);
+  if (autoplay === undefined) return;
+  for (const [id, own] of autoplay.tracks) {
+    const entry = global.get(id);
+    if (entry === undefined) continue;
+    entry.plays = Math.max(0, entry.plays - own.plays);
+    entry.completes = Math.max(0, entry.completes - own.completes);
+  }
 }
 
 interface StoredUserData {
@@ -165,6 +192,7 @@ function rankTracks(
   limit: number,
 ): ListeningTrackStats[] {
   return [...stats.values()]
+    .filter((entry) => entry.plays > 0)
     .map((entry) => ({ ...entry }))
     .sort(
       (a, b) =>
@@ -218,7 +246,10 @@ export class ListeningHistory {
         };
         stats.set(track.id, entry);
       }
-      entry.plays++;
+      // Autoplay's own picks are not channel requests: the global entry
+      // only learns they played recently (so classics rest) without
+      // gaining plays that would make autoplay reinforce itself.
+      if (stats !== this.#global || uid !== AUTOPLAY_UID) entry.plays++;
       entry.lastPlayedAt = at;
     }
     const plays = this.#userData(uid).plays;
@@ -247,8 +278,13 @@ export class ListeningHistory {
         };
         stats.set(track.id, entry);
       }
-      if (completed) entry.completes++;
-      else entry.skips++;
+      // A finished autoplay pick often means nobody was listening; a skip
+      // is always someone acting, so only skips reach the channel stats.
+      if (completed) {
+        if (stats !== this.#global || uid !== AUTOPLAY_UID) entry.completes++;
+      } else {
+        entry.skips++;
+      }
     }
     const plays = this.#userData(uid).plays;
     const open = [...plays].reverse().find((event) => event.id === track.id);
@@ -270,7 +306,7 @@ export class ListeningHistory {
     this.#ensureLoaded();
     const plays = new Map<string, number>();
     for (const entry of this.#global.values()) {
-      if (entry.artist === undefined) continue;
+      if (entry.artist === undefined || entry.plays === 0) continue;
       plays.set(entry.artist, (plays.get(entry.artist) ?? 0) + entry.plays);
     }
     return [...plays.entries()]
@@ -305,7 +341,7 @@ export class ListeningHistory {
   recentSeeds(limit: number): readonly AutoplaySeed[] {
     this.#ensureLoaded();
     return [...this.#global.entries()]
-      .filter(([id]) => isYouTubeVideoId(id))
+      .filter(([id, entry]) => isYouTubeVideoId(id) && entry.plays > 0)
       .sort(([, a], [, b]) => b.lastPlayedAt - a.lastPlayedAt)
       .map(([id, entry]) => ({
         ...(entry.artist === undefined ? {} : { artist: entry.artist }),
@@ -330,6 +366,73 @@ export class ListeningHistory {
       }
     }
     return bestUid;
+  }
+
+  /**
+   * The channel's all-time favorites that are due to come back: tracks
+   * people asked for and let play, rested for a few hours, rarely skipped.
+   * Scored by completions over plays so a song everyone sits through ranks
+   * above one that was merely requested often.
+   */
+  classicSeeds(limit: number, now = Date.now()): readonly ClassicSeed[] {
+    this.#ensureLoaded();
+    const seeds: ClassicSeed[] = [];
+    for (const [id, entry] of this.#global) {
+      if (!isYouTubeVideoId(id) || entry.plays === 0) continue;
+      if (now - entry.lastPlayedAt < CLASSIC_REST_MS) continue;
+      const heard = entry.completes + entry.skips;
+      if (heard > 0 && entry.skips / heard > CLASSIC_MAX_SKIP_RATE) continue;
+      seeds.push({
+        ...(entry.artist === undefined ? {} : { artist: entry.artist }),
+        id,
+        score: 2 * entry.completes + entry.plays - 2 * entry.skips,
+        title: entry.title,
+      });
+    }
+    return seeds.sort((a, b) => b.score - a.score).slice(0, Math.max(1, limit));
+  }
+
+  /**
+   * One seed track per artist the channel listens to most, for discovery
+   * mixes that stay in the channel's taste. The seed is the artist's most
+   * completed YouTube track.
+   */
+  channelArtistSeeds(limit: number): readonly AutoplaySeed[] {
+    this.#ensureLoaded();
+    const byArtist = new Map<
+      string,
+      { plays: number; seed: AutoplaySeed; seedCompletes: number }
+    >();
+    for (const [id, entry] of this.#global) {
+      if (entry.artist === undefined || entry.plays === 0) continue;
+      if (!isYouTubeVideoId(id)) continue;
+      const key = entry.artist.toLowerCase();
+      const current = byArtist.get(key);
+      const seed = { artist: entry.artist, id, title: entry.title };
+      if (current === undefined) {
+        byArtist.set(key, {
+          plays: entry.plays,
+          seed,
+          seedCompletes: entry.completes,
+        });
+        continue;
+      }
+      current.plays += entry.plays;
+      if (entry.completes > current.seedCompletes) {
+        current.seed = seed;
+        current.seedCompletes = entry.completes;
+      }
+    }
+    return [...byArtist.values()]
+      .sort((a, b) => b.plays - a.plays)
+      .slice(0, Math.max(1, limit))
+      .map((artist) => artist.seed);
+  }
+
+  /** Whether this track ever played on the channel, requested or not. */
+  hasHeard(id: string): boolean {
+    this.#ensureLoaded();
+    return this.#global.has(id);
   }
 
   userSummary(uid: string): ListeningUserSummary {
@@ -426,7 +529,7 @@ export class ListeningHistory {
   #ensureLoaded(): void {
     if (this.#loaded) return;
     this.#loaded = true;
-    const parsed = readJsonFile(this.#filePath, parseHistoryFile);
+    const parsed = readJsonFile(this.#filePath, parseHistoryFile, this.#logger);
     if (parsed === undefined) return;
     this.#users = parsed.users;
     this.#global = parsed.global;
@@ -449,7 +552,6 @@ export class ListeningHistory {
 
   async #persistNow(): Promise<void> {
     try {
-      await mkdir(dirname(this.#filePath), { recursive: true });
       const data = {
         global: Object.fromEntries(this.#global),
         users: Object.fromEntries(
@@ -461,14 +563,9 @@ export class ListeningHistory {
             },
           ]),
         ),
-        version: 1 as const,
+        version: HISTORY_VERSION,
       };
-      const temporary = `${this.#filePath}.tmp`;
-      await writeFile(temporary, JSON.stringify(data), {
-        encoding: "utf8",
-        mode: 0o600,
-      });
-      await rename(temporary, this.#filePath);
+      await writeFileAtomic(this.#filePath, JSON.stringify(data), 0o600);
     } catch (error) {
       this.#logger.warn(
         { err: error },

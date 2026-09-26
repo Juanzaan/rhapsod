@@ -82,6 +82,8 @@ Si el despliegue sigue `main`, usar `git pull --ff-only` en lugar del checkout. 
 
 Verificar `systemctl is-active rhapsod`, versión del panel, una pista de prueba, avance de cola y preferencias. Revisar errores con `journalctl -u rhapsod -n 100 --no-pager`. Para revertir, detener en reposo, recuperar el commit registrado, ejecutar `npm ci` y `npm run build`, restaurar el respaldo correspondiente si lo exige una migración e iniciar de nuevo.
 
+Si un archivo de datos (listas, favoritos, historial de escucha, biblioteca de canciones, telemetría o estado de reproducción) no se puede leer al iniciar porque no es JSON válido o tiene una versión de formato desconocida, el bot lo renombra a `<nombre>.corrupt-<hora UTC>` en el mismo directorio, registra una advertencia con ambos nombres y ese almacén arranca vacío. No se borra nada. Los archivos apartados se listan con `ls /var/lib/rhapsod/*.corrupt-*`. Para recuperar uno, detener el bot en reposo, reparar la copia o tomar el archivo del respaldo, devolverle su nombre original e iniciar el bot.
+
 ## Docker Compose (Linux)
 
 Compose inicia contenedores separados para el bot y yt-dlp con la red del host Linux. Ambos servicios escuchan en localhost; no se publica ningún puerto del panel. Esta configuración permite acceder a TeamSpeak o servicios auxiliares del host.

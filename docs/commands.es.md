@@ -13,7 +13,7 @@ Los comandos utilizan `!` por defecto y se procesan en el chat de TeamSpeak cuan
 | `!skip`                               | `!s`                  | Saltar la pista actual con permiso de solicitante o administrador.           |
 | `!previous`                           | `!prev`               | Repetir la última pista terminada.                                           |
 | `!seek <segundos>`                    | -                     | Cambiar la posición de reproducción.                                         |
-| `!stop`                               | -                     | Detener la reproducción y vaciar la sesión.                                  |
+| `!stop`                               | -                     | Detener y vaciar la sesión; con pistas ajenas, solo administradores.         |
 | `!queue [página]`                     | `!q`                  | Mostrar 10 pistas por página y tiempo restante conocido.                     |
 | `!history`                            | `!hist`               | Mostrar las 10 últimas pistas iniciadas.                                     |
 | `!now-playing`                        | `!np`, `!now`         | Mostrar pista, duración y solicitante; incluye título de radio.              |
@@ -25,16 +25,10 @@ Los comandos utilizan `!` por defecto y se procesan en el chat de TeamSpeak cuan
 | `!debug-server`                       | `!ds`                 | Información del servidor; solo administradores.                              |
 | `!chart`                              | -                     | Gráfico de actividad; solo administradores.                                  |
 | `!remove <n\|inicio-fin>`             | `!rm`                 | Eliminar pistas propias o, con permisos, ajenas.                             |
-| `!clear`                              | `!c`                  | Vaciar pistas pendientes.                                                    |
+| `!clear`                              | `!c`                  | Vaciar pendientes; con pistas ajenas, solo administradores.                  |
 | `!shuffle`                            | -                     | Mezclar pistas pendientes.                                                   |
 | `!loop [off\|track\|queue]`           | -                     | Repetición persistente de pista o cola.                                      |
 | `!lyrics`                             | `!ly`                 | Buscar letras mediante LRCLIB.                                               |
-| `!bassboost [1-5]`                    | `!bb`                 | Aplicar refuerzo de graves.                                                  |
-| `!nightcore [1.05-1.35]`              | `!nc`                 | Aumentar velocidad.                                                          |
-| `!vaporwave [0.80-0.95]`              | `!vw`                 | Reducir velocidad.                                                           |
-| `!8d`                                 | -                     | Aplicar efecto espacial.                                                     |
-| `!filter [off]`                       | -                     | Mostrar o desactivar el filtro.                                              |
-| `!effects <efecto> [on\|off]`         | -                     | Controlar efectos; admite `list` y `reset`.                                  |
 | `!playlist <subcomando>`              | `!pl`                 | `save`, `load`, `list`, `show`, `delete`, `add`, `remove`, `rename`, `info`. |
 | `!fav` / `!favs`                      | -                     | Guardar la pista actual o listar favoritos.                                  |
 | `!unfav <n>`                          | -                     | Eliminar un favorito por posición.                                           |
@@ -50,7 +44,7 @@ Los comandos utilizan `!` por defecto y se procesan en el chat de TeamSpeak cuan
 
 ## Permisos y persistencia
 
-La mayoría de los comandos están disponibles para todos. `RHAPSOD_ADMIN_UIDS` permite saltar o eliminar pistas ajenas y usar comandos administrativos. `!jump` verifica permisos sobre cada pista descartada. Cualquier usuario puede saltar una pista automática.
+La mayoría de los comandos están disponibles para todos. `RHAPSOD_ADMIN_UIDS` permite saltar o eliminar pistas ajenas y usar comandos administrativos. `!jump` verifica permisos sobre cada pista descartada. `!stop` y `!clear` exigen que todas las pistas afectadas sean propias o automáticas, salvo para administradores. Cualquier usuario puede saltar una pista automática. Las pistas de usuarios que ya no están conectados al servidor también son comunes: cualquiera puede saltarlas, quitarlas o vaciarlas.
 
 Los favoritos se guardan por UID en `data/user-preferences.json`, con un máximo de 50 por usuario. Volumen, repetición y reproducción automática se guardan en `data/state.json`. `!stop` y `!clear` desactivan la repetición y cancelan la continuación pendiente. Con `RHAPSOD_INSTANCE_ID`, los archivos están dentro del directorio de instancia.
 
@@ -70,6 +64,12 @@ La cola usa posiciones desde 1. `!remove inicio-fin` incluye ambos extremos y li
 
 ## Reproducción automática
 
-`!autoplay on` usa mezclas y pistas relacionadas de YouTube, señales de escucha personal y del canal, coincidencias de títulos y continuidad de energía estimada. Limita repeticiones y concentración de artistas. Sin pistas iniciales permanece en silencio; las solicitudes a proveedores tienen tiempo limitado. Las canciones de la radio en directo entran al mismo historial cuando la emisora las nombra en sus metadatos, para que la rotación también alimente la reproducción automática y `!tops`.
+`!autoplay on` mantiene la música al vaciarse la cola rotando tres fuentes: cada diez pistas elige cuatro parecidas, tres clásicas y tres descubrimientos.
+
+- **Parecidas:** la mezcla de YouTube de lo que acaba de sonar, ordenada según quien viene pidiendo (afinidad por artista y palabras del título en sus sesiones recientes, continuidad de energía con la última pista).
+- **Clásicas:** pistas que el canal pidió y dejó sonar antes, con al menos seis horas de descanso; las que se saltan más de lo que se terminan no vuelven.
+- **Descubrimientos:** pistas que el canal nunca escuchó, tomadas de la mezcla de YouTube de un artista de los más escuchados en el canal.
+
+Las elecciones de la reproducción automática no cuentan como pedidos: no suben en `!tops` ni en el perfil de gustos, así que no se refuerza a sí misma. Saltar una de sus pistas cuenta en contra de esa pista, y su fuente queda fuera los dos turnos siguientes. Si una fuente no tiene nada para ofrecer, la siguiente la reemplaza; sin historial permanece en silencio. Las mezclas obtenidas se reutilizan durante 30 minutos y las solicitudes a proveedores tienen tiempo limitado. Las canciones de la radio en directo entran al mismo historial cuando la emisora las nombra en sus metadatos, para que la rotación también alimente las clásicas y `!tops`.
 
 Rhapsod pasa argumentos directamente a los procesos hijos; los comandos de chat no ejecutan sintaxis de shell.

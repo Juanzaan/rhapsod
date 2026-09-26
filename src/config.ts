@@ -10,6 +10,14 @@ const optionalPositiveInteger = z.preprocess(
   z.coerce.number().int().min(1).max(4).optional(),
 );
 
+// Ranges are the ones the resolver used to clamp to. Out-of-range values now
+// fail at startup like every other key, and the panel rejects them on save.
+const timeoutMs = (min: number, max: number, fallback: number) =>
+  z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.coerce.number().int().min(min).max(max).default(fallback),
+  );
+
 const configSchema = z.object({
   RHAPSOD_ADMIN_UIDS: z.string().default(""),
   RHAPSOD_ENV_FILE: z.string().min(1).default(".env"),
@@ -124,6 +132,11 @@ const configSchema = z.object({
     (value) => (value === "" ? undefined : value),
     z.string().url().optional(),
   ),
+  RHAPSOD_YTDLP_SEARCH_TIMEOUT_MS: timeoutMs(4_000, 20_000, 8_000),
+  RHAPSOD_YTDLP_AUDIO_URL_TIMEOUT_MS: timeoutMs(5_000, 30_000, 12_000),
+  RHAPSOD_YTDLP_DOWNLOAD_TIMEOUT_MS: timeoutMs(30_000, 300_000, 60_000),
+  RHAPSOD_YTDLP_METADATA_TIMEOUT_MS: timeoutMs(10_000, 60_000, 30_000),
+  RHAPSOD_YTDLP_PLAYLIST_TIMEOUT_MS: timeoutMs(15_000, 120_000, 45_000),
   RHAPSOD_WARP_PROXY: optionalSecret,
   RHAPSOD_PANEL_ENABLED: z
     .enum(["true", "false"])
@@ -140,6 +153,8 @@ const configSchema = z.object({
 });
 
 export type AppConfig = z.infer<typeof configSchema>;
+
+export const CONFIG_KEYS: readonly string[] = Object.keys(configSchema.shape);
 
 export function loadConfig(
   environment: NodeJS.ProcessEnv = process.env,

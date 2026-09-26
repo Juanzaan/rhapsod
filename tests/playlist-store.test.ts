@@ -1,5 +1,11 @@
 import { afterAll, describe, expect, it } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -131,6 +137,23 @@ describe("PlaylistStore", () => {
     store.save("uid-1", "fiesta", [track("a")]);
     await store.flush();
     expect(store.load("uid-1", "fiesta")?.tracks).toHaveLength(1);
+  });
+
+  it("keeps a copy of an unreadable store instead of overwriting it", async () => {
+    const dir = mkdtempSync(join(directory, "quarantine-"));
+    const filePath = join(dir, "playlists.json");
+    const damaged = '{"version":1,"playlists":{"uid-1":[{"name":"fiesta"';
+    writeFileSync(filePath, damaged);
+    const store = new PlaylistStore(filePath);
+    store.save("uid-1", "nueva", [track("a")]);
+    await store.flush();
+
+    const copies = readdirSync(dir).filter((name) =>
+      name.startsWith("playlists.json.corrupt-"),
+    );
+    expect(copies).toHaveLength(1);
+    expect(readFileSync(join(dir, copies[0]!), "utf8")).toBe(damaged);
+    expect(store.load("uid-1", "nueva")).toBeDefined();
   });
 
   it("recovers from an unsupported version", async () => {
