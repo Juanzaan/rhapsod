@@ -38,6 +38,7 @@ Correcciones de persistencia, actualización de dependencias, reparación del de
 - Usar el binario de FFmpeg y el User-Agent configurados para los flujos precargados de la pista siguiente; antes usaban el ffmpeg-static incluido.
 - Espaciar los mensajes de chat un segundo aunque se encolen varios a la vez, registrar los mensajes descartados por la cola anti-flood, dividir los textos de más de 1024 caracteres (como `!help` o `!debug-server` en servidores grandes) en lugar de perderlos, y detectar un sondeo de heartbeat que nunca responde.
 - `!stop` y `!clear` siguen la misma regla de propiedad que `!skip` y `!remove`: se rechazan si la cola tiene pistas de otro usuario, salvo para administradores. Las pistas automáticas y las de usuarios que ya salieron del servidor son comunes, así que las pistas de alguien ausente nunca bloquean la cola.
+- Documentar qué guarda Rhapsod de cada usuario de TeamSpeak, por cuánto tiempo y cómo borrar los datos de un usuario, en `docs/privacy.es.md`.
 - Ejecutar el watchdog del bucle de eventos cada 15 segundos en lugar de cada 15 minutos, así una detención de más de 30 segundos reinicia el bot en vez de una de más de 30 minutos. El intervalo se configura con `RHAPSOD_WATCHDOG_INTERVAL_SECONDS` (0 lo desactiva); `RHAPSOD_WATCHDOG_INTERVAL_MINUTES` queda obsoleta y solo se respeta su valor `0`.
 - Enviar la versión en ejecución en cada User-Agent saliente (`Rhapsod/<versión>`, leída de `package.json`) en lugar de los desactualizados `Rhapsod/3.0` y `Rhapsod/1`.
 - Repartir las búsquedas de `!radio` entre los espejos de radio-browser que publica el proyecto en vez de fijar `de1`, y pasar a otro espejo cuando uno falla.
@@ -53,6 +54,7 @@ Correcciones de persistencia, actualización de dependencias, reparación del de
 - Comprobar las descargas del instalador y de la actualización semanal con las sumas publicadas, usar directorios temporales privados en lugar de rutas fijas en `/tmp`, crear el usuario de servicio con shell `nologin` y fijar el servidor y el complemento POT a la misma versión. Los contenedores Docker se ejecutan con el usuario sin privilegios `node` y Compose inicia el proveedor POT en loopback.
 - Enviar seguidas las partes de un mensaje de chat dividido: otro mensaje encolado mientras tanto ya no puede quedar entre ellas.
 - Endurecer todas las unidades systemd: dispositivos privados, parámetros, módulos, registros, grupos de control y reloj del kernel protegidos, espacios de nombres y familias de direcciones restringidos, sin capacidades, filtro de llamadas `@system-service` y umask privada. El acceso a archivos no cambia.
+- Actualizar dependencias: dotenv 18 y libopus-wasm 0.4 (salida Opus verificada idéntica byte a byte), además de versiones compatibles de Hono, Zod, undici, Vitest, ESLint y Prettier. Dependabot ya no propone versiones mayores de `@types/node` por encima del entorno Node 22 admitido.
 - Dejar de notificar a un manejador de conexión perdida después de cancelar su suscripción: los eventos de expulsión y desconexión se registran una sola vez en lugar de una por suscripción.
 
 ## Actualización

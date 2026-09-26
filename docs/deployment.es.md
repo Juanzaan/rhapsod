@@ -68,7 +68,7 @@ sudo systemctl stop rhapsod
 sudo tar -czf /root/rhapsod-backup.tar.gz /var/lib/rhapsod /etc/rhapsod.env
 ```
 
-Para el instalador, usar `/home/rhapsod/rhapsod/data`, `/home/rhapsod/rhapsod/.env` y el archivo de cookies configurado. Guardar las copias de forma privada.
+Para el instalador, usar `/home/rhapsod/rhapsod/data`, `/home/rhapsod/rhapsod/.env` y el archivo de cookies configurado. Guardar las copias de forma privada: contienen datos de cada usuario, descritos en [datos y privacidad](privacy.es.md).
 
 En instalaciones por etiqueta, sustituir `<release-tag>` por la versión publicada elegida:
 
