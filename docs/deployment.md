@@ -66,7 +66,7 @@ sudo systemctl stop rhapsod
 sudo tar -czf /root/rhapsod-backup.tar.gz /var/lib/rhapsod /etc/rhapsod.env
 ```
 
-For installer layouts, use `/home/rhapsod/rhapsod/data`, `/home/rhapsod/rhapsod/.env` and the configured cookie file instead. Store backups privately.
+For installer layouts, use `/home/rhapsod/rhapsod/data`, `/home/rhapsod/rhapsod/.env` and the configured cookie file instead. Store backups privately: they hold per-user data, described in [data and privacy](privacy.md).
 
 For a tagged installation, replace `<release-tag>` with the selected published tag:
 

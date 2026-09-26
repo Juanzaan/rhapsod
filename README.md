@@ -90,6 +90,7 @@ npm run test:coverage
 - [Releases and publishing](docs/releases.md)
 - [Roadmap](docs/roadmap.md) and [bot research](docs/research-ts3-bots.md)
 - [Optional voice routing](docs/warp-voice-egress.md)
+- [Data and privacy](docs/privacy.md): what is stored per user and how to delete it
 - [Contributing](CONTRIBUTING.md) and [security policy](SECURITY.md)
 
 Report problems using the [bug template](https://github.com/Juanzaan/rhapsod/issues/new?template=bug_report.yml), including the version from `package.json`, relevant sanitized logs and reproduction steps.

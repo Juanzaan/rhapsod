@@ -38,6 +38,7 @@ Persistence fixes, dependency updates, deployment repairs and consistent bilingu
 - Use the configured FFmpeg binary and User-Agent for prewarmed next-track streams; they used to fall back to the bundled ffmpeg-static.
 - Space outgoing chat messages one second apart even when several are queued at once, log messages dropped by the anti-flood queue, split texts longer than 1024 characters (such as `!help` or `!debug-server` on large servers) instead of losing them, and detect a heartbeat probe that never answers.
 - `!stop` and `!clear` follow the same ownership rule as `!skip` and `!remove`: they are refused when the queue holds another user's tracks, unless the sender is an admin. Autoplay picks and tracks whose requester left the server are communal, so an absent user's tracks never pin the queue.
+- Document what Rhapsod stores per TeamSpeak user, for how long, and how to delete one user's data, in `docs/privacy.md`.
 - Run the event-loop watchdog every 15 seconds instead of every 15 minutes, so a stall over 30 seconds restarts the bot instead of one over 30 minutes. The interval is set with `RHAPSOD_WATCHDOG_INTERVAL_SECONDS` (0 disables); `RHAPSOD_WATCHDOG_INTERVAL_MINUTES` is deprecated and only its `0` is honored.
 - Send the running version in every outbound User-Agent (`Rhapsod/<version>`, read from `package.json`) instead of the stale `Rhapsod/3.0` and `Rhapsod/1`.
 - Spread `!radio` searches across the radio-browser mirrors listed by the project instead of pinning `de1`, moving to another mirror when one fails.
@@ -53,6 +54,7 @@ Persistence fixes, dependency updates, deployment repairs and consistent bilingu
 - Verify installer and weekly-update downloads against published checksums, use private temp directories instead of fixed `/tmp` paths, create the service user with a `nologin` shell and pin the POT provider server and plugin to the same release. Docker containers run as the unprivileged `node` user and Compose starts the POT provider on loopback.
 - Send the parts of a split chat message back to back: another message queued meanwhile can no longer land between them.
 - Support aarch64 (arm64) hosts in the installer, such as Oracle Cloud Ampere: Node.js, yt-dlp, static FFmpeg and WARP are fetched for the host architecture, and the weekly update keeps using the matching yt-dlp binary.
+- Update dependencies: dotenv 18 and libopus-wasm 0.4 (Opus output verified byte-identical), plus compatible Hono, Zod, undici, Vitest, ESLint and Prettier releases. Dependabot no longer proposes `@types/node` majors beyond the supported Node 22 runtime.
 - Stop notifying a connection-lost handler after it unsubscribes: kicked and disconnected events are bound once instead of once per subscription.
 
 ## Upgrade
