@@ -6,6 +6,7 @@
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { get } from "node:http";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -76,29 +77,26 @@ export async function runSmoke(options: SmokeOptions): Promise<SmokeResult> {
   const check = (name: string, ok: boolean, detail?: string): void => {
     checks.push({ name, ok, ...(detail === undefined ? {} : { detail }) });
   };
-  const get = (path: string, withAuth = true): Promise<Response> =>
-    fetch(`${base}${path}`, {
-      headers: withAuth ? { authorization: auth } : {},
-      signal: AbortSignal.timeout(5_000),
-    });
+  const fetchPath = (path: string, withAuth = true): Promise<SmokeResponse> =>
+    request(`${base}${path}`, withAuth ? { authorization: auth } : {});
 
   try {
     const started = await waitForPanel(
-      () => get("/api/health"),
+      () => fetchPath("/api/health"),
       exited,
       options.startTimeoutMs ?? 30_000,
     );
     check("panel starts", started.ok, started.detail);
     if (started.ok) {
-      const anonymous = await get("/api/health", false);
+      const anonymous = await fetchPath("/api/health", false);
       check(
         "rejects requests without credentials",
         anonymous.status === 401,
         `status ${anonymous.status}`,
       );
 
-      const state = await get("/api/state");
-      const body = (await state.json().catch(() => undefined)) as
+      const state = await fetchPath("/api/state");
+      const body = parseJson(state.body) as
         { playerState?: unknown } | undefined;
       check(
         "serves /api/state",
@@ -106,11 +104,10 @@ export async function runSmoke(options: SmokeOptions): Promise<SmokeResult> {
         `status ${state.status}`,
       );
 
-      const page = await get("/");
+      const page = await fetchPath("/");
       check(
         "serves the dashboard",
-        page.status === 200 &&
-          (page.headers.get("content-type") ?? "").includes("text/html"),
+        page.status === 200 && page.contentType.includes("text/html"),
         `status ${page.status}`,
       );
     }
@@ -135,7 +132,7 @@ export async function runSmoke(options: SmokeOptions): Promise<SmokeResult> {
 }
 
 async function waitForPanel(
-  probe: () => Promise<Response>,
+  probe: () => Promise<SmokeResponse>,
   exited: Promise<number | null>,
   timeoutMs: number,
 ): Promise<{ ok: boolean; detail?: string }> {
@@ -153,6 +150,46 @@ async function waitForPanel(
     await delay(250);
   }
   return { detail: `no answer within ${timeoutMs} ms`, ok: false };
+}
+
+interface SmokeResponse {
+  readonly status: number;
+  readonly contentType: string;
+  readonly body: string;
+}
+
+// node:http with one connection per request instead of fetch: undici's
+// pooled keep-alive sockets were still open when the bot exited, and on
+// Node 24 undici then failed an internal assertion (`assert(!this.paused)`)
+// as an uncaught exception in the test worker.
+function request(
+  url: string,
+  headers: Record<string, string>,
+): Promise<SmokeResponse> {
+  return new Promise((resolve, reject) => {
+    const req = get(url, { agent: false, headers, timeout: 5_000 }, (res) => {
+      const chunks: Buffer[] = [];
+      res.on("data", (chunk: Buffer) => chunks.push(chunk));
+      res.on("end", () =>
+        resolve({
+          body: Buffer.concat(chunks).toString("utf8"),
+          contentType: res.headers["content-type"] ?? "",
+          status: res.statusCode ?? 0,
+        }),
+      );
+      res.on("error", reject);
+    });
+    req.on("timeout", () => req.destroy(new Error("request timed out")));
+    req.on("error", reject);
+  });
+}
+
+function parseJson(text: string): unknown {
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return undefined;
+  }
 }
 
 function freePort(): Promise<number> {
