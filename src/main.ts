@@ -187,7 +187,7 @@ async function main(): Promise<void> {
           : { daemonUrl: config.RHAPSOD_YTDLP_DAEMON_URL }),
         timeouts: timeoutConfigFrom(config),
       });
-      createPanelServer({
+      const setupPanel = createPanelServer({
         config,
         envFilePath: config.RHAPSOD_ENV_FILE,
         logger,
@@ -220,6 +220,15 @@ async function main(): Promise<void> {
       logger.info(
         "Setup mode: panel running without TeamSpeak; complete the wizard and restart",
       );
+      // Without these, `systemctl stop` during setup killed the process
+      // with the panel open and the log unflushed.
+      const stopSetup = (): void => {
+        logger.info("Shutdown initiated in setup mode");
+        flushBeforeExit = () => setupPanel.close().catch(() => undefined);
+        void exitAfterFlush(0);
+      };
+      process.once("SIGINT", stopSetup);
+      process.once("SIGTERM", stopSetup);
     }
     return;
   }
