@@ -21,6 +21,11 @@ export interface FfmpegPcmOptions {
     readonly measuredTp: number;
   };
   readonly seekSeconds?: number;
+  /**
+   * Endless stream (radio). A 403 retry reconnects at the live edge instead
+   * of seeking: ffmpeg would read and discard the whole seek offset first.
+   */
+  readonly live?: boolean;
   readonly userAgent?: string;
   /**
    * Optional HTTP proxy URL (e.g. Cloudflare WARP in proxy mode) used ONLY
@@ -126,6 +131,17 @@ export function buildFfmpegPcmArguments(
   return args;
 }
 
+/**
+ * Matches the HTTP 403 wording ffmpeg ("Server returned 403 Forbidden") and
+ * yt-dlp ("HTTP Error 403: Forbidden") print. A bare /403/ also matched the
+ * digits of googlevideo URLs and itags echoed in unrelated errors.
+ */
+export function isForbiddenResponse(text: string): boolean {
+  return /server returned 403|http error 403|\b403 forbidden\b/i.test(text);
+}
+
+const PCM_BYTES_PER_SECOND = SAMPLE_RATE * CHANNELS * 2;
+
 const FFMPEG_403_RETRY_COUNT = 2;
 const FFMPEG_403_RETRY_DELAY_MS = 1_500;
 
@@ -142,15 +158,35 @@ export function createFfmpegPcmStream(
   let retries = 0;
   let usedProxy = false;
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
+  // PCM already handed to the player across every ffmpeg attempt. A 403
+  // retry resumes from here; restarting at the original offset replayed the
+  // start of the track into the same stream.
+  let emittedBytes = 0;
 
   const start = (useProxy = false): void => {
     if (stopped) return;
     usedProxy = useProxy;
-    const args = buildFfmpegPcmArguments(url, options, useProxy);
+    const resumeSeconds =
+      options.live === true
+        ? undefined
+        : (options.seekSeconds ?? 0) + emittedBytes / PCM_BYTES_PER_SECOND;
+    const args = buildFfmpegPcmArguments(
+      url,
+      {
+        ...options,
+        ...(resumeSeconds === undefined
+          ? {}
+          : { seekSeconds: Math.floor(resumeSeconds * 1_000) / 1_000 }),
+      },
+      useProxy,
+    );
     stderr = "";
     child = spawnProcess(binary, args, {
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
+    });
+    child.stdout.on("data", (chunk: Buffer) => {
+      emittedBytes += chunk.length;
     });
     child.stdout.pipe(stream, { end: false });
     child.stderr.on("data", (chunk: Buffer) => {
@@ -192,14 +228,14 @@ export function createFfmpegPcmStream(
       // The player stays in "buffering" and receives audio when a retry succeeds.
       // After the direct retries are exhausted, one last attempt goes through
       // the configured proxy egress (e.g. Cloudflare WARP) when available.
-      if (/403|Forbidden/i.test(stderr) && retries < FFMPEG_403_RETRY_COUNT) {
+      if (isForbiddenResponse(stderr) && retries < FFMPEG_403_RETRY_COUNT) {
         retries++;
         retryTimer = setTimeout(() => start(false), FFMPEG_403_RETRY_DELAY_MS);
         retryTimer.unref();
         return;
       }
       if (
-        /403|Forbidden/i.test(stderr) &&
+        isForbiddenResponse(stderr) &&
         !usedProxy &&
         options.proxyUrl !== undefined &&
         options.proxyUrl.length > 0

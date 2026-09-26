@@ -5,7 +5,10 @@ import {
   playFfmpegUrl,
   type FfmpegPlaybackSession,
 } from "../audio/ffmpeg-player.js";
-import type { FfmpegPcmStream } from "../audio/ffmpeg-pcm.js";
+import {
+  isForbiddenResponse,
+  type FfmpegPcmStream,
+} from "../audio/ffmpeg-pcm.js";
 import type { RhapsodOpusEncoder } from "../audio/opus-encoder.js";
 import { FRAME_DURATION_MS } from "../audio/opus-encoder.js";
 import type {
@@ -40,6 +43,10 @@ export type PlaybackDriverState = "idle" | "resolving" | "playing";
 
 export type PlaybackEndReason =
   "completed" | "error" | "skipped" | "stopped" | "filter-change";
+
+// Internal end reason for a session replaced by another session of the same
+// track (seek, filter change, 403 retry); never reported to observers.
+type SessionEndReason = PlaybackEndReason | "restart";
 
 export interface PlaybackTiming {
   readonly audioUrlSource?: AudioUrlSource;
@@ -164,8 +171,20 @@ export class PlaybackController {
   // URL not yet in hand), playing (live session). Transient windows (a skip
   // landing between sessions) resolve themselves within one loop turn.
   #driverState: PlaybackDriverState = "idle";
-  #pendingSeek:
-    { readonly seconds: number; readonly trackId: string } | undefined;
+  // Set when the current track restarts in a new ffmpeg session (seek,
+  // filter change, 403 retry). The next session for that track resumes the
+  // same play: it is not counted, announced or recorded again. `seconds` is
+  // absent for live streams, which rejoin at the live edge.
+  #pendingResume:
+    { readonly seconds?: number; readonly trackId: string } | undefined;
+  // Track position where the current session started; framesSent counts
+  // from zero in every session.
+  #sessionOffsetMs = 0;
+  // A play whose session was replaced by a restart and whose finish is
+  // therefore not reported yet. The resumed session reports it; if the
+  // resume never plays (skip, stop, resolution failure) it is reported here.
+  #unfinished:
+    { readonly track: Track; readonly metrics: AudioPlayerMetrics } | undefined;
   #pendingSkips = 0;
   #volumePercent = 50;
   #tracksPlayed = 0;
@@ -176,7 +195,7 @@ export class PlaybackController {
     { readonly source: string; readonly stream: FfmpegPcmStream } | undefined;
   readonly #sessionEndReasons = new WeakMap<
     FfmpegPlaybackSession,
-    PlaybackEndReason
+    SessionEndReason
   >();
   readonly #retries = new WeakMap<Track, number>();
   #filter: AudioFilter = "off";
@@ -264,8 +283,32 @@ export class PlaybackController {
   }
 
   get playbackPositionMs(): number {
-    const frames = this.#session?.player.metrics.framesSent ?? 0;
-    return Math.max(0, frames * FRAME_DURATION_MS);
+    const session = this.#session;
+    if (session === undefined) return 0;
+    return this.#sessionPositionMs(session);
+  }
+
+  #sessionPositionMs(session: FfmpegPlaybackSession): number {
+    return Math.max(
+      0,
+      this.#sessionOffsetMs +
+        session.player.metrics.framesSent * FRAME_DURATION_MS,
+    );
+  }
+
+  #reportUnfinished(reason: PlaybackEndReason): void {
+    const unfinished = this.#unfinished;
+    if (unfinished === undefined) return;
+    this.#unfinished = undefined;
+    this.#safeObserver(() =>
+      this.#onPlaybackFinished(unfinished.track, unfinished.metrics, reason),
+    );
+  }
+
+  /** Resume point for a restart of the current track; undefined when live. */
+  #resumeSeconds(track: Track, positionMs: number): number | undefined {
+    if (track.durationSeconds === undefined) return undefined;
+    return Math.floor(positionMs / 1_000);
   }
 
   get audioHealth(): AudioPlayerMetrics | undefined {
@@ -291,19 +334,31 @@ export class PlaybackController {
     this.#filterParam = nextParam;
     this.#onStateChanged();
     if (this.#current && this.#session) {
-      const positionMs =
-        this.#session.player.metrics.framesSent * FRAME_DURATION_MS;
-      this.#restartForFilterChange(Math.floor(positionMs / 1_000));
+      this.#restartCurrent(
+        this.#resumeSeconds(
+          this.#current,
+          this.#sessionPositionMs(this.#session),
+        ),
+      );
     }
   }
 
-  #restartForFilterChange(seekSeconds: number): void {
+  /**
+   * Replaces the current session with a new one for the same track. The
+   * interrupted session is not reported as finished: the listener did not
+   * skip anything, the same play continues.
+   */
+  #restartCurrent(seconds: number | undefined): void {
     const track = this.#current;
     if (!track) return;
-    this.#pendingSeek = { seconds: seekSeconds, trackId: track.id };
+    this.#pendingResume = {
+      ...(seconds === undefined ? {} : { seconds }),
+      trackId: track.id,
+    };
     this.#epochs.invalidatePlayback();
     if (this.#session) {
-      this.#sessionEndReasons.set(this.#session, "filter-change");
+      this.#sessionEndReasons.set(this.#session, "restart");
+      this.#unfinished = { track, metrics: this.#session.player.metrics };
       this.#session.stop();
       this.#session = undefined;
     }
@@ -311,7 +366,7 @@ export class PlaybackController {
       this.#queue.requeue(track);
       this.#queue.moveToHead(track.id);
     } catch {
-      // Duplicate already queued: the filter change acts like a restart.
+      // Duplicate already queued: the restart acts like a skip.
     }
     this.requestNext();
   }
@@ -368,7 +423,8 @@ export class PlaybackController {
   skip(): void {
     this.#epochs.invalidatePlayback();
     this.#pendingSkips++;
-    this.#pendingSeek = undefined;
+    this.#pendingResume = undefined;
+    this.#reportUnfinished("skipped");
     // Keep a warm stream that matches the next queue head: a skip is exactly
     // the moment the prewarmed stream pays off. #takeWarmStream discards it
     // safely at handoff time if the head changed instead.
@@ -388,7 +444,8 @@ export class PlaybackController {
     }
     this.#epochs.invalidatePlayback();
     this.#pendingSkips += position - 1 + (this.#current === undefined ? 0 : 1);
-    this.#pendingSeek = undefined;
+    this.#pendingResume = undefined;
+    this.#reportUnfinished("skipped");
     if (this.#current) this.#preparedStore.invalidate(this.#current.source);
     if (this.#session) this.#sessionEndReasons.set(this.#session, "skipped");
     this.#session?.stop();
@@ -411,7 +468,8 @@ export class PlaybackController {
     this.#epochs.resetAll();
     this.#autoplayArmed = false;
     this.#pendingSkips = 0;
-    this.#pendingSeek = undefined;
+    this.#pendingResume = undefined;
+    this.#reportUnfinished("stopped");
     this.#discardWarmStream();
     if (this.#session) this.#sessionEndReasons.set(this.#session, "stopped");
     this.#session?.stop();
@@ -426,7 +484,8 @@ export class PlaybackController {
     this.#epochs.resetAll();
     this.#autoplayArmed = false;
     this.#pendingSkips = 0;
-    this.#pendingSeek = undefined;
+    this.#pendingResume = undefined;
+    this.#reportUnfinished("stopped");
     this.#discardWarmStream();
     this.#loopMode = "off";
     this.#loopPool = [];
@@ -442,18 +501,7 @@ export class PlaybackController {
     if (this.#current.durationSeconds !== undefined) {
       target = Math.min(target, Math.max(0, this.#current.durationSeconds - 1));
     }
-    this.#pendingSeek = { seconds: target, trackId: this.#current.id };
-    this.#epochs.invalidatePlayback();
-    if (this.#session) this.#sessionEndReasons.set(this.#session, "skipped");
-    this.#session?.stop();
-    this.#session = undefined;
-    try {
-      this.#queue.requeue(this.#current);
-      this.#queue.moveToHead(this.#current.id);
-    } catch {
-      // Duplicate already queued: the seek acts like a skip.
-    }
-    this.requestNext();
+    this.#restartCurrent(target);
   }
 
   replayPrevious(): Track {
@@ -586,8 +634,9 @@ export class PlaybackController {
           return undefined;
         });
         if (resolved === undefined) {
-          if (this.#pendingSeek?.trackId === track.id) {
-            this.#pendingSeek = undefined;
+          if (this.#pendingResume?.trackId === track.id) {
+            this.#pendingResume = undefined;
+            this.#reportUnfinished("error");
           }
           continue;
         }
@@ -601,14 +650,16 @@ export class PlaybackController {
             trackId: track.id,
           });
         });
-        const pendingSeek = this.#pendingSeek;
-        this.#pendingSeek = undefined;
-        const seekSeconds =
-          pendingSeek !== undefined && pendingSeek.trackId === track.id
-            ? pendingSeek.seconds
-            : undefined;
+        const pendingResume = this.#pendingResume;
+        this.#pendingResume = undefined;
+        const resuming = pendingResume?.trackId === track.id;
+        // A different track taking over means the restarted play was
+        // abandoned (for example the restart could not requeue it).
+        if (!resuming) this.#reportUnfinished("skipped");
+        const seekSeconds = resuming ? pendingResume?.seconds : undefined;
         const playbackOptions: {
           readonly seekSeconds?: number;
+          readonly live?: boolean;
           readonly audioFilter: {
             readonly name: AudioFilter;
             readonly param?: FilterParam;
@@ -623,6 +674,7 @@ export class PlaybackController {
           };
         } = {
           ...(seekSeconds === undefined ? {} : { seekSeconds }),
+          ...(track.durationSeconds === undefined ? { live: true } : {}),
           audioFilter: { name: this.#filter, param: this.#filterParam },
           // Live radio has no measured profile, so it used to play through
           // dynamic single-pass loudnorm forever: the gain rides audibly on
@@ -673,15 +725,22 @@ export class PlaybackController {
         } catch (error) {
           this.#reportPlaybackError(track, error);
           this.#preparedStore.drop(track.source);
+          if (resuming) this.#reportUnfinished("error");
           continue;
         }
         session.player.setVolume(volumeToGain(this.#volumePercent));
         this.#session = session;
+        this.#sessionOffsetMs = (seekSeconds ?? 0) * 1_000;
         this.#autoplayArmed = true;
         this.#driverState = "playing";
-        this.#tracksPlayed++;
-        this.#recordHistory(track);
-        this.#safeObserver(() => this.#onPlaybackStarted(track));
+        if (resuming) {
+          // The resumed session reports the finish from here on.
+          this.#unfinished = undefined;
+        } else {
+          this.#tracksPlayed++;
+          this.#recordHistory(track);
+          this.#safeObserver(() => this.#onPlaybackStarted(track));
+        }
         this.#prefetchWhenStable();
         let playbackError: unknown;
         try {
@@ -689,49 +748,58 @@ export class PlaybackController {
         } catch (error) {
           playbackError = error;
         }
+        const endReason =
+          this.#sessionEndReasons.get(session) ??
+          (playbackError !== undefined ? "error" : "completed");
+        if (endReason === "restart") continue;
+        const retries = this.#retries.get(track) ?? 0;
+        if (
+          playbackError instanceof Error &&
+          endReason === "error" &&
+          isForbiddenResponse(playbackError.message) &&
+          retries < MAX_AUDIO_URL_403_RETRIES
+        ) {
+          this.#retries.set(track, retries + 1);
+          const positionMs = this.#sessionPositionMs(session);
+          // Invalidate stale URL (daemon may have cached a 403'd host).
+          // Awaited on purpose: the requeued track's re-resolve can reach
+          // the daemon before a fire-and-forget invalidate lands, and the
+          // daemon would serve the same dead URL again — burning ~10-25s
+          // of dead air and a retry on a URL already known bad.
+          this.#preparedStore.drop(track.source);
+          await this.#resolver
+            .invalidateAudioUrl?.(track.source)
+            .catch(() => undefined);
+          if (
+            this.#epochs.isGenerationCurrent(generation) &&
+            this.#current === track
+          ) {
+            try {
+              this.#queue.requeue(track);
+              this.#queue.moveToHead(track.id);
+              // The retry resumes the same play where the 403 cut it:
+              // no second "Reproduciendo", no error message, no restart
+              // from the top.
+              const seconds = this.#resumeSeconds(track, positionMs);
+              this.#pendingResume = {
+                ...(seconds === undefined ? {} : { seconds }),
+                trackId: track.id,
+              };
+              this.#unfinished = { track, metrics: session.player.metrics };
+              this.#session = undefined;
+              this.#current = undefined;
+              this.#onStateChanged();
+              continue;
+            } catch {
+              // Already queued or limit reached: fall through
+            }
+          }
+        }
         this.#safeObserver(() => {
-          this.#onPlaybackFinished(
-            track,
-            session.player.metrics,
-            this.#sessionEndReasons.get(session) ??
-              (playbackError !== undefined ? "error" : "completed"),
-          );
+          this.#onPlaybackFinished(track, session.player.metrics, endReason);
         });
         if (playbackError !== undefined) {
           this.#reportPlaybackError(track, playbackError);
-          const is403 =
-            playbackError instanceof Error &&
-            /403|Forbidden/i.test(playbackError.message);
-          if (is403) {
-            const retries = this.#retries.get(track) ?? 0;
-            if (retries < MAX_AUDIO_URL_403_RETRIES) {
-              this.#retries.set(track, retries + 1);
-              // Invalidate stale URL (daemon may have cached a 403'd host).
-              // Awaited on purpose: the requeued track's re-resolve can reach
-              // the daemon before a fire-and-forget invalidate lands, and the
-              // daemon would serve the same dead URL again — burning ~10-25s
-              // of dead air and a retry on a URL already known bad.
-              this.#preparedStore.drop(track.source);
-              await this.#resolver
-                .invalidateAudioUrl?.(track.source)
-                .catch(() => undefined);
-              if (
-                this.#epochs.isGenerationCurrent(generation) &&
-                this.#current === track
-              ) {
-                try {
-                  this.#queue.requeue(track);
-                  this.#queue.moveToHead(track.id);
-                  this.#session = undefined;
-                  this.#current = undefined;
-                  this.#onStateChanged();
-                  continue;
-                } catch {
-                  // Already queued or limit reached: fall through
-                }
-              }
-            }
-          }
         }
         if (
           !this.#epochs.isGenerationCurrent(generation) ||
@@ -1120,6 +1188,7 @@ export class PlaybackController {
         const loudnessProfile = this.#loudnessProfiler?.cached(next.source);
         const stream = this.#createPcmStream(url, {
           audioFilter: { name: this.#filter, param: this.#filterParam },
+          ...(next.durationSeconds === undefined ? { live: true } : {}),
           ...(this.#proxyUrl === undefined ? {} : { proxyUrl: this.#proxyUrl }),
           ...(this.#loudnessProfiler === undefined ||
           next.durationSeconds === undefined

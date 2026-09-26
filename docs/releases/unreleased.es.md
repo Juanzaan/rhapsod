@@ -29,6 +29,9 @@ Correcciones de persistencia, actualización de dependencias, reparación del de
 - Tratar el panel como administrador, para que saltar o quitar pistas de otros usuarios funcione desde la web.
 - La actualización semanal de yt-dlp ya no reinicia el bot: el servicio usa `Wants=` sobre el servicio auxiliar en lugar de `Requires=`, y la actualización reintenta pip con `--break-system-packages` en Debian 12 y Ubuntu 24.04.
 - Ocultar tokens bearer y cabeceras de cookies completas en registros y diagnósticos.
+- Tratar `!seek`, los cambios de filtro y los reintentos por 403 como la misma reproducción: sin un segundo mensaje "Reproduciendo", sin sumar en las estadísticas, sin registrar un salto en el perfil de gustos, y `!previous` devuelve la pista anterior. La posición del panel continúa desde el punto de salto en lugar de volver a 0:00.
+- Reanudar los reintentos por 403 donde se cortó el audio en lugar de repetir el comienzo de la pista, reintentar sin publicar un error en cada intento y volver a la radio en vivo en el punto actual. La detección de 403 busca el texto del error HTTP en lugar de cualquier "403" dentro de las URL.
+- Usar el binario de FFmpeg y el User-Agent configurados para los flujos precargados de la pista siguiente; antes usaban el ffmpeg-static incluido.
 
 ## Actualización
 
