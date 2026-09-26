@@ -37,7 +37,7 @@ Each item ships as its own PR with a regression test, bilingual docs and unrelea
 
 - **5. Gapless handoff tuning.** With the gap numbers from item 1, tune when the next track is prewarmed and keep the warm stream across seeks and queue edits that do not change the next track. Target and scope set by production data from `scripts/log-stats.mjs`; skipped if the gap is already under 200 ms at p90. Risk: medium.
 - **6. Loudness check.** Report measured loudness spread per session from the loudness profiler and adjust the default target or the fallback path only if the spread is audible. Risk: low.
-- **15. Panel scripts as real files.** In progress: the ambience, server tree, Commands, Server, Settings and setup wizard scripts live in `src/panel/scripts/` (#151 to #155), which also exposed the setup wizard bugs fixed in #156. The dashboard script is next. Risk: medium, the dashboard is large.
+- **15. Panel scripts as real files.** Done: every page script (ambience, server tree, dashboard, Commands, Server, Settings, setup wizard) lives in `src/panel/scripts/`, checked by ESLint and `tsc -p tsconfig.panel.json` and still inlined for the CSP. Moving them exposed the setup wizard bugs fixed in #156.
 - **16. Fake TeamSpeak harness (lane A).** A scripted server or recorded fixtures to exercise the TeamSpeak adapter and the startup wiring without a live server. Belongs to `src/adapters/ts3/`; taken by the lane A session.
 
 ### Proposed by lane A (open for veto)
