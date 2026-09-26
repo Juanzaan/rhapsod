@@ -60,8 +60,6 @@ export interface PanelStatus {
   readonly queueLength: number;
   readonly currentTitle?: string;
   readonly currentArtist?: string;
-  readonly currentDuration?: number;
-  readonly currentPosition?: number;
   readonly durationMs?: number;
   readonly positionMs?: number;
   readonly playerState?: "idle" | "buffering" | "playing" | "paused";
@@ -71,8 +69,6 @@ export interface PanelStatus {
   readonly uptimeMs?: number;
   readonly disconnects?: DisconnectSummary;
   readonly version: string;
-  readonly uptime?: number;
-  readonly hostname?: string;
 }
 
 export interface PanelOptions {
@@ -643,7 +639,7 @@ export function createPanelServer(options: PanelOptions): {
       port: options.config.RHAPSOD_PANEL_PORT,
       user: panelUser,
     },
-    "Setup panel listening",
+    "Panel listening",
   );
 
   return {
