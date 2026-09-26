@@ -10,7 +10,7 @@ Los comandos utilizan `!` por defecto y se procesan en el chat de TeamSpeak cuan
 | `!playnext <URL o búsqueda>`          | `!pn`, `!next`        | Añadir una pista al principio de la cola pendiente.                                                                                              |
 | `!yt [n] <búsqueda>`                  | `!search`, `!youtube` | Elegir un resultado clasificado; respeta la fuente preferida.                                                                                    |
 | `!pause` / `!resume`                  | -                     | Pausar o continuar.                                                                                                                              |
-| `!skip`                               | `!s`                  | Saltar la pista actual con permiso de solicitante o administrador.                                                                               |
+| `!skip`                               | `!s`                  | Saltar la pista actual (solicitante, administrador o votación de oyentes).                                                                       |
 | `!previous`                           | `!prev`               | Repetir la última pista terminada.                                                                                                               |
 | `!seek <segundos>`                    | -                     | Cambiar la posición de reproducción.                                                                                                             |
 | `!stop`                               | -                     | Detener y vaciar la sesión; con pistas ajenas, solo administradores.                                                                             |
@@ -45,6 +45,8 @@ Los comandos utilizan `!` por defecto y se procesan en el chat de TeamSpeak cuan
 ## Permisos y persistencia
 
 La mayoría de los comandos están disponibles para todos. `RHAPSOD_ADMIN_UIDS` permite saltar o eliminar pistas ajenas y usar comandos administrativos. `!jump` verifica permisos sobre cada pista descartada. `!stop` y `!clear` exigen que todas las pistas afectadas sean propias o automáticas, salvo para administradores. Cualquier usuario puede saltar una pista automática. Las pistas de usuarios que ya no están conectados al servidor también son comunes: cualquiera puede saltarlas, quitarlas o vaciarlas.
+
+Con `RHAPSOD_VOTE_SKIP=true` (por defecto `false`), `!skip` sobre una pista ajena cuenta como voto en lugar de rechazarse. La pista se salta cuando votó más de la mitad de las personas del canal del bot: 2 de 2, 2 de 3, 3 de 4. Solo votan los oyentes de ese canal, el voto de quien se va deja de contar y los votos se reinician al cambiar la pista. Si no se puede leer la lista de clientes del canal, se aplica la regla de propiedad.
 
 Los favoritos se guardan por UID en `data/user-preferences.json`, con un máximo de 50 por usuario. Volumen, repetición y reproducción automática se guardan en `data/state.json`. `!stop` y `!clear` desactivan la repetición y cancelan la continuación pendiente. Con `RHAPSOD_INSTANCE_ID`, los archivos están dentro del directorio de instancia.
 
