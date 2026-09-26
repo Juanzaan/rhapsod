@@ -135,10 +135,11 @@ The workflow publishes them with `scripts/release-notes.mjs`; see
 `docs/releases.md`. Unknown tags fail instead of using unrelated notes.
 
 Deploy: production runs from `main` on OCI via systemd
-(`EnvironmentFile=/etc/rhapsod.env`, `ExecStart=node dist/main.js`). Deploy =
-`git pull --ff-only && npm ci && npm run build && systemctl restart rhapsod`.
-The bot connects to a live server with real users. Never restart it without
-checking nothing is playing (`/api/state` → `playerState`).
+(`ExecStart=node dist/main.js`, `.env` in the checkout). Deploy with
+`sudo bash scripts/deploy.sh` on the host: it waits for
+`playerState: "idle"`, backs up, builds, restarts and rolls back on failure.
+The bot connects to a live server with real users. Never restart it by hand
+without checking nothing is playing (`/api/state` → `playerState`).
 
 ## Hard rules
 
