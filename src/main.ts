@@ -33,6 +33,7 @@ import {
 import { formatPlaybackError, formatPlaybackStarted } from "./lib/messages.js";
 import { classifyYoutubeAuthFailure } from "./lib/youtube-auth-health.js";
 import { CommandRateLimiter } from "./commands/command-rate-limiter.js";
+import { SkipVotes } from "./application/skip-votes.js";
 import { loadConfig } from "./config.js";
 import type { Track } from "./domain/track.js";
 import { FilePlaybackStateStore } from "./domain/state-store.js";
@@ -68,6 +69,10 @@ import { AppleMusicClient } from "./media/apple-music.js";
 import { DirectUrlClient } from "./media/direct-url.js";
 import { APP_VERSION as packageVersion } from "./lib/version.js";
 import { startEgressGuard } from "./lib/egress-guard.js";
+import {
+  PlaybackMetrics,
+  renderPrometheus,
+} from "./observability/prometheus.js";
 import { LyricsClient, parseArtistTitle } from "./media/lyrics.js";
 import { SoundCloudPublicApi } from "./media/soundcloud/public-api.js";
 import { SpotifyApi } from "./media/spotify/api.js";
@@ -108,6 +113,7 @@ async function main(): Promise<void> {
     retentionDays: config.RHAPSOD_LOG_RETENTION_DAYS,
   });
   const metrics = new MetricsCollector();
+  const playbackMetrics = new PlaybackMetrics();
   const trackTimings = new Map<
     string,
     { audioUrlMs?: number; cacheHit?: boolean; metadataMs?: number }
@@ -504,13 +510,15 @@ async function main(): Promise<void> {
           : formatPlaybackStarted(track.title, isFirst),
       );
     },
-    onPlaybackFinished: (track, metrics, reason) => {
+    onPlaybackFinished: (track, metrics, reason, kpis) => {
+      playbackMetrics.record(reason, metrics, kpis);
       const timings = trackTimings.get(track.id);
       trackTimings.delete(track.id);
       logger.info(
         {
           ...timings,
           ...metrics,
+          ...kpis,
           reason,
           trackId: track.id,
           title: track.title,
@@ -638,6 +646,7 @@ async function main(): Promise<void> {
     listeningHistory,
     ytDlpExecutor,
     commandRateLimiter,
+    skipVotes: new SkipVotes(),
     encoder,
     verbose,
     hasStartedPlaying: false,
@@ -999,6 +1008,14 @@ async function main(): Promise<void> {
             requestedBy: track.requestedBy,
           })),
         errors: () => metrics.errorSummary(20),
+        metricsText: () =>
+          renderPrometheus({
+            counters: metrics.counters(),
+            memoryRssBytes: process.memoryUsage.rss(),
+            playback: playbackMetrics,
+            uptimeSeconds: process.uptime(),
+            version: packageVersion,
+          }),
         chat: () => chatLog.snapshot(),
         sendChat: (text: string) => connection.sendChannelMessage(text),
         serverView: () => ({

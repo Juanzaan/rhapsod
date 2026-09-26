@@ -33,8 +33,8 @@ jobs:
       - run: npm run lint
       - run: npm run lint:scripts
       - run: npm run lint:docs
-      - name: Validate installer syntax
-        run: bash -n install.sh
+      - name: Validate shell script syntax
+        run: bash -n install.sh scripts/deploy.sh
       - run: npm run typecheck
       - name: Test with coverage
         run: npm run test:coverage

@@ -61,6 +61,18 @@ Wait for `playerState` to be `idle`. Paused and buffering sessions also represen
 
 ## Backup, update and rollback
 
+`scripts/deploy.sh` runs the whole procedure below in one command on the host: it waits until the panel reports `playerState: "idle"`, stops the bot, backs up `data/` and the env file, checks out the target, runs `npm ci` and the build as the service user, starts the bot and waits until it stays active and the panel answers. If the build or the start fails, it checks out the previous commit, rebuilds and starts it, and exits with an error. It restarts the yt-dlp daemon only when its script changed and warns when unit templates changed.
+
+```bash
+sudo bash scripts/deploy.sh --dry-run
+sudo bash scripts/deploy.sh
+sudo bash scripts/deploy.sh --ref v4.0.0
+```
+
+The default target is `origin/main`; `--ref` accepts a branch, tag or commit. The idle check reads the panel settings from `APP_DIR/.env` (`--env-file` for `/etc/rhapsod.env`); without an enabled panel it refuses to restart unless `--force` is given. Backups go to `APP_DIR/../backups` (`--backup-dir`), private to root, keeping the newest five (`--keep`). Entries are relative, so a restore is `tar -xzf <backup> -C /home/rhapsod/rhapsod` for `data/` and `.env`. It does not restore data on rollback; use the reported backup when a data migration requires it. `--service rhapsod@blue` deploys a named instance.
+
+The manual procedure:
+
 Record the current commit with `git rev-parse HEAD`. During an idle maintenance window, stop the bot and archive the actual data and configuration paths so the backup is consistent:
 
 ```bash
@@ -85,6 +97,32 @@ For a deployment already tracking `main`, use `git pull --ff-only` instead of th
 Verify `systemctl is-active rhapsod`, the panel version, a test track, queue advancement and saved preferences. Inspect `journalctl -u rhapsod -n 100 --no-pager` for errors. To roll back, stop while idle, check out the recorded commit, run `npm ci` and `npm run build`, restore the matching backup if a data migration requires it, and restart.
 
 When a data file (playlists, favorites, listening history, song library, telemetry or playback state) cannot be read at startup because it is not valid JSON or has an unknown format version, the bot renames it to `<name>.corrupt-<UTC time>` in the same directory, logs a warning with both names and starts that store empty. Nothing is deleted. List set-aside files with `ls /var/lib/rhapsod/*.corrupt-*`. To recover one, stop the bot while idle, repair the copy or take the file from the backup, move it back to its original name and start the bot.
+
+## Playback indicators
+
+Every finished track logs a `Playback session` line with its latency: `startDelayMs` (from picking the track to its first audio frame), `handoffGapMs` (silence after the previous track, absent after the bot sat idle), `coldStart`, `prewarmed`, underruns and rebuffers. Summarize them from the log directory:
+
+```bash
+cd /var/lib/rhapsod
+node /home/rhapsod/rhapsod/scripts/log-stats.mjs --since 2026-09-01T00:00:00Z logs/*.log
+```
+
+The "Indicadores de reproducción" block reports p50, p90 and p99 for the time from a command to the first audio on a cold start, the gap between tracks, and underruns per track, plus the share of handoffs that used the prewarmed stream. Compare the same window before and after an update.
+
+The panel also serves the same counters and latency histograms live at `GET /api/metrics` in Prometheus text format, behind the panel's basic auth and loopback bind. A Prometheus running on the same host scrapes it with:
+
+```yaml
+scrape_configs:
+  - job_name: rhapsod
+    metrics_path: /api/metrics
+    basic_auth:
+      username: admin
+      password_file: /etc/prometheus/rhapsod-panel-password
+    static_configs:
+      - targets: ["127.0.0.1:8080"]
+```
+
+`rhapsod_play_start_delay_seconds` and `rhapsod_handoff_gap_seconds` are histograms; `rhapsod_plays_total{reason="error"}` and `rhapsod_underruns_total` are counters. Counters restart at zero when the bot restarts.
 
 ## Docker Compose (Linux)
 

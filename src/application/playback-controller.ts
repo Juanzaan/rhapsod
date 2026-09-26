@@ -11,9 +11,10 @@ import {
 } from "../audio/ffmpeg-pcm.js";
 import type { RhapsodOpusEncoder } from "../audio/opus-encoder.js";
 import { FRAME_DURATION_MS } from "../audio/opus-encoder.js";
-import type {
-  AudioPlayerMetrics,
-  VoiceFrameOutput,
+import {
+  isMidPlayStall,
+  type AudioPlayerMetrics,
+  type VoiceFrameOutput,
 } from "../audio/audio-player.js";
 import type { LoudnessProfiler } from "../audio/loudness-profiler.js";
 import type { YoutubeTrackMetadata } from "../media/youtube/yt-dlp.js";
@@ -24,9 +25,13 @@ import type {
   PrefetchStatus,
 } from "../observability/metrics.js";
 import { UserError } from "../lib/user-error.js";
-import type { PreparedAudioStore } from "./prepared-audio-store.js";
+import {
+  lastsThroughPlay,
+  type PreparedAudioStore,
+} from "./prepared-audio-store.js";
 import { PlaybackEpoch } from "./playback-epoch.js";
 import type { TrackQueue } from "./track-queue.js";
+import { messages } from "../lib/messages.js";
 
 export type LoopMode = "off" | "queue" | "track";
 
@@ -41,6 +46,29 @@ export type PlaybackEndReason = "completed" | "error" | "skipped" | "stopped";
 // Internal end reason for a session replaced by another session of the same
 // track (seek, 403 retry); never reported to observers.
 type SessionEndReason = PlaybackEndReason | "restart";
+
+/**
+ * Per-play latency, reported once when a play ends (restarts of the same
+ * play for seek or a 403 do not count as new starts).
+ * - startDelayMs: from the driver picking the track to its first audio frame
+ *   (resolution, ffmpeg startup and buffering).
+ * - handoffGapMs: from the previous track's end to this track's first frame,
+ *   the silence listeners hear; absent after the driver sat idle.
+ */
+export interface PlaybackKpis {
+  readonly coldStart: boolean;
+  readonly handoffGapMs?: number;
+  readonly prewarmed: boolean;
+  readonly startDelayMs?: number;
+}
+
+interface PlayStart {
+  readonly createdAt: number;
+  readonly pickedAt: number;
+  readonly player: { readonly metrics: AudioPlayerMetrics };
+  readonly prewarmed: boolean;
+  readonly previousEndedAt: number | undefined;
+}
 
 export interface PlaybackTiming {
   readonly audioUrlSource?: AudioUrlSource;
@@ -85,6 +113,7 @@ export interface PlaybackControllerOptions {
     track: Track,
     metrics: AudioPlayerMetrics,
     reason: PlaybackEndReason,
+    kpis?: PlaybackKpis,
   ) => void;
   readonly onTiming?: (timing: PlaybackTiming) => void;
   readonly onStateChanged?: () => void;
@@ -100,6 +129,10 @@ const AUDIO_URL_REFRESH_AHEAD_MS = 3 * 60_000;
 const AUTH_REQUIRED_RE =
   /sign in to confirm|cookies for the authentication|request you to sign in|login required/i;
 const MAX_AUDIO_URL_403_RETRIES = 3;
+// A source that stops delivering mid-song (throttled CDN, dropped radio
+// connection) used to end the track as an error and skip it. One resume per
+// play gets it back; a second stall in the same play is treated as dead.
+const MAX_STALL_RESUMES_PER_PLAY = 1;
 const PREFETCH_STABILITY_TIMEOUT_MS = 8_000;
 const PREFETCH_STABILITY_POLL_MS = 100;
 const PREWARM_CHECK_INTERVAL_MS = 2_000;
@@ -147,8 +180,13 @@ export class PlaybackController {
     track: Track,
     metrics: AudioPlayerMetrics,
     reason: PlaybackEndReason,
+    kpis?: PlaybackKpis,
   ) => void;
   readonly #onTiming: (timing: PlaybackTiming) => void;
+  readonly #playStarts = new WeakMap<Track, PlayStart>();
+  // When the last session ended while more was queued; cleared when the
+  // driver goes idle so a start after silence counts as cold, not a gap.
+  #lastSessionEndedAt: number | undefined;
   readonly #onStateChanged: () => void;
   readonly #autoplayProvider: (() => Promise<Track | undefined>) | undefined;
   readonly #autoplayTimeoutMs: number;
@@ -191,6 +229,7 @@ export class PlaybackController {
     SessionEndReason
   >();
   readonly #retries = new WeakMap<Track, number>();
+  readonly #stallResumes = new WeakMap<Track, number>();
 
   constructor(options: PlaybackControllerOptions) {
     this.#encoder = options.encoder;
@@ -281,9 +320,34 @@ export class PlaybackController {
     const unfinished = this.#unfinished;
     if (unfinished === undefined) return;
     this.#unfinished = undefined;
+    const kpis = this.#takeKpis(unfinished.track);
     this.#safeObserver(() =>
-      this.#onPlaybackFinished(unfinished.track, unfinished.metrics, reason),
+      this.#onPlaybackFinished(
+        unfinished.track,
+        unfinished.metrics,
+        reason,
+        kpis,
+      ),
     );
+  }
+
+  #takeKpis(track: Track): PlaybackKpis | undefined {
+    const start = this.#playStarts.get(track);
+    if (start === undefined) return undefined;
+    this.#playStarts.delete(track);
+    const delay = start.player.metrics.firstFrameDelayMs;
+    const firstFrameAt =
+      delay === undefined ? undefined : start.createdAt + delay;
+    return {
+      coldStart: start.previousEndedAt === undefined,
+      prewarmed: start.prewarmed,
+      ...(firstFrameAt === undefined
+        ? {}
+        : { startDelayMs: firstFrameAt - start.pickedAt }),
+      ...(firstFrameAt === undefined || start.previousEndedAt === undefined
+        ? {}
+        : { handoffGapMs: firstFrameAt - start.previousEndedAt }),
+    };
   }
 
   /** Resume point for a restart of the current track; undefined when live. */
@@ -396,10 +460,10 @@ export class PlaybackController {
 
   jumpTo(position: number): void {
     if (!Number.isSafeInteger(position) || position < 1) {
-      throw new UserError("Usá: !jump <posición>");
+      throw new UserError(messages.jumpToUsaJumpPosicion);
     }
     if (position > this.#queue.length) {
-      throw new UserError("No existe esa posición en la cola.");
+      throw new UserError(messages.jumpToNoExisteEsaPosicion);
     }
     this.#epochs.invalidatePlayback();
     this.#pendingSkips += position - 1 + (this.#current === undefined ? 0 : 1);
@@ -435,6 +499,7 @@ export class PlaybackController {
     this.#session = undefined;
     this.#current = undefined;
     this.#driverState = "idle";
+    this.#lastSessionEndedAt = undefined;
     this.#loopMode = "off";
     this.#loopPool = [];
   }
@@ -452,9 +517,7 @@ export class PlaybackController {
 
   seek(seconds: number): void {
     if (!this.#current || !this.#session) {
-      throw new UserError(
-        "No hay nada reproduciéndose para saltar de posición.",
-      );
+      throw new UserError(messages.seekNoHayNadaReproduciendose);
     }
     let target = Math.max(0, Math.floor(seconds));
     if (this.#current.durationSeconds !== undefined) {
@@ -466,7 +529,7 @@ export class PlaybackController {
   replayPrevious(): Track {
     const previous = this.#history[this.#current ? 1 : 0];
     if (!previous) {
-      throw new UserError("No hay ninguna canción anterior para repetir.");
+      throw new UserError(messages.replayPreviousNoHayNingunaCancion);
     }
     try {
       this.#queue.requeue(previous);
@@ -560,6 +623,7 @@ export class PlaybackController {
           if (this.#queue.length > 0) continue;
           this.#current = undefined;
           this.#driverState = "idle";
+          this.#lastSessionEndedAt = undefined;
           this.#onStateChanged();
           return;
         }
@@ -649,9 +713,12 @@ export class PlaybackController {
               }),
         };
         let session: FfmpegPlaybackSession;
+        let prewarmed = false;
+        const createdAt = Date.now();
         try {
           if (seekSeconds === undefined) {
             const warm = this.#takeWarmStream(track.source);
+            prewarmed = warm !== undefined;
             if (warm !== undefined) {
               session = this.#createPlayback(
                 resolved.url,
@@ -691,6 +758,13 @@ export class PlaybackController {
           // The resumed session reports the finish from here on.
           this.#unfinished = undefined;
         } else {
+          this.#playStarts.set(track, {
+            createdAt,
+            pickedAt: audioResolutionStartedAt,
+            player: session.player,
+            prewarmed,
+            previousEndedAt: this.#lastSessionEndedAt,
+          });
           this.#tracksPlayed++;
           this.#recordHistory(track);
           this.#safeObserver(() => this.#onPlaybackStarted(track));
@@ -702,28 +776,41 @@ export class PlaybackController {
         } catch (error) {
           playbackError = error;
         }
+        this.#lastSessionEndedAt = Date.now();
         const endReason =
           this.#sessionEndReasons.get(session) ??
           (playbackError !== undefined ? "error" : "completed");
         if (endReason === "restart") continue;
         const retries = this.#retries.get(track) ?? 0;
-        if (
+        const stallResumes = this.#stallResumes.get(track) ?? 0;
+        const forbidden =
           playbackError instanceof Error &&
           endReason === "error" &&
           isForbiddenResponse(playbackError.message) &&
-          retries < MAX_AUDIO_URL_403_RETRIES
-        ) {
-          this.#retries.set(track, retries + 1);
+          retries < MAX_AUDIO_URL_403_RETRIES;
+        const stalled =
+          !forbidden &&
+          playbackError instanceof Error &&
+          endReason === "error" &&
+          isMidPlayStall(playbackError.message) &&
+          stallResumes < MAX_STALL_RESUMES_PER_PLAY;
+        if (forbidden || stalled) {
+          if (forbidden) this.#retries.set(track, retries + 1);
+          else this.#stallResumes.set(track, stallResumes + 1);
           const positionMs = this.#sessionPositionMs(session);
+          // Resolve again on resume: a stalled googlevideo URL is often
+          // throttled or near expiry, and a 403'd one is dead.
+          this.#preparedStore.drop(track.source);
           // Invalidate stale URL (daemon may have cached a 403'd host).
           // Awaited on purpose: the requeued track's re-resolve can reach
           // the daemon before a fire-and-forget invalidate lands, and the
           // daemon would serve the same dead URL again — burning ~10-25s
           // of dead air and a retry on a URL already known bad.
-          this.#preparedStore.drop(track.source);
-          await this.#resolver
-            .invalidateAudioUrl?.(track.source)
-            .catch(() => undefined);
+          if (forbidden) {
+            await this.#resolver
+              .invalidateAudioUrl?.(track.source)
+              .catch(() => undefined);
+          }
           if (
             this.#epochs.isGenerationCurrent(generation) &&
             this.#current === track
@@ -731,7 +818,7 @@ export class PlaybackController {
             try {
               this.#queue.requeue(track);
               this.#queue.moveToHead(track.id);
-              // The retry resumes the same play where the 403 cut it:
+              // The retry resumes the same play where the 403 or stall cut it:
               // no second "Reproduciendo", no error message, no restart
               // from the top.
               const seconds = this.#resumeSeconds(track, positionMs);
@@ -749,8 +836,14 @@ export class PlaybackController {
             }
           }
         }
+        const kpis = this.#takeKpis(track);
         this.#safeObserver(() => {
-          this.#onPlaybackFinished(track, session.player.metrics, endReason);
+          this.#onPlaybackFinished(
+            track,
+            session.player.metrics,
+            endReason,
+            kpis,
+          );
         });
         if (playbackError !== undefined) {
           this.#reportPlaybackError(track, playbackError);
@@ -993,7 +1086,9 @@ export class PlaybackController {
     for (const [index, next] of prefetchSlice.entries()) {
       const existing = this.#preparedStore.peek(next.source);
       if (existing !== undefined) {
-        if (existing.expiresAt > Date.now() + AUDIO_URL_REFRESH_AHEAD_MS) {
+        if (
+          lastsThroughPlay(existing.expiresAt, next, AUDIO_URL_REFRESH_AHEAD_MS)
+        ) {
           continue;
         }
         this.#preparedStore.invalidate(next.source);
@@ -1024,7 +1119,11 @@ export class PlaybackController {
           const stillPrepared = this.#preparedStore.peek(track.source);
           if (
             stillPrepared === undefined ||
-            stillPrepared.expiresAt <= Date.now() + AUDIO_URL_REFRESH_AHEAD_MS
+            !lastsThroughPlay(
+              stillPrepared.expiresAt,
+              track,
+              AUDIO_URL_REFRESH_AHEAD_MS,
+            )
           ) {
             void this.#preparedStore
               .resolve(track, "prefetch", (t, signal) =>

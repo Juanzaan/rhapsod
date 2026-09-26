@@ -29,6 +29,10 @@ Proveedores -> PreparedAudioStore -> FFmpeg PCM
 - `src/observability/`: registros estructurados, métricas y errores sin secretos.
 - `src/config.ts`: esquema de ejecución y valores predeterminados.
 
+## Comandos
+
+Un comando está en tres lugares, todos indexados por su nombre: la forma de sus argumentos en la unión `ChatCommand` (`src/commands/chat-command.ts`), una entrada en `COMMANDS` (`src/commands/command-registry.ts`) con alias, categoría, uso, resumen y analizador de argumentos, y un manejador en `COMMAND_HANDLERS` (`src/commands/command-handlers.ts`). `!help` y `GET /api/commands` leen `COMMANDS`. Si falta un comando en alguna de las tablas, o un analizador devuelve la forma de otro comando, `npm run typecheck` falla. Los manejadores van en su propia tabla porque necesitan el servicio de reproducción y la conexión de TeamSpeak, mientras que el analizador y `!help` se cargan sin ellos.
+
 ## Reproducción y proveedores
 
 Los metadatos se resuelven al recibir solicitudes; las URL temporales se preparan cerca de la reproducción. `PreparedAudioStore` evita consultas duplicadas y gestiona caducidad y cancelación. `PlaybackEpoch` invalida trabajo asíncrono antiguo tras acciones de transporte. `PlaybackController` serializa el avance y limita el tiempo de resolución.
@@ -50,3 +54,7 @@ El panel permanece en `127.0.0.1` con autenticación básica y acceso por SSH. E
 ## Verificación y ampliación
 
 Ejecutar `npm run check` y `npm run test:coverage`. Las pruebas de proveedores y TeamSpeak usan sustitutos controlados; comprobar audio y despliegue en el entorno de destino. TeamSpeak 6 está previsto y debe conservar el contrato de conexión de la aplicación.
+
+Los cambios en el ranking de búsqueda se miden con `npm run eval:search`, que puntúa `src/media/youtube/search-ranking.ts` contra `tests/fixtures/search-eval.json`: cada caso tiene una búsqueda, la lista de candidatos que vio el ranking y las elecciones aceptables. Las pruebas fallan cuando la precisión baja del `minAccuracy` del archivo; una mejora del ranking sube ese número en el mismo PR. Para agregar casos reales, ejecutar `npm run eval:search -- --record "<búsqueda>"` en un equipo con acceso a YouTube, completar `expected` a mano y agregar el resultado al archivo con `"source": "recorded"`.
+
+Los cambios en la reproducción automática se miden con `npm run eval:autoplay`, que ejecuta la rotación del DJ del servicio de reproducción real durante 40 elecciones sobre `tests/fixtures/autoplay-eval.json` (pistas, sus mixes de YouTube y un historial de escucha inicial) con una semilla aleatoria fija. Informa repeticiones dentro de 20 reproducciones, la mayor proporción de un mismo artista en 10 elecciones seguidas, el salto medio de energía entre títulos consecutivos y la proporción de elecciones nuevas para el canal. Las pruebas verifican tres semillas contra los `limits` del archivo.

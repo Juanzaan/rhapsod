@@ -61,6 +61,18 @@ Esperar a que `playerState` sea `idle`. Los estados de pausa y carga también in
 
 ## Respaldo, actualización y reversión
 
+`scripts/deploy.sh` ejecuta en el servidor todo el procedimiento siguiente con un solo comando: espera a que el panel indique `playerState: "idle"`, detiene el bot, respalda `data/` y el archivo de entorno, obtiene la revisión elegida, ejecuta `npm ci` y la compilación con el usuario del servicio, inicia el bot y espera a que siga activo y el panel responda. Si la compilación o el inicio fallan, vuelve al commit anterior, lo compila, lo inicia y termina con error. Reinicia el servicio de yt-dlp solo si cambió su script y avisa si cambiaron las plantillas de unidades.
+
+```bash
+sudo bash scripts/deploy.sh --dry-run
+sudo bash scripts/deploy.sh
+sudo bash scripts/deploy.sh --ref v4.0.0
+```
+
+El destino por defecto es `origin/main`; `--ref` acepta una rama, una etiqueta o un commit. La comprobación de reposo lee la configuración del panel de `APP_DIR/.env` (`--env-file` para `/etc/rhapsod.env`); sin un panel activo no reinicia salvo con `--force`. Los respaldos se guardan en `APP_DIR/../backups` (`--backup-dir`), solo legibles por root, y se conservan los cinco más recientes (`--keep`). Las rutas son relativas, así que para restaurar `data/` y `.env` se usa `tar -xzf <respaldo> -C /home/rhapsod/rhapsod`. No restaura datos al revertir; usar el respaldo indicado si una migración de datos lo requiere. `--service rhapsod@blue` actualiza una instancia con nombre.
+
+El procedimiento manual:
+
 Registrar el commit actual con `git rev-parse HEAD`. Durante una ventana de mantenimiento en reposo, detener el bot y respaldar las rutas reales de datos y configuración:
 
 ```bash
@@ -85,6 +97,32 @@ Si el despliegue sigue `main`, usar `git pull --ff-only` en lugar del checkout. 
 Verificar `systemctl is-active rhapsod`, versión del panel, una pista de prueba, avance de cola y preferencias. Revisar errores con `journalctl -u rhapsod -n 100 --no-pager`. Para revertir, detener en reposo, recuperar el commit registrado, ejecutar `npm ci` y `npm run build`, restaurar el respaldo correspondiente si lo exige una migración e iniciar de nuevo.
 
 Si un archivo de datos (listas, favoritos, historial de escucha, biblioteca de canciones, telemetría o estado de reproducción) no se puede leer al iniciar porque no es JSON válido o tiene una versión de formato desconocida, el bot lo renombra a `<nombre>.corrupt-<hora UTC>` en el mismo directorio, registra una advertencia con ambos nombres y ese almacén arranca vacío. No se borra nada. Los archivos apartados se listan con `ls /var/lib/rhapsod/*.corrupt-*`. Para recuperar uno, detener el bot en reposo, reparar la copia o tomar el archivo del respaldo, devolverle su nombre original e iniciar el bot.
+
+## Indicadores de reproducción
+
+Cada pista terminada registra una línea `Playback session` con su latencia: `startDelayMs` (desde que se elige la pista hasta su primer cuadro de audio), `handoffGapMs` (silencio después de la pista anterior, ausente si el bot estuvo en reposo), `coldStart`, `prewarmed`, cortes y recargas del búfer. Para resumirlos desde el directorio de registros:
+
+```bash
+cd /var/lib/rhapsod
+node /home/rhapsod/rhapsod/scripts/log-stats.mjs --since 2026-09-01T00:00:00Z logs/*.log
+```
+
+El bloque "Indicadores de reproducción" informa p50, p90 y p99 del tiempo desde un comando hasta el primer audio en un arranque en frío, de la pausa entre pistas y de los cortes por pista, además de la proporción de cambios que usaron el flujo precargado. Comparar la misma ventana antes y después de una actualización.
+
+El panel también expone en vivo los mismos contadores e histogramas de latencia en `GET /api/metrics`, en formato de texto de Prometheus, detrás de la autenticación básica del panel y su enlace local. Un Prometheus en el mismo servidor lo consulta con:
+
+```yaml
+scrape_configs:
+  - job_name: rhapsod
+    metrics_path: /api/metrics
+    basic_auth:
+      username: admin
+      password_file: /etc/prometheus/rhapsod-panel-password
+    static_configs:
+      - targets: ["127.0.0.1:8080"]
+```
+
+`rhapsod_play_start_delay_seconds` y `rhapsod_handoff_gap_seconds` son histogramas; `rhapsod_plays_total{reason="error"}` y `rhapsod_underruns_total` son contadores. Los contadores vuelven a cero cuando el bot se reinicia.
 
 ## Docker Compose (Linux)
 

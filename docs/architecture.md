@@ -29,6 +29,10 @@ Media providers -> PreparedAudioStore -> FFmpeg PCM
 - `src/observability/`: structured logs, playback metrics and sanitized errors.
 - `src/config.ts`: runtime schema and default settings.
 
+## Commands
+
+A command lives in three places, all keyed by its name: its argument shape in the `ChatCommand` union (`src/commands/chat-command.ts`), an entry in `COMMANDS` (`src/commands/command-registry.ts`) with aliases, category, usage, summary and argument parser, and a handler in `COMMAND_HANDLERS` (`src/commands/command-handlers.ts`). `!help` and `GET /api/commands` read `COMMANDS`. A command missing from either table, or a parser that returns another command's shape, fails `npm run typecheck`. Handlers stay in their own table because they need the playback service and the TeamSpeak connection, while the parser and `!help` load without them.
+
 ## Playback and providers
 
 Metadata is resolved at intake; temporary stream URLs are prepared near playback. `PreparedAudioStore` deduplicates lookups and manages expiry and cancellation. `PlaybackEpoch` invalidates stale asynchronous work after transport actions. `PlaybackController` serializes advancement and bounds resolution time.
@@ -50,3 +54,7 @@ The panel remains bound to `127.0.0.1` behind basic authentication and is reache
 ## Verification and extension
 
 Run `npm run check` and `npm run test:coverage`. Provider and TeamSpeak tests use controlled substitutes; live audio and deployment checks remain necessary in the target environment. TeamSpeak 6 is planned and must preserve the application-facing connection contract.
+
+Search ranking changes are measured with `npm run eval:search`, which scores `src/media/youtube/search-ranking.ts` against `tests/fixtures/search-eval.json`: each case holds a query, the candidate list the ranker saw and the acceptable picks. The test suite fails when accuracy drops below the fixture's `minAccuracy`; a ranking improvement raises that number in the same PR. To add real cases, run `npm run eval:search -- --record "<query>"` on a host that reaches YouTube, fill in `expected` by hand and append the output to the fixture with `"source": "recorded"`.
+
+Autoplay changes are measured with `npm run eval:autoplay`, which runs the real playback service's DJ rotation for 40 picks over `tests/fixtures/autoplay-eval.json` (tracks, their YouTube mixes and a seeded listening history) with a fixed random seed. It reports repeats within 20 plays, the largest share one artist holds in any 10 picks, the mean energy jump between consecutive titles and the share of picks new to the channel. The test suite checks three seeds against the fixture's `limits`.

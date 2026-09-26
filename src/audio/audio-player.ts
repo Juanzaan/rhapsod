@@ -12,6 +12,12 @@ const BUFFER_HIGH_WATER_FRAMES = 250;
 const BUFFER_LOW_WATER_FRAMES = 150;
 const MAX_UNDERRUN_FRAMES = 250;
 const BUFFER_TIMEOUT_MS = 15_000;
+const MID_PLAY_STALL = "Audio source stalled for ";
+
+/** True for a source that stopped delivering after playback had started. */
+export function isMidPlayStall(message: string): boolean {
+  return message.startsWith(MID_PLAY_STALL);
+}
 const POOL_MAX_FRAMES = 8;
 
 class FramePool {
@@ -276,7 +282,7 @@ export class AudioPlayer {
         if (!this.#recovering) return;
         this.#fail(
           new Error(
-            `Audio source stalled for ${MAX_UNDERRUN_FRAMES * FRAME_DURATION_MS}ms`,
+            `${MID_PLAY_STALL}${MAX_UNDERRUN_FRAMES * FRAME_DURATION_MS}ms`,
           ),
         );
       }, MAX_UNDERRUN_FRAMES * FRAME_DURATION_MS);

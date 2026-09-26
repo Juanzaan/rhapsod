@@ -1,8 +1,45 @@
+import type { YoutubeSearchCandidate } from "./yt-dlp.js";
+
 export interface InnertubeSearchResult {
   readonly channel?: string;
   readonly durationSeconds?: number;
   readonly id: string;
   readonly title: string;
+}
+
+/**
+ * The candidates the ranker sees for one query. Generic search is more
+ * reliable from datacenter IPs; music search rescues queries like "poland"
+ * where the generic results are travel vlogs, so it wins only when the
+ * generic list has nothing music-like. Shared by the resolver and the
+ * search evaluation recorder so fixtures capture exactly this list.
+ */
+export function pickInnertubeCandidates(
+  results: readonly InnertubeSearchResult[],
+  musicResults: readonly InnertubeSearchResult[],
+): YoutubeSearchCandidate[] | undefined {
+  const toCandidate = (result: InnertubeSearchResult) => ({
+    ...(result.durationSeconds === undefined
+      ? {}
+      : { durationSeconds: result.durationSeconds }),
+    ...(result.channel === undefined ? {} : { channel: result.channel }),
+    id: result.id,
+    title: result.title,
+    webpageUrl: `https://www.youtube.com/watch?v=${result.id}`,
+  });
+  if (results.length > 0) {
+    const hasMusicLike = results.some(
+      (r) =>
+        /official|audio|lyrics|topic/i.test(r.title) ||
+        /topic|official/i.test(r.channel ?? ""),
+    );
+    if (!hasMusicLike && musicResults.length > 0) {
+      return musicResults.map(toCandidate);
+    }
+    return results.map(toCandidate);
+  }
+  if (musicResults.length > 0) return musicResults.map(toCandidate);
+  return undefined;
 }
 
 export interface InnertubeSearchOptions {

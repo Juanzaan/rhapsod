@@ -4,47 +4,49 @@
 
 Los comandos utilizan `!` por defecto y se procesan en el chat de TeamSpeak cuando el adaptador está conectado. `!help` muestra el resumen generado desde el registro de comandos.
 
-| Comando                               | Alias                 | Función                                                                      |
-| ------------------------------------- | --------------------- | ---------------------------------------------------------------------------- |
-| `!play <URL o búsqueda>`              | `!p`                  | Añadir un enlace compatible o buscar música.                                 |
-| `!playnext <URL o búsqueda>`          | `!pn`, `!next`        | Añadir una pista al principio de la cola pendiente.                          |
-| `!yt [n] <búsqueda>`                  | `!search`, `!youtube` | Elegir un resultado clasificado; respeta la fuente preferida.                |
-| `!pause` / `!resume`                  | -                     | Pausar o continuar.                                                          |
-| `!skip`                               | `!s`                  | Saltar la pista actual con permiso de solicitante o administrador.           |
-| `!previous`                           | `!prev`               | Repetir la última pista terminada.                                           |
-| `!seek <segundos>`                    | -                     | Cambiar la posición de reproducción.                                         |
-| `!stop`                               | -                     | Detener y vaciar la sesión; con pistas ajenas, solo administradores.         |
-| `!queue [página]`                     | `!q`                  | Mostrar 10 pistas por página y tiempo restante conocido.                     |
-| `!history`                            | `!hist`               | Mostrar las 10 últimas pistas iniciadas.                                     |
-| `!now-playing`                        | `!np`, `!now`         | Mostrar pista, duración y solicitante; incluye título de radio.              |
-| `!stats`                              | `!st`                 | Mostrar actividad, cola, volumen y estado del audio.                         |
-| `!volume <0-100>`                     | `!vol`, `!v`          | Ajustar volumen persistente; valor predeterminado 50.                        |
-| `!move <origen> <destino>`            | `!mv`                 | Mover una pista pendiente.                                                   |
-| `!channel-move <canal>`               | `!ch`                 | Mover el bot de canal; solo administradores.                                 |
-| `!diag`                               | -                     | Diagnóstico interno; solo administradores.                                   |
-| `!debug-server`                       | `!ds`                 | Información del servidor; solo administradores.                              |
-| `!chart`                              | -                     | Gráfico de actividad; solo administradores.                                  |
-| `!remove <n\|inicio-fin>`             | `!rm`                 | Eliminar pistas propias o, con permisos, ajenas.                             |
-| `!clear`                              | `!c`                  | Vaciar pendientes; con pistas ajenas, solo administradores.                  |
-| `!shuffle`                            | -                     | Mezclar pistas pendientes.                                                   |
-| `!loop [off\|track\|queue]`           | -                     | Repetición persistente de pista o cola.                                      |
-| `!lyrics`                             | `!ly`                 | Buscar letras mediante LRCLIB.                                               |
-| `!playlist <subcomando>`              | `!pl`                 | `save`, `load`, `list`, `show`, `delete`, `add`, `remove`, `rename`, `info`. |
-| `!fav` / `!favs`                      | -                     | Guardar la pista actual o listar favoritos.                                  |
-| `!unfav <n>`                          | -                     | Eliminar un favorito por posición.                                           |
-| `!favplay <n>`                        | `!fp`                 | Añadir un favorito a la cola.                                                |
-| `!fuente [youtube\|soundcloud\|auto]` | -                     | Consultar o elegir fuente de búsqueda.                                       |
-| `!radio <nombre, género o link>`      | `!rb`                 | Buscar y sintonizar una emisora; los enlaces de TuneIn suenan directo.       |
-| `!jump <posición>`                    | `!j`                  | Saltar a una posición con permisos sobre las pistas descartadas.             |
-| `!tops [n]`                           | `!top`                | Mostrar pistas más escuchadas; 5 por defecto, máximo 10.                     |
-| `!mystats`                            | -                     | Mostrar estadísticas personales y favoritos.                                 |
-| `!autoplay [on\|off]`                 | -                     | Continuar con pistas relacionadas al vaciarse la cola.                       |
-| `!test-tone`                          | `!tone`               | Emitir un tono de 3 segundos con límite de frecuencia.                       |
-| `!help`                               | `!h`                  | Mostrar ayuda.                                                               |
+| Comando                               | Alias                 | Función                                                                                                                                          |
+| ------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `!play <URL o búsqueda>`              | `!p`                  | Añadir un enlace compatible o buscar música.                                                                                                     |
+| `!playnext <URL o búsqueda>`          | `!pn`, `!next`        | Añadir una pista al principio de la cola pendiente.                                                                                              |
+| `!yt [n] <búsqueda>`                  | `!search`, `!youtube` | Elegir un resultado clasificado; respeta la fuente preferida.                                                                                    |
+| `!pause` / `!resume`                  | -                     | Pausar o continuar.                                                                                                                              |
+| `!skip`                               | `!s`                  | Saltar la pista actual (solicitante, administrador o votación de oyentes).                                                                       |
+| `!previous`                           | `!prev`               | Repetir la última pista terminada.                                                                                                               |
+| `!seek <segundos>`                    | -                     | Cambiar la posición de reproducción.                                                                                                             |
+| `!stop`                               | -                     | Detener y vaciar la sesión; con pistas ajenas, solo administradores.                                                                             |
+| `!queue [página]`                     | `!q`                  | Mostrar 10 pistas por página y tiempo restante conocido.                                                                                         |
+| `!history`                            | `!hist`               | Mostrar las 10 últimas pistas iniciadas.                                                                                                         |
+| `!now-playing`                        | `!np`, `!now`         | Mostrar pista, duración y solicitante; incluye título de radio.                                                                                  |
+| `!stats`                              | `!st`                 | Mostrar actividad, cola, volumen y estado del audio.                                                                                             |
+| `!volume <0-100>`                     | `!vol`, `!v`          | Ajustar volumen persistente; valor predeterminado 50.                                                                                            |
+| `!move <origen> <destino>`            | `!mv`                 | Mover una pista pendiente.                                                                                                                       |
+| `!channel-move <canal>`               | `!ch`                 | Mover el bot de canal; solo administradores.                                                                                                     |
+| `!diag`                               | -                     | Diagnóstico interno; solo administradores.                                                                                                       |
+| `!debug-server`                       | `!ds`                 | Información del servidor; solo administradores.                                                                                                  |
+| `!chart`                              | -                     | Gráfico de actividad; solo administradores.                                                                                                      |
+| `!remove <n\|inicio-fin>`             | `!rm`                 | Eliminar pistas propias o, con permisos, ajenas.                                                                                                 |
+| `!clear`                              | `!c`                  | Vaciar pendientes; con pistas ajenas, solo administradores.                                                                                      |
+| `!shuffle`                            | -                     | Mezclar pistas pendientes.                                                                                                                       |
+| `!loop [off\|track\|queue]`           | -                     | Repetición persistente de pista o cola.                                                                                                          |
+| `!lyrics`                             | `!ly`                 | Buscar letras mediante LRCLIB.                                                                                                                   |
+| `!playlist <subcomando>`              | `!pl`                 | `save`, `load`, `list`, `show`, `delete`, `add`, `remove`, `rename`, `info`.                                                                     |
+| `!fav` / `!favs`                      | -                     | Guardar la pista actual o listar favoritos.                                                                                                      |
+| `!unfav <n>`                          | -                     | Eliminar un favorito por posición.                                                                                                               |
+| `!favplay <n>`                        | `!fp`                 | Añadir un favorito a la cola.                                                                                                                    |
+| `!fuente [youtube\|soundcloud\|auto]` | -                     | Consultar o elegir fuente de búsqueda.                                                                                                           |
+| `!radio <nombre, género o link>`      | `!rb`                 | Buscar y sintonizar una emisora; los enlaces de TuneIn suenan directo.                                                                           |
+| `!jump <posición>`                    | `!j`                  | Saltar a una posición con permisos sobre las pistas descartadas.                                                                                 |
+| `!tops [n]`                           | `!top`                | Mostrar pistas más escuchadas; 5 por defecto, máximo 10.                                                                                         |
+| `!mystats`                            | -                     | Mostrar estadísticas personales y favoritos.                                                                                                     |
+| `!autoplay [on\|off]`                 | -                     | Continuar con pistas relacionadas al vaciarse la cola.                                                                                           |
+| `!test-tone`                          | `!tone`               | Emitir un tono de 3 segundos con límite de frecuencia.                                                                                           |
+| `!help [1-4\|comando]`                | `!h`                  | Mostrar el menú de categorías, una categoría por página con la indicación de la siguiente, o un comando con sus alias (`!help skip`, `!help s`). |
 
 ## Permisos y persistencia
 
 La mayoría de los comandos están disponibles para todos. `RHAPSOD_ADMIN_UIDS` permite saltar o eliminar pistas ajenas y usar comandos administrativos. `!jump` verifica permisos sobre cada pista descartada. `!stop` y `!clear` exigen que todas las pistas afectadas sean propias o automáticas, salvo para administradores. Cualquier usuario puede saltar una pista automática. Las pistas de usuarios que ya no están conectados al servidor también son comunes: cualquiera puede saltarlas, quitarlas o vaciarlas.
+
+Con `RHAPSOD_VOTE_SKIP=true` (por defecto `false`), `!skip` sobre una pista ajena cuenta como voto en lugar de rechazarse. La pista se salta cuando votó más de la mitad de las personas del canal del bot: 2 de 2, 2 de 3, 3 de 4. Solo votan los oyentes de ese canal, el voto de quien se va deja de contar y los votos se reinician al cambiar la pista. Si no se puede leer la lista de clientes del canal, se aplica la regla de propiedad.
 
 Los favoritos se guardan por UID en `data/user-preferences.json`, con un máximo de 50 por usuario. Volumen, repetición y reproducción automática se guardan en `data/state.json`. `!stop` y `!clear` desactivan la repetición y cancelan la continuación pendiente. Con `RHAPSOD_INSTANCE_ID`, los archivos están dentro del directorio de instancia.
 
