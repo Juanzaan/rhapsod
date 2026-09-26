@@ -1,4 +1,5 @@
 import { safeFetch } from "../lib/ssrf.js";
+import { rhapsodUserAgent } from "../lib/version.js";
 
 export interface IcyFetchOptions {
   readonly fetch?: typeof fetch;
@@ -47,7 +48,7 @@ export async function fetchIcyTitle(
       fetchImpl(url, {
         headers: {
           "Icy-MetaData": "1",
-          "User-Agent": options.userAgent ?? "Rhapsod/3.0",
+          "User-Agent": options.userAgent ?? rhapsodUserAgent(),
         },
         redirect: "follow",
         signal: controller.signal,

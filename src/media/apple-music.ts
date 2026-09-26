@@ -1,5 +1,6 @@
 import { safeFetch } from "../lib/ssrf.js";
 import { UserError } from "../lib/user-error.js";
+import { rhapsodUserAgent } from "../lib/version.js";
 
 export interface AppleMusicTrack {
   readonly artist: string;
@@ -165,7 +166,7 @@ export class AppleMusicClient implements AppleMusicResolver {
       response = await this.#fetch(
         `${LOOKUP_BASE}?id=${ids.map((id) => encodeURIComponent(id)).join(",")}&country=${encodeURIComponent(this.#country)}&entity=song&limit=${ids.length}`,
         {
-          headers: { "user-agent": "Rhapsod/3.0 (apple-music)" },
+          headers: { "user-agent": rhapsodUserAgent("apple-music") },
           signal: AbortSignal.timeout(this.#timeoutMs),
         },
       );

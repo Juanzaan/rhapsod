@@ -1,20 +1,6 @@
 import "dotenv/config";
 
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { join } from "node:path";
-
-// Read at startup: under systemd Node runs `dist/main.js` directly, so
-// npm_package_version is never set and the panel used to report a stale
-// hardcoded version. package.json sits next to the compiled entrypoint.
-const packageVersion = (
-  JSON.parse(
-    readFileSync(
-      join(fileURLToPath(new URL(".", import.meta.url)), "../package.json"),
-      "utf8",
-    ),
-  ) as { version: string }
-).version;
 
 import { Ts3IdentityStore } from "./adapters/ts3/identity-store.js";
 import {
@@ -80,6 +66,7 @@ import { resolveTuneInUrl } from "./media/tunein.js";
 import { SongLinkClient } from "./media/song-link.js";
 import { AppleMusicClient } from "./media/apple-music.js";
 import { DirectUrlClient } from "./media/direct-url.js";
+import { APP_VERSION as packageVersion } from "./lib/version.js";
 import { startEgressGuard } from "./lib/egress-guard.js";
 import { LyricsClient, parseArtistTitle } from "./media/lyrics.js";
 import { SoundCloudPublicApi } from "./media/soundcloud/public-api.js";
@@ -578,7 +565,10 @@ async function main(): Promise<void> {
         ? {}
         : { ffprobeBinary: config.RHAPSOD_FFPROBE_PATH }),
     }),
-    soundcloudResolver: new SoundCloudPublicApi({ logger }),
+    soundcloudResolver: new SoundCloudPublicApi({
+      logger,
+      clientIdCachePath: join(dataDir, "soundcloud-client-id.json"),
+    }),
     lyricsResolver: new LyricsClient({ logger }),
     ...(spotifyResolver ? { spotifyResolver } : {}),
   });
