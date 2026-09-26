@@ -33,6 +33,7 @@ Persistence fixes, dependency updates, deployment repairs and consistent bilingu
 - Treat `!seek`, filter changes and 403 retries as the same play: no second "Reproduciendo" message, no extra count in stats, no skipped listen in the taste profile, and `!previous` returns the prior track. The panel position continues from the seek target instead of restarting at 0:00.
 - Resume 403 retries where the audio stopped instead of replaying the start of the track, retry silently instead of posting an error for each attempt, and rejoin live radio at the live edge. 403 detection matches the HTTP error wording instead of any "403" in URLs.
 - Use the configured FFmpeg binary and User-Agent for prewarmed next-track streams; they used to fall back to the bundled ffmpeg-static.
+- Space outgoing chat messages one second apart even when several are queued at once, log messages dropped by the anti-flood queue, split texts longer than 1024 characters (such as `!help` or `!debug-server` on large servers) instead of losing them, and detect a heartbeat probe that never answers.
 
 ## Upgrade
 

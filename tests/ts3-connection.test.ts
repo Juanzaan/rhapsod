@@ -61,9 +61,12 @@ import type { AppConfig } from "../src/config.js";
 import type { Logger } from "pino";
 import type { Identity } from "@honeybbq/teamspeak-client";
 import {
+  createHeartbeat,
+  createMessageGate,
   createTs3Connection,
   DUPLICATE_INSTANCE_EXIT_CODE,
   DuplicateBotInstanceError,
+  splitTextMessage,
 } from "../src/adapters/ts3/ts3-connection.js";
 
 interface Ts3ClientMock {
@@ -487,5 +490,106 @@ describe("duplicate instance guard", () => {
     // deploy/systemd/rhapsod.service lists this value in
     // RestartPreventExitStatus; changing one requires changing the other.
     expect(DUPLICATE_INSTANCE_EXIT_CODE).toBe(42);
+  });
+});
+
+describe("message gate", () => {
+  it("spaces a burst one interval apart instead of releasing it together", async () => {
+    vi.useFakeTimers();
+    try {
+      const gate = createMessageGate({ intervalMs: 1_100 });
+      const sentAt: number[] = [];
+      const start = Date.now();
+      const sends = Array.from({ length: 5 }, () =>
+        gate(() => {
+          sentAt.push(Date.now() - start);
+          return Promise.resolve();
+        }),
+      );
+      await vi.advanceTimersByTimeAsync(5_000);
+      await Promise.all(sends);
+      expect(sentAt).toEqual([0, 1_100, 2_200, 3_300, 4_400]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reports dropped messages when the queue is full", async () => {
+    vi.useFakeTimers();
+    try {
+      const drops: number[] = [];
+      const gate = createMessageGate({
+        intervalMs: 1_000,
+        maxQueue: 2,
+        onDrop: (queued) => drops.push(queued),
+      });
+      const send = () => Promise.resolve();
+      const pending = [gate(send), gate(send), gate(send), gate(send)];
+      await vi.advanceTimersByTimeAsync(5_000);
+      await Promise.all(pending);
+      expect(drops).toEqual([2]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("splitTextMessage", () => {
+  it("keeps short messages whole", () => {
+    expect(splitTextMessage("hola")).toEqual(["hola"]);
+    expect(splitTextMessage("")).toEqual([""]);
+  });
+
+  it("splits at line breaks so no part exceeds the limit", () => {
+    const lines = Array.from(
+      { length: 30 },
+      (_, i) => `!cmd${i} ${"x".repeat(40)}`,
+    );
+    const parts = splitTextMessage(lines.join("\n"));
+    expect(parts.length).toBeGreaterThan(1);
+    for (const part of parts)
+      expect([...part].length).toBeLessThanOrEqual(1_024);
+    expect(parts.join("\n")).toBe(lines.join("\n"));
+  });
+
+  it("cuts a single long word and never splits an emoji", () => {
+    const parts = splitTextMessage("🎵".repeat(10), 4);
+    expect(parts).toEqual(["🎵🎵🎵🎵", "🎵🎵🎵🎵", "🎵🎵"]);
+  });
+
+  it("sends a 1025-character help text as two channel messages", async () => {
+    const m = await ts3Mock();
+    vi.useFakeTimers();
+    try {
+      const connection = createTs3Connection(testConfig(), identity, logger);
+      const text = `${"a".repeat(600)}\n${"b".repeat(424)}`;
+      const sending = connection.sendChannelMessage(text);
+      await vi.advanceTimersByTimeAsync(3_000);
+      await sending;
+      expect(m.__client.execCommand).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("heartbeat", () => {
+  it("counts a probe that never settles as a failure", async () => {
+    vi.useFakeTimers();
+    try {
+      const onLost = vi.fn();
+      const stop = createHeartbeat(
+        () => new Promise<void>(() => {}),
+        1_000,
+        onLost,
+        2,
+        500,
+      );
+      await vi.advanceTimersByTimeAsync(3_000);
+      expect(onLost).toHaveBeenCalledTimes(1);
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
