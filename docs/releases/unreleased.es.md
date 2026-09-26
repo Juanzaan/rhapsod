@@ -38,6 +38,7 @@ Correcciones de persistencia, actualización de dependencias, reparación del de
 - Usar el binario de FFmpeg y el User-Agent configurados para los flujos precargados de la pista siguiente; antes usaban el ffmpeg-static incluido.
 - Espaciar los mensajes de chat un segundo aunque se encolen varios a la vez, registrar los mensajes descartados por la cola anti-flood, dividir los textos de más de 1024 caracteres (como `!help` o `!debug-server` en servidores grandes) en lugar de perderlos, y detectar un sondeo de heartbeat que nunca responde.
 - `!stop` y `!clear` siguen la misma regla de propiedad que `!skip` y `!remove`: se rechazan si la cola tiene pistas de otro usuario, salvo para administradores. Las pistas automáticas y las de usuarios que ya salieron del servidor son comunes, así que las pistas de alguien ausente nunca bloquean la cola.
+- Ejecutar el watchdog del bucle de eventos cada 15 segundos en lugar de cada 15 minutos, así una detención de más de 30 segundos reinicia el bot en vez de una de más de 30 minutos. El intervalo se configura con `RHAPSOD_WATCHDOG_INTERVAL_SECONDS` (0 lo desactiva); `RHAPSOD_WATCHDOG_INTERVAL_MINUTES` queda obsoleta y solo se respeta su valor `0`.
 - Enviar la versión en ejecución en cada User-Agent saliente (`Rhapsod/<versión>`, leída de `package.json`) en lugar de los desactualizados `Rhapsod/3.0` y `Rhapsod/1`.
 - Repartir las búsquedas de `!radio` entre los espejos de radio-browser que publica el proyecto en vez de fijar `de1`, y pasar a otro espejo cuando uno falla.
 - Mantener SoundCloud funcionando cuando cambia su página: el último `client_id` obtenido se guarda en `data/soundcloud-client-id.json` y se usa si la obtención falla, con una advertencia en el log, y el usuario recibe un mensaje claro cuando no hay ninguno.
@@ -61,6 +62,8 @@ Se requiere Node.js >=22.19.0. Respaldar configuración y datos, ejecutar `npm c
 Si el panel usa una contraseña por defecto no se iniciará; definir antes una `RHAPSOD_PANEL_PASSWORD` única. Las instalaciones existentes conservan la línea `Requires=` en `/etc/systemd/system/rhapsod.service` hasta volver a ejecutar el instalador: cambiarla por `Wants=` y ejecutar `systemctl daemon-reload`.
 
 Instalaciones con Docker: ejecutar `sudo chown -R 1000:1000 data .env` antes de recrear los contenedores, que ahora se ejecutan con uid 1000.
+
+El watchdog ahora usa 15 segundos por defecto. Un archivo de entorno con `RHAPSOD_WATCHDOG_INTERVAL_MINUTES=15` sigue funcionando y registra un aviso de obsolescencia; reemplazar esa línea por `RHAPSOD_WATCHDOG_INTERVAL_SECONDS=15`, o por `0` para mantener el watchdog desactivado.
 
 Un tiempo de espera de yt-dlp fuera de rango ahora detiene el inicio. Antes de reiniciar, comparar cada línea `RHAPSOD_YTDLP_*_TIMEOUT_MS` de `grep TIMEOUT_MS /etc/rhapsod.env` con los rangos de `.env.example`.
 
