@@ -99,7 +99,7 @@ describe("NonMusicSegments", () => {
       startSeconds: 12,
     });
 
-    const url = new URL(String(fetch.mock.calls[0]?.[0]));
+    const url = new URL(fetch.mock.calls[0]?.[0] as string);
     const prefix = createHash("sha256")
       .update(VIDEO_ID)
       .digest("hex")
