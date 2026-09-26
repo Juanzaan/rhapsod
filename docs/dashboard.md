@@ -8,7 +8,9 @@ Open the authenticated panel at `http://127.0.0.1:8080/`. For a remote host, use
 
 Search by title, artist or supported link. Select the next-track checkbox to insert ahead of the pending queue. A failed request keeps the search text so it can be retried. Previous, pause/resume, skip, stop and volume operate on the shared bot session.
 
-Click the progress bar to seek. When focused, arrow keys move five seconds; Home and End move to the beginning and end. Live streams without a known duration cannot be sought. The rotating record indicates playback state and is decorative, not an audio spectrum or album cover.
+Hover the progress bar to see the time under the cursor, then click to seek. When focused, arrow keys move five seconds; Home and End move to the beginning and end. Live streams without a known duration cannot be sought. The rotating record, the tonearm and the equalizer bars next to the state label indicate playback state. They are decorative, not an audio spectrum or album cover: the bars move while the bot plays and rest when it pauses.
+
+Each track gets its own color, derived from its title. The player, progress bar, primary buttons, active filters and the background glow change to that color when the track changes, so the same song always shows the same color. The last color is stored in this browser and reused by the other panel pages.
 
 The discovery card provides radio search and explicit autoplay on/off commands. Playlist and statistics buttons use the panel's bot command context; they do not impersonate a TeamSpeak user's personal library. Lyrics and history open in the output card.
 
@@ -16,11 +18,13 @@ The discovery card provides radio search and explicit autoplay on/off commands. 
 
 Choose Aurora, Sunset or Ocean from the background selector, or disable the background. These animated gradients are generated locally with CSS; there are no third-party images, GIF downloads or tracking requests.
 
+Cards rise into place on load and as they scroll into view, new queue entries and chat messages slide in, removed tracks slide out, counters animate to their new values and buttons respond to presses. Moving between panel pages crossfades in browsers that support view transitions. If the panel loses contact with the bot, the player, queue and server cards turn gray and the status reads "Reconectando" until the next successful refresh. All motion runs in the page itself with CSS and the browser animation API; no animation library is downloaded.
+
 The motion button pauses animation. Scene and motion preferences are stored in this browser, independently from bot configuration. System reduced-motion settings override animation, and hidden tabs pause movement. If browser storage is unavailable, the controls still work for the current page.
 
 ## Settings, commands and setup
 
-The other panel pages use the same colors, typography and responsive cards. Settings are grouped by service, with read-only values identified and masked secrets preserved. The save bar remains available while scrolling. Commands can be searched by name, alias or description, including a leading `!`; required arguments remain visible. The setup wizard provides guided configuration and a link back to the console.
+The other panel pages use the same colors, typography and responsive cards. Settings are grouped by service and labeled by meaning, with the variable name shown next to each label; read-only values are identified and masked secrets preserved. Edited fields are marked and the save bar counts unsaved changes until they are saved. Commands can be searched by name, alias or description, including a leading `!`; matches are highlighted and required arguments remain visible. Clicking a command copies its name, for example `!radio`, to the clipboard. The setup wizard provides guided configuration and a link back to the console.
 
 ## Server and empty channels
 

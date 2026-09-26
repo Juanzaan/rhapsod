@@ -273,6 +273,22 @@ describe("panel-server", () => {
     }
   });
 
+  it("serves an SVG favicon instead of a 404", async () => {
+    const port = 23611;
+    const state = startTestPanel("", port);
+    try {
+      const res = await fetch(`${state.baseUrl}/favicon.ico`, {
+        headers: { authorization: state.auth },
+      });
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type")).toContain("image/svg+xml");
+      expect(await res.text()).toContain("<svg");
+    } finally {
+      await state.close();
+      rmSync(state.dir, { recursive: true, force: true });
+    }
+  });
+
   it("serves the dashboard with a content-length matching the body", async () => {
     // Regression: the dashboard used to be gzipped inline with content-length
     // taken from the gzip buffer, while the runtime wrote the uncompressed

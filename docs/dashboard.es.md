@@ -8,7 +8,9 @@ Abrir el panel autenticado en `http://127.0.0.1:8080/`. Para un servidor remoto,
 
 Buscar por título, artista o enlace compatible. Seleccionar la casilla de próxima pista para insertar antes de la cola pendiente. Si falla una solicitud, el texto se conserva para repetirla. Anterior, pausa, salto, parada y volumen controlan la sesión compartida.
 
-Pulsar la barra de progreso para cambiar de posición. Con el foco en la barra, las flechas avanzan o retroceden cinco segundos; Inicio y Fin seleccionan los extremos. Las transmisiones sin duración conocida no admiten búsqueda de posición. El disco giratorio indica reproducción y es decorativo, no un espectro de audio ni una portada.
+Al pasar el cursor sobre la barra de progreso se muestra el tiempo de ese punto; pulsar para cambiar de posición. Con el foco en la barra, las flechas avanzan o retroceden cinco segundos; Inicio y Fin seleccionan los extremos. Las transmisiones sin duración conocida no admiten búsqueda de posición. El disco giratorio, el brazo y las barras del ecualizador junto al estado indican la reproducción. Son decorativos, no un espectro de audio ni una portada: las barras se mueven mientras el bot reproduce y se detienen en pausa.
+
+Cada pista tiene su propio color, calculado a partir del título. El reproductor, la barra de progreso, los botones principales, los filtros activos y el brillo del fondo cambian a ese color al cambiar de pista, por lo que la misma canción siempre muestra el mismo color. El último color se guarda en este navegador y lo usan las demás páginas del panel.
 
 La tarjeta de descubrimiento permite buscar radio y activar o desactivar la reproducción automática. Listas y estadísticas utilizan el contexto de comandos del bot; no representan la biblioteca personal de un usuario TeamSpeak. Letras e historial se muestran en la tarjeta de salida.
 
@@ -16,11 +18,13 @@ La tarjeta de descubrimiento permite buscar radio y activar o desactivar la repr
 
 Elegir Aurora, Atardecer u Océano, o desactivar el fondo. Los degradados animados se generan localmente con CSS; no descargan imágenes externas, GIF ni solicitudes de seguimiento.
 
+Las tarjetas aparecen de forma escalonada al cargar y al entrar en pantalla con el desplazamiento, las entradas nuevas de la cola y del chat se deslizan, las pistas quitadas salen deslizándose, los contadores se animan hasta su nuevo valor y los botones responden al pulsarlos. El paso entre páginas del panel se funde en los navegadores compatibles con transiciones de vista. Si el panel pierde contacto con el bot, las tarjetas de reproducción, cola y servidor se ven en gris y el estado indica "Reconectando" hasta la siguiente actualización correcta. Todo el movimiento se ejecuta en la propia página con CSS y la API de animación del navegador; no se descarga ninguna biblioteca de animación.
+
 El botón de movimiento pausa las animaciones. Las preferencias se guardan en este navegador, separadas de la configuración del bot. La reducción de movimiento del sistema tiene prioridad; las pestañas ocultas pausan la animación. Sin almacenamiento del navegador, los controles siguen funcionando durante la visita actual.
 
 ## Ajustes, comandos y asistente
 
-Las demás páginas utilizan los mismos colores, tipografía y tarjetas adaptables. Los ajustes se agrupan por servicio, con valores de solo lectura identificados y secretos ocultos conservados. La barra de guardado permanece disponible al desplazarse. Los comandos admiten búsqueda por nombre, alias o descripción, incluido `!` al principio; los argumentos requeridos se muestran completos. El asistente ofrece configuración guiada y acceso a la consola.
+Las demás páginas utilizan los mismos colores, tipografía y tarjetas adaptables. Los ajustes se agrupan por servicio y se rotulan por su significado, con el nombre de la variable junto a cada etiqueta; los valores de solo lectura se identifican y los secretos ocultos se conservan. Los campos editados se marcan y la barra de guardado cuenta los cambios pendientes hasta guardarlos. Los comandos admiten búsqueda por nombre, alias o descripción, incluido `!` al principio; las coincidencias se resaltan y los argumentos requeridos se muestran completos. Pulsar un comando copia su nombre, por ejemplo `!radio`, al portapapeles. El asistente ofrece configuración guiada y acceso a la consola.
 
 ## Servidor y canales vacíos
 
