@@ -7,6 +7,7 @@ La normalización de volumen medida funciona por primera vez: los temas con un p
 ## Cambios
 
 - El medidor de sonoridad nunca generaba un perfil: ffmpeg se ejecutaba con `-loglevel error`, que oculta el informe de loudnorm, el informe se leía de stdout en lugar de stderr y sus valores, impresos como texto, se rechazaban. Todos los temas con duración se reproducían con `loudnorm` dinámico en una sola pasada, y cada precarga repetía la medición de 120 segundos. Los temas medidos ahora reciben normalización en dos pasadas, lineal cuando la ganancia entra bajo el techo de -1,5 dBTP.
+- Si el proceso de ffmpeg de un tema termina con error después de empezar la reproducción (un corte más largo que las reconexiones propias de ffmpeg, un 5xx al reconectar), el tema se reanuda una vez desde su posición con una URL resuelta de nuevo, igual que un flujo que se detiene. Antes terminaba como error y pasaba al siguiente tema.
 
 ## Actualización
 
