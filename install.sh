@@ -287,6 +287,27 @@ Restart=on-failure
 RestartSec=5
 NoNewPrivileges=true
 PrivateTmp=true
+# Kernel, device, namespace and syscall isolation. None of it narrows file
+# access: the services write data/, .env and the cookie file under /home.
+# Blocked syscalls fail with EPERM instead of killing the process.
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+UMask=0077
 ProtectSystem=full
 MemoryMax=512M
 
@@ -317,6 +338,27 @@ RestartSec=5
 RuntimeMaxSec=86400
 NoNewPrivileges=true
 PrivateTmp=true
+# Kernel, device, namespace and syscall isolation. None of it narrows file
+# access: the services write data/, .env and the cookie file under /home.
+# Blocked syscalls fail with EPERM instead of killing the process.
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+UMask=0077
 ProtectSystem=strict
 # read-only, not true: the daemon's script, PYTHONPATH deps and cookies all
 # live under /home, and ProtectHome=true makes them invisible to it.
@@ -355,6 +397,27 @@ RestartPreventExitStatus=42
 TimeoutStopSec=15
 NoNewPrivileges=true
 PrivateTmp=true
+# Kernel, device, namespace and syscall isolation. None of it narrows file
+# access: the services write data/, .env and the cookie file under /home.
+# Blocked syscalls fail with EPERM instead of killing the process.
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+UMask=0077
 ProtectSystem=full
 MemoryMax=2G
 MemorySwapMax=2G
