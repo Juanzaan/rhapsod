@@ -33,6 +33,7 @@ import {
 import { formatPlaybackError, formatPlaybackStarted } from "./lib/messages.js";
 import { classifyYoutubeAuthFailure } from "./lib/youtube-auth-health.js";
 import { CommandRateLimiter } from "./commands/command-rate-limiter.js";
+import { SkipVotes } from "./application/skip-votes.js";
 import { loadConfig } from "./config.js";
 import type { Track } from "./domain/track.js";
 import { FilePlaybackStateStore } from "./domain/state-store.js";
@@ -645,6 +646,7 @@ async function main(): Promise<void> {
     listeningHistory,
     ytDlpExecutor,
     commandRateLimiter,
+    skipVotes: new SkipVotes(),
     encoder,
     verbose,
     hasStartedPlaying: false,
