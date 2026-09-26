@@ -38,6 +38,11 @@ Persistence fixes, dependency updates, deployment repairs and consistent bilingu
 - Use the configured FFmpeg binary and User-Agent for prewarmed next-track streams; they used to fall back to the bundled ffmpeg-static.
 - Space outgoing chat messages one second apart even when several are queued at once, log messages dropped by the anti-flood queue, split texts longer than 1024 characters (such as `!help` or `!debug-server` on large servers) instead of losing them, and detect a heartbeat probe that never answers.
 - `!stop` and `!clear` follow the same ownership rule as `!skip` and `!remove`: they are refused when the queue holds another user's tracks, unless the sender is an admin. Autoplay picks and tracks whose requester left the server are communal, so an absent user's tracks never pin the queue.
+- Run the event-loop watchdog every 15 seconds instead of every 15 minutes, so a stall over 30 seconds restarts the bot instead of one over 30 minutes. The interval is set with `RHAPSOD_WATCHDOG_INTERVAL_SECONDS` (0 disables); `RHAPSOD_WATCHDOG_INTERVAL_MINUTES` is deprecated and only its `0` is honored.
+- Send the running version in every outbound User-Agent (`Rhapsod/<version>`, read from `package.json`) instead of the stale `Rhapsod/3.0` and `Rhapsod/1`.
+- Spread `!radio` searches across the radio-browser mirrors listed by the project instead of pinning `de1`, moving to another mirror when one fails.
+- Keep SoundCloud working when its page changes: the last discovered `client_id` is saved to `data/soundcloud-client-id.json` and used when discovery fails, with a warning in the log, and the user gets a clear message when none is known.
+- Coalesce listening-history and song-library saves into one write every five seconds instead of rewriting the whole file on every play start and finish, and read both files at startup instead of during the first track. Shutdown still flushes pending changes.
 - Harden `scripts/spotify-auth.mjs`: the callback server listens on 127.0.0.1 only, the authorize URL carries a random `state` and callbacks without it are ignored instead of accepted or ending the flow, and the script now reads `.env` as its message said.
 - Send every ffmpeg and ffprobe connection through a local egress guard. Checking the input URL did not cover what ffmpeg opens on its own: a 302 to a plain-HTTP host or an HLS segment on one reached internal addresses such as the cloud metadata service or the yt-dlp daemon. The guard resolves each destination, refuses private addresses and plain HTTP, and prefers IPv4. `no_proxy` is removed from their environment so it cannot bypass the guard.
 - Fix the WARP fallback for 403 responses: ffmpeg rejects `-timeout` together with `-http_proxy`, so the fallback attempt exited before connecting.
@@ -48,6 +53,7 @@ Persistence fixes, dependency updates, deployment repairs and consistent bilingu
 - Verify installer and weekly-update downloads against published checksums, use private temp directories instead of fixed `/tmp` paths, create the service user with a `nologin` shell and pin the POT provider server and plugin to the same release. Docker containers run as the unprivileged `node` user and Compose starts the POT provider on loopback.
 - Send the parts of a split chat message back to back: another message queued meanwhile can no longer land between them.
 - Harden every systemd unit: private devices, protected kernel tunables, modules, logs, control groups and clock, restricted namespaces and address families, no capabilities, `@system-service` syscall filter and a private umask. File access is unchanged.
+- Stop notifying a connection-lost handler after it unsubscribes: kicked and disconnected events are bound once instead of once per subscription.
 
 ## Upgrade
 
@@ -58,6 +64,8 @@ Node.js >=22.19.0 is required. Back up configuration and data, run `npm ci` and 
 If the panel uses a default password it will not start; set a unique `RHAPSOD_PANEL_PASSWORD` first. Existing installs keep the old `Requires=` line in `/etc/systemd/system/rhapsod.service` until the installer runs again: change it to `Wants=` and run `systemctl daemon-reload`.
 
 Docker installs: run `sudo chown -R 1000:1000 data .env` before recreating the containers, which now run as uid 1000.
+
+The watchdog now defaults to 15 seconds. An env file with `RHAPSOD_WATCHDOG_INTERVAL_MINUTES=15` keeps working and logs a deprecation warning; replace that line with `RHAPSOD_WATCHDOG_INTERVAL_SECONDS=15`, or set it to `0` to keep the watchdog off.
 
 A yt-dlp timeout outside its range now stops startup. Before restarting, compare any `RHAPSOD_YTDLP_*_TIMEOUT_MS` line from `grep TIMEOUT_MS /etc/rhapsod.env` with the ranges in `.env.example`.
 

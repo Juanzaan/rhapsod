@@ -103,3 +103,52 @@ async function syncDirectory(directory: string): Promise<void> {
     // best effort
   }
 }
+
+/**
+ * Coalesces saves of a whole-file store. Listening history and the song
+ * library used to serialize and write their entire file on every recorded
+ * play, on the event loop that also paces voice frames. Changes now mark the
+ * store dirty and one write runs after `delayMs`, reading the state at that
+ * moment; `flush()` writes immediately and is what shutdown awaits.
+ */
+export class DebouncedWriter {
+  readonly #write: () => Promise<void>;
+  readonly #delayMs: number;
+  #timer: NodeJS.Timeout | undefined;
+  #dirty = false;
+  #chain: Promise<void> = Promise.resolve();
+
+  constructor(write: () => Promise<void>, delayMs = 5_000) {
+    this.#write = write;
+    this.#delayMs = delayMs;
+  }
+
+  schedule(): void {
+    this.#dirty = true;
+    if (this.#timer !== undefined) return;
+    const timer = setTimeout(() => {
+      this.#timer = undefined;
+      void this.#drain();
+    }, this.#delayMs);
+    timer.unref();
+    this.#timer = timer;
+  }
+
+  async flush(): Promise<void> {
+    if (this.#timer !== undefined) {
+      clearTimeout(this.#timer);
+      this.#timer = undefined;
+    }
+    await this.#drain();
+  }
+
+  #drain(): Promise<void> {
+    if (this.#dirty) {
+      this.#dirty = false;
+      this.#chain = this.#chain
+        .then(() => this.#write())
+        .catch(() => undefined);
+    }
+    return this.#chain;
+  }
+}

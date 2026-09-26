@@ -1,3 +1,4 @@
+import { readJsonFile, writeFileAtomic } from "../../lib/json-file-store.js";
 import type { MinimalLogger } from "../../observability/logger.js";
 import { noopLogger } from "../../observability/logger.js";
 import type { YoutubeTrackMetadata } from "../youtube/yt-dlp.js";
@@ -5,6 +6,10 @@ import type { YoutubeTrackMetadata } from "../youtube/yt-dlp.js";
 const HOME_URL = "https://soundcloud.com/";
 const API_URL = "https://api-v2.soundcloud.com";
 const CLIENT_ID_TTL_MS = 6 * 60 * 60_000;
+// How long a fallback client_id is used before discovery is tried again.
+const FALLBACK_RETRY_MS = 10 * 60_000;
+export const CLIENT_ID_UNAVAILABLE_MESSAGE =
+  "SoundCloud cambió su página y no se pudo obtener su clave de acceso. Probá con un link de YouTube mientras tanto.";
 
 interface Transcoding {
   readonly format?: { readonly protocol?: string };
@@ -60,6 +65,11 @@ interface SoundCloudPublicApiOptions {
   readonly fetch?: typeof fetch;
   readonly logger?: MinimalLogger;
   readonly timeoutMs?: number;
+  /**
+   * Where the last discovered client_id is kept, so a restart while
+   * soundcloud.com has changed its page still has one to try.
+   */
+  readonly clientIdCachePath?: string;
 }
 
 export class SoundCloudPublicApi implements SoundCloudResolver {
@@ -69,11 +79,15 @@ export class SoundCloudPublicApi implements SoundCloudResolver {
   readonly #timeoutMs: number;
   #clientId: { expiresAt: number; value: string } | undefined;
   #clientIdRequest: Promise<string> | undefined;
+  readonly #clientIdCachePath: string | undefined;
+  // Values SoundCloud answered 401 to: never offered as a fallback again.
+  readonly #rejectedClientIds = new Set<string>();
 
   constructor(options: SoundCloudPublicApiOptions = {}) {
     this.#fetch = options.fetch ?? fetch;
     this.#logger = options.logger ?? noopLogger;
     this.#timeoutMs = options.timeoutMs ?? 12_000;
+    this.#clientIdCachePath = options.clientIdCachePath;
   }
 
   match(input: string): boolean {
@@ -183,6 +197,7 @@ export class SoundCloudPublicApi implements SoundCloudResolver {
       signal: AbortSignal.timeout(this.#timeoutMs),
     });
     if (response.status === 401 && retry) {
+      this.#rejectedClientIds.add(clientId);
       this.#clientId = undefined;
       return this.#apiRequest<T>(pathOrUrl, false);
     }
@@ -195,7 +210,9 @@ export class SoundCloudPublicApi implements SoundCloudResolver {
     if (this.#clientId && this.#clientId.expiresAt > Date.now())
       return this.#clientId.value;
     if (this.#clientIdRequest !== undefined) return this.#clientIdRequest;
-    const request = this.#discoverClientId();
+    const request = this.#discoverClientId().catch((error: unknown) =>
+      this.#fallbackClientId(error),
+    );
     this.#clientIdRequest = request;
     try {
       return await request;
@@ -210,7 +227,7 @@ export class SoundCloudPublicApi implements SoundCloudResolver {
     const home = await this.#fetch(HOME_URL, {
       signal: AbortSignal.timeout(this.#timeoutMs),
     });
-    if (!home.ok) throw new Error("No se pudo conectar con SoundCloud.");
+    if (!home.ok) throw new Error(`homepage answered ${home.status}`);
     const html = await home.text();
     const scripts = [
       ...html.matchAll(
@@ -245,9 +262,65 @@ export class SoundCloudPublicApi implements SoundCloudResolver {
         { durationMs: Date.now() - startedAt },
         "SoundCloud: client_id discovered",
       );
+      this.#saveClientId(match[1]);
       return match[1];
     }
-    throw new Error("No se pudo conectar con SoundCloud.");
+    throw new Error(`no client_id in ${scriptSources.length} scripts`);
+  }
+
+  // Scraping breaks whenever soundcloud.com changes its bundle. A known
+  // client_id usually keeps working for days after that, so the last one
+  // is used and discovery retried later, instead of failing every request.
+  #fallbackClientId(error: unknown): string {
+    const reason = error instanceof Error ? error.message : String(error);
+    const candidate = [this.#clientId?.value, this.#cachedClientId()].find(
+      (value): value is string =>
+        value !== undefined && !this.#rejectedClientIds.has(value),
+    );
+    if (candidate === undefined) {
+      this.#logger.warn(
+        { reason },
+        "SoundCloud: client_id discovery failed and no previous one is known",
+      );
+      throw new Error(CLIENT_ID_UNAVAILABLE_MESSAGE, { cause: error });
+    }
+    this.#logger.warn(
+      { reason },
+      "SoundCloud: client_id discovery failed; using the last known one",
+    );
+    this.#clientId = {
+      expiresAt: Date.now() + FALLBACK_RETRY_MS,
+      value: candidate,
+    };
+    return candidate;
+  }
+
+  #cachedClientId(): string | undefined {
+    if (this.#clientIdCachePath === undefined) return undefined;
+    return readJsonFile(
+      this.#clientIdCachePath,
+      (raw) => {
+        const value = (raw as { value?: unknown } | null)?.value;
+        return typeof value === "string" && /^[A-Za-z0-9_-]{20,}$/.test(value)
+          ? value
+          : undefined;
+      },
+      this.#logger,
+    );
+  }
+
+  #saveClientId(value: string): void {
+    if (this.#clientIdCachePath === undefined) return;
+    writeFileAtomic(
+      this.#clientIdCachePath,
+      JSON.stringify({ discoveredAt: Date.now(), value }),
+      0o600,
+    ).catch((error: unknown) => {
+      this.#logger.warn(
+        { err: error },
+        "SoundCloud: could not save the client_id cache",
+      );
+    });
   }
 
   async #followShortLink(url: string): Promise<string> {
