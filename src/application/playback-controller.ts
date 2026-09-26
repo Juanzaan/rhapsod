@@ -11,9 +11,10 @@ import {
 } from "../audio/ffmpeg-pcm.js";
 import type { RhapsodOpusEncoder } from "../audio/opus-encoder.js";
 import { FRAME_DURATION_MS } from "../audio/opus-encoder.js";
-import type {
-  AudioPlayerMetrics,
-  VoiceFrameOutput,
+import {
+  isMidPlayStall,
+  type AudioPlayerMetrics,
+  type VoiceFrameOutput,
 } from "../audio/audio-player.js";
 import type { LoudnessProfiler } from "../audio/loudness-profiler.js";
 import type { YoutubeTrackMetadata } from "../media/youtube/yt-dlp.js";
@@ -124,6 +125,10 @@ const AUDIO_URL_REFRESH_AHEAD_MS = 3 * 60_000;
 const AUTH_REQUIRED_RE =
   /sign in to confirm|cookies for the authentication|request you to sign in|login required/i;
 const MAX_AUDIO_URL_403_RETRIES = 3;
+// A source that stops delivering mid-song (throttled CDN, dropped radio
+// connection) used to end the track as an error and skip it. One resume per
+// play gets it back; a second stall in the same play is treated as dead.
+const MAX_STALL_RESUMES_PER_PLAY = 1;
 const PREFETCH_STABILITY_TIMEOUT_MS = 8_000;
 const PREFETCH_STABILITY_POLL_MS = 100;
 const PREWARM_CHECK_INTERVAL_MS = 2_000;
@@ -220,6 +225,7 @@ export class PlaybackController {
     SessionEndReason
   >();
   readonly #retries = new WeakMap<Track, number>();
+  readonly #stallResumes = new WeakMap<Track, number>();
 
   constructor(options: PlaybackControllerOptions) {
     this.#encoder = options.encoder;
@@ -774,23 +780,35 @@ export class PlaybackController {
           (playbackError !== undefined ? "error" : "completed");
         if (endReason === "restart") continue;
         const retries = this.#retries.get(track) ?? 0;
-        if (
+        const stallResumes = this.#stallResumes.get(track) ?? 0;
+        const forbidden =
           playbackError instanceof Error &&
           endReason === "error" &&
           isForbiddenResponse(playbackError.message) &&
-          retries < MAX_AUDIO_URL_403_RETRIES
-        ) {
-          this.#retries.set(track, retries + 1);
+          retries < MAX_AUDIO_URL_403_RETRIES;
+        const stalled =
+          !forbidden &&
+          playbackError instanceof Error &&
+          endReason === "error" &&
+          isMidPlayStall(playbackError.message) &&
+          stallResumes < MAX_STALL_RESUMES_PER_PLAY;
+        if (forbidden || stalled) {
+          if (forbidden) this.#retries.set(track, retries + 1);
+          else this.#stallResumes.set(track, stallResumes + 1);
           const positionMs = this.#sessionPositionMs(session);
+          // Resolve again on resume: a stalled googlevideo URL is often
+          // throttled or near expiry, and a 403'd one is dead.
+          this.#preparedStore.drop(track.source);
           // Invalidate stale URL (daemon may have cached a 403'd host).
           // Awaited on purpose: the requeued track's re-resolve can reach
           // the daemon before a fire-and-forget invalidate lands, and the
           // daemon would serve the same dead URL again — burning ~10-25s
           // of dead air and a retry on a URL already known bad.
-          this.#preparedStore.drop(track.source);
-          await this.#resolver
-            .invalidateAudioUrl?.(track.source)
-            .catch(() => undefined);
+          if (forbidden) {
+            await this.#resolver
+              .invalidateAudioUrl?.(track.source)
+              .catch(() => undefined);
+          }
           if (
             this.#epochs.isGenerationCurrent(generation) &&
             this.#current === track
@@ -798,7 +816,7 @@ export class PlaybackController {
             try {
               this.#queue.requeue(track);
               this.#queue.moveToHead(track.id);
-              // The retry resumes the same play where the 403 cut it:
+              // The retry resumes the same play where the 403 or stall cut it:
               // no second "Reproduciendo", no error message, no restart
               // from the top.
               const seconds = this.#resumeSeconds(track, positionMs);
