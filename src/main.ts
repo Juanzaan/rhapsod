@@ -80,6 +80,7 @@ import { resolveTuneInUrl } from "./media/tunein.js";
 import { SongLinkClient } from "./media/song-link.js";
 import { AppleMusicClient } from "./media/apple-music.js";
 import { DirectUrlClient } from "./media/direct-url.js";
+import { startEgressGuard } from "./lib/egress-guard.js";
 import { LyricsClient, parseArtistTitle } from "./media/lyrics.js";
 import { SoundCloudPublicApi } from "./media/soundcloud/public-api.js";
 import { SpotifyApi } from "./media/spotify/api.js";
@@ -400,9 +401,11 @@ async function main(): Promise<void> {
       : undefined;
   const ffmpegPath = config.RHAPSOD_FFMPEG_PATH;
   const ffmpegUserAgent = config.RHAPSOD_FFMPEG_USER_AGENT;
+  const { proxyUrl: egressProxyUrl } = await startEgressGuard({ logger });
   const loudnessProfiler = new LoudnessProfiler({
     ...(ffmpegPath === undefined ? {} : { binary: ffmpegPath }),
     targetLufs: config.RHAPSOD_LOUDNESS_TARGET_LUFS,
+    egressProxyUrl,
   });
   const { executor: ytDlpExecutor, resolver: ytDlpResolver } =
     createYtDlpResolverStack(logger, {
@@ -436,6 +439,7 @@ async function main(): Promise<void> {
     createPlayback: (url, playbackEncoder, output, options) =>
       playFfmpegUrl(url, playbackEncoder, output, {
         ...(ffmpegPath === undefined ? {} : { binary: ffmpegPath }),
+        egressProxyUrl,
         // The controller decides per track: finite tracks carry a target,
         // live radio omits it so endless streams skip dynamic loudnorm.
         ...(options?.loudnessTargetLufs === undefined
@@ -465,6 +469,7 @@ async function main(): Promise<void> {
       createPcmStream(url, {
         ...options,
         ...(ffmpegPath === undefined ? {} : { binary: ffmpegPath }),
+        egressProxyUrl,
         ...(ffmpegUserAgent === undefined
           ? {}
           : { userAgent: ffmpegUserAgent }),
@@ -564,6 +569,7 @@ async function main(): Promise<void> {
     alternativeResolver: new SongLinkClient({ logger }),
     appleMusicResolver: new AppleMusicClient(),
     directUrlResolver: new DirectUrlClient({
+      egressProxyUrl,
       ...(config.RHAPSOD_FFPROBE_PATH === undefined
         ? {}
         : { ffprobeBinary: config.RHAPSOD_FFPROBE_PATH }),
