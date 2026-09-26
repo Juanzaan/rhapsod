@@ -296,6 +296,10 @@ async function main(): Promise<void> {
     join(dataDir, "song-library.json"),
     logger,
   );
+  // At startup, not inside the first onPlaybackStarted: a large history
+  // parsed there delayed the first track's audio.
+  listeningHistory.load();
+  songLibrary.load();
   const serverSnapshot = new ServerSnapshot();
   const channelDirectory = new ChannelDirectory(async (cid) => {
     try {

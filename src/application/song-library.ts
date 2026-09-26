@@ -1,6 +1,10 @@
 import type { MinimalLogger } from "../observability/logger.js";
 import { noopLogger } from "../observability/logger.js";
-import { readJsonFile, writeFileAtomic } from "../lib/json-file-store.js";
+import {
+  DebouncedWriter,
+  readJsonFile,
+  writeFileAtomic,
+} from "../lib/json-file-store.js";
 
 export interface LibraryTrackInput {
   readonly artist?: string;
@@ -82,11 +86,16 @@ export class SongLibrary {
   readonly #logger: MinimalLogger;
   readonly #tracks = new Map<string, StoredEntry>();
   #loaded = false;
-  #writeChain: Promise<void> = Promise.resolve();
+  readonly #writer = new DebouncedWriter(() => this.#persistNow());
 
   constructor(filePath: string, logger?: MinimalLogger) {
     this.#filePath = filePath;
     this.#logger = logger ?? noopLogger;
+  }
+
+  /** Reads the file now instead of on the first recorded play. */
+  load(): void {
+    this.#ensureLoaded();
   }
 
   record(input: LibraryTrackInput): void {
@@ -106,7 +115,7 @@ export class SongLibrary {
       entry.plays++;
       entry.lastHeardAt = now;
     }
-    void this.#schedulePersist();
+    this.#writer.schedule();
   }
 
   size(): number {
@@ -129,7 +138,7 @@ export class SongLibrary {
   }
 
   async flush(): Promise<void> {
-    await this.#writeChain;
+    await this.#writer.flush();
   }
 
   #ensureLoaded(): void {
@@ -138,12 +147,6 @@ export class SongLibrary {
     const parsed = readJsonFile(this.#filePath, parseLibraryFile, this.#logger);
     if (parsed === undefined) return;
     for (const [id, entry] of parsed) this.#tracks.set(id, entry);
-  }
-
-  #schedulePersist(): Promise<void> {
-    const write = this.#writeChain.then(() => this.#persistNow());
-    this.#writeChain = write.catch(() => undefined);
-    return write;
   }
 
   async #persistNow(): Promise<void> {
