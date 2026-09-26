@@ -122,6 +122,11 @@ export const messages = {
   skipSoloQuienPidioLa:
     "Solo quien pidió la canción (o un admin) puede saltarla.",
   skipPistaSaltada: "Pista saltada.",
+  skipVotoSoloOyentes: "Para votar tenés que estar en el canal del bot.",
+  skipVotoRegistrado: (votes: number, needed: number): string =>
+    `Voto para saltar registrado (${votes}/${needed}).`,
+  skipVotacionAprobada: (votes: number, needed: number): string =>
+    `Votación aprobada (${votes}/${needed}): pista saltada.`,
   jumpNoExisteEsaPosicion: "No existe esa posición en la cola.",
   jumpSoloQuienPidioLas:
     "Solo quien pidió las pistas (o un admin) puede saltar hasta ahí.",

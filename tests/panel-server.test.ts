@@ -74,6 +74,7 @@ function baseConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     RHAPSOD_PANEL_USER: "admin",
     RHAPSOD_PANEL_PASSWORD: "secret",
     RHAPSOD_VERBOSE: false,
+    RHAPSOD_VOTE_SKIP: false,
     ...overrides,
   };
 }

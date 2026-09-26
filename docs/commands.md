@@ -12,7 +12,7 @@ chat once the TS3 adapter is connected.
 | `!yt [n] <search terms>`              | `!search`, `!youtube` | Add a matching YouTube video; a leading number picks the n-th ranked result.                                                         |
 | `!pause`                              | -                     | Pause the current track.                                                                                                             |
 | `!resume`                             | -                     | Resume the current track.                                                                                                            |
-| `!skip`                               | `!s`                  | Skip the current track (only its requester or an admin).                                                                             |
+| `!skip`                               | `!s`                  | Skip the current track (its requester, an admin, or a listener vote).                                                                |
 | `!previous`                           | `!prev`               | Replay the last finished track.                                                                                                      |
 | `!seek <seconds>`                     | -                     | Jump to a position in seconds within the current track.                                                                              |
 | `!stop`                               | -                     | Stop playback and clear the queue (only when every track is yours or an autoplay pick, or as an admin).                              |
@@ -55,6 +55,12 @@ chat once the TS3 adapter is connected.
   their own current track. Tracks whose requester is no longer connected to
   the server are communal, like autoplay picks: anyone may skip, remove or
   clear them.
+- **Vote skip:** with `RHAPSOD_VOTE_SKIP=true` (default `false`), `!skip` on
+  someone else's track counts as a vote instead of being refused. The track
+  is skipped when more than half of the people in the bot's channel voted:
+  2 of 2, 2 of 3, 3 of 4. Only listeners in that channel can vote, a voter
+  who leaves stops counting, and votes reset when the track changes. If the
+  channel's client list cannot be read, the ownership rule applies.
 - **Favorites:** `!fav` saves the current track per TS3 user id (up to 50),
   persisted to `data/user-preferences.json` (atomic write) and replayable
   with `!favplay <n>`.
