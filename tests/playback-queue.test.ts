@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { PlaybackQueue } from "../src/domain/playback-queue.js";
+import {
+  DuplicateTrackError,
+  PlaybackQueue,
+} from "../src/domain/playback-queue.js";
+import { UserError } from "../src/lib/user-error.js";
 import type { Track } from "../src/domain/track.js";
 
 const firstTrack: Track = {
@@ -33,6 +37,23 @@ describe("PlaybackQueue", () => {
     expect(() => queue.add(firstTrack)).toThrow(
       "Esa canción ya está en la cola.",
     );
+  });
+
+  // Regression: callers told duplicates apart by matching this Spanish text
+  // in error.message, so rewording it made a playlist with a repeated song
+  // fail as a whole instead of skipping the repeat.
+  it("rejects duplicates with a typed user-facing error", () => {
+    const queue = new PlaybackQueue();
+    queue.add(firstTrack);
+    let thrown: unknown;
+    try {
+      queue.add(firstTrack);
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(DuplicateTrackError);
+    expect(thrown).toBeInstanceOf(UserError);
+    expect((thrown as DuplicateTrackError).trackId).toBe(firstTrack.id);
   });
 
   it("promotes tracks to the head", () => {
