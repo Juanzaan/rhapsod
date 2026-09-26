@@ -29,12 +29,6 @@ Los comandos utilizan `!` por defecto y se procesan en el chat de TeamSpeak cuan
 | `!shuffle`                            | -                     | Mezclar pistas pendientes.                                                   |
 | `!loop [off\|track\|queue]`           | -                     | Repetición persistente de pista o cola.                                      |
 | `!lyrics`                             | `!ly`                 | Buscar letras mediante LRCLIB.                                               |
-| `!bassboost [1-5]`                    | `!bb`                 | Aplicar refuerzo de graves.                                                  |
-| `!nightcore [1.05-1.35]`              | `!nc`                 | Aumentar velocidad.                                                          |
-| `!vaporwave [0.80-0.95]`              | `!vw`                 | Reducir velocidad.                                                           |
-| `!8d`                                 | -                     | Aplicar efecto espacial.                                                     |
-| `!filter [off]`                       | -                     | Mostrar o desactivar el filtro.                                              |
-| `!effects <efecto> [on\|off]`         | -                     | Controlar efectos; admite `list` y `reset`.                                  |
 | `!playlist <subcomando>`              | `!pl`                 | `save`, `load`, `list`, `show`, `delete`, `add`, `remove`, `rename`, `info`. |
 | `!fav` / `!favs`                      | -                     | Guardar la pista actual o listar favoritos.                                  |
 | `!unfav <n>`                          | -                     | Eliminar un favorito por posición.                                           |

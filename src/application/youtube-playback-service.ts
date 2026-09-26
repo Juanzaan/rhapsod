@@ -24,7 +24,6 @@ import type { createPcmStream, playFfmpegUrl } from "../audio/ffmpeg-player.js";
 import type { LoudnessProfiler } from "../audio/loudness-profiler.js";
 import type { RhapsodOpusEncoder } from "../audio/opus-encoder.js";
 import type { VoiceFrameOutput } from "../audio/audio-player.js";
-import type { AudioFilter, FilterParam } from "../audio/filter-chain.js";
 import type { AudioPlayerMetrics } from "../audio/audio-player.js";
 import type { AlternativeSourceResolver } from "../media/song-link.js";
 import {
@@ -259,9 +258,6 @@ export class YoutubePlaybackService {
         : { directUrlResolver: options.directUrlResolver }),
       encoder: options.encoder,
       ...(restored?.autoplay === true ? { initialAutoplay: true } : {}),
-      ...(restored?.filter === undefined
-        ? {}
-        : { initialFilter: restored.filter }),
       ...(restored?.loopMode === undefined
         ? {}
         : { initialLoopMode: restored.loopMode }),
@@ -324,10 +320,6 @@ export class YoutubePlaybackService {
     return this.#controller.loopMode;
   }
 
-  get filter(): AudioFilter {
-    return this.#controller.filter;
-  }
-
   get playerState(): "idle" | "buffering" | "playing" | "paused" {
     return this.#controller.playerState;
   }
@@ -346,10 +338,6 @@ export class YoutubePlaybackService {
 
   setLoopMode(mode: LoopMode): void {
     this.#controller.setLoopMode(mode);
-  }
-
-  setFilter(filter: AudioFilter, param?: FilterParam): void {
-    this.#controller.setFilter(filter, param);
   }
 
   async enqueue(
@@ -1665,12 +1653,10 @@ export class YoutubePlaybackService {
 
   #persistState(): void {
     if (this.#persistenceSuppressed) return;
-    const filter = this.#controller.filter;
     this.#safeObserver(() => {
       this.#stateStore?.save({
         ...(this.#controller.autoplayEnabled ? { autoplay: true } : {}),
         loopMode: this.#controller.loopMode,
-        ...(filter === "off" ? {} : { filter }),
         queue: this.#serializedQueue(),
         volumePercent: this.#controller.volume,
       });

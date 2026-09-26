@@ -451,9 +451,6 @@ async function main(): Promise<void> {
           ? {}
           : { seekSeconds: options.seekSeconds }),
         ...(options?.live === undefined ? {} : { live: options.live }),
-        ...(options?.audioFilter === undefined
-          ? {}
-          : { audioFilter: options.audioFilter }),
         ...(options?.loudnessProfile === undefined
           ? {}
           : { loudnessProfile: options.loudnessProfile }),
@@ -983,7 +980,6 @@ async function main(): Promise<void> {
           playerState: playback.playerState,
           volume: playback.volume,
           loopMode: playback.loopMode,
-          currentFilter: playback.filter,
           tracksPlayed: playback.tracksPlayed + scrobbler.confirmedCount,
           uptimeMs: Math.round(process.uptime() * 1000),
           disconnects: metrics.disconnectSummary(),

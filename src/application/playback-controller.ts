@@ -15,11 +15,6 @@ import type {
   AudioPlayerMetrics,
   VoiceFrameOutput,
 } from "../audio/audio-player.js";
-import {
-  isAudioFilter,
-  type AudioFilter,
-  type FilterParam,
-} from "../audio/filter-chain.js";
 import type { LoudnessProfiler } from "../audio/loudness-profiler.js";
 import type { YoutubeTrackMetadata } from "../media/youtube/yt-dlp.js";
 import type { DirectUrlResolver } from "../media/direct-url.js";
@@ -41,11 +36,10 @@ export function volumeToGain(percent: number): number {
 
 export type PlaybackDriverState = "idle" | "resolving" | "playing";
 
-export type PlaybackEndReason =
-  "completed" | "error" | "skipped" | "stopped" | "filter-change";
+export type PlaybackEndReason = "completed" | "error" | "skipped" | "stopped";
 
 // Internal end reason for a session replaced by another session of the same
-// track (seek, filter change, 403 retry); never reported to observers.
+// track (seek, 403 retry); never reported to observers.
 type SessionEndReason = PlaybackEndReason | "restart";
 
 export interface PlaybackTiming {
@@ -99,7 +93,6 @@ export interface PlaybackControllerOptions {
   readonly initialAutoplay?: boolean;
   readonly initialVolumePercent?: number;
   readonly initialLoopMode?: LoopMode;
-  readonly initialFilter?: string;
   readonly persistedQueue?: readonly SerializedQueueTrack[];
 }
 
@@ -172,7 +165,7 @@ export class PlaybackController {
   // landing between sessions) resolve themselves within one loop turn.
   #driverState: PlaybackDriverState = "idle";
   // Set when the current track restarts in a new ffmpeg session (seek,
-  // filter change, 403 retry). The next session for that track resumes the
+  // 403 retry). The next session for that track resumes the
   // same play: it is not counted, announced or recorded again. `seconds` is
   // absent for live streams, which rejoin at the live edge.
   #pendingResume:
@@ -198,8 +191,6 @@ export class PlaybackController {
     SessionEndReason
   >();
   readonly #retries = new WeakMap<Track, number>();
-  #filter: AudioFilter = "off";
-  #filterParam: FilterParam = {};
 
   constructor(options: PlaybackControllerOptions) {
     this.#encoder = options.encoder;
@@ -227,12 +218,6 @@ export class PlaybackController {
     }
     if (options.initialLoopMode !== undefined) {
       this.#loopMode = options.initialLoopMode;
-    }
-    if (
-      options.initialFilter !== undefined &&
-      isAudioFilter(options.initialFilter)
-    ) {
-      this.#filter = options.initialFilter;
     }
     this.#persistedQueue = options.persistedQueue ?? [];
   }
@@ -265,10 +250,6 @@ export class PlaybackController {
 
   get loopMode(): LoopMode {
     return this.#loopMode;
-  }
-
-  get filter(): AudioFilter {
-    return this.#filter;
   }
 
   get playerState(): "idle" | "buffering" | "playing" | "paused" {
@@ -319,28 +300,6 @@ export class PlaybackController {
     this.#loopMode = mode;
     this.#loopPool = mode === "queue" ? [...this.#queue.snapshot()] : [];
     this.#onStateChanged();
-  }
-
-  setFilter(filter: AudioFilter, param?: FilterParam): void {
-    const nextParam = filter === "off" ? {} : (param ?? {});
-    if (
-      filter === this.#filter &&
-      nextParam.level === this.#filterParam.level &&
-      nextParam.rate === this.#filterParam.rate
-    ) {
-      return;
-    }
-    this.#filter = filter;
-    this.#filterParam = nextParam;
-    this.#onStateChanged();
-    if (this.#current && this.#session) {
-      this.#restartCurrent(
-        this.#resumeSeconds(
-          this.#current,
-          this.#sessionPositionMs(this.#session),
-        ),
-      );
-    }
   }
 
   /**
@@ -660,10 +619,6 @@ export class PlaybackController {
         const playbackOptions: {
           readonly seekSeconds?: number;
           readonly live?: boolean;
-          readonly audioFilter: {
-            readonly name: AudioFilter;
-            readonly param?: FilterParam;
-          };
           readonly stream?: FfmpegPcmStream;
           readonly loudnessTargetLufs?: number;
           readonly loudnessProfile?: {
@@ -675,7 +630,6 @@ export class PlaybackController {
         } = {
           ...(seekSeconds === undefined ? {} : { seekSeconds }),
           ...(track.durationSeconds === undefined ? { live: true } : {}),
-          audioFilter: { name: this.#filter, param: this.#filterParam },
           // Live radio has no measured profile, so it used to play through
           // dynamic single-pass loudnorm forever: the gain rides audibly on
           // an endless pre-mastered broadcast chain (pumping, squashed
@@ -1187,7 +1141,6 @@ export class PlaybackController {
         // on both paths.
         const loudnessProfile = this.#loudnessProfiler?.cached(next.source);
         const stream = this.#createPcmStream(url, {
-          audioFilter: { name: this.#filter, param: this.#filterParam },
           ...(next.durationSeconds === undefined ? { live: true } : {}),
           ...(this.#proxyUrl === undefined ? {} : { proxyUrl: this.#proxyUrl }),
           ...(this.#loudnessProfiler === undefined ||
