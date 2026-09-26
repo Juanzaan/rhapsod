@@ -9,7 +9,10 @@ const DEFAULT_BINARY = "ffmpeg";
 const MEASURE_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_ENTRIES = 500;
 const MAX_CONCURRENT = 2;
-const SAMPLE_SECONDS = 120;
+// Linear two-pass gain is only safe when the true peak it checks covers the
+// whole track: a 120 s sample of a quiet intro let the gain clip a louder
+// chorus. Longer tracks (mixes, podcasts) keep the dynamic filter.
+const MAX_MEASURED_SECONDS = 15 * 60;
 
 export interface LoudnessProfile {
   readonly measuredI: number;
@@ -96,7 +99,8 @@ export class LoudnessProfiler {
     return entry.profile;
   }
 
-  measure(source: string, url: string): void {
+  measure(source: string, url: string, durationSeconds: number): void {
+    if (durationSeconds > MAX_MEASURED_SECONDS) return;
     if (this.cached(source) !== undefined) return;
     if (this.#measuring.has(source)) return;
     if (this.#activeMeasurements >= MAX_CONCURRENT) return;
@@ -123,8 +127,6 @@ export class LoudnessProfiler {
           "info",
           "-nostdin",
           ...ffmpegEgressArguments(this.#egressProxyUrl),
-          "-t",
-          String(SAMPLE_SECONDS),
           "-i",
           url,
           "-af",
@@ -135,7 +137,7 @@ export class LoudnessProfiler {
         ],
         {
           maxBuffer: 4 * 1024 * 1024,
-          timeout: 90_000,
+          timeout: 180_000,
           windowsHide: true,
           ...(env === undefined ? {} : { env }),
         },
