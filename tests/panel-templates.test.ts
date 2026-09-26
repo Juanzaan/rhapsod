@@ -1033,10 +1033,18 @@ describe("dashboard motion", () => {
 });
 
 describe("panel pages motion and feedback", () => {
+  // The templates emit bare <script> tags; plain index lookups read them
+  // back without a tag-matching regexp.
   function pageScript(html: string): string {
-    return [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
-      .map((m) => m[1] ?? "")
-      .join("\n");
+    const blocks: string[] = [];
+    let start = html.indexOf("<script>");
+    while (start !== -1) {
+      const end = html.indexOf("</script>", start);
+      if (end === -1) break;
+      blocks.push(html.slice(start + "<script>".length, end));
+      start = html.indexOf("<script>", end);
+    }
+    return blocks.join("\n");
   }
 
   const quietWindow = { matchMedia: () => ({ matches: false }) };
