@@ -59,6 +59,10 @@ describe("panel browser scripts", () => {
 
     expect(PAGES.dashboard!()).toContain(panelScript("server-tree"));
 
+    const setup = renderSetupWizard();
+    expect(setup).toContain(panelScript("setup"));
+    expect(setup).toContain(panelScript("ambience"));
+
     const settings = renderSettingsPage();
     expect(settings).toContain(panelScript("settings"));
     expect(settings).toContain(panelScript("ambience"));
