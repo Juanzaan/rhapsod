@@ -1,10 +1,7 @@
-import { dirname } from "node:path";
-import { mkdir, rename, writeFile } from "node:fs/promises";
-
 import type { MinimalLogger } from "../observability/logger.js";
 import { noopLogger } from "../observability/logger.js";
 import { UserError } from "../lib/user-error.js";
-import { readJsonFile } from "../lib/json-file-store.js";
+import { readJsonFile, writeFileAtomic } from "../lib/json-file-store.js";
 
 export interface FavoriteTrack {
   readonly addedAt: number;
@@ -200,7 +197,7 @@ export class UserPreferences {
     if (this.#loaded) return;
     this.#loaded = true;
     this.#users =
-      readJsonFile(this.#filePath, parsePreferencesFile) ??
+      readJsonFile(this.#filePath, parsePreferencesFile, this.#logger) ??
       new Map<string, StoredUserEntry>();
   }
 
@@ -212,7 +209,6 @@ export class UserPreferences {
 
   async #persistNow(): Promise<void> {
     try {
-      await mkdir(dirname(this.#filePath), { recursive: true });
       const users: Record<string, unknown> = {};
       for (const [uid, entry] of this.#users.entries()) {
         users[uid] = {
@@ -224,12 +220,7 @@ export class UserPreferences {
         };
       }
       const data = { users, version: 1 as const };
-      const temporary = `${this.#filePath}.tmp`;
-      await writeFile(temporary, JSON.stringify(data), {
-        encoding: "utf8",
-        mode: 0o600,
-      });
-      await rename(temporary, this.#filePath);
+      await writeFileAtomic(this.#filePath, JSON.stringify(data), 0o600);
     } catch (error) {
       this.#logger.warn(
         { err: error },

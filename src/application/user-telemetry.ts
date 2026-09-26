@@ -85,6 +85,7 @@ export class UserTelemetry {
           users: record.users as Record<string, unknown>,
         } as unknown as TelemetryFile;
       },
+      this.logger,
     );
     if (file === undefined) {
       this.logger.warn(
