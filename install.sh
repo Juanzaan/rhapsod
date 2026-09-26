@@ -4,7 +4,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/Juanzaan/rhapsod/main/install.sh | sudo bash
 #
 # Supported: Ubuntu 20.04+, Debian 11+, RHEL / Oracle Linux / Rocky / Alma 9+
-# on x86_64. Installs: Node 22, yt-dlp (binary + daemon package), static
+# on x86_64 or aarch64 (arm64). Installs: Node 22, yt-dlp (binary + daemon package), static
 # FFmpeg, Cloudflare WARP (proxy mode, fallback egress for YouTube 403s),
 # the bgutil POT provider, the bot itself, systemd units, and a weekly
 # yt-dlp updater. Ends by printing the panel password and next steps.
@@ -50,7 +50,13 @@ verify_checksum() {
 }
 
 [[ "$(id -u)" == "0" ]] || fail "run as root (e.g. sudo bash install.sh)"
-[[ "$(uname -m)" == "x86_64" ]] || fail "only x86_64 is supported (static FFmpeg + WARP client)"
+# Every downloaded artifact exists for both: Node.js tarballs, yt-dlp's
+# standalone binary, the static FFmpeg build and the WARP packages.
+case "$(uname -m)" in
+  x86_64) NODE_ARCH="x64"; YTDLP_ASSET="yt-dlp_linux"; FFMPEG_ARCH="amd64" ;;
+  aarch64|arm64) NODE_ARCH="arm64"; YTDLP_ASSET="yt-dlp_linux_aarch64"; FFMPEG_ARCH="arm64" ;;
+  *) fail "unsupported architecture $(uname -m) (need x86_64 or aarch64)" ;;
+esac
 
 # --- Distro detection -------------------------------------------------------
 # shellcheck disable=SC1091
@@ -99,7 +105,7 @@ fi
 # --- Node.js 22 (distro-agnostic tarball) ------------------------------------
 if ! command -v node >/dev/null 2>&1; then
   log "Installing Node.js $NODE_VERSION"
-  NODE_NAME="node-${NODE_VERSION}-linux-x64.tar.xz"
+  NODE_NAME="node-${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz"
   curl -fL "https://nodejs.org/dist/${NODE_VERSION}/${NODE_NAME}" \
     -o "$WORK_DIR/$NODE_NAME"
   curl -fsSL "https://nodejs.org/dist/${NODE_VERSION}/SHASUMS256.txt" \
@@ -116,10 +122,10 @@ NODE_BIN="$(command -v node)"
 # --- yt-dlp standalone binary -------------------------------------------------
 log "Installing yt-dlp binary"
 YTDLP_RELEASE="https://github.com/yt-dlp/yt-dlp/releases/latest/download"
-curl -fL "$YTDLP_RELEASE/yt-dlp_linux" -o "$WORK_DIR/yt-dlp_linux"
+curl -fL "$YTDLP_RELEASE/$YTDLP_ASSET" -o "$WORK_DIR/$YTDLP_ASSET"
 curl -fsSL "$YTDLP_RELEASE/SHA2-256SUMS" -o "$WORK_DIR/yt-dlp-SHA2-256SUMS"
-verify_checksum "$WORK_DIR/yt-dlp_linux" yt-dlp_linux "$WORK_DIR/yt-dlp-SHA2-256SUMS"
-install -m 0755 "$WORK_DIR/yt-dlp_linux" /usr/local/bin/yt-dlp
+verify_checksum "$WORK_DIR/$YTDLP_ASSET" "$YTDLP_ASSET" "$WORK_DIR/yt-dlp-SHA2-256SUMS"
+install -m 0755 "$WORK_DIR/$YTDLP_ASSET" /usr/local/bin/yt-dlp
 /usr/local/bin/yt-dlp --version
 
 # --- Python daemon packages ---------------------------------------------------
@@ -134,7 +140,7 @@ fi
 
 # --- Static FFmpeg ------------------------------------------------------------
 log "Installing static FFmpeg"
-FFMPEG_NAME="ffmpeg-release-amd64-static.tar.xz"
+FFMPEG_NAME="ffmpeg-release-${FFMPEG_ARCH}-static.tar.xz"
 FFMPEG_URL="https://johnvansickle.com/ffmpeg/releases/$FFMPEG_NAME"
 curl -fL "$FFMPEG_URL" -o "$WORK_DIR/$FFMPEG_NAME"
 # This mirror only publishes an MD5: it catches corrupt or swapped
@@ -359,18 +365,18 @@ UNIT
 
 # --- Weekly yt-dlp updater (SinusBot-style rolling updates) ------------------------------
 {
-  printf '#!/bin/bash\nDAEMON_DEPS=%q\n' "$DAEMON_DEPS"
+  printf '#!/bin/bash\nDAEMON_DEPS=%q\nYTDLP_ASSET=%q\n' "$DAEMON_DEPS" "$YTDLP_ASSET"
   cat <<'CRON'
 # Refresh yt-dlp (binary + daemon package) so YouTube extractor fixes land weekly.
 set -euo pipefail
 WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "$WORK_DIR"' EXIT
 RELEASE="https://github.com/yt-dlp/yt-dlp/releases/latest/download"
-curl -fsSL "$RELEASE/yt-dlp_linux" -o "$WORK_DIR/yt-dlp_linux"
+curl -fsSL "$RELEASE/$YTDLP_ASSET" -o "$WORK_DIR/$YTDLP_ASSET"
 curl -fsSL "$RELEASE/SHA2-256SUMS" -o "$WORK_DIR/SHA2-256SUMS"
 # A mismatch aborts the update and keeps the installed binary.
-(cd "$WORK_DIR" && grep ' yt-dlp_linux$' SHA2-256SUMS | sha256sum -c --quiet -)
-install -m 0755 "$WORK_DIR/yt-dlp_linux" /usr/local/bin/yt-dlp
+(cd "$WORK_DIR" && grep " $YTDLP_ASSET\$" SHA2-256SUMS | sha256sum -c --quiet -)
+install -m 0755 "$WORK_DIR/$YTDLP_ASSET" /usr/local/bin/yt-dlp
 # Debian 12 / Ubuntu 24.04 mark the system Python as externally managed;
 # retry like the installer does instead of silently keeping the old version.
 PIP=(python3 -m pip install --target "$DAEMON_DEPS" --upgrade --quiet)

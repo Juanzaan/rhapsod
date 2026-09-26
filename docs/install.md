@@ -2,7 +2,7 @@
 
 [Español](install.es.md)
 
-Use an always-on Linux host with outbound UDP access to TeamSpeak. The installer supports x86_64 Ubuntu 20.04+, Debian 11+ and RHEL-family 9+ systems. Resource use depends on queue size and extraction concurrency; measure FFmpeg and yt-dlp memory alongside the Node process.
+Use an always-on Linux host with outbound UDP access to TeamSpeak. The installer supports x86_64 and aarch64 (arm64, for example Oracle Cloud Ampere) Ubuntu 20.04+, Debian 11+ and RHEL-family 9+ systems. Resource use depends on queue size and extraction concurrency; measure FFmpeg and yt-dlp memory alongside the Node process.
 
 ## VPS installer
 

@@ -47,6 +47,7 @@ Persistence fixes, dependency updates, deployment repairs and consistent bilingu
 - Accept `!channel-move` while the bot cannot talk in its channel: it is the command that moves it out, and it used to be ignored with every other command. Move permissions still apply.
 - Verify installer and weekly-update downloads against published checksums, use private temp directories instead of fixed `/tmp` paths, create the service user with a `nologin` shell and pin the POT provider server and plugin to the same release. Docker containers run as the unprivileged `node` user and Compose starts the POT provider on loopback.
 - Send the parts of a split chat message back to back: another message queued meanwhile can no longer land between them.
+- Support aarch64 (arm64) hosts in the installer, such as Oracle Cloud Ampere: Node.js, yt-dlp, static FFmpeg and WARP are fetched for the host architecture, and the weekly update keeps using the matching yt-dlp binary.
 
 ## Upgrade
 

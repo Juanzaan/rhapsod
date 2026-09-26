@@ -47,6 +47,7 @@ Correcciones de persistencia, actualización de dependencias, reparación del de
 - Aceptar `!channel-move` mientras el bot no puede hablar en su canal: es el comando que lo saca de ahí y antes se ignoraba junto con todos los demás. Los permisos de movimiento siguen aplicando.
 - Comprobar las descargas del instalador y de la actualización semanal con las sumas publicadas, usar directorios temporales privados en lugar de rutas fijas en `/tmp`, crear el usuario de servicio con shell `nologin` y fijar el servidor y el complemento POT a la misma versión. Los contenedores Docker se ejecutan con el usuario sin privilegios `node` y Compose inicia el proveedor POT en loopback.
 - Enviar seguidas las partes de un mensaje de chat dividido: otro mensaje encolado mientras tanto ya no puede quedar entre ellas.
+- Admitir servidores aarch64 (arm64) en el instalador, como Oracle Cloud Ampere: Node.js, yt-dlp, FFmpeg estático y WARP se descargan para la arquitectura del servidor, y la actualización semanal sigue usando el binario de yt-dlp correspondiente.
 
 ## Actualización
 
