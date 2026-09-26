@@ -31,12 +31,6 @@ chat once the TS3 adapter is connected.
 | `!shuffle`                            | -                     | Shuffle the pending queue (the current track keeps playing).                                                               |
 | `!loop [off\|track\|queue]`           | -                     | Repeat the current track (`track`) or the whole queue (`queue`); persists in `state.json`.                                 |
 | `!lyrics`                             | `!ly`                 | Show the lyrics of the current track, found via LRCLIB (best-effort, no account).                                          |
-| `!bassboost [1-5]`                    | `!bb`                 | Apply the bassboost filter (level 1-5).                                                                                    |
-| `!nightcore [1.05-1.35]`              | `!nc`                 | Apply the nightcore filter (playback speed).                                                                               |
-| `!vaporwave [0.80-0.95]`              | `!vw`                 | Apply the vaporwave filter (playback speed).                                                                               |
-| `!8d`                                 | -                     | Apply the 8D spatial audio filter.                                                                                         |
-| `!filter [off]`                       | -                     | Show the current audio filter, or `off` to disable it.                                                                     |
-| `!effects <effect> [on\|off]`         | -                     | Control audio effects (`8d`, `nightcore`, `bassboost`, `vaporwave`, `list`, `reset`).                                      |
 | `!playlist <subcommand>`              | `!pl`                 | Saved playlists: `save\|load\|list\|show\|delete\|add\|remove\|rename\|info`.                                              |
 | `!fav`                                | -                     | Save the current track to your favorites (max 50 per user).                                                                |
 | `!favs`                               | -                     | List your favorite tracks.                                                                                                 |
