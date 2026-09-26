@@ -10,5 +10,6 @@
   { "tag": "v2.3.1", "previous": "v2.3.0" },
   { "tag": "v2.4.0", "previous": "v2.3.1" },
   { "tag": "v2.4.1", "previous": "v2.4.0" },
-  { "tag": "v3.0.0", "previous": "v2.4.1" }
+  { "tag": "v3.0.0", "previous": "v2.4.1" },
+  { "tag": "v4.0.0", "previous": "v3.0.0" }
 ]

@@ -6,21 +6,22 @@
 
 ## Archivo
 
-| Versión                                   | Contenido                                                 |
-| ----------------------------------------- | --------------------------------------------------------- |
-| [Sin publicar](releases/unreleased.es.md) | Cambios pendientes                                        |
-| [v3.0.0](releases/v3.0.0.es.md)           | Preferencias, reproducción automática, radio e instancias |
-| [v2.4.1](releases/v2.4.1.es.md)           | Automatización de versiones                               |
-| [v2.4.0](releases/v2.4.0.es.md)           | Transiciones, volumen y límite de resolución              |
-| [v2.3.1](releases/v2.3.1.es.md)           | Fiabilidad del panel                                      |
-| [v2.3.0](releases/v2.3.0.es.md)           | Panel e instalador                                        |
-| [v2.2.0](releases/v2.2.0.es.md)           | Innertube y servicio persistente                          |
-| [v2.1.0](releases/v2.1.0.es.md)           | Listas y efectos                                          |
-| [v2.0.0](releases/v2.0.0.es.md)           | Perfil para servidores mayores                            |
-| [v1.2.1](releases/v1.2.1.es.md)           | Última versión de bajos recursos                          |
-| [v1.2.0](releases/v1.2.0.es.md)           | Reproducción y reconexión                                 |
-| [v1.1.0](releases/v1.1.0.es.md)           | Audio y controles de cola                                 |
-| [v1.0.0](releases/v1.0.0.es.md)           | Primera versión estable                                   |
+| Versión                                   | Contenido                                                                  |
+| ----------------------------------------- | -------------------------------------------------------------------------- |
+| [Sin publicar](releases/unreleased.es.md) | Cambios pendientes                                                         |
+| [v4.0.0](releases/v4.0.0.es.md)           | DJ automático, recuperación de la reproducción, métricas y panel reforzado |
+| [v3.0.0](releases/v3.0.0.es.md)           | Preferencias, reproducción automática, radio e instancias                  |
+| [v2.4.1](releases/v2.4.1.es.md)           | Automatización de versiones                                                |
+| [v2.4.0](releases/v2.4.0.es.md)           | Transiciones, volumen y límite de resolución                               |
+| [v2.3.1](releases/v2.3.1.es.md)           | Fiabilidad del panel                                                       |
+| [v2.3.0](releases/v2.3.0.es.md)           | Panel e instalador                                                         |
+| [v2.2.0](releases/v2.2.0.es.md)           | Innertube y servicio persistente                                           |
+| [v2.1.0](releases/v2.1.0.es.md)           | Listas y efectos                                                           |
+| [v2.0.0](releases/v2.0.0.es.md)           | Perfil para servidores mayores                                             |
+| [v1.2.1](releases/v1.2.1.es.md)           | Última versión de bajos recursos                                           |
+| [v1.2.0](releases/v1.2.0.es.md)           | Reproducción y reconexión                                                  |
+| [v1.1.0](releases/v1.1.0.es.md)           | Audio y controles de cola                                                  |
+| [v1.0.0](releases/v1.0.0.es.md)           | Primera versión estable                                                    |
 
 Los resúmenes históricos describen su código etiquetado; las secciones de verificación son procedimientos, no afirmaciones de pruebas actuales de versiones antiguas. El detalle original permanece en [CHANGELOG.md](../CHANGELOG.md) y las diferencias enlazadas.
 

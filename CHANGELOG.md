@@ -6,6 +6,86 @@ for [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-09-26
+
+The release that turns autoplay into a channel DJ, makes playback recover
+from stalls and expiring URLs, measures search and autoplay quality, and
+hardens the panel, the deployment and startup. The audio filters are gone,
+which makes it a major version.
+
+### Removed
+
+- The audio filters (`!bassboost`, `!nightcore`, `!vaporwave`, `!8d`,
+  `!filter`, `!effects`) and their panel controls (#101). `!test-tone` and
+  `!chart` remain as their own commands; a filter saved in `state.json` is
+  ignored.
+
+### Added
+
+- Autoplay as a DJ rotating similar tracks, channel classics and
+  discoveries from the channel's favorite artists, seeded from listening
+  history after a restart (#100).
+- Optional vote skip with `RHAPSOD_VOTE_SKIP` (#136) and `!help <command>`
+  with a pointer to the next category on each `!help <n>` page (#135).
+- Per-track playback latency logs and a playback report in
+  `scripts/log-stats.mjs` (#126); `GET /api/metrics` in Prometheus text
+  format on the panel (#127).
+- Offline evaluations: `npm run eval:search` with a 100% floor in the test
+  suite (#130, #131) and `npm run eval:autoplay` (#132).
+- `npm run smoke`, which starts the built bot in setup mode and checks the
+  panel (#140).
+- `scripts/deploy.sh` with a wait for idle playback, backup and automatic
+  rollback (#138); aarch64 support in the installer (#117).
+- Radio: HEAD-less streams, pasted TuneIn links, ffprobe builds without
+  `-max_redirects`; Apple Music links through the iTunes lookup.
+- `docs/privacy.md`: what is stored per TeamSpeak user and how to delete it
+  (#122).
+
+### Changed
+
+- The panel dashboard and every page redesigned around a shared animated
+  background, with a server tree that includes empty channels (#82, #83,
+  #84, #94).
+- The event-loop watchdog runs every 15 seconds by default
+  (`RHAPSOD_WATCHDOG_INTERVAL_SECONDS`, #120).
+- `!stop` and `!clear` follow the ownership rule of `!skip`; tracks of users
+  who left the server are communal (#98).
+- History and library saves are coalesced and loaded at startup (#113).
+- Internals: `src/main.ts` split into tested modules under
+  `src/bootstrap/` (#142 to #149), table-driven commands (#137), one chat
+  message catalog (#133), and the panel's browser code in linted,
+  type-checked files (#151 to #155).
+
+### Fixed
+
+- A stalled stream resumes at its position instead of being skipped
+  (#128); prepared URLs are reused only when they last the whole track
+  (#129); 403 retries and `!seek` count as the same play (#93).
+- The setup wizard finishes an install: it advances after the connection
+  test, keeps earlier answers and saves only settings (#156).
+- Startup exits with code 1 when TeamSpeak is unreachable, so systemd
+  restarts it (#143); setup mode stops cleanly on SIGTERM (#140).
+- Data safety: every exit flushes pending state (#92), unreadable files are
+  kept and every write is fsynced (#104).
+- The yt-dlp daemon no longer crashes on short links or hangs (#105) and
+  answers in one write (#110); yt-dlp timeouts are validated (#106).
+- Chat: long messages are split and kept together (#95, #99),
+  `!channel-move` works while muted (#96), connection-lost handlers
+  unsubscribe (#114).
+- Search ranking no longer lets short title words match query terms
+  (#131); SoundCloud keeps its last `client_id` and radio rotates mirrors
+  (#116).
+
+### Security
+
+- Every ffmpeg and ffprobe connection goes through a local egress guard
+  (#97, #109).
+- Panel writes must be same-origin JSON, pages no longer embed the
+  password and default passwords refuse to start (#92).
+- `scripts/spotify-auth.mjs` binds to loopback and verifies the OAuth
+  `state` (#111); installer downloads are verified, containers drop root
+  (#102) and systemd units are sandboxed (#115).
+
 ## [3.0.0] - 2026-09-11
 
 The release that turns the bot into a personal DJ and hardens everything
@@ -747,7 +827,8 @@ preserving low-end fallbacks where practical.
 - Removed dead `src/ports` contracts and superseded abstractions; the TS3
   adapter now exposes the only connection contract the application needs.
 
-[unreleased]: https://github.com/Juanzaan/rhapsod/compare/v3.0.0...HEAD
+[unreleased]: https://github.com/Juanzaan/rhapsod/compare/v4.0.0...HEAD
+[4.0.0]: https://github.com/Juanzaan/rhapsod/compare/v3.0.0...v4.0.0
 [3.0.0]: https://github.com/Juanzaan/rhapsod/compare/v2.4.1...v3.0.0
 [2.4.1]: https://github.com/Juanzaan/rhapsod/compare/v2.4.0...v2.4.1
 [2.4.0]: https://github.com/Juanzaan/rhapsod/compare/v2.3.1...v2.4.0
