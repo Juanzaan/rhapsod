@@ -1246,86 +1246,64 @@ async function handlePlaylist(
   }
 }
 
+type CommandName = ChatCommand["name"];
+
+type CommandHandler<N extends CommandName> = (
+  ctx: CommandContext,
+  command: Extract<ChatCommand, { name: N }>,
+  sender: CommandSender,
+  send: SendFn,
+) => Promise<void>;
+
+// Keyed by name so a command without a handler fails to compile.
+const COMMAND_HANDLERS: { readonly [N in CommandName]: CommandHandler<N> } = {
+  play: handlePlay,
+  playnext: handlePlayNext,
+  search: handleSearch,
+  pause: handlePause,
+  previous: handlePrevious,
+  resume: handleResume,
+  seek: handleSeek,
+  queue: handleQueue,
+  history: handleHistory,
+  move: handleMove,
+  remove: handleRemove,
+  clear: handleClear,
+  "channel-move": handleChannelMove,
+  shuffle: handleShuffle,
+  "now-playing": handleNowPlaying,
+  skip: handleSkip,
+  jump: handleJump,
+  stats: handleStats,
+  diag: handleDiag,
+  "debug-server": handleDebugServer,
+  chart: handleChart,
+  stop: handleStop,
+  "test-tone": handleTestTone,
+  help: handleHelp,
+  loop: handleLoop,
+  volume: handleVolume,
+  lyrics: handleLyrics,
+  playlist: handlePlaylist,
+  fav: handleFav,
+  favs: handleFavs,
+  unfav: handleUnfav,
+  favplay: handleFavPlay,
+  fuente: handleFuente,
+  radio: handleRadio,
+  tops: handleTops,
+  mystats: handleMyStats,
+  autoplay: handleAutoplay,
+};
+
 export async function dispatchCommand(
   ctx: CommandContext,
   command: ChatCommand,
   sender: CommandSender,
   send: SendFn,
 ): Promise<void> {
-  switch (command.name) {
-    case "play":
-      return handlePlay(ctx, command, sender, send);
-    case "playnext":
-      return handlePlayNext(ctx, command, sender, send);
-    case "search":
-      return handleSearch(ctx, command, sender, send);
-    case "pause":
-      return handlePause(ctx, command, sender, send);
-    case "previous":
-      return handlePrevious(ctx, command, sender, send);
-    case "resume":
-      return handleResume(ctx, command, sender, send);
-    case "seek":
-      return handleSeek(ctx, command, sender, send);
-    case "queue":
-      return handleQueue(ctx, command, sender, send);
-    case "history":
-      return handleHistory(ctx, command, sender, send);
-    case "move":
-      return handleMove(ctx, command, sender, send);
-    case "remove":
-      return handleRemove(ctx, command, sender, send);
-    case "clear":
-      return handleClear(ctx, command, sender, send);
-    case "channel-move":
-      return handleChannelMove(ctx, command, sender, send);
-    case "shuffle":
-      return handleShuffle(ctx, command, sender, send);
-    case "now-playing":
-      return handleNowPlaying(ctx, command, sender, send);
-    case "skip":
-      return handleSkip(ctx, command, sender, send);
-    case "jump":
-      return handleJump(ctx, command, sender, send);
-    case "stats":
-      return handleStats(ctx, command, sender, send);
-    case "diag":
-      return handleDiag(ctx, command, sender, send);
-    case "debug-server":
-      return handleDebugServer(ctx, command, sender, send);
-    case "chart":
-      return handleChart(ctx, command, sender, send);
-    case "stop":
-      return handleStop(ctx, command, sender, send);
-    case "test-tone":
-      return handleTestTone(ctx, command, sender, send);
-    case "help":
-      return handleHelp(ctx, command, sender, send);
-    case "loop":
-      return handleLoop(ctx, command, sender, send);
-    case "volume":
-      return handleVolume(ctx, command, sender, send);
-    case "lyrics":
-      return handleLyrics(ctx, command, sender, send);
-    case "playlist":
-      return handlePlaylist(ctx, command, sender, send);
-    case "fav":
-      return handleFav(ctx, command, sender, send);
-    case "favs":
-      return handleFavs(ctx, command, sender, send);
-    case "unfav":
-      return handleUnfav(ctx, command, sender, send);
-    case "favplay":
-      return handleFavPlay(ctx, command, sender, send);
-    case "fuente":
-      return handleFuente(ctx, command, sender, send);
-    case "radio":
-      return handleRadio(ctx, command, sender, send);
-    case "tops":
-      return handleTops(ctx, command, sender, send);
-    case "mystats":
-      return handleMyStats(ctx, command, sender, send);
-    case "autoplay":
-      return handleAutoplay(ctx, command, sender, send);
-  }
+  // TypeScript cannot correlate the handler picked by name with the
+  // narrowed command, so the call goes through the widest handler type.
+  const handler = COMMAND_HANDLERS[command.name] as CommandHandler<CommandName>;
+  return handler(ctx, command, sender, send);
 }
