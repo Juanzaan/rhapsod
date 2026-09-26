@@ -33,6 +33,14 @@ describe("normalizeError", () => {
     expect(result.category).toBe("timeout");
   });
 
+  it.each([
+    "connect ETIMEDOUT 142.250.0.1:443",
+    "read ECONNRESET",
+    "The operation was aborted",
+  ])("categorizes the Node network error %s as a timeout", (message) => {
+    expect(normalizeError(new Error(message)).category).toBe("timeout");
+  });
+
   it("categorizes rate-limit errors", () => {
     const result = normalizeError(new Error("HTTP 429 Too Many Requests"));
     expect(result.category).toBe("rate-limit");
