@@ -37,6 +37,7 @@ import { AUTOPLAY_UID } from "./application/autoplay-picker.js";
 import {
   normalizeCommandInput,
   parseChatCommand,
+  runsWithoutTalkPower,
 } from "./commands/chat-command.js";
 import { probeTs3Server } from "./adapters/ts3/probe.js";
 import {
@@ -658,12 +659,12 @@ async function main(): Promise<void> {
       const command = parseChatCommand(message);
       if (!command) return;
       telemetry.recordCommand(senderUid);
-      if (!canTalk) {
+      if (!canTalk && !runsWithoutTalkPower(command)) {
         if (Date.now() - mutedFeedbackAt > 10_000) {
           mutedFeedbackAt = Date.now();
           await connection
             .sendChannelMessage(
-              "El bot no puede hablar en este canal: no voy a procesar comandos hasta que me muevan a un canal donde se escuche.",
+              "El bot no puede hablar en este canal: solo acepto !channel-move <canal> hasta que me muevan a un canal donde se escuche.",
             )
             .catch(() => undefined);
         }
@@ -788,7 +789,7 @@ async function main(): Promise<void> {
   await checkTalkPower("startup");
   if (!canTalk) {
     logger.warn(
-      "The bot cannot talk in its current channel; commands will be ignored until it is moved",
+      "The bot cannot talk in its current channel; only !channel-move is accepted until it is moved",
     );
   }
   connection.onClientEnter((event) => {

@@ -34,6 +34,7 @@ Correcciones de persistencia, actualización de dependencias, reparación del de
 - Reanudar los reintentos por 403 donde se cortó el audio en lugar de repetir el comienzo de la pista, reintentar sin publicar un error en cada intento y volver a la radio en vivo en el punto actual. La detección de 403 busca el texto del error HTTP en lugar de cualquier "403" dentro de las URL.
 - Usar el binario de FFmpeg y el User-Agent configurados para los flujos precargados de la pista siguiente; antes usaban el ffmpeg-static incluido.
 - Espaciar los mensajes de chat un segundo aunque se encolen varios a la vez, registrar los mensajes descartados por la cola anti-flood, dividir los textos de más de 1024 caracteres (como `!help` o `!debug-server` en servidores grandes) en lugar de perderlos, y detectar un sondeo de heartbeat que nunca responde.
+- Aceptar `!channel-move` mientras el bot no puede hablar en su canal: es el comando que lo saca de ahí y antes se ignoraba junto con todos los demás. Los permisos de movimiento siguen aplicando.
 
 ## Actualización
 

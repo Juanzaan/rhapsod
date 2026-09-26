@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   normalizeCommandInput,
   parseChatCommand,
+  runsWithoutTalkPower,
 } from "../src/commands/chat-command.js";
 
 describe("parseChatCommand", () => {
@@ -448,5 +449,14 @@ describe("normalizeCommandInput", () => {
       from: 99,
       to: 99,
     });
+  });
+});
+
+describe("runsWithoutTalkPower", () => {
+  it("lets !channel-move through so a muted bot can be moved out", () => {
+    const move = parseChatCommand("!channel-move Musica");
+    const play = parseChatCommand("!play algo");
+    expect(move && runsWithoutTalkPower(move)).toBe(true);
+    expect(play && runsWithoutTalkPower(play)).toBe(false);
   });
 });
