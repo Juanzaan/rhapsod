@@ -15,6 +15,16 @@ export interface PrefetchStats {
   groups: Record<string, Summary>;
 }
 
+export interface PlaybackKpiStats {
+  commandToAudioMs: Summary;
+  startDelayMs: Summary;
+  handoffGapMs: Summary;
+  underrunsPerPlay: Summary;
+  rebuffersPerPlay: Summary;
+  handoffs: { prewarmed: number; cold: number };
+  prewarmRate: number;
+}
+
 export interface LogStats {
   parsedCount: number;
   skipped: number;
@@ -24,6 +34,7 @@ export interface LogStats {
   audioUrlMs: Summary;
   metadataMs: Summary;
   firstFrameDelayMs: Summary;
+  kpis: PlaybackKpiStats;
   cacheHitRate: number;
   cacheHits: { hit: number; miss: number };
   winners: Record<string, number>;

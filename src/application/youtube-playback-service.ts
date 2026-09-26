@@ -54,6 +54,7 @@ import {
   type LoopMode,
   type PlaybackDriverState,
   type PlaybackEndReason,
+  type PlaybackKpis,
   type PlaybackTiming,
 } from "./playback-controller.js";
 import {
@@ -106,6 +107,7 @@ interface PlaybackServiceOptions {
     track: Track,
     metrics: AudioPlayerMetrics,
     reason: PlaybackEndReason,
+    kpis?: PlaybackKpis,
   ) => void;
   readonly onTiming?: (timing: PlaybackTiming) => void;
 }
@@ -270,9 +272,9 @@ export class YoutubePlaybackService {
       ...(options.onPlaybackError === undefined
         ? {}
         : { onPlaybackError: options.onPlaybackError }),
-      onPlaybackFinished: (track, metrics, reason) => {
+      onPlaybackFinished: (track, metrics, reason, kpis) => {
         this.#noteAutoplayFinish(track, reason);
-        options.onPlaybackFinished?.(track, metrics, reason);
+        options.onPlaybackFinished?.(track, metrics, reason, kpis);
       },
       ...(options.onPlaybackStarted === undefined
         ? {}
