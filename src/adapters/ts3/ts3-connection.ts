@@ -150,6 +150,13 @@ export interface Ts3Connection {
   }>;
   getCurrentChannelId(): number;
   listConnectedClientUids(): Promise<readonly string[]>;
+  /**
+   * UIDs of the people listening with the bot: regular clients in the bot's
+   * current channel, without the bot itself or query clients, one entry per
+   * identity. `undefined` when the list cannot be read, so callers can tell
+   * a failed query from an empty channel.
+   */
+  listChannelListenerUids(): Promise<readonly string[] | undefined>;
   canTalkInCurrentChannel(): Promise<boolean>;
   moveToChannel(cid: number): Promise<void>;
   getServerInfo(): Promise<Record<string, string>>;
@@ -492,6 +499,24 @@ export function createTs3Connection(
           .map((entry) => entry.uid);
       } catch {
         return [];
+      }
+    },
+    listChannelListenerUids: async () => {
+      try {
+        const clients = await listClients(client);
+        const channelId = client.channelID();
+        const selfId = client.clientID();
+        const uids = clients
+          .filter(
+            (entry) =>
+              entry.type === 0 &&
+              entry.id !== selfId &&
+              entry.channelID === channelId,
+          )
+          .map((entry) => entry.uid);
+        return [...new Set(uids)];
+      } catch {
+        return undefined;
       }
     },
     canTalkInCurrentChannel: async () => {
