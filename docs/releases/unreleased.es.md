@@ -42,6 +42,7 @@ Correcciones de persistencia, actualización de dependencias, reparación del de
 - Corregir el daemon de yt-dlp: los enlaces youtu.be, `/shorts/` y `/live/` ya no rompen la solicitud, dos solicitudes del mismo video ya no lo extraen dos veces, una solicitud que espera una extracción trabada se rinde a los 45 segundos, las URL en caché vencen en la hora firmada en la URL (menos 15 minutos) en vez de a las seis horas fijas, y las rutas desconocidas responden 404.
 - Conservar los archivos de datos ilegibles: listas, favoritos, historial de escucha, biblioteca de canciones, telemetría o estado de reproducción que no se pueden leer se renombran a `<nombre>.corrupt-<hora>` en vez de ser reemplazados por el siguiente guardado. Cada escritura de datos se sincroniza con el disco antes del renombre, así que un corte de energía no puede dejar un archivo vacío.
 - Aceptar `!channel-move` mientras el bot no puede hablar en su canal: es el comando que lo saca de ahí y antes se ignoraba junto con todos los demás. Los permisos de movimiento siguen aplicando.
+- Comprobar las descargas del instalador y de la actualización semanal con las sumas publicadas, usar directorios temporales privados en lugar de rutas fijas en `/tmp`, crear el usuario de servicio con shell `nologin` y fijar el servidor y el complemento POT a la misma versión. Los contenedores Docker se ejecutan con el usuario sin privilegios `node` y Compose inicia el proveedor POT en loopback.
 - Enviar seguidas las partes de un mensaje de chat dividido: otro mensaje encolado mientras tanto ya no puede quedar entre ellas.
 
 ## Actualización
@@ -49,6 +50,8 @@ Correcciones de persistencia, actualización de dependencias, reparación del de
 Se requiere Node.js >=22.19.0. Respaldar configuración y datos, ejecutar `npm ci` y `npm run build`, y reiniciar cuando `/api/state` indique `playerState: "idle"`.
 
 Si el panel usa una contraseña por defecto no se iniciará; definir antes una `RHAPSOD_PANEL_PASSWORD` única. Las instalaciones existentes conservan la línea `Requires=` en `/etc/systemd/system/rhapsod.service` hasta volver a ejecutar el instalador: cambiarla por `Wants=` y ejecutar `systemctl daemon-reload`.
+
+Instalaciones con Docker: ejecutar `sudo chown -R 1000:1000 data .env` antes de recrear los contenedores, que ahora se ejecutan con uid 1000.
 
 Un tiempo de espera de yt-dlp fuera de rango ahora detiene el inicio. Antes de reiniciar, comparar cada línea `RHAPSOD_YTDLP_*_TIMEOUT_MS` de `grep TIMEOUT_MS /etc/rhapsod.env` con los rangos de `.env.example`.
 

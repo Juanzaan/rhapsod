@@ -98,7 +98,15 @@ RHAPSOD_FFPROBE_PATH=/usr/bin/ffprobe
 RHAPSOD_YTDLP_COOKIES_PATH=/app/data/youtube-cookies.txt
 ```
 
-Create `data/` and place a cookie file there if required. The bot mounts data read/write; the daemon reads it read-only. `.env` is mounted for panel edits; recreate containers after changing environment values because Compose injects them at container creation. Optional WARP/POT services are configured separately on the host.
+Create `data/` and place a cookie file there if required. The bot mounts data read/write; the daemon reads it read-only. `.env` is mounted for panel edits; recreate containers after changing environment values because Compose injects them at container creation.
+
+The containers run as the unprivileged `node` user (uid 1000). Make the mounted files writable by that uid:
+
+```bash
+sudo chown -R 1000:1000 data .env
+```
+
+Compose also starts the bgutil POT provider, bound to `127.0.0.1:4416` and pinned to the plugin version in the image. WARP stays a host service.
 
 ```bash
 docker compose config --quiet

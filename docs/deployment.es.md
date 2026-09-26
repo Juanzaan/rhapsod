@@ -98,7 +98,15 @@ RHAPSOD_FFPROBE_PATH=/usr/bin/ffprobe
 RHAPSOD_YTDLP_COOKIES_PATH=/app/data/youtube-cookies.txt
 ```
 
-Crear `data/` y colocar las cookies si son necesarias. El bot monta datos con escritura; el servicio los lee sin modificarlos. `.env` se monta para el panel; recrear contenedores tras cambiar el entorno, ya que Compose lo inyecta al crearlos. Configurar servicios WARP/POT opcionales por separado en el host.
+Crear `data/` y colocar las cookies si son necesarias. El bot monta datos con escritura; el servicio los lee sin modificarlos. `.env` se monta para el panel; recrear contenedores tras cambiar el entorno, ya que Compose lo inyecta al crearlos.
+
+Los contenedores se ejecutan con el usuario sin privilegios `node` (uid 1000). Dar permisos de escritura a ese uid sobre los archivos montados:
+
+```bash
+sudo chown -R 1000:1000 data .env
+```
+
+Compose también inicia el proveedor POT de bgutil, escuchando en `127.0.0.1:4416` y con la misma versión que el complemento de la imagen. WARP sigue siendo un servicio del host.
 
 ```bash
 docker compose config --quiet
