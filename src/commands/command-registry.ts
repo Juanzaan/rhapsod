@@ -306,8 +306,8 @@ export const COMMAND_SPECS: readonly CommandSpec[] = [
     aliases: ["h"],
     group: "misc",
     adminOnly: false,
-    usage: "help [1-4]",
-    summary: "Mostrar el menú o los comandos de una categoría",
+    usage: "help [1-4 | comando]",
+    summary: "Mostrar el menú, una categoría o un comando",
   },
 ];
 
@@ -353,6 +353,33 @@ export function visibleCommandSpecs(isAdmin: boolean): CommandSpec[] {
 export function resolveHelpCategory(
   raw: string | undefined,
 ): CommandGroup | undefined {
+  return matchHelpCategory(raw, true);
+}
+
+export type HelpTopic =
+  { readonly category: CommandGroup } | { readonly command: string };
+
+/**
+ * A number or a full category name wins over a command ("!help cola" is the
+ * category), a command or alias wins over a category prefix ("!help c" is
+ * !clear, not "cola").
+ */
+export function resolveHelpTopic(
+  raw: string | undefined,
+): HelpTopic | undefined {
+  const exact = matchHelpCategory(raw, false);
+  if (exact !== undefined) return { category: exact };
+  const command =
+    raw === undefined ? undefined : lookupCommandName(raw.replace(/^!/, ""));
+  if (command !== undefined) return { command };
+  const prefix = matchHelpCategory(raw, true);
+  return prefix === undefined ? undefined : { category: prefix };
+}
+
+function matchHelpCategory(
+  raw: string | undefined,
+  allowPrefix: boolean,
+): CommandGroup | undefined {
   if (raw === undefined || raw === "") return undefined;
   const normalized = stripAccents(raw.toLowerCase());
   const index = Number(normalized);
@@ -366,7 +393,9 @@ export function resolveHelpCategory(
   return HELP_GROUPS.find((group) => {
     const name = stripAccents(HELP_GROUP_NAMES[group].toLowerCase());
     return (
-      group === normalized || name === normalized || name.startsWith(normalized)
+      group === normalized ||
+      name === normalized ||
+      (allowPrefix && name.startsWith(normalized))
     );
   });
 }
@@ -388,7 +417,7 @@ export function formatHelpMenu(isAdmin: boolean): string {
       return `!help ${index + 1} (${HELP_GROUP_NAMES[group]}) — ${HELP_GROUP_SUMMARIES[group]}`;
     }),
     "",
-    "Ej: escribí !help 2 para ver los comandos de cola.",
+    "Ej: escribí !help 2 para ver los comandos de cola, o !help play para uno solo.",
   ];
   return lines.join("\n");
 }
@@ -412,7 +441,33 @@ export function formatHelpCategory(
       return `!${spec.usage}${aliasSuffix} - ${spec.summary}`;
     }),
     "",
-    "Usá !help para volver al menú.",
+    helpFooter(group, isAdmin),
   ];
   return lines.join("\n");
+}
+
+function helpFooter(group: CommandGroup, isAdmin: boolean): string {
+  const visible = visibleCommandSpecs(isAdmin);
+  const next = HELP_GROUPS.slice(HELP_GROUPS.indexOf(group) + 1).find(
+    (candidate) => visible.some((spec) => spec.group === candidate),
+  );
+  const back = "Usá !help para volver al menú.";
+  if (next === undefined) return back;
+  const page = HELP_GROUPS.indexOf(next) + 1;
+  return `Siguiente: !help ${page} (${HELP_GROUP_NAMES[next]}). ${back}`;
+}
+
+/** One command in detail; admin-only commands stay hidden from others. */
+export function formatHelpCommand(name: string, isAdmin: boolean): string {
+  const spec = COMMAND_SPECS.find((candidate) => candidate.name === name);
+  if (spec === undefined || (spec.adminOnly && !isAdmin)) {
+    return `No hay ayuda para !${name} en tu nivel. Usá !help para ver el menú.`;
+  }
+  const page = HELP_GROUPS.indexOf(spec.group) + 1;
+  return [
+    `!${spec.usage} - ${spec.summary}`,
+    ...(spec.aliases.length > 0 ? [`Alias: !${spec.aliases.join(", !")}`] : []),
+    `Categoría: ${HELP_GROUP_NAMES[spec.group]} (!help ${page})`,
+    ...(spec.adminOnly ? ["Solo admins."] : []),
+  ].join("\n");
 }

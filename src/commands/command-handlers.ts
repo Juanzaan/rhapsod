@@ -24,7 +24,11 @@ import {
   canRemoveTracks,
   isAdminUid,
 } from "./permissions.js";
-import { formatHelpCategory, formatHelpMenu } from "./command-registry.js";
+import {
+  formatHelpCategory,
+  formatHelpCommand,
+  formatHelpMenu,
+} from "./command-registry.js";
 import { messages } from "../lib/messages.js";
 
 export interface CommandContext {
@@ -946,6 +950,10 @@ async function handleHelp(
   send: SendFn,
 ): Promise<void> {
   const isAdmin = isAdminUid(sender.uid, ctx.adminUids);
+  if (command.command !== undefined) {
+    await send(formatHelpCommand(command.command, isAdmin));
+    return;
+  }
   if (command.category === undefined) {
     await send(formatHelpMenu(isAdmin));
     return;

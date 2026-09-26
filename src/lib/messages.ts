@@ -259,7 +259,7 @@ export const messages = {
   parseChatCommandUsaPlaylistSaveLoad:
     "Usá: !playlist save|load|list|show|delete|add|remove|rename|info <nombre>",
   parseChatCommandUsaHelp14:
-    "Usá: !help [1-4 | reproducción | cola | administración | otros]",
+    "Usá: !help [1-4 | reproducción | cola | administración | otros | comando]",
   parseChatCommandElComandoNoAcepta: (rawName: string | number): string =>
     `El comando !${rawName} no acepta argumentos`,
   parsePositionUsa: (usage: string | number): string => `Usá: ${usage}`,
