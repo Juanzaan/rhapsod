@@ -32,7 +32,7 @@ Con `RHAPSOD_SKIP_NON_MUSIC=true`, cada pista de YouTube se consulta en `sponsor
 
    ```bash
    cd /var/lib/rhapsod
-   sudo -u rhapsod node -e '
+   sudo -u rhapsod env PATH="$PATH" node -e '
    const users = require("./user-telemetry.json").users;
    for (const user of Object.values(users))
      if (user.names.includes(process.argv[1])) console.log(user.uid);
@@ -48,7 +48,7 @@ Con `RHAPSOD_SKIP_NON_MUSIC=true`, cada pista de YouTube se consulta en `sponsor
 3. Quitar el UID de cada archivo que lo guarda. Reemplazar `UID_HERE` y ejecutar como el usuario del servicio desde el directorio de datos:
 
    ```bash
-   sudo -u rhapsod node -e '
+   sudo -u rhapsod env PATH="$PATH" node -e '
    const fs = require("node:fs");
    const uid = process.argv[1];
    const edits = {

@@ -25,7 +25,9 @@ CONF="${RHAPSOD_INSTALL_CONF:-/etc/rhapsod/install.conf}"
 # Overridable for tests; production uses the real commands.
 SYSTEMCTL="${RHAPSOD_SYSTEMCTL:-systemctl}"
 JOURNALCTL="${RHAPSOD_JOURNALCTL:-journalctl}"
-AS_USER="${RHAPSOD_AS_USER:-sudo -u}"
+# Empty means runuser, not sudo -u: RHEL's sudo secure_path drops
+# /usr/local/bin, and every call below already runs as root.
+AS_USER="${RHAPSOD_AS_USER:-}"
 USERDEL="${RHAPSOD_USERDEL:-userdel}"
 GETENT="${RHAPSOD_GETENT:-getent}"
 # Prefix for the system paths uninstall removes; tests point it at a sandbox.
@@ -64,8 +66,7 @@ cli() {
   if [[ -z "${RHAPSOD_AS_USER:-}" && "$(id -un)" == "$APP_USER" ]]; then
     (cd "$APP_DIR" && "$NODE_BIN" dist/cli.js "$@")
   else
-    # shellcheck disable=SC2086 # AS_USER is a command prefix on purpose.
-    (cd "$APP_DIR" && $AS_USER "$APP_USER" "$NODE_BIN" dist/cli.js "$@")
+    (cd "$APP_DIR" && as_app "$NODE_BIN" dist/cli.js "$@")
   fi
 }
 
@@ -76,8 +77,13 @@ player_state() {
 }
 
 as_app() {
-  # shellcheck disable=SC2086 # AS_USER is a command prefix on purpose.
-  $AS_USER "$APP_USER" "$@"
+  if [[ -z "$AS_USER" ]]; then
+    # Without --, runuser reads the command's own options (--json) as its own.
+    runuser -u "$APP_USER" -- "$@"
+  else
+    # shellcheck disable=SC2086 # AS_USER is a command prefix on purpose.
+    $AS_USER "$APP_USER" "$@"
+  fi
 }
 
 # Fails closed: a panel that does not answer (disabled, down, or a password

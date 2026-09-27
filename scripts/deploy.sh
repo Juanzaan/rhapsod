@@ -35,7 +35,9 @@ FORCE=0
 DRY_RUN=0
 # Overridable for tests; production uses the real commands.
 SYSTEMCTL="${RHAPSOD_DEPLOY_SYSTEMCTL:-systemctl}"
-AS_USER="${RHAPSOD_DEPLOY_AS_USER:-sudo -u}"
+# runuser, not sudo -u: RHEL's sudo secure_path drops /usr/local/bin, where
+# npm lives.
+AS_USER="${RHAPSOD_DEPLOY_AS_USER:-}"
 POLL_SECONDS="${RHAPSOD_DEPLOY_POLL_SECONDS:-10}"
 # The panel starts only after the TeamSpeak connection, which may take up
 # to RHAPSOD_TS3_CONNECT_TIMEOUT_SECONDS (180 by default).
@@ -70,8 +72,13 @@ BACKUP_DIR="${BACKUP_DIR:-$(dirname "$APP_DIR")/backups}"
 [[ "$WAIT_MINUTES" =~ ^[0-9]+$ ]] || fail "--wait-minutes must be a number"
 
 as_app() {
-  # shellcheck disable=SC2086 # AS_USER is a command prefix on purpose.
-  $AS_USER "$APP_USER" "$@"
+  if [[ -z "$AS_USER" ]]; then
+    # Without --, runuser reads the command's own options (npm --prefix) as its own.
+    runuser -u "$APP_USER" -- "$@"
+  else
+    # shellcheck disable=SC2086 # AS_USER is a command prefix on purpose.
+    $AS_USER "$APP_USER" "$@"
+  fi
 }
 
 # Reads KEY from the env file: last assignment wins, surrounding quotes go.

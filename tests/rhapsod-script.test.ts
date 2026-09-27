@@ -78,7 +78,7 @@ fi
     journalctl,
     `#!/usr/bin/env bash\necho "journalctl $*" >> ${JSON.stringify(calls)}\n`,
   );
-  // Drops the user argument, as sudo -u would after switching to it.
+  // Drops the user argument, as runuser -u would after switching to it.
   const asUser = join(root, "as-user");
   executable(asUser, `#!/usr/bin/env bash\nshift\nexec "$@"\n`);
   // Stands in for deploy.sh: records its arguments and checks out --ref,
@@ -206,6 +206,30 @@ describeUnix("rhapsod wrapper", () => {
 
   it("passes --json through to the cli", () => {
     const result = sandbox("playing").run("status", "--json");
+    expect(result.calls).toContain("cli status --json\n");
+  });
+
+  it("ends runuser's options with -- so status --json reaches the cli", () => {
+    const bin = mkdtempSync(join(tmpdir(), "rhapsod-runuser-"));
+    sandboxes.push(bin);
+    const box = sandbox("idle");
+    // Like the real runuser, reads every option before -- as its own.
+    executable(
+      join(bin, "runuser"),
+      `#!/usr/bin/env bash
+echo "runuser $*" >> ${JSON.stringify(box.calls)}
+[[ "$1" == -u && "$3" == -- ]] || { echo "runuser: unrecognized option" >&2; exit 1; }
+shift 3
+exec "$@"
+`,
+    );
+    const result = box.runWith(
+      { RHAPSOD_AS_USER: "", PATH: `${bin}:${process.env.PATH ?? ""}` },
+      "restart",
+    );
+    expect(result.stderr).toBe("");
+    expect(result.code).toBe(0);
+    expect(result.calls).toContain("runuser -u rhapsod -- ");
     expect(result.calls).toContain("cli status --json\n");
   });
 
