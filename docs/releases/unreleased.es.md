@@ -39,6 +39,7 @@ La normalización de volumen medida funciona por primera vez: los temas con un p
 - La caché de títulos de radio en vivo descarta las entradas vencidas; antes guardaba una por estación mientras el proceso estuviera activo.
 - La CI también ejecuta las pruebas en Windows y en Linux arm64, y cada acción de GitHub queda fijada por el SHA de su commit.
 - Las descripciones de los ajustes del panel y las etiquetas del asistente de configuración llevan sus tildes.
+- Un tema ahora termina en el tick que envía su último audio en lugar de uno después, y su último frame parcial (menos de 20 ms) se envía completado con silencio en lugar de descartarse. Con el tema siguiente ya precargado, el silencio entre temas en el reproductor baja de unos 40 ms a 20 ms, un frame, que no se percibe como pausa. `rhapsod_inter_track_gap_seconds` muestra el paso completo, incluido el trabajo del controlador entre temas.
 
 ## Actualización
 

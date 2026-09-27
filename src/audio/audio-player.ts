@@ -258,7 +258,8 @@ export class AudioPlayer {
 
   readonly #sendNextFrameCore = (): void => {
     if (this.#state !== "playing") return;
-    if (this.#bufferedBytes >= PCM_FRAME_BYTES) {
+    const tail = this.#sourceEnded && this.#bufferedBytes > 0;
+    if (this.#bufferedBytes >= PCM_FRAME_BYTES || tail) {
       const frame = this.#framePool.acquire();
       const gained = this.#gain === 1 ? undefined : this.#framePool.acquire();
       try {
@@ -286,6 +287,9 @@ export class AudioPlayer {
       ) {
         this.#resumeSource();
       }
+      // Ending on the tick that sent the last audio, not the next one,
+      // saves a frame of silence at every track change.
+      if (this.#sourceEnded && this.#bufferedBytes === 0) this.#finish();
       return;
     }
 
@@ -311,14 +315,20 @@ export class AudioPlayer {
     }
   };
 
+  /**
+   * Fills one frame from the buffer. The last partial frame of an ended
+   * source is padded with silence instead of dropped.
+   */
   #readFrameInto(target: Uint8Array): Uint8Array {
     let written = 0;
-    while (written < PCM_FRAME_BYTES) {
+    const wanted = Math.min(PCM_FRAME_BYTES, this.#bufferedBytes);
+    target.fill(0, wanted);
+    while (written < wanted) {
       const chunk = this.#chunks[0];
       if (chunk === undefined)
         throw new Error("PCM buffer accounting mismatch");
       const available = chunk.byteLength - this.#chunkOffset;
-      const length = Math.min(PCM_FRAME_BYTES - written, available);
+      const length = Math.min(wanted - written, available);
       target.set(
         chunk.subarray(this.#chunkOffset, this.#chunkOffset + length),
         written,

@@ -70,6 +70,50 @@ describe("AudioPlayer", () => {
     }
   });
 
+  it("ends on the tick that sends the last audio frame", async () => {
+    const { clock, output, player } = setup();
+    const source = new PassThrough();
+    let finished = false;
+    void player.play(source).then(() => (finished = true));
+    source.end(Buffer.alloc(PCM_FRAME_BYTES * 16, 7));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    for (let frame = 0; frame < 15; frame++) clock.tick();
+    await Promise.resolve();
+    expect(finished).toBe(false);
+    clock.tick();
+    await Promise.resolve();
+
+    // No extra silent tick before the next track can start.
+    expect(output.sendVoiceFrame).toHaveBeenCalledTimes(16);
+    expect(finished).toBe(true);
+    expect(player.state).toBe("idle");
+  });
+
+  it("pads the last partial frame with silence instead of dropping it", async () => {
+    const { clock, encodeMock, player } = setup();
+    const source = new PassThrough();
+    let finished = false;
+    void player.play(source).then(() => (finished = true));
+    source.end(
+      Buffer.concat([
+        Buffer.alloc(PCM_FRAME_BYTES * 16, 7),
+        Buffer.alloc(1_000, 9),
+      ]),
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+
+    for (let frame = 0; frame < 17; frame++) clock.tick();
+    await Promise.resolve();
+
+    expect(encodeMock).toHaveBeenCalledTimes(17);
+    const tail = encodeMock.mock.calls[16]?.[0];
+    expect(tail?.byteLength).toBe(PCM_FRAME_BYTES);
+    expect(tail?.[999]).toBe(9);
+    expect(tail?.[1_000]).toBe(0);
+    expect(finished).toBe(true);
+  });
+
   it("meters the loudness it sends, before the volume gain", () => {
     const { clock, player } = setup();
     player.setVolume(0.5);
