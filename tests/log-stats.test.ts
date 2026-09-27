@@ -409,6 +409,7 @@ describe("log-stats playback KPIs", () => {
       session({
         coldStart: false,
         handoffGapMs: 80,
+        delivered: { integratedLufs: -14.3, truePeakDbtp: -1.7 },
         interTrackGapMs: 65,
         prewarmed: true,
         rebufferEvents: 1,
@@ -437,6 +438,8 @@ describe("log-stats playback KPIs", () => {
     expect(stats.playbackSessions).toBe(5);
     expect(stats.kpis.commandToAudioMs).toMatchObject({ count: 2, max: 2_000 });
     expect(stats.kpis.interTrackGapMs).toMatchObject({ count: 1, p50: 65 });
+    expect(stats.kpis.deliveredLufs).toMatchObject({ count: 1, p50: -14.3 });
+    expect(stats.kpis.deliveredTruePeak).toMatchObject({ count: 1, max: -1.7 });
     expect(stats.kpis.startDelayMs).toMatchObject({ count: 4, max: 1_400 });
     expect(stats.kpis.handoffGapMs).toMatchObject({ count: 2, p50: 80 });
     expect(stats.kpis.handoffs).toEqual({ prewarmed: 1, cold: 1 });
