@@ -23,10 +23,11 @@ La normalización de volumen medida funciona por primera vez: los temas con un p
 - Los temas medidos se reproducen con una ganancia fija de `volume` seguida de `alimiter` a -1,5 dBFS en lugar de `loudnorm` con `linear=true`, que cambiaba a su modo dinámico sin aviso cuando el rango de sonoridad medido superaba 11 LU: los temas con mucho rango seguían con ganancia variable y remuestreados a 192 kHz y de vuelta. La subida queda limitada a +12 dB. Con un archivo de prueba de 3 minutos esto usó 0,3 s de CPU y 16 MB de memoria, en lugar de 9 s y 129 MB. Al arrancar, el bot revisa `ffmpeg -filters`; si la versión instalada no tiene `alimiter`, deja una advertencia en el log y sigue con la pasada lineal de `loudnorm`.
 - Agregar un lanzador del panel para Windows (`tools/desktop`): abre el túnel SSH y el navegador, guarda la conexión en `%APPDATA%` y la contraseña del panel en el Administrador de credenciales de Windows, y no incluye servidor ni contraseña en el ejecutable. La integración continua lo compila en Windows.
 - Convertir el lanzador de Windows en una aplicación de bandeja: reconecta sola el túnel SSH, muestra en el icono qué se está reproduciendo, abre el panel en una ventana propia con un perfil separado, ejecuta una sola copia y edita su configuración en una ventana. La integración continua ejecuta su autoprueba.
+- Nuevo comando `rhapsod` en los equipos instalados con el script: `status` (servicios, reproductor, TeamSpeak, código de `!claim` pendiente, túnel del panel), `doctor` (una línea por comprobación con su arreglo), `password` (contraseña del panel aleatoria nueva), `restart` (espera a que no suene nada), `logs` y `version`. La parte que no depende del sistema es `node dist/cli.js`, que sirve desde Docker o una instalación manual.
 
 ## Actualización
 
-No se requieren acciones además de los pasos de actualización de v4.0.0. Las instalaciones con `RHAPSOD_ADMIN_UIDS` configurado nunca ven un código de `!claim`. `RHAPSOD_LOUDNESS_TARGET_LUFS` mantiene su significado y su valor por defecto (-14). `RHAPSOD_SKIP_NON_MUSIC` queda desactivado salvo que se defina en `true`.
+No se requieren acciones además de los pasos de actualización de v4.0.0. Volver a ejecutar el instalador agrega el comando `rhapsod`. Las instalaciones con `RHAPSOD_ADMIN_UIDS` configurado nunca ven un código de `!claim`. `RHAPSOD_LOUDNESS_TARGET_LUFS` mantiene su significado y su valor por defecto (-14). `RHAPSOD_SKIP_NON_MUSIC` queda desactivado salvo que se defina en `true`.
 
 ## Verificación
 
