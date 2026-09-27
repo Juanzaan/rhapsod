@@ -4276,7 +4276,8 @@ describe("YoutubePlaybackService", () => {
     const resumeOptions = (
       createPlayback.mock.calls[1] as unknown[] | undefined
     )?.[3] as { seekSeconds?: number } | undefined;
-    expect(resumeOptions?.seekSeconds).toBe(40);
+    // 2000 frames sent, 250 of them silence while starved: 35 s of music.
+    expect(resumeOptions?.seekSeconds).toBe(35);
     expect(onPlaybackStarted).toHaveBeenCalledTimes(1);
     expect(onPlaybackFinished).not.toHaveBeenCalled();
     expect(onPlaybackError).not.toHaveBeenCalled();
@@ -4314,7 +4315,8 @@ describe("YoutubePlaybackService", () => {
     const resumeOptions = (
       createPlayback.mock.calls[1] as unknown[] | undefined
     )?.[3] as { seekSeconds?: number } | undefined;
-    expect(resumeOptions?.seekSeconds).toBe(40);
+    // 2000 frames sent, 250 of them silence while starved: 35 s of music.
+    expect(resumeOptions?.seekSeconds).toBe(35);
     expect(onPlaybackStarted).toHaveBeenCalledTimes(1);
     expect(onPlaybackFinished).not.toHaveBeenCalled();
     expect(onPlaybackError).not.toHaveBeenCalled();
