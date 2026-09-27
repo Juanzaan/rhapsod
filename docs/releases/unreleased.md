@@ -52,6 +52,7 @@ Measured loudness normalization works for the first time: tracks with a loudness
 - A song resumed after a stall or an ffmpeg exit starts where its music stopped: the position no longer counts the silence sent while the stream starved, which skipped up to 5 seconds of the song. The panel and `!np` show the same corrected position.
 - Admin private messages about notices: the 6-hour resend window and the 5-an-hour cap are kept in `data/notices.json`, so a crash loop no longer sends a message on every start; a queued "[Resuelto]" is dropped when its notice opens again before delivery; messages held back by the hourly cap or by a failed client list (a TeamSpeak reconnect) go out on their own later instead of waiting for the next notice or an admin joining.
 - `rhapsod uninstall --purge` no longer deletes a service user that can log in: with `RHAPSOD_USER` set to an existing account such as `ubuntu`, it deleted that account and its home, SSH keys included. Only an account with a `nologin` or `false` shell is removed now.
+- When `scripts/deploy.sh` rolls back a deploy that changed `scripts/yt-dlp-daemon.py`, it restarts `rhapsod-ytdlp-daemon` again after the rebuild. Before, the rolled-back bot talked to a daemon still running the failed version's script until the next reboot.
 
 ## Upgrade
 
