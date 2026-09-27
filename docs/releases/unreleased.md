@@ -24,6 +24,7 @@ Measured loudness normalization works for the first time: tracks with a loudness
 - Add a Windows launcher for the panel (`tools/desktop`): it opens the SSH tunnel and the browser, keeps the connection settings in `%APPDATA%` and the panel password in the Windows Credential Manager, and embeds no host or password. CI builds it on Windows.
 - Turn the Windows launcher into a tray app: it reconnects the SSH tunnel on its own, shows what is playing in the icon, opens the panel in its own browser window with a separate profile, runs a single copy and edits its settings in a window. CI runs its self-test.
 - New `rhapsod` command on installer hosts: `status` (services, player, TeamSpeak, pending `!claim` code, panel tunnel), `doctor` (one line per check with its fix), `password` (new random panel password), `restart` (waits for idle), `logs` and `version`. The host-independent part is `node dist/cli.js`, usable from Docker or a manual install.
+- `/api/metrics` exports `rhapsod_frame_tick_lateness_seconds`, how late each 20 ms audio tick fired, and `rhapsod_clock_slips_total`, ticks more than a frame late; each `Playback session` log line carries the same numbers as `clockTiming`. They are the baseline for the gapless and loudness work planned next.
 
 ## Upgrade
 

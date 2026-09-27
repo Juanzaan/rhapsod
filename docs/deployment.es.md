@@ -124,6 +124,8 @@ scrape_configs:
 
 `rhapsod_play_start_delay_seconds` y `rhapsod_handoff_gap_seconds` son histogramas; `rhapsod_plays_total{reason="error"}` y `rhapsod_underruns_total` son contadores. Los contadores vuelven a cero cuando el bot se reinicia.
 
+`rhapsod_frame_tick_lateness_seconds` es un histograma de cuánto se atrasó cada tick de audio de 20 ms, y `rhapsod_clock_slips_total` cuenta los ticks atrasados más de un frame, en los que el reloj de audio abandonó su horario. Ambos se suman al terminar cada reproducción. Si el contador de saltos sube sin otros cambios, el equipo no llegó a tiempo (CPU robada en un VPS compartido, una pausa de recolección de memoria); los mismos valores por reproducción están en la línea de log `Playback session`, bajo `clockTiming`.
+
 Con un daemon de yt-dlp configurado, `rhapsod_ytdlp_daemon_up` baja a 0 mientras el daemon falla y `rhapsod_ytdlp_daemon_fallbacks_total` cuenta las resoluciones que lanzaron yt-dlp en su lugar. En ese estado las canciones siguen sonando, pero tardan más en empezar; el bot registra `yt-dlp daemon failed` como máximo una vez por minuto y el daemon escribe cada falla en su journal (`journalctl -u rhapsod-ytdlp-daemon`).
 
 `GET /api/health` responde 503 mientras el bot se reconecta a TeamSpeak y 200 en cualquier otro caso. El cuerpo también informa `reconnecting`, `youtubeAuthHealthy` e `ytdlpDaemon`; esos dos últimos degradan el cuerpo pero no el código de estado, así que `scripts/deploy.sh` no revierte por un inicio de sesión de YouTube vencido.

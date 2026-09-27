@@ -68,6 +68,36 @@ describe("FrameScheduler", () => {
     expect(onFrame).toHaveBeenCalledTimes(1);
   });
 
+  it("counts how late each tick fires and when the clock slips", () => {
+    let now = 0;
+    const callbacks: Array<() => void> = [];
+    const scheduler = new FrameScheduler({
+      now: () => now,
+      schedule: (callback) => {
+        callbacks.push(callback);
+        return {} as NodeJS.Timeout;
+      },
+    });
+
+    scheduler.start(vi.fn());
+    now = 20.5; // due at 20: 0.5 ms late
+    callbacks.shift()?.();
+    now = 43; // due at 40: 3 ms late
+    callbacks.shift()?.();
+    now = 130; // due at 60: 70 ms late, drops the base
+    callbacks.shift()?.();
+    now = 150; // due at 150 after the slip: on time
+    callbacks.shift()?.();
+
+    expect(scheduler.timing).toEqual({
+      clockSlips: 1,
+      latenessCounts: [2, 0, 1, 0, 0, 0, 1],
+      latenessSumMs: 73.5,
+      maxLatenessMs: 70,
+      ticks: 4,
+    });
+  });
+
   it("cancels a pending frame when stopped", () => {
     const timer = {} as NodeJS.Timeout;
     const cancel = vi.fn();

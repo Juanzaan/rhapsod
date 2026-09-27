@@ -1,6 +1,6 @@
 import type { Readable } from "node:stream";
 
-import { FrameScheduler } from "./frame-scheduler.js";
+import { type ClockTiming, FrameScheduler } from "./frame-scheduler.js";
 import {
   FRAME_DURATION_MS,
   PCM_FRAME_BYTES,
@@ -61,10 +61,12 @@ export interface VoiceFrameOutput {
 export interface AudioPlayerClock {
   start(onFrame: () => void): void;
   stop(): void;
+  readonly timing?: ClockTiming;
 }
 
 export interface AudioPlayerMetrics {
   readonly bufferedBytes: number;
+  readonly clockTiming?: ClockTiming;
   readonly firstFrameDelayMs?: number;
   readonly framesSent: number;
   readonly maxBufferedBytes: number;
@@ -118,8 +120,10 @@ export class AudioPlayer {
   }
 
   get metrics(): AudioPlayerMetrics {
+    const clockTiming = this.#clock.timing;
     return {
       bufferedBytes: this.#bufferedBytes,
+      ...(clockTiming === undefined ? {} : { clockTiming }),
       ...(this.#firstFrameDelayMs === undefined
         ? {}
         : { firstFrameDelayMs: this.#firstFrameDelayMs }),
