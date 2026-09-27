@@ -95,7 +95,7 @@ export class LoudnessMeter {
   #stepEnergy = 0;
   #stepSamples = 0;
   readonly #steps: number[] = [];
-  readonly #blockPowers: number[] = [];
+  readonly #blocks = new GatedLoudness();
   #peak = 0;
   #cached: DeliveredLoudness | undefined;
 
@@ -149,7 +149,7 @@ export class LoudnessMeter {
     this.#stepSamples = 0;
     if (this.#steps.length > STEPS_PER_BLOCK) this.#steps.shift();
     if (this.#steps.length === STEPS_PER_BLOCK) {
-      this.#blockPowers.push(
+      this.#blocks.add(
         this.#steps.reduce((sum, power) => sum + power, 0) / STEPS_PER_BLOCK,
       );
     }
@@ -160,22 +160,60 @@ export class LoudnessMeter {
       this.#peak > 0
         ? { truePeakDbtp: round(20 * Math.log10(this.#peak)) }
         : {};
-    const absolute = this.#blockPowers.filter(
-      (power) => loudness(power) > ABSOLUTE_GATE_LUFS,
+    const integrated = this.#blocks.integrated();
+    return integrated === undefined
+      ? truePeak
+      : { integratedLufs: round(integrated), ...truePeak };
+  }
+}
+
+const BIN_LU = 0.1;
+const MAX_BLOCK_LUFS = 5;
+const BIN_COUNT = Math.ceil((MAX_BLOCK_LUFS - ABSOLUTE_GATE_LUFS) / BIN_LU);
+
+/**
+ * BS.1770 gating over a fixed histogram of block loudness (0.1 LU bins, as
+ * libebur128 does), so memory and the cost of a reading stay constant: a
+ * radio stream that plays for days used to keep every 400 ms block and
+ * rescan all of them on each metrics read.
+ */
+export class GatedLoudness {
+  readonly #counts = new Float64Array(BIN_COUNT);
+  readonly #powers = new Float64Array(BIN_COUNT);
+  #count = 0;
+  #power = 0;
+
+  add(blockPower: number): void {
+    const blockLufs = loudness(blockPower);
+    if (!(blockLufs > ABSOLUTE_GATE_LUFS)) return;
+    const bin = Math.min(
+      BIN_COUNT - 1,
+      Math.floor((blockLufs - ABSOLUTE_GATE_LUFS) / BIN_LU),
     );
-    if (absolute.length === 0) return truePeak;
-    const threshold = loudness(mean(absolute)) - RELATIVE_GATE_LU;
-    const gated = absolute.filter((power) => loudness(power) > threshold);
-    return { integratedLufs: round(loudness(mean(gated))), ...truePeak };
+    this.#counts[bin]!++;
+    this.#powers[bin]! += blockPower;
+    this.#count++;
+    this.#power += blockPower;
+  }
+
+  /** Gated integrated loudness; undefined until a block passes the gates. */
+  integrated(): number | undefined {
+    if (this.#count === 0) return undefined;
+    const threshold = loudness(this.#power / this.#count) - RELATIVE_GATE_LU;
+    let count = 0;
+    let power = 0;
+    for (let bin = 0; bin < BIN_COUNT; bin++) {
+      const center = ABSOLUTE_GATE_LUFS + (bin + 0.5) * BIN_LU;
+      if (center <= threshold) continue;
+      count += this.#counts[bin]!;
+      power += this.#powers[bin]!;
+    }
+    return count === 0 ? undefined : loudness(power / count);
   }
 }
 
 function loudness(power: number): number {
   return -0.691 + 10 * Math.log10(power);
-}
-
-function mean(values: readonly number[]): number {
-  return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
 function round(value: number): number {

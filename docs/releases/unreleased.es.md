@@ -46,6 +46,7 @@ La normalización de volumen medida funciona por primera vez: los temas con un p
 - `rhapsod restart` y `rhapsod backup` ya no toman como en espera un panel que no responde: con el bot andando y el reproductor desconocido (panel apagado o caído, o una contraseña cambiada con `rhapsod password` que todavía no se cargó) se detienen y piden `--force` en lugar de cortar una canción.
 - Con `RHAPSOD_SKIP_NON_MUSIC=true`, el corte del final ahora también se aplica a la primera canción después de que la cola estuvo quieta y a una canción que se reanuda tras un corte; antes solo las canciones precargadas terminaban donde termina la música.
 - Una detención limpia (un deploy, `rhapsod update`, el botón de reinicio del panel) ya no cuenta para el aviso de reinicios en serie; antes, cuatro deploys o reinicios desde el panel en 15 minutos lo abrían como crítico y mandaban un mensaje privado a los admins.
+- El medidor de sonoridad entregada guarda sus bloques de 400 ms en un histograma fijo de 0,1 LU en lugar de una lista que crecía mientras durara la reproducción: una radio sonando un día hacía que cada lectura de métricas recorriera unos 864.000 bloques. Ahora una lectura cuesta lo mismo después de un minuto o de una semana, con el mismo resultado dentro de 0,05 LU. Una medición de sonoridad que falla (tiempo agotado, 403) no se reintenta durante una hora, en lugar de repetirse en cada precarga del mismo tema.
 
 ## Actualización
 
