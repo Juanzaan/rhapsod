@@ -21,8 +21,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
           cache: npm
@@ -40,21 +40,28 @@ jobs:
         run: npm run test:coverage
       - run: npm run build
       - name: Upload coverage report
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-report
           path: coverage/
           retention-days: 7
 
   runtime-compatibility:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     strategy:
+      # One platform failing should not hide the others' results.
+      fail-fast: false
       matrix:
-        node: [22.19.0, 24]
+        include:
+          - { os: ubuntu-latest, node: 22.19.0 }
+          - { os: ubuntu-latest, node: "24" }
+          # arm64 hosts, such as OCI Ampere instances.
+          - { os: ubuntu-24.04-arm, node: 22.19.0 }
+          - { os: windows-latest, node: 22.19.0 }
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ matrix.node }}
           cache: npm
@@ -67,7 +74,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Validate Compose
         run: |
           cp .env.example .env
@@ -84,7 +91,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Build the Windows launcher
         shell: pwsh
         run: powershell -NoProfile -ExecutionPolicy Bypass -File tools\desktop\build.ps1
@@ -99,7 +106,7 @@ jobs:
             -ArgumentList '--self-test', "`"$report`"" -Wait -PassThru
           Get-Content $report
           if ($process.ExitCode -ne 0) { throw "self-test failed with exit code $($process.ExitCode)" }
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: rhapsod-dashboard
           path: tools/desktop/bin/RhapsodDashboard.exe
