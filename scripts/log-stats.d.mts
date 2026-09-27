@@ -20,6 +20,8 @@ export interface PlaybackKpiStats {
   startDelayMs: Summary;
   handoffGapMs: Summary;
   interTrackGapMs: Summary;
+  deliveredLufs: Summary;
+  deliveredTruePeak: Summary;
   underrunsPerPlay: Summary;
   rebuffersPerPlay: Summary;
   handoffs: { prewarmed: number; cold: number };

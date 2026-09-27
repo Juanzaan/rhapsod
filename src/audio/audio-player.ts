@@ -1,6 +1,7 @@
 import type { Readable } from "node:stream";
 
 import { type ClockTiming, FrameScheduler } from "./frame-scheduler.js";
+import { type DeliveredLoudness, LoudnessMeter } from "./loudness-meter.js";
 import {
   FRAME_DURATION_MS,
   PCM_FRAME_BYTES,
@@ -67,6 +68,8 @@ export interface AudioPlayerClock {
 export interface AudioPlayerMetrics {
   readonly bufferedBytes: number;
   readonly clockTiming?: ClockTiming;
+  /** BS.1770 reading of the frames sent, before the !volume gain. */
+  readonly delivered?: DeliveredLoudness;
   readonly firstFrameDelayMs?: number;
   readonly framesSent: number;
   /** Date.now() when the last frame with source audio (not silence) went out. */
@@ -88,6 +91,7 @@ export class AudioPlayer {
   #framesSent = 0;
   #firstFrameDelayMs: number | undefined;
   #lastAudioFrameAt: number | undefined;
+  #meter = new LoudnessMeter();
   #playStartedAt = 0;
   #maxBufferedBytes = 0;
   #rebufferEvents = 0;
@@ -124,7 +128,9 @@ export class AudioPlayer {
 
   get metrics(): AudioPlayerMetrics {
     const clockTiming = this.#clock.timing;
+    const delivered = this.#meter.result;
     return {
+      ...(Object.keys(delivered).length === 0 ? {} : { delivered }),
       bufferedBytes: this.#bufferedBytes,
       ...(clockTiming === undefined ? {} : { clockTiming }),
       ...(this.#firstFrameDelayMs === undefined
@@ -256,7 +262,11 @@ export class AudioPlayer {
       const frame = this.#framePool.acquire();
       const gained = this.#gain === 1 ? undefined : this.#framePool.acquire();
       try {
-        const pcm = applyGain(this.#readFrameInto(frame), this.#gain, gained);
+        const source = this.#readFrameInto(frame);
+        // Metered before !volume: the loudness chain is what gets tuned,
+        // the volume is each channel's choice.
+        this.#meter.add(source);
+        const pcm = applyGain(source, this.#gain, gained);
         this.#output.sendVoiceFrame(this.#encoder.encode(pcm));
       } finally {
         this.#framePool.release(frame);
@@ -373,6 +383,7 @@ export class AudioPlayer {
     this.#framesSent = 0;
     this.#firstFrameDelayMs = undefined;
     this.#lastAudioFrameAt = undefined;
+    this.#meter = new LoudnessMeter();
     this.#maxBufferedBytes = 0;
     this.#rebufferEvents = 0;
     this.#underruns = 0;
