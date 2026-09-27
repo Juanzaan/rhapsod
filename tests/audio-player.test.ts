@@ -47,6 +47,25 @@ function setup() {
 }
 
 describe("AudioPlayer", () => {
+  it("reports its clock's tick timing with the play metrics", () => {
+    const { encoder, output } = setup();
+    const timing = {
+      clockSlips: 2,
+      latenessCounts: [40, 0, 0, 0, 0, 0, 2],
+      latenessSumMs: 150,
+      maxLatenessMs: 90,
+      ticks: 42,
+    };
+    const clock = { start: vi.fn(), stop: vi.fn(), timing };
+
+    const player = new AudioPlayer(encoder, output, clock);
+
+    expect(player.metrics.clockTiming).toEqual(timing);
+    expect(
+      new AudioPlayer(encoder, output, new ManualClock()).metrics,
+    ).not.toHaveProperty("clockTiming");
+  });
+
   it("prebuffers 320ms of PCM and emits one exact frame per clock tick", () => {
     const { clock, encodeMock, output, player } = setup();
     const source = new PassThrough();

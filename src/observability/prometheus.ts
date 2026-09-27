@@ -1,4 +1,5 @@
 import type { AudioPlayerMetrics } from "../audio/audio-player.js";
+import { TICK_LATENESS_BOUNDS_MS } from "../audio/frame-scheduler.js";
 import type {
   PlaybackEndReason,
   PlaybackKpis,
@@ -9,6 +10,7 @@ import type { MetricsCounters } from "./metrics.js";
 // Seconds. Starts under a second are the goal; the long tail covers slow
 // resolutions up to the 90 s resolve watchdog.
 const LATENCY_BUCKETS = [0.1, 0.25, 0.5, 1, 2, 4, 8, 16, 32, 64];
+const TICK_LATENESS_BUCKETS = TICK_LATENESS_BOUNDS_MS.map((ms) => ms / 1_000);
 
 class Histogram {
   readonly #buckets: readonly number[];
@@ -19,6 +21,17 @@ class Histogram {
   constructor(buckets: readonly number[]) {
     this.#buckets = buckets;
     this.#counts = buckets.map(() => 0);
+  }
+
+  /** Adds per-bucket counts (one per bound plus the open-ended bucket). */
+  addCounts(counts: readonly number[], sum: number): void {
+    let cumulative = 0;
+    this.#buckets.forEach((_bound, index) => {
+      cumulative += counts[index] ?? 0;
+      this.#counts[index]! += cumulative;
+    });
+    this.#count += counts.reduce((total, count) => total + count, 0);
+    this.#sum += sum;
   }
 
   observe(value: number): void {
@@ -50,6 +63,8 @@ export class PlaybackMetrics {
   readonly #startDelay = new Histogram(LATENCY_BUCKETS);
   readonly #handoffGap = new Histogram(LATENCY_BUCKETS);
   readonly #handoffs = { cold: 0, prewarmed: 0 };
+  readonly #tickLateness = new Histogram(TICK_LATENESS_BUCKETS);
+  #clockSlips = 0;
   #underruns = 0;
   #rebuffers = 0;
 
@@ -61,6 +76,14 @@ export class PlaybackMetrics {
     this.#plays.set(reason, (this.#plays.get(reason) ?? 0) + 1);
     this.#underruns += metrics.underruns;
     this.#rebuffers += metrics.rebufferEvents;
+    const timing = metrics.clockTiming;
+    if (timing !== undefined) {
+      this.#tickLateness.addCounts(
+        timing.latenessCounts,
+        timing.latenessSumMs / 1_000,
+      );
+      this.#clockSlips += timing.clockSlips;
+    }
     if (kpis === undefined) return;
     if (kpis.startDelayMs !== undefined)
       this.#startDelay.observe(kpis.startDelayMs / 1_000);
@@ -101,6 +124,13 @@ export class PlaybackMetrics {
       "# HELP rhapsod_underruns_total Audio frames sent as silence because the source fell behind.",
       "# TYPE rhapsod_underruns_total counter",
       `rhapsod_underruns_total ${this.#underruns}`,
+      ...this.#tickLateness.lines(
+        "rhapsod_frame_tick_lateness_seconds",
+        "How late each 20 ms audio tick fired against its deadline.",
+      ),
+      "# HELP rhapsod_clock_slips_total Audio ticks more than a frame late, where the clock dropped its base.",
+      "# TYPE rhapsod_clock_slips_total counter",
+      `rhapsod_clock_slips_total ${this.#clockSlips}`,
       "# HELP rhapsod_rebuffers_total Times playback paused to refill the buffer.",
       "# TYPE rhapsod_rebuffers_total counter",
       `rhapsod_rebuffers_total ${this.#rebuffers}`,
