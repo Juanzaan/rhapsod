@@ -155,6 +155,7 @@ export function analyzeLogs(lines) {
   const commandToAudioMs = [];
   const startDelayMs = [];
   const handoffGapMs = [];
+  const interTrackGapMs = [];
   const underrunsPerPlay = [];
   const rebuffersPerPlay = [];
   const handoffs = { prewarmed: 0, cold: 0 };
@@ -197,13 +198,20 @@ export function analyzeLogs(lines) {
       else if (record.cacheHit === false) cacheHits.miss++;
       if (typeof record.startDelayMs === "number") {
         startDelayMs.push(record.startDelayMs);
-        // A cold start waited for metadata, then resolution and ffmpeg:
-        // together that is what the listener waited after typing !play.
-        if (record.coldStart === true && typeof record.metadataMs === "number")
+        // Newer lines measure it directly; older ones sum the metadata wait
+        // and the start delay, which misses the time between the two.
+        if (typeof record.commandToFirstAudioMs === "number")
+          commandToAudioMs.push(record.commandToFirstAudioMs);
+        else if (
+          record.coldStart === true &&
+          typeof record.metadataMs === "number"
+        )
           commandToAudioMs.push(record.metadataMs + record.startDelayMs);
       }
       if (typeof record.handoffGapMs === "number")
         handoffGapMs.push(record.handoffGapMs);
+      if (typeof record.interTrackGapMs === "number")
+        interTrackGapMs.push(record.interTrackGapMs);
       if (record.coldStart === false) {
         if (record.prewarmed === true) handoffs.prewarmed++;
         else handoffs.cold++;
@@ -286,6 +294,7 @@ export function analyzeLogs(lines) {
       commandToAudioMs: summarize(commandToAudioMs),
       startDelayMs: summarize(startDelayMs),
       handoffGapMs: summarize(handoffGapMs),
+      interTrackGapMs: summarize(interTrackGapMs),
       underrunsPerPlay: summarize(underrunsPerPlay),
       rebuffersPerPlay: summarize(rebuffersPerPlay),
       handoffs,
@@ -362,6 +371,9 @@ export function formatStats(stats, options = {}) {
     `  Elección de pista a primer audio: ${fmtSummary(stats.kpis.startDelayMs)}`,
   );
   lines.push(`  Pausa entre pistas: ${fmtSummary(stats.kpis.handoffGapMs)}`);
+  lines.push(
+    `  Silencio entre pistas (último a primer audio): ${fmtSummary(stats.kpis.interTrackGapMs)}`,
+  );
   lines.push(
     `  Cambios precargados: ${stats.kpis.handoffs.prewarmed} de ${stats.kpis.handoffs.prewarmed + stats.kpis.handoffs.cold} (${stats.kpis.prewarmRate}%)`,
   );
