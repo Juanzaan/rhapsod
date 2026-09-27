@@ -202,6 +202,21 @@ node -e 'const [major, minor] = process.versions.node.split(".").map(Number); pr
 npm --version
 NODE_BIN="$(command -v node)"
 
+# --- Service user ---------------------------------------------------------------
+# Before anything is written under /home/$APP_USER: the daemon packages below
+# used to create that directory as root first, so on a new server useradd
+# left the home root-owned and the POT provider clone failed.
+log "Creating $APP_USER user"
+if ! id "$APP_USER" >/dev/null 2>&1; then
+  # A service account needs no login shell; the installer runs its commands
+  # through sudo -u, which does not use it. Existing users are left as is.
+  useradd --create-home --shell "$(command -v nologin || echo /usr/sbin/nologin)" "$APP_USER"
+fi
+# A run that failed with that bug left the home owned by root.
+if [[ -d "/home/$APP_USER" && "$(stat -c %U "/home/$APP_USER")" == "root" ]]; then
+  chown "$APP_USER:" "/home/$APP_USER"
+fi
+
 # --- yt-dlp standalone binary -------------------------------------------------
 log "Installing yt-dlp binary"
 YTDLP_RELEASE="https://github.com/yt-dlp/yt-dlp/releases/latest/download"
@@ -235,14 +250,6 @@ tar -xJf "$WORK_DIR/$FFMPEG_NAME" -C "$WORK_DIR/ffmpeg" --strip-components=1
 install -m 0755 "$WORK_DIR/ffmpeg/ffmpeg" /usr/local/bin/ffmpeg
 install -m 0755 "$WORK_DIR/ffmpeg/ffprobe" /usr/local/bin/ffprobe
 /usr/local/bin/ffmpeg -version 2>&1 | head -1
-
-# --- Service user ---------------------------------------------------------------
-log "Creating $APP_USER user"
-if ! id "$APP_USER" >/dev/null 2>&1; then
-  # A service account needs no login shell; the installer runs its commands
-  # through sudo -u, which does not use it. Existing users are left as is.
-  useradd --create-home --shell "$(command -v nologin || echo /usr/sbin/nologin)" "$APP_USER"
-fi
 
 # --- Cloudflare WARP (proxy mode: never touches routing/SSH) -------------------
 install_warp_debian() {
