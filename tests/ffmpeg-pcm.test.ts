@@ -8,6 +8,7 @@ import {
   buildFfmpegPcmArguments,
   buildLoudnessFilter,
   probeFfmpegFilter,
+  bundledFfmpegPath,
   resolveFfmpegBinary,
   createFfmpegPcmStream,
   ffmpegEnvironment,
@@ -776,6 +777,20 @@ describe("probeFfmpegFilter", () => {
     await expect(probeFfmpegFilter("ffmpeg", "alimiter", run)).resolves.toBe(
       false,
     );
+  });
+
+  // Regression: a failed ffmpeg-static download still resolved to a path
+  // with no file behind it, so spawns failed with ENOENT instead of using
+  // ffmpeg from PATH.
+  it("ignores a bundled ffmpeg path with no file behind it", () => {
+    expect(bundledFfmpegPath(() => "/nonexistent/ffmpeg")).toBeUndefined();
+    expect(bundledFfmpegPath(() => null)).toBeUndefined();
+    expect(
+      bundledFfmpegPath(() => {
+        throw new Error("Cannot find module 'ffmpeg-static'");
+      }),
+    ).toBeUndefined();
+    expect(bundledFfmpegPath(() => process.execPath)).toBe(process.execPath);
   });
 
   const bundled = resolveFfmpegBinary(undefined);

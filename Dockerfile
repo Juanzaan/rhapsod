@@ -3,7 +3,9 @@
 FROM node:22-bookworm-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci
+# ffmpeg-static is optional and skipped: the runtime image installs ffmpeg
+# from apt and the bot falls back to the ffmpeg on PATH.
+RUN npm ci --omit=optional
 COPY tsconfig.json tsconfig.build.json ./
 COPY src ./src
 RUN npm run build
@@ -25,7 +27,7 @@ COPY --from=build /app/dist ./dist
 COPY --from=build /app/node_modules ./node_modules
 COPY package.json package-lock.json ./
 COPY scripts ./scripts
-RUN npm prune --omit=dev \
+RUN npm prune --omit=dev --omit=optional \
   && install -d -o node -g node /app/data
 ENV NODE_ENV=production
 
