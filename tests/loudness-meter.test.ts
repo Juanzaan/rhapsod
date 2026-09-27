@@ -2,7 +2,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 
 import { describe, expect, it } from "vitest";
 
-import { LoudnessMeter } from "../src/audio/loudness-meter.js";
+import { GatedLoudness, LoudnessMeter } from "../src/audio/loudness-meter.js";
 
 const RATE = 48_000;
 
@@ -127,5 +127,48 @@ describe("LoudnessMeter", () => {
       0.2,
     );
     expect(Math.abs(meter.result.truePeakDbtp! - expectedTp)).toBeLessThan(0.3);
+  });
+});
+
+describe("GatedLoudness", () => {
+  const loudness = (power: number): number => -0.691 + 10 * Math.log10(power);
+  const exact = (powers: readonly number[]): number => {
+    const mean = (values: readonly number[]): number =>
+      values.reduce((sum, value) => sum + value, 0) / values.length;
+    const absolute = powers.filter((power) => loudness(power) > -70);
+    const threshold = loudness(mean(absolute)) - 10;
+    return loudness(mean(absolute.filter((p) => loudness(p) > threshold)));
+  };
+
+  it("gates like the exact per-block calculation", () => {
+    let seed = 7;
+    const random = (): number => {
+      seed = (seed * 1_103_515_245 + 12_345) % 2 ** 31;
+      return seed / 2 ** 31;
+    };
+    // Block levels spread from -80 to 0 LUFS, so both gates cut something.
+    const powers = Array.from(
+      { length: 5_000 },
+      () => 10 ** ((-80 + 80 * random() + 0.691) / 10),
+    );
+    const gated = new GatedLoudness();
+    for (const power of powers) gated.add(power);
+
+    expect(Math.abs(gated.integrated()! - exact(powers))).toBeLessThan(0.05);
+  });
+
+  it("keeps a reading cheap after days of blocks", () => {
+    // A day of a radio stream is 864,000 blocks of 400 ms every 100 ms. The
+    // previous meter kept each one and rescanned them all on every read.
+    const gated = new GatedLoudness();
+    const power = 10 ** ((-14 + 0.691) / 10);
+    for (let block = 0; block < 1_000_000; block++) gated.add(power);
+
+    const started = performance.now();
+    for (let read = 0; read < 100; read++) gated.integrated();
+    const perRead = (performance.now() - started) / 100;
+
+    expect(gated.integrated()).toBeCloseTo(-14, 1);
+    expect(perRead).toBeLessThan(2);
   });
 });

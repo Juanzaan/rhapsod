@@ -45,6 +45,7 @@ Measured loudness normalization works for the first time: tracks with a loudness
 - A track now ends on the tick that sends its last audio instead of one tick later, and its last partial frame (under 20 ms) is sent padded with silence instead of dropped. With the next track already prewarmed, the silence between tracks at the player drops from about 40 ms to 20 ms, one frame, which listeners hear as no gap. `rhapsod_inter_track_gap_seconds` shows the full handoff, including the controller's work between tracks.
 - With `RHAPSOD_SKIP_NON_MUSIC=true`, the outro cut now also applies to the first song after the queue was idle and to a song resumed after a stall; before, only prewarmed songs stopped at the end of the music.
 - A clean stop (a deploy, `rhapsod update`, the panel's restart button) no longer counts toward the restart-loop notice; before, four deploys or panel restarts within 15 minutes opened it as critical and sent the admins a private message.
+- The delivered-loudness meter keeps its 400 ms blocks in a fixed 0.1 LU histogram instead of a list that grew for as long as a play lasted: a radio stream playing for a day made each metrics read rescan about 864,000 blocks. A read now costs the same after a minute or a week, with the same result within 0.05 LU. A loudness measurement that fails (timeout, 403) is not retried for an hour, instead of on every prefetch of the same track.
 
 ## Upgrade
 

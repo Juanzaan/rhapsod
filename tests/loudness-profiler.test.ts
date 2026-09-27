@@ -176,6 +176,44 @@ describe("LoudnessProfiler", () => {
     expect(execFile).toHaveBeenCalledTimes(1);
   });
 
+  it("waits an hour before measuring a failed track again", async () => {
+    vi.useFakeTimers({ now: 1_000_000, toFake: ["Date"] });
+    try {
+      const execFile = vi.fn(() => Promise.reject(new Error("timed out")));
+      const profiler = new LoudnessProfiler({ execFile });
+      profiler.measure(
+        "https://youtu.be/abc",
+        "https://media.example/abc",
+        200,
+      );
+      await vi.waitFor(() => expect(execFile).toHaveBeenCalledTimes(1));
+      await new Promise((resolve) => setImmediate(resolve));
+
+      profiler.measure(
+        "https://youtu.be/abc",
+        "https://media.example/abc",
+        200,
+      );
+      vi.setSystemTime(1_000_000 + 59 * 60_000);
+      profiler.measure(
+        "https://youtu.be/abc",
+        "https://media.example/abc",
+        200,
+      );
+      expect(execFile).toHaveBeenCalledTimes(1);
+
+      vi.setSystemTime(1_000_000 + 61 * 60_000);
+      profiler.measure(
+        "https://youtu.be/abc",
+        "https://media.example/abc",
+        200,
+      );
+      expect(execFile).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("does not cache a profile when ffmpeg fails", async () => {
     const execFile = vi.fn(() => Promise.reject(new Error("network down")));
     const profiler = new LoudnessProfiler({ execFile });
