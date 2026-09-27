@@ -102,7 +102,7 @@ The installer adds `/usr/local/bin/rhapsod` and records the install in `/etc/rha
 | `rhapsod status`    | Service states, player state, TeamSpeak connection, a pending `!claim` code and the SSH tunnel command for the panel. `--json` for scripts.      |
 | `rhapsod doctor`    | The checks above, with the fix for each failure. Prints no secrets.                                                                              |
 | `rhapsod password`  | Writes a new random `RHAPSOD_PANEL_PASSWORD` and prints it.                                                                                      |
-| `rhapsod restart`   | Restarts the bot when the player is idle; `--force` restarts during playback.                                                                    |
+| `rhapsod restart`   | Restarts the bot when the player is idle, or refuses when the panel cannot tell; `--force` skips the check.                                      |
 | `rhapsod logs [N]`  | Follows the bot and daemon journal from N lines back (default 100).                                                                              |
 | `rhapsod version`   | Installed version.                                                                                                                               |
 | `rhapsod backup`    | Stops the bot for a few seconds and archives `data/` and `.env` to `/home/rhapsod/backups`. Refuses during playback unless `--force`.            |
@@ -126,7 +126,7 @@ sudo systemctl start rhapsod
 
 `rollback` restores the code only; the data stays as the newer version left it. When that version changed the data format, restore the backup taken before the update as shown above.
 
-`rhapsod uninstall --purge --yes` runs without a prompt. The last backup goes to `/var/backups/rhapsod`, because `--purge` deletes the home. Node.js, FFmpeg, yt-dlp and WARP stay installed, since other software may use them.
+`rhapsod uninstall --purge --yes` runs without a prompt. The last backup goes to `/var/backups/rhapsod`, because `--purge` deletes the home. A service user that can log in (an existing account passed as `RHAPSOD_USER`) is kept with its home; only the checkout is removed. Node.js, FFmpeg, yt-dlp and WARP stay installed, since other software may use them.
 
 ## Troubleshooting
 

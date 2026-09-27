@@ -64,7 +64,7 @@ if (process.argv[2] === "status" && process.argv[3] === "--json") {
 echo "systemctl $*" >> ${JSON.stringify(calls)}
 if [[ "$1" == "is-active" ]]; then
   unit="\${@: -1}"
-  if [[ "${activeUnits}" == "all" || "$unit" != "bgutil-pot-provider" ]]; then
+  if [[ "${activeUnits}" == "all" || ( "${activeUnits}" == "some" && "$unit" != "bgutil-pot-provider" ) ]]; then
     [[ "$2" == "--quiet" ]] || echo active
     exit 0
   fi
@@ -100,6 +100,12 @@ done
     userdel,
     `#!/usr/bin/env bash\necho "userdel $*" >> ${JSON.stringify(calls)}\n`,
   );
+  // Answers like getent for the service user; LOGIN_SHELL picks its shell.
+  const getent = join(root, "getent");
+  executable(
+    getent,
+    `#!/usr/bin/env bash\necho "rhapsod:x:999:999::/home/rhapsod:\${LOGIN_SHELL:-/usr/sbin/nologin}"\n`,
+  );
   const system = join(root, "system");
   mkdirSync(join(system, "etc", "systemd", "system"), { recursive: true });
   mkdirSync(join(system, "etc", "rhapsod"), { recursive: true });
@@ -132,6 +138,7 @@ done
         RHAPSOD_NO_SUDO: "1",
         RHAPSOD_DEPLOY: deploy,
         RHAPSOD_USERDEL: userdel,
+        RHAPSOD_GETENT: getent,
         RHAPSOD_ROOT: system,
         RHAPSOD_BACKUP_DIR: backups,
         GIT_CONFIG_NOSYSTEM: "1",
@@ -223,6 +230,20 @@ describeUnix("rhapsod wrapper", () => {
     expect(result.code).toBe(1);
     expect(result.stderr).toContain("the player is playing");
     expect(result.calls).not.toContain("systemctl restart");
+  });
+
+  it("refuses to restart when the panel does not answer", () => {
+    const result = sandbox("").run("restart");
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("could not read the player");
+    expect(result.calls).not.toContain("systemctl restart");
+  });
+
+  it("restarts a stopped bot without asking the panel", () => {
+    const result = sandbox("", "none").run("restart");
+    expect(result.code).toBe(0);
+    expect(result.calls).toContain("systemctl restart rhapsod\n");
+    expect(result.calls).not.toContain("cli status");
   });
 
   it("restarts during playback with --force, without asking the panel", () => {
@@ -341,6 +362,21 @@ describeUnix("rhapsod wrapper", () => {
     expect(
       readdirSync(join(box.system, "var", "backups", "rhapsod")),
     ).toHaveLength(1);
+  });
+
+  it("keeps a user that can log in when purging", () => {
+    const box = sandbox();
+    withReleases(box);
+    const result = box.runWith(
+      { LOGIN_SHELL: "/bin/bash" },
+      "uninstall",
+      "--purge",
+      "--yes",
+    );
+    expect(result.code, result.stderr).toBe(0);
+    expect(existsSync(box.app)).toBe(false);
+    expect(result.calls).not.toContain("userdel");
+    expect(result.stdout).toContain("it can log in");
   });
 
   it("asks before uninstalling when not told --yes", () => {

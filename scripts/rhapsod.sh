@@ -29,6 +29,7 @@ JOURNALCTL="${RHAPSOD_JOURNALCTL:-journalctl}"
 # every call below already runs as root.
 AS_USER="${RHAPSOD_AS_USER:-runuser -u}"
 USERDEL="${RHAPSOD_USERDEL:-userdel}"
+GETENT="${RHAPSOD_GETENT:-getent}"
 # Prefix for the system paths uninstall removes; tests point it at a sandbox.
 ROOT="${RHAPSOD_ROOT:-}"
 UNITS=(rhapsod rhapsod-ytdlp-daemon bgutil-pot-provider)
@@ -81,11 +82,15 @@ as_app() {
   $AS_USER "$APP_USER" "$@"
 }
 
+# Fails closed: a panel that does not answer (disabled, down, or a password
+# changed in .env but not yet loaded) could be in the middle of a song.
 require_idle() {
   local state
+  "$SYSTEMCTL" is-active --quiet rhapsod || return 0
   state="$(player_state)"
   case "$state" in
-    idle|"") ;;
+    idle) ;;
+    "") fail "could not read the player from the panel; check nothing is playing, then pass --force" ;;
     *) fail "the player is $state; retry when it is idle, or pass --force" ;;
   esac
 }
@@ -157,7 +162,9 @@ case "$command" in
     ;;
   password)
     cli password
-    echo "Apply it with:  rhapsod restart"
+    # The running bot still has the old password, so the idle check cannot
+    # log in until the restart.
+    echo "Apply it, once nothing is playing, with:  rhapsod restart --force"
     ;;
   version)
     cli version
@@ -267,12 +274,22 @@ case "$command" in
       if grep -q '"name": "rhapsod"' "$APP_DIR/package.json" 2>/dev/null; then
         rm -rf "$APP_DIR"
       fi
-      "$USERDEL" --remove "$APP_USER" 2>/dev/null || "$USERDEL" "$APP_USER" || true
+      # install.sh accepts an existing RHAPSOD_USER (for example ubuntu)
+      # and leaves it as is; only a service account it could have created,
+      # one that cannot log in, is deleted with its home.
+      shell="$("$GETENT" passwd "$APP_USER" 2>/dev/null | cut -d: -f7)"
+      if [[ "$shell" == */nologin || "$shell" == */false ]]; then
+        "$USERDEL" --remove "$APP_USER" 2>/dev/null || "$USERDEL" "$APP_USER" || true
+      else
+        kept_user=1
+      fi
     fi
     rm -f "$ROOT/usr/local/bin/rhapsod"
     echo "Rhapsod was removed. Last backup: $final"
     if [[ "$purge" != "1" ]]; then
       echo "Kept: the $APP_USER user and its home ($APP_DIR, backups). Remove them with  sudo userdel --remove $APP_USER"
+    elif [[ "${kept_user:-0}" == "1" ]]; then
+      echo "Kept: the $APP_USER user and its home, because it can log in and was not created for Rhapsod."
     fi
     echo "Kept, shared with other software: Node.js in /usr/local, /usr/local/bin/ffmpeg, ffprobe and yt-dlp, and Cloudflare WARP if it was installed."
     ;;

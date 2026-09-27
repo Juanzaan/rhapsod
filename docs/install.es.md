@@ -102,7 +102,7 @@ El instalador agrega `/usr/local/bin/rhapsod` y registra la instalación en `/et
 | `rhapsod status`    | Estado de los servicios y del reproductor, conexión con TeamSpeak, un código de `!claim` pendiente y el comando del túnel SSH para el panel. `--json` para scripts.  |
 | `rhapsod doctor`    | Las comprobaciones anteriores, con el arreglo de cada falla. No imprime secretos.                                                                                    |
 | `rhapsod password`  | Escribe un `RHAPSOD_PANEL_PASSWORD` aleatorio nuevo y lo imprime.                                                                                                    |
-| `rhapsod restart`   | Reinicia el bot cuando el reproductor está en espera; `--force` reinicia durante la reproducción.                                                                    |
+| `rhapsod restart`   | Reinicia el bot cuando el reproductor está en espera, o se niega si el panel no puede decirlo; `--force` omite la comprobación.                                      |
 | `rhapsod logs [N]`  | Sigue el journal del bot y del daemon desde N líneas atrás (100 por defecto).                                                                                        |
 | `rhapsod version`   | Versión instalada.                                                                                                                                                   |
 | `rhapsod backup`    | Detiene el bot unos segundos y archiva `data/` y `.env` en `/home/rhapsod/backups`. Se niega durante la reproducción salvo con `--force`.                            |
@@ -126,7 +126,7 @@ sudo systemctl start rhapsod
 
 `rollback` restaura solo el código; los datos quedan como los dejó la versión más nueva. Si esa versión cambió el formato de los datos, restaurar el backup tomado antes de la actualización como se muestra arriba.
 
-`rhapsod uninstall --purge --yes` se ejecuta sin preguntar. El último backup queda en `/var/backups/rhapsod`, porque `--purge` borra la carpeta personal. Node.js, FFmpeg, yt-dlp y WARP quedan instalados, porque otros programas pueden usarlos.
+`rhapsod uninstall --purge --yes` se ejecuta sin preguntar. El último backup queda en `/var/backups/rhapsod`, porque `--purge` borra la carpeta personal. Un usuario del servicio que puede iniciar sesión (una cuenta existente pasada como `RHAPSOD_USER`) se conserva con su carpeta personal; solo se borra el checkout. Node.js, FFmpeg, yt-dlp y WARP quedan instalados, porque otros programas pueden usarlos.
 
 ## Resolución de problemas
 
