@@ -9,7 +9,6 @@ import {
   DuplicateBotInstanceError,
 } from "./adapters/ts3/ts3-connection.js";
 import { createRhapsodOpusEncoder } from "./audio/opus-encoder.js";
-import { createPcmStream, playFfmpegUrl } from "./audio/ffmpeg-player.js";
 import { probeFfmpegFilter, resolveFfmpegBinary } from "./audio/ffmpeg-pcm.js";
 import { LoudnessProfiler } from "./audio/loudness-profiler.js";
 import { playTestTone } from "./audio/test-tone-player.js";
@@ -68,6 +67,7 @@ import { startConnectedPanel } from "./bootstrap/panel.js";
 import { createPlaybackEvents } from "./bootstrap/playback-events.js";
 import { ServerViewSync } from "./bootstrap/server-view.js";
 import { NoticeMonitor } from "./bootstrap/notices.js";
+import { ffmpegFactories } from "./bootstrap/ffmpeg-factories.js";
 import { AdminAlerts } from "./application/notices/admin-alerts.js";
 import { flushStores, openStores } from "./bootstrap/stores.js";
 import { ytDlpStackOptions } from "./bootstrap/yt-dlp-options.js";
@@ -265,46 +265,18 @@ async function main(): Promise<void> {
   daemonHealthRef.get = () => ytDlpResolver.daemonHealth();
   const resolver: YoutubePlaybackResolver = ytDlpResolver;
   const playback = new YoutubePlaybackService({
-    createPlayback: (url, playbackEncoder, output, options) =>
-      playFfmpegUrl(url, playbackEncoder, output, {
-        ...(ffmpegPath === undefined ? {} : { binary: ffmpegPath }),
-        egressProxyUrl,
-        peakLimiter,
-        // The controller decides per track: finite tracks carry a target,
-        // live radio omits it so endless streams skip dynamic loudnorm.
-        ...(options?.loudnessTargetLufs === undefined
-          ? {}
-          : { loudnessTargetLufs: options.loudnessTargetLufs }),
-        ...(ffmpegUserAgent === undefined
-          ? {}
-          : { userAgent: ffmpegUserAgent }),
-        ...(config.RHAPSOD_WARP_PROXY === undefined
-          ? {}
-          : { proxyUrl: config.RHAPSOD_WARP_PROXY }),
-        ...(options?.seekSeconds === undefined
-          ? {}
-          : { seekSeconds: options.seekSeconds }),
-        ...(options?.live === undefined ? {} : { live: options.live }),
-        ...(options?.loudnessProfile === undefined
-          ? {}
-          : { loudnessProfile: options.loudnessProfile }),
-        ...(options?.stream === undefined ? {} : { stream: options.stream }),
-      }),
+    ...ffmpegFactories({
+      ...(ffmpegPath === undefined ? {} : { binary: ffmpegPath }),
+      egressProxyUrl,
+      peakLimiter,
+      ...(ffmpegUserAgent === undefined ? {} : { userAgent: ffmpegUserAgent }),
+      ...(config.RHAPSOD_WARP_PROXY === undefined
+        ? {}
+        : { proxyUrl: config.RHAPSOD_WARP_PROXY }),
+    }),
     ...(config.RHAPSOD_WARP_PROXY === undefined
       ? {}
       : { proxyUrl: config.RHAPSOD_WARP_PROXY }),
-    // Prewarmed next-track streams need the same binary and User-Agent as
-    // cold starts; the default factory used to fall back to ffmpeg-static.
-    createPcmStream: (url, options) =>
-      createPcmStream(url, {
-        ...options,
-        ...(ffmpegPath === undefined ? {} : { binary: ffmpegPath }),
-        egressProxyUrl,
-        peakLimiter,
-        ...(ffmpegUserAgent === undefined
-          ? {}
-          : { userAgent: ffmpegUserAgent }),
-      }),
     prewarmNext: true,
     loudnessProfiler,
     ...(config.RHAPSOD_SKIP_NON_MUSIC
@@ -688,7 +660,7 @@ async function main(): Promise<void> {
     radioTitles,
     resolver: ytDlpResolver,
     reconnecting: () => reconnector.reconnecting,
-    restart: () => shutdown(1),
+    restart: () => shutdown(1, true),
     scrobbler,
     serverView,
     youtubeAuthHealthy: () => youtubeAuthState.healthy,
@@ -696,11 +668,14 @@ async function main(): Promise<void> {
   });
 
   let shutdownStarted = false;
-  const shutdown = (code: number): void => {
+  // The panel's restart exits 1 so systemd starts the bot again; it is
+  // still a clean stop, not a crash.
+  const shutdown = (code: number, clean = code === 0): void => {
     if (shutdownStarted) return;
     shutdownStarted = true;
     logger.info("Shutdown initiated; stopping playback and flushing state");
     shuttingDown = true;
+    if (clean) notices.cleanStop();
     playback.stop(false);
     encoder.close();
     stopHeartbeat();
