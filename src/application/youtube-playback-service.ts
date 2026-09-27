@@ -148,6 +148,9 @@ interface PlaylistEnqueueResult {
 }
 
 const DEFAULT_PLAYLIST_MAX_TRACKS = 100;
+// Resolutions whose track was never queued (a failed or rejected add) must
+// not grow the request-time map for the life of the process.
+const MAX_PENDING_REQUESTS = 50;
 const AUTOPLAY_MIX_LIMIT = 25;
 const AUTOPLAY_SEED_LIMIT = 3;
 // Pool sizes for the DJ buckets and how long a fetched YouTube mix is
@@ -184,6 +187,7 @@ function youtubeVideoIdFromSource(source: string): string | undefined {
 export { audioUrlExpiresAt } from "./prepared-audio-store.js";
 
 export class YoutubePlaybackService {
+  readonly #requestedAt = new Map<string, number>();
   readonly #queue: TrackQueue;
   readonly #controller: PlaybackController;
   readonly #resolver: YoutubePlaybackResolver;
@@ -1231,6 +1235,11 @@ export class YoutubePlaybackService {
     };
     if (metadata.audioUrl)
       this.#preparedStore.setReady(track, metadata.audioUrl);
+    const requestedAt = this.#requestedAt.get(metadata.id);
+    if (requestedAt !== undefined) {
+      this.#requestedAt.delete(metadata.id);
+      this.#controller.noteRequested(track, requestedAt);
+    }
     this.#queue.add(track, this.#controller.current);
     if (!this.#controller.current) this.#controller.prefetchNext();
     this.#controller.requestNext();
@@ -1668,6 +1677,11 @@ export class YoutubePlaybackService {
     metadata: YoutubeTrackMetadata,
     startedAt: number,
   ): void {
+    this.#requestedAt.set(metadata.id, startedAt);
+    if (this.#requestedAt.size > MAX_PENDING_REQUESTS) {
+      const oldest = this.#requestedAt.keys().next().value;
+      if (oldest !== undefined) this.#requestedAt.delete(oldest);
+    }
     this.#safeObserver(() => {
       this.#onTiming({
         durationMs: Date.now() - startedAt,

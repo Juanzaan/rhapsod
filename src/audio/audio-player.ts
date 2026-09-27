@@ -69,6 +69,8 @@ export interface AudioPlayerMetrics {
   readonly clockTiming?: ClockTiming;
   readonly firstFrameDelayMs?: number;
   readonly framesSent: number;
+  /** Date.now() when the last frame with source audio (not silence) went out. */
+  readonly lastAudioFrameAt?: number;
   readonly maxBufferedBytes: number;
   readonly rebufferEvents: number;
   readonly underruns: number;
@@ -85,6 +87,7 @@ export class AudioPlayer {
   #bufferedBytes = 0;
   #framesSent = 0;
   #firstFrameDelayMs: number | undefined;
+  #lastAudioFrameAt: number | undefined;
   #playStartedAt = 0;
   #maxBufferedBytes = 0;
   #rebufferEvents = 0;
@@ -128,6 +131,9 @@ export class AudioPlayer {
         ? {}
         : { firstFrameDelayMs: this.#firstFrameDelayMs }),
       framesSent: this.#framesSent,
+      ...(this.#lastAudioFrameAt === undefined
+        ? {}
+        : { lastAudioFrameAt: this.#lastAudioFrameAt }),
       maxBufferedBytes: this.#maxBufferedBytes,
       rebufferEvents: this.#rebufferEvents,
       underruns: this.#underruns,
@@ -256,7 +262,9 @@ export class AudioPlayer {
         this.#framePool.release(frame);
         if (gained !== undefined) this.#framePool.release(gained);
       }
-      this.#firstFrameDelayMs ??= Date.now() - this.#playStartedAt;
+      const sentAt = Date.now();
+      this.#firstFrameDelayMs ??= sentAt - this.#playStartedAt;
+      this.#lastAudioFrameAt = sentAt;
       this.#framesSent++;
       if (this.#recovering) {
         this.#recovering = false;
@@ -364,6 +372,7 @@ export class AudioPlayer {
     this.#resetBuffer();
     this.#framesSent = 0;
     this.#firstFrameDelayMs = undefined;
+    this.#lastAudioFrameAt = undefined;
     this.#maxBufferedBytes = 0;
     this.#rebufferEvents = 0;
     this.#underruns = 0;

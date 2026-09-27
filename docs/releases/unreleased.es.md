@@ -24,6 +24,7 @@ La normalización de volumen medida funciona por primera vez: los temas con un p
 - Agregar un lanzador del panel para Windows (`tools/desktop`): abre el túnel SSH y el navegador, guarda la conexión en `%APPDATA%` y la contraseña del panel en el Administrador de credenciales de Windows, y no incluye servidor ni contraseña en el ejecutable. La integración continua lo compila en Windows.
 - Convertir el lanzador de Windows en una aplicación de bandeja: reconecta sola el túnel SSH, muestra en el icono qué se está reproduciendo, abre el panel en una ventana propia con un perfil separado, ejecuta una sola copia y edita su configuración en una ventana. La integración continua ejecuta su autoprueba.
 - `/api/metrics` exporta `rhapsod_frame_tick_lateness_seconds`, cuánto se atrasó cada tick de audio de 20 ms, y `rhapsod_clock_slips_total`, los ticks atrasados más de un frame; cada línea de log `Playback session` trae los mismos valores como `clockTiming`. Son la base para el trabajo de paso sin pausa y de sonoridad planificado a continuación.
+- `/api/metrics` exporta `rhapsod_inter_track_gap_seconds`, el silencio entre el último frame de audio de un tema y el primero del siguiente, y `rhapsod_command_to_first_audio_seconds`, desde un pedido hasta su primer frame de audio en un inicio en frío. `scripts/log-stats.mjs` informa ese silencio y usa la medición directa del comando cuando la línea de log la trae.
 
 ## Actualización
 

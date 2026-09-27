@@ -41,12 +41,14 @@ describe("PlaybackMetrics", () => {
     const playback = new PlaybackMetrics();
     playback.record("completed", audio, {
       coldStart: true,
+      commandToFirstAudioMs: 1_200,
       prewarmed: false,
       startDelayMs: 300,
     });
     playback.record("skipped", audio, {
       coldStart: false,
       handoffGapMs: 80,
+      interTrackGapMs: 30,
       prewarmed: true,
       startDelayMs: 2_500,
     });
@@ -68,6 +70,15 @@ describe("PlaybackMetrics", () => {
     );
     expect(text).toContain("rhapsod_play_start_delay_seconds_sum 2.8");
     expect(text).toContain('rhapsod_handoff_gap_seconds_bucket{le="0.1"} 1');
+    expect(text).toContain(
+      'rhapsod_inter_track_gap_seconds_bucket{le="0.02"} 0',
+    );
+    expect(text).toContain(
+      'rhapsod_inter_track_gap_seconds_bucket{le="0.04"} 1',
+    );
+    expect(text).toContain(
+      'rhapsod_command_to_first_audio_seconds_bucket{le="2"} 1',
+    );
     expect(text).toContain('rhapsod_handoffs_total{prewarmed="true"} 1');
     expect(text).toContain('rhapsod_handoffs_total{prewarmed="false"} 0');
     expect(text).toContain("rhapsod_underruns_total 9");
