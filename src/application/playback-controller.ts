@@ -6,6 +6,7 @@ import {
   type FfmpegPlaybackSession,
 } from "../audio/ffmpeg-player.js";
 import {
+  isFfmpegExit,
   isForbiddenResponse,
   type FfmpegPcmStream,
 } from "../audio/ffmpeg-pcm.js";
@@ -792,7 +793,12 @@ export class PlaybackController {
           !forbidden &&
           playbackError instanceof Error &&
           endReason === "error" &&
-          isMidPlayStall(playbackError.message) &&
+          (isMidPlayStall(playbackError.message) ||
+            // ffmpeg reconnects on its own for a few seconds, then exits;
+            // a longer outage or a 5xx on reconnect used to end the song.
+            (isFfmpegExit(playbackError.message) &&
+              !isForbiddenResponse(playbackError.message) &&
+              session.player.metrics.framesSent > 0)) &&
           stallResumes < MAX_STALL_RESUMES_PER_PLAY;
         if (forbidden || stalled) {
           if (forbidden) this.#retries.set(track, retries + 1);

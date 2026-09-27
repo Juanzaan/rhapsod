@@ -13,6 +13,7 @@ La normalización de volumen medida funciona por primera vez: los temas con un p
 - La sonoridad del tema siguiente se mide desde que empieza el tema actual en lugar de cuando se prepara su flujo precargado a mitad del tema, así la primera reproducción usa su perfil medido. No se mide nada con la cola detenida, para que una segunda descarga no compita con un inicio en frío.
 - El perfil de sonoridad cubre el tema completo en lugar de sus primeros 120 segundos, así una ganancia lineal calculada para una introducción suave no puede saturar un estribillo más fuerte. Los temas de más de 15 minutos no se miden y mantienen el filtro dinámico.
 - Una canción que ya está en la cola ahora se saltea por el tipo de error y no por el texto del mensaje de chat. Antes, cambiar la frase "Esa canción ya está en la cola." hacía fallar completa una playlist o una colección de Spotify o Apple Music que tuviera una canción ya encolada. Los errores de DRM de SoundCloud se reconocen de la misma forma; la salida de DRM de yt-dlp se sigue comparando por texto, porque yt-dlp solo la informa ahí.
+- Si el proceso de ffmpeg de un tema termina con error después de empezar la reproducción (un corte más largo que las reconexiones propias de ffmpeg, un 5xx al reconectar), el tema se reanuda una vez desde su posición con una URL resuelta de nuevo, igual que un flujo que se detiene. Antes terminaba como error y pasaba al siguiente tema.
 
 ## Actualización
 
