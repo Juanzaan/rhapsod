@@ -68,6 +68,7 @@ import { startConnectedPanel } from "./bootstrap/panel.js";
 import { createPlaybackEvents } from "./bootstrap/playback-events.js";
 import { ServerViewSync } from "./bootstrap/server-view.js";
 import { NoticeMonitor } from "./bootstrap/notices.js";
+import { AdminAlerts } from "./application/notices/admin-alerts.js";
 import { flushStores, openStores } from "./bootstrap/stores.js";
 import { ytDlpStackOptions } from "./bootstrap/yt-dlp-options.js";
 
@@ -428,6 +429,7 @@ async function main(): Promise<void> {
     get youtubeAuthFailure() {
       return youtubeAuthState.category;
     },
+    notices: notices.registry,
   };
   let canTalk = true;
   const commandGate = new ChatCommandGate({
@@ -463,6 +465,15 @@ async function main(): Promise<void> {
   );
   await connection.connect();
   logger.info("Connected to TeamSpeak 3");
+  const adminAlerts = new AdminAlerts({
+    registry: notices.registry,
+    adminUids: () => adminUids,
+    listClients: () => connection.listClients(),
+    sendPrivateMessage: (clid, text) =>
+      connection.sendPrivateMessage(clid, text),
+    logger,
+  });
+  adminAlerts.start();
   if (adminClaim.code !== undefined) {
     void connection
       .sendChannelMessage(messages.claimAvisoCanal)
@@ -519,6 +530,7 @@ async function main(): Promise<void> {
     );
   }
   connection.onClientEnter((event) => {
+    adminAlerts.adminEntered(event.uid);
     telemetry.clientEntered({
       clid: event.clid,
       uid: event.uid,

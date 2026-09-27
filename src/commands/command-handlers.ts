@@ -32,6 +32,8 @@ import {
   formatHelpMenu,
 } from "./command-registry.js";
 import { messages } from "../lib/messages.js";
+import { formatNoticeList } from "../application/notices/admin-alerts.js";
+import type { NoticeRegistry } from "../application/notices/notice-registry.js";
 import {
   youtubeAuthHint,
   type YoutubeAuthFailureCategory,
@@ -62,6 +64,8 @@ export interface CommandContext {
   hasStartedPlaying: boolean;
   youtubeAuthHealthy: boolean;
   readonly youtubeAuthFailure?: YoutubeAuthFailureCategory | undefined;
+  /** Absent in setup mode, where no detector runs. */
+  readonly notices?: Pick<NoticeRegistry, "ignore" | "list">;
 }
 
 export interface CommandSender {
@@ -937,6 +941,34 @@ async function handleDebugServer(
   await send(lines.join("\n"));
 }
 
+async function handleAvisos(
+  ctx: CommandContext,
+  command: Extract<ChatCommand, { name: "avisos" }>,
+  sender: CommandSender,
+  send: SendFn,
+): Promise<void> {
+  if (!isAdminUid(sender.uid, ctx.adminUids)) {
+    await send(messages.avisosSoloLosAdministradoresPueden);
+    return;
+  }
+  if (ctx.notices === undefined) {
+    await send(messages.avisosNoDisponibles);
+    return;
+  }
+  const open = ctx.notices.list();
+  if (command.ignore === undefined) {
+    await send(formatNoticeList(open));
+    return;
+  }
+  const notice = open[command.ignore - 1];
+  if (notice === undefined) {
+    await send(messages.avisosNoExiste(command.ignore));
+    return;
+  }
+  ctx.notices.ignore(notice.key);
+  await send(messages.avisosIgnorado(notice.titleEs));
+}
+
 async function handleChart(
   ctx: CommandContext,
   _command: Extract<ChatCommand, { name: "chart" }>,
@@ -1318,6 +1350,7 @@ const COMMAND_HANDLERS: { readonly [N in CommandName]: CommandHandler<N> } = {
   diag: handleDiag,
   "debug-server": handleDebugServer,
   chart: handleChart,
+  avisos: handleAvisos,
   stop: handleStop,
   "test-tone": handleTestTone,
   help: handleHelp,
