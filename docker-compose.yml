@@ -1,42 +1,56 @@
+# Runs the published image. The first start writes data/.env inside the
+# rhapsod-data volume and prints the panel password to the bot's log:
+#   docker compose up -d && docker compose logs rhapsod
+# To build from this checkout instead, add docker-compose.dev.yml:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 services:
   rhapsod:
-    build: .
-    image: rhapsod:latest
+    image: ghcr.io/juanzaan/rhapsod:${RHAPSOD_VERSION:-4}
     restart: unless-stopped
     network_mode: host
-    env_file:
-      - .env
     environment:
-      RHAPSOD_ENV_FILE: /app/.env
       RHAPSOD_PANEL_HOST: 127.0.0.1
       RHAPSOD_YTDLP_DAEMON_URL: ${RHAPSOD_YTDLP_DAEMON_URL:-http://127.0.0.1:8765}
     depends_on:
       - ytdlp
     volumes:
-      - ./.env:/app/.env
-      - ./data:/app/data
+      - rhapsod-data:/app/data
 
   ytdlp:
-    build: .
-    image: rhapsod:latest
+    image: ghcr.io/juanzaan/rhapsod:${RHAPSOD_VERSION:-4}
     restart: unless-stopped
     network_mode: host
-    env_file:
-      - .env
     environment:
       RHAPSOD_YTDLP_DAEMON_HOST: 127.0.0.1
+      # Set here too: on the first start the daemon runs before the bot
+      # writes data/.env.
+      RHAPSOD_YTDLP_COOKIES_PATH: /app/data/youtube-cookies.txt
     command: ["python3", "scripts/yt-dlp-daemon.py"]
+    # The image's check reads the bot's panel; the daemon only has to listen.
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - import socket; socket.create_connection(("127.0.0.1", 8765), 5)
+      interval: 60s
+      start_period: 30s
+      start_interval: 5s
     depends_on:
       - pot
     volumes:
-      - ./data:/app/data:ro
+      - rhapsod-data:/app/data:ro
 
   # YouTube PO token provider the daemon queries at 127.0.0.1:4416. The image
   # binds 0.0.0.0 by default; with host networking that would publish an
   # unauthenticated token server on every interface, so bind loopback only.
+  # Pinned by digest: a re-pushed tag cannot change what runs here.
   pot:
-    image: brainicism/bgutil-ytdlp-pot-provider:2.0.0
+    image: brainicism/bgutil-ytdlp-pot-provider:2.0.0@sha256:ed86b6fdd5e430ddd7c8ce1adb55e1ab54db7c7dbc1bcbf3a82454a85b971164
     restart: unless-stopped
     network_mode: host
     init: true
     command: ["--host", "127.0.0.1"]
+
+volumes:
+  rhapsod-data:

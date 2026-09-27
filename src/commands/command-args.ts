@@ -32,6 +32,18 @@ export function parseClaim(argument: string): CommandOf<"claim"> {
   return { code: argument, name: "claim" };
 }
 
+export function parseAvisos(argument: string): CommandOf<"avisos"> {
+  if (!argument) return { name: "avisos" };
+  const [action, position, ...rest] = argument.split(/\s+/);
+  if (action !== "ignorar" || position === undefined || rest.length > 0) {
+    throw new UserError(messages.parseChatCommandUsaAvisos);
+  }
+  return {
+    ignore: parsePosition(position, "!avisos ignorar <n>"),
+    name: "avisos",
+  };
+}
+
 export function parseSearch(argument: string): CommandOf<"search"> {
   const first = argument.split(/\s+/)[0] ?? "";
   if (/^\d+$/.test(first)) {

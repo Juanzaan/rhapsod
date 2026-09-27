@@ -4,6 +4,7 @@ import type { ChatCommand } from "./chat-command.js";
 import {
   noArgument,
   parseAutoplay,
+  parseAvisos,
   parseClaim,
   parseFavPlay,
   parseFuente,
@@ -388,6 +389,15 @@ export const COMMANDS: CommandTable = {
     usage: "chart",
     summary: "Telemetría de usuarios",
     parse: noArgument("chart"),
+  },
+  avisos: {
+    name: "avisos",
+    aliases: ["notices"],
+    group: "admin",
+    adminOnly: true,
+    usage: "avisos [ignorar <n>]",
+    summary: "Problemas abiertos del bot",
+    parse: parseAvisos,
   },
   help: {
     name: "help",
