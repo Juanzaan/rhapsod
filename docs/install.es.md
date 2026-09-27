@@ -14,20 +14,40 @@ El instalador selecciona la última etiqueta estable, instala Node 22 si falta, 
 
 Las descargas se comprueban con las sumas que publica cada proyecto: `SHASUMS256.txt` para Node.js, `SHA2-256SUMS` para yt-dlp y el archivo MD5 del espejo de FFmpeg. Una diferencia detiene la instalación; la actualización semanal de yt-dlp conserva el binario instalado. El servidor POT y su complemento de yt-dlp usan la misma versión fijada. Un usuario de servicio nuevo recibe el shell `nologin`; ejecutar las tareas de mantenimiento con `sudo -u rhapsod <comando>`.
 
-El bot inicia solo el panel con `RHAPSOD_TS3_AUTO_CONNECT=false`. Abrir un túnel:
+En una instalación nueva, el instalador primero pregunta por el servidor de TeamSpeak (`ts.example.com` o `ts.example.com:9987`) y su contraseña, si tiene. La pregunta aparece en la terminal, así que también funciona con `curl | sudo bash`. Al terminar, el bot entra a ese servidor y el instalador muestra un código de un solo uso:
+
+```text
+The bot is in your TeamSpeak server.
+Make yourself its admin: in TeamSpeak, send the bot or its channel
+  !claim abcde-fghjk
+```
+
+Enviar `!claim <código>` en TeamSpeak. El primer usuario que envía el código correcto queda como administrador: el bot agrega su UID a `RHAPSOD_ADMIN_UIDS` en `.env`. El código se guarda en `data/admin-claim-code` hasta que se usa, se conserva entre reinicios y deja de funcionar tras cinco intentos incorrectos hasta el siguiente reinicio. Si ya hay un administrador configurado, `!claim` se rechaza.
+
+Presionar Enter en la pregunta, o ejecutar sin terminal, mantiene el comportamiento anterior: el bot inicia solo el panel con `RHAPSOD_TS3_AUTO_CONNECT=false` y TeamSpeak se configura en el panel. Para configurarlo sin la pregunta, pasar la respuesta:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Juanzaan/rhapsod/main/install.sh -o "$HOME/rhapsod-install.sh"
+sudo env RHAPSOD_TS3_HOST=ts.example.com:9987 RHAPSOD_TS3_PASSWORD=secreto bash "$HOME/rhapsod-install.sh"
+```
+
+Una contraseña con espacios, `#` o comillas no puede pasar por el instalador; configurarla en el panel.
+
+Después de eso el panel es opcional. Abrir un túnel desde la computadora propia:
 
 ```bash
 ssh -N -L 8080:127.0.0.1:8080 user@host
 ```
 
-Abrir `http://127.0.0.1:8080/setup`, acceder con las credenciales mostradas y configurar TeamSpeak, canal, audio y YouTube. Guardar TeamSpeak activa la conexión automática para el siguiente inicio. Mantener el panel en `127.0.0.1`.
+Abrir `http://127.0.0.1:8080/` (o `/setup` si TeamSpeak todavía no está configurado) y acceder con las credenciales mostradas. Mantener el panel en `127.0.0.1`.
 
-Las opciones del instalador son `RHAPSOD_REF`, `RHAPSOD_APP_DIR`, `RHAPSOD_USER` y `RHAPSOD_SKIP_WARP=1`. Pasarlas explícitamente al proceso privilegiado:
+Cloudflare WARP no se instala por defecto. Solo sirve cuando YouTube bloquea la dirección del servidor, algo que pasa con rangos de VPS en la nube y rara vez con una conexión hogareña. Cuando ocurre, `!stats` lo indica. Para agregar WARP, volver a ejecutar el instalador:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Juanzaan/rhapsod/main/install.sh -o "$HOME/rhapsod-install.sh"
-sudo env RHAPSOD_SKIP_WARP=1 bash "$HOME/rhapsod-install.sh"
+sudo env RHAPSOD_WITH_WARP=1 bash "$HOME/rhapsod-install.sh"
 ```
+
+Luego reiniciar el servicio de yt-dlp y el bot cuando no haya nada sonando. Repetir el instalador conserva WARP si ya está instalado; `RHAPSOD_SKIP_WARP=1` lo deja afuera. Las otras opciones del instalador son `RHAPSOD_REF`, `RHAPSOD_APP_DIR` y `RHAPSOD_USER`.
 
 El instalador configura una actualización semanal de yt-dlp. Actualizar Rhapsod por separado mediante el [procedimiento de despliegue](deployment.es.md).
 
@@ -55,6 +75,8 @@ RHAPSOD_PANEL_PASSWORD=replace-with-a-unique-password
 npm run build
 npm start
 ```
+
+Sin `RHAPSOD_ADMIN_UIDS`, el bot escribe un código de `!claim` en `data/admin-claim-code` y lo registra en el log al iniciar; enviar `!claim <código>` en TeamSpeak para quedar como administrador.
 
 Usar `RHAPSOD_YTDLP_PATH`, `RHAPSOD_FFMPEG_PATH` y `RHAPSOD_FFPROBE_PATH` si las herramientas no están en PATH. El servicio opcional escucha en `127.0.0.1:8765`; configurar `RHAPSOD_YTDLP_DAEMON_URL` solo si está ejecutándose. Consultar [despliegue](deployment.es.md) para servicios y Docker.
 

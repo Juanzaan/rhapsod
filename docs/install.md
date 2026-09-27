@@ -14,20 +14,40 @@ The installer selects the latest stable tag, installs Node 22 when absent, yt-dl
 
 Downloads are checked against the checksums their publishers list: `SHASUMS256.txt` for Node.js, `SHA2-256SUMS` for yt-dlp and the MD5 file of the FFmpeg mirror. A mismatch stops the install; the weekly yt-dlp update keeps the installed binary instead. The POT provider server and its yt-dlp plugin are pinned to the same release. A new service user gets a `nologin` shell; run maintenance commands with `sudo -u rhapsod <command>`.
 
-The bot starts in panel-only mode with `RHAPSOD_TS3_AUTO_CONNECT=false`. Open a tunnel:
+On a new install, the installer first asks for the TeamSpeak server (`ts.example.com` or `ts.example.com:9987`) and its password, if it has one. It asks on the terminal, so this works through `curl | sudo bash` too. At the end, the bot joins that server and the installer prints a one-time code:
+
+```text
+The bot is in your TeamSpeak server.
+Make yourself its admin: in TeamSpeak, send the bot or its channel
+  !claim abcde-fghjk
+```
+
+Send `!claim <code>` in TeamSpeak. The first user who sends the right code becomes admin: the bot adds that user's UID to `RHAPSOD_ADMIN_UIDS` in `.env`. The code lives in `data/admin-claim-code` until it is used, survives restarts, and stops working after five wrong attempts until the next restart. With an admin already configured, `!claim` is refused.
+
+Pressing Enter at the question, or running without a terminal, keeps the previous behavior: the bot starts panel-only with `RHAPSOD_TS3_AUTO_CONNECT=false` and TeamSpeak is set in the panel. To configure it without the question, pass the answer:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Juanzaan/rhapsod/main/install.sh -o "$HOME/rhapsod-install.sh"
+sudo env RHAPSOD_TS3_HOST=ts.example.com:9987 RHAPSOD_TS3_PASSWORD=secret bash "$HOME/rhapsod-install.sh"
+```
+
+A password with spaces, `#` or quotes cannot go through the installer; set it in the panel.
+
+The panel is optional after that. Open a tunnel from your own computer:
 
 ```bash
 ssh -N -L 8080:127.0.0.1:8080 user@host
 ```
 
-Open `http://127.0.0.1:8080/setup`, sign in with the printed credentials and configure TeamSpeak, channel, audio and YouTube. Saving TeamSpeak settings enables auto-connect for the next start. Keep the panel on `127.0.0.1`.
+Open `http://127.0.0.1:8080/` (or `/setup` when TeamSpeak is not configured yet) and sign in with the printed credentials. Keep the panel on `127.0.0.1`.
 
-Installer overrides are `RHAPSOD_REF`, `RHAPSOD_APP_DIR`, `RHAPSOD_USER` and `RHAPSOD_SKIP_WARP=1`. Pass them to the privileged shell explicitly, for example:
+Cloudflare WARP is not installed by default. It only helps when YouTube blocks the server's address, which happens on cloud VPS ranges and rarely on a home connection. When that happens, `!stats` says so. Add WARP by running the installer again:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Juanzaan/rhapsod/main/install.sh -o "$HOME/rhapsod-install.sh"
-sudo env RHAPSOD_SKIP_WARP=1 bash "$HOME/rhapsod-install.sh"
+sudo env RHAPSOD_WITH_WARP=1 bash "$HOME/rhapsod-install.sh"
 ```
+
+Then restart the daemon and the bot while nothing is playing. A rerun keeps WARP when it is already installed; `RHAPSOD_SKIP_WARP=1` leaves it out. Other installer overrides are `RHAPSOD_REF`, `RHAPSOD_APP_DIR` and `RHAPSOD_USER`.
 
 The installer configures a weekly yt-dlp updater. Rhapsod itself is updated separately using the [deployment procedure](deployment.md).
 
@@ -55,6 +75,8 @@ RHAPSOD_PANEL_PASSWORD=replace-with-a-unique-password
 npm run build
 npm start
 ```
+
+Without `RHAPSOD_ADMIN_UIDS`, the bot writes a `!claim` code to `data/admin-claim-code` and logs it at startup; send `!claim <code>` in TeamSpeak to become admin.
 
 Use `RHAPSOD_YTDLP_PATH`, `RHAPSOD_FFMPEG_PATH` and `RHAPSOD_FFPROBE_PATH` when tools are outside PATH. The optional daemon listens at `127.0.0.1:8765`; configure `RHAPSOD_YTDLP_DAEMON_URL` only when it is running. See [deployment](deployment.md) for services and Docker.
 

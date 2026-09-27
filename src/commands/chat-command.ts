@@ -10,6 +10,7 @@ import { messages } from "../lib/messages.js";
 export type ChatCommand =
   | { readonly name: "channel-move"; readonly input: string }
   | { readonly name: "chart" }
+  | { readonly code: string; readonly name: "claim" }
   | { readonly name: "clear" }
   | { readonly name: "debug-server" }
   | { readonly name: "diag" }
@@ -120,7 +121,9 @@ export function normalizeCommandInput(raw: string): string {
  * fix. The handler still applies its own move permissions.
  */
 export function runsWithoutTalkPower(command: ChatCommand): boolean {
-  return command.name === "channel-move";
+  // Neither plays audio, and !claim has to work on a fresh server where
+  // nobody has granted the bot talk power yet.
+  return command.name === "channel-move" || command.name === "claim";
 }
 
 export function parseChatCommand(

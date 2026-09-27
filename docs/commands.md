@@ -26,6 +26,7 @@ chat once the TS3 adapter is connected.
 | `!diag`                               | -                     | Internal diagnostics (admins only).                                                                                                  |
 | `!debug-server`                       | `!ds`                 | TeamSpeak server info (admins only).                                                                                                 |
 | `!chart`                              | -                     | User telemetry chart (admins only).                                                                                                  |
+| `!claim <code>`                       | -                     | Become the first admin with the code the installer printed (only while no admin is configured).                                      |
 | `!remove <n\|from-to>`                | `!rm`                 | Remove one position or an inclusive range (requesters may remove only their own tracks).                                             |
 | `!clear`                              | `!c`                  | Clear pending tracks (only when every pending track is yours or an autoplay pick, or as an admin).                                   |
 | `!shuffle`                            | -                     | Shuffle the pending queue (the current track keeps playing).                                                                         |
@@ -48,6 +49,8 @@ chat once the TS3 adapter is connected.
 ## Source behavior
 
 - **Permissions:** most commands are open to everyone. `RHAPSOD_ADMIN_UIDS`
+  lists the admins; on a new install, `!claim <code>` fills it with the
+  first owner (see [install](install.md)). It
   grants admins the ability to remove tracks requested by other users with
   `!remove`, to skip anyone's current track with `!skip`, to stop or clear a
   queue that holds other users' tracks with `!stop`/`!clear`, and to use
