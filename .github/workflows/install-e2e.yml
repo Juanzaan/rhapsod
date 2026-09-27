@@ -1,8 +1,9 @@
 name: Install E2E
 
 # Runs install.sh on a fresh runner the way a new owner would on a clean
-# VPS, against a real TeamSpeak 3 server in a container, then checks that
-# the bot joined, the panel answers and `rhapsod doctor` reports no failure.
+# VPS, against a real TeamSpeak server in a container (3, and the official
+# 6 beta), then checks that the bot joined, the panel answers and
+# `rhapsod doctor` reports no failure.
 on:
   pull_request:
     branches: [main]
@@ -32,29 +33,50 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [ubuntu-22.04, ubuntu-24.04, ubuntu-24.04-arm]
+        include:
+          - { runner: ubuntu-22.04, server: ts3 }
+          - { runner: ubuntu-24.04, server: ts3 }
+          - { runner: ubuntu-24.04-arm, server: ts3 }
+          # Install and join only: update, rollback and uninstall do not
+          # depend on the server.
+          - { runner: ubuntu-24.04, server: ts6 }
+    name: install (${{ matrix.runner }}, ${{ matrix.server }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
       # The TeamSpeak 3 server is published for amd64 only; arm64 runs it
       # under emulation, which is slower but speaks the same protocol.
-      - if: runner.arch == 'ARM64'
+      - if: matrix.server == 'ts3' && runner.arch == 'ARM64'
         uses: docker/setup-qemu-action@v4
         with:
           platforms: amd64
       - name: Start a TeamSpeak 3 server
+        if: matrix.server == 'ts3'
         run: |
-          docker run -d --name ts3 --network host --platform linux/amd64 \
+          docker run -d --name ts --network host --platform linux/amd64 \
             -e TS3SERVER_LICENSE=accept teamspeak:3.13
           for _ in $(seq 1 90); do
             if (: </dev/tcp/127.0.0.1/10011) 2>/dev/null; then exit 0; fi
             sleep 2
           done
-          docker logs ts3
+          docker logs ts
+          exit 1
+      # TeamSpeak 6 keeps the TeamSpeak 3 client protocol on UDP 9987; the
+      # file transfer port (TCP) says it finished starting.
+      - name: Start a TeamSpeak 6 server
+        if: matrix.server == 'ts6'
+        run: |
+          docker run -d --name ts --network host \
+            -e TSSERVER_LICENSE_ACCEPTED=accept teamspeaksystems/teamspeak6-server:6.0.0-beta13.1
+          for _ in $(seq 1 90); do
+            if (: </dev/tcp/127.0.0.1/30033) 2>/dev/null; then exit 0; fi
+            sleep 2
+          done
+          docker logs ts
           exit 1
 
       # Runner images ship Node 20 in /usr/local/bin; a clean VPS has none,
@@ -99,6 +121,7 @@ jobs:
 
       # A rerun must keep the install working and not ask anything again.
       - name: Rerun the installer
+        if: matrix.server == 'ts3'
         run: |
           sudo env RHAPSOD_REPOSITORY=/opt/rhapsod-src RHAPSOD_REF=e2e \
             bash install.sh </dev/null 2>&1 | tee rerun.log
@@ -107,6 +130,7 @@ jobs:
           rhapsod doctor
 
       - name: Back up
+        if: matrix.server == 'ts3'
         run: |
           sudo rhapsod backup | tee backup.txt
           file="$(sed -n 's/^Backup: //p' backup.txt)"
@@ -116,6 +140,7 @@ jobs:
           bash "$RUNNER_TEMP/wait-connected"
 
       - name: Update to a new version
+        if: matrix.server == 'ts3'
         run: |
           sudo -u rhapsod git -C /home/rhapsod/rhapsod rev-parse HEAD > installed.sha
           sudo git -C /opt/rhapsod-src -c user.name=e2e -c user.email=e2e@localhost \
@@ -127,6 +152,7 @@ jobs:
 
       # A version that crashes on start must be rolled back by the update.
       - name: Update to a broken version
+        if: matrix.server == 'ts3'
         run: |
           sudo sed -i '1i process.exit(1);' /opt/rhapsod-src/src/main.ts
           sudo git -C /opt/rhapsod-src -c user.name=e2e -c user.email=e2e@localhost \
@@ -139,12 +165,14 @@ jobs:
           bash "$RUNNER_TEMP/wait-connected"
 
       - name: Roll back
+        if: matrix.server == 'ts3'
         run: |
           sudo rhapsod rollback
           test "$(sudo -u rhapsod git -C /home/rhapsod/rhapsod rev-parse HEAD)" = "$(cat installed.sha)"
           bash "$RUNNER_TEMP/wait-connected"
 
       - name: Uninstall
+        if: matrix.server == 'ts3'
         run: |
           sudo rhapsod uninstall --purge --yes
           if id rhapsod 2>/dev/null; then echo "user left behind"; exit 1; fi
@@ -157,6 +185,7 @@ jobs:
 
       # A server that had Rhapsod before must take a new install cleanly.
       - name: Install again
+        if: matrix.server == 'ts3'
         run: |
           sudo git -C /opt/rhapsod-src reset -q --hard "$(cat updated.sha)"
           sudo env RHAPSOD_REPOSITORY=/opt/rhapsod-src RHAPSOD_REF=e2e \
@@ -169,4 +198,4 @@ jobs:
         if: failure()
         run: |
           sudo journalctl -u rhapsod -u rhapsod-ytdlp-daemon -u bgutil-pot-provider --no-pager -n 300 || true
-          docker logs ts3 2>&1 | tail -50 || true
+          docker logs ts 2>&1 | tail -50 || true
