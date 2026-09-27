@@ -46,7 +46,17 @@ La normalización de volumen medida funciona por primera vez: los temas con un p
 
 ## Actualización
 
-No se requieren acciones además de los pasos de actualización de v4.0.0. Volver a ejecutar el instalador agrega el comando `rhapsod`. Las instalaciones de Docker hechas con el archivo de Compose anterior mueven `.env` y `data/` al volumen nuevo una vez; ver [despliegue](../deployment.es.md#docker-compose-linux). Las instalaciones con `RHAPSOD_ADMIN_UIDS` configurado nunca ven un código de `!claim`. `RHAPSOD_LOUDNESS_TARGET_LUFS` mantiene su significado y su valor por defecto (-14). `RHAPSOD_SKIP_NON_MUSIC` queda desactivado salvo que se defina en `true`. Las imágenes de Docker ahora usan el ffmpeg de Debian; para usar otra compilación, definir `RHAPSOD_FFMPEG_PATH`.
+No se requieren acciones además de los pasos de actualización de v4.0.0. Para tener el comando `rhapsod` en una instalación existente, no volver a ejecutar el instalador: en un servidor en uso hace checkout de la última etiqueta publicada en lugar de lo desplegado, corre `npm ci` y una compilación bajo el bot en marcha y reescribe las unidades de systemd, y una instalación fuera de `/home/rhapsod/rhapsod` recibe una segunda instalación vacía. Después del deploy, escribir a mano la configuración del comando como root, con el checkout, el usuario del servicio y el `node` de `ExecStart=` en `systemctl cat rhapsod`:
+
+```bash
+install -d -m 0755 /etc/rhapsod
+printf 'APP_DIR=%s\nAPP_USER=%s\nNODE_BIN=%s\n' /home/rhapsod/rhapsod rhapsod /usr/bin/node \
+  > /etc/rhapsod/install.conf
+install -m 0755 /home/rhapsod/rhapsod/scripts/rhapsod.sh /usr/local/bin/rhapsod
+rhapsod doctor
+```
+
+Las instalaciones de Docker hechas con el archivo de Compose anterior mueven `.env` y `data/` al volumen nuevo una vez; ver [despliegue](../deployment.es.md#docker-compose-linux). Las instalaciones con `RHAPSOD_ADMIN_UIDS` configurado nunca ven un código de `!claim`; con la clave vacía (administradores solo por grupo del servidor) el bot crea uno y avisa en el canal en cada arranque que no tiene administrador, hasta que alguien lo reclame o se complete la clave. `RHAPSOD_LOUDNESS_TARGET_LUFS` mantiene su significado y su valor por defecto (-14). `RHAPSOD_SKIP_NON_MUSIC` queda desactivado salvo que se defina en `true`. Las imágenes de Docker ahora usan el ffmpeg de Debian; para usar otra compilación, definir `RHAPSOD_FFMPEG_PATH`.
 
 ## Verificación
 
