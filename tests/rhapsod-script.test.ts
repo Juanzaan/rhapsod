@@ -209,6 +209,30 @@ describeUnix("rhapsod wrapper", () => {
     expect(result.calls).toContain("cli status --json\n");
   });
 
+  it("ends runuser's options with -- so status --json reaches the cli", () => {
+    const bin = mkdtempSync(join(tmpdir(), "rhapsod-runuser-"));
+    sandboxes.push(bin);
+    const box = sandbox("idle");
+    // Like the real runuser, reads every option before -- as its own.
+    executable(
+      join(bin, "runuser"),
+      `#!/usr/bin/env bash
+echo "runuser $*" >> ${JSON.stringify(box.calls)}
+[[ "$1" == -u && "$3" == -- ]] || { echo "runuser: unrecognized option" >&2; exit 1; }
+shift 3
+exec "$@"
+`,
+    );
+    const result = box.runWith(
+      { RHAPSOD_AS_USER: "", PATH: `${bin}:${process.env.PATH ?? ""}` },
+      "restart",
+    );
+    expect(result.stderr).toBe("");
+    expect(result.code).toBe(0);
+    expect(result.calls).toContain("runuser -u rhapsod -- ");
+    expect(result.calls).toContain("cli status --json\n");
+  });
+
   it("fails doctor when a service is down, after running the cli checks", () => {
     const result = sandbox("idle", "some").run("doctor");
     expect(result.code).toBe(1);
