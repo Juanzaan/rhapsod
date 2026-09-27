@@ -52,6 +52,7 @@ La normalización de volumen medida funciona por primera vez: los temas con un p
 - Una canción que se reanuda después de un corte o de una caída de ffmpeg arranca donde se detuvo su música: la posición ya no cuenta el silencio enviado mientras faltaban datos, que se saltaba hasta 5 segundos del tema. El panel y `!np` muestran la misma posición corregida.
 - Mensajes privados de avisos a los admins: la ventana de reenvío de 6 horas y el tope de 5 por hora se guardan en `data/notices.json`, así un bucle de caídas ya no manda un mensaje en cada arranque; un "[Resuelto]" en cola se descarta si su aviso se vuelve a abrir antes de enviarse; los mensajes que retuvo el tope por hora o una lista de clientes fallida (una reconexión a TeamSpeak) salen solos más tarde, en lugar de esperar al próximo aviso o a que entre un admin.
 - `rhapsod uninstall --purge` ya no borra un usuario del servicio que puede iniciar sesión: con `RHAPSOD_USER` apuntando a una cuenta existente como `ubuntu`, borraba esa cuenta y su carpeta personal, claves SSH incluidas. Ahora solo se quita una cuenta con shell `nologin` o `false`.
+- Cuando `scripts/deploy.sh` vuelve atrás un deploy que cambió `scripts/yt-dlp-daemon.py`, reinicia de nuevo `rhapsod-ytdlp-daemon` después de reconstruir. Antes, el bot restaurado hablaba con un daemon que seguía corriendo el script de la versión fallida hasta el próximo reinicio del servidor.
 
 ## Actualización
 
