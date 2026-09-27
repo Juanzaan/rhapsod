@@ -132,7 +132,7 @@ scrape_configs:
 
 With a yt-dlp daemon configured, `rhapsod_ytdlp_daemon_up` drops to 0 while the daemon fails and `rhapsod_ytdlp_daemon_fallbacks_total` counts resolves that spawned yt-dlp instead. Songs still play in that state, only slower to start; the bot logs `yt-dlp daemon failed` at most once a minute and the daemon writes each failure to its journal (`journalctl -u rhapsod-ytdlp-daemon`).
 
-`GET /api/health` answers 503 while the bot is reconnecting to TeamSpeak and 200 otherwise. Its body also reports `reconnecting`, `youtubeAuthHealthy` and `ytdlpDaemon`; those two degrade the body but not the status code, so `scripts/deploy.sh` does not roll back over an expired YouTube login.
+`GET /api/health` answers 503 while the bot is reconnecting to TeamSpeak and 200 otherwise. Its body also reports `reconnecting`, `youtubeAuthHealthy` and `ytdlpDaemon`; those two degrade the body but not the status code, so `scripts/deploy.sh` does not roll back over an expired YouTube login. The body also carries `verdict` from the open notices (`ok`, `degraded` with an error notice, `unhealthy` with a critical one; ignored notices do not count) and `openNotices`. The verdict never changes the status code either: a persistent critical notice would otherwise roll back every deploy, including the one that fixes it. `rhapsod doctor` warns on `degraded` and fails on `unhealthy`.
 
 ## Docker Compose (Linux)
 

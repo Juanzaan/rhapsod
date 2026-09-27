@@ -91,7 +91,7 @@ ffmpeg -version
 ffprobe -version
 ```
 
-Confirmar que el bot entra en su canal, solicitar una pista con `!play` y revisar `!stats`. En instalaciones con el script, ejecutar `rhapsod doctor`: imprime una línea `ok`, `WARN` o `FAIL` por comprobación (servicios, Node.js, FFmpeg, yt-dlp, puertos del daemon y del POT, panel en loopback, TeamSpeak, YouTube, disco, reloj) y termina con código distinto de cero cuando falla alguna.
+Confirmar que el bot entra en su canal, solicitar una pista con `!play` y revisar `!stats`. En instalaciones con el script, ejecutar `rhapsod doctor`: imprime una línea `ok`, `WARN` o `FAIL` por comprobación (servicios, Node.js, FFmpeg, yt-dlp, puertos del daemon y del POT, panel en loopback, TeamSpeak, YouTube, avisos abiertos, disco, reloj) y termina con código distinto de cero cuando falla alguna.
 
 ## El comando rhapsod
 

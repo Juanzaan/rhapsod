@@ -91,7 +91,7 @@ ffmpeg -version
 ffprobe -version
 ```
 
-Confirm the bot joins its channel, request a track with `!play` and inspect `!stats`. For installer deployments, run `rhapsod doctor`: it prints one `ok`, `WARN` or `FAIL` line per check (services, Node.js, FFmpeg, yt-dlp, daemon and POT ports, panel bound to loopback, TeamSpeak, YouTube, disk, clock) and exits non-zero when a check fails.
+Confirm the bot joins its channel, request a track with `!play` and inspect `!stats`. For installer deployments, run `rhapsod doctor`: it prints one `ok`, `WARN` or `FAIL` line per check (services, Node.js, FFmpeg, yt-dlp, daemon and POT ports, panel bound to loopback, TeamSpeak, YouTube, open notices, disk, clock) and exits non-zero when a check fails.
 
 ## The rhapsod command
 
