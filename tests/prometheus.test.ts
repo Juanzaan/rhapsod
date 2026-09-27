@@ -75,6 +75,45 @@ describe("PlaybackMetrics", () => {
   });
 });
 
+describe("PlaybackMetrics clock timing", () => {
+  it("sums each play's tick lateness buckets and clock slips", () => {
+    const playback = new PlaybackMetrics();
+    const timing = (counts: number[], sumMs: number, slips: number) => ({
+      ...audio,
+      clockTiming: {
+        clockSlips: slips,
+        latenessCounts: counts,
+        latenessSumMs: sumMs,
+        maxLatenessMs: 70,
+        ticks: counts.reduce((total, count) => total + count, 0),
+      },
+    });
+    playback.record(
+      "completed",
+      timing([5, 0, 1, 0, 0, 0, 1], 80, 1),
+      undefined,
+    );
+    playback.record("skipped", timing([2, 1, 0, 0, 0, 0, 0], 20, 0), undefined);
+    playback.record("error", audio, undefined);
+
+    const text = render(playback);
+    expect(text).toContain(
+      'rhapsod_frame_tick_lateness_seconds_bucket{le="0.001"} 7',
+    );
+    expect(text).toContain(
+      'rhapsod_frame_tick_lateness_seconds_bucket{le="0.002"} 8',
+    );
+    expect(text).toContain(
+      'rhapsod_frame_tick_lateness_seconds_bucket{le="0.05"} 9',
+    );
+    expect(text).toContain(
+      'rhapsod_frame_tick_lateness_seconds_bucket{le="+Inf"} 10',
+    );
+    expect(text).toContain("rhapsod_frame_tick_lateness_seconds_sum 0.1");
+    expect(text).toContain("rhapsod_clock_slips_total 1");
+  });
+});
+
 describe("renderPrometheus", () => {
   it("writes valid exposition lines with a HELP and TYPE per family", () => {
     const text = render(new PlaybackMetrics());
