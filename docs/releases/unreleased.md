@@ -34,10 +34,15 @@ Measured loudness normalization works for the first time: tracks with a loudness
 - The installer failed on a server where the service user did not exist yet: installing the daemon's Python packages created `/home/rhapsod` as root before `useradd`, and cloning the POT provider into it was denied. The user is now created first, and a rerun fixes a home left owned by root. A new CI workflow installs on fresh Ubuntu 22.04, 24.04 and arm64 runners against a TeamSpeak 3 server to catch this kind of failure.
 - On a fresh install YouTube failed until cookies were loaded: the installer and the Docker image create an empty `youtube-cookies.txt`, and yt-dlp rejects an empty file as "not a Netscape format cookies file". The bot and the yt-dlp daemon now skip a missing or empty cookie file, and the panel no longer reports it as broken.
 - The fixed loudness gain stops where the measured true peak meets the -1.5 dB ceiling, so the limiter only catches what the measurement missed. A quiet track with loud peaks plays slightly under the target instead of having its peaks squashed; loud masters are still cut to the target. In a test with short loud bursts over quiet noise, the previous gain drove the bursts into the limiter, which let true peaks reach -0.8 dBTP because it limits samples, not the waveform between them; the new gain leaves the limiter idle and the true peak at -1.5 dBTP, 1.1 LU under the target.
+- `ffmpeg-static` is now an optional dependency and the Docker image no longer installs it: the container plays through the ffmpeg it installs from Debian instead of a second bundled copy. When the bundled download fails, the bot uses the ffmpeg on `PATH` instead of a path to a file that was never written.
+- The panel waits one second before answering a wrong password, to slow down scripted guesses. Requests without credentials, such as the browser's first prompt, answer at once.
+- The live radio title cache drops expired entries; it kept one per station for the life of the process.
+- CI also runs the tests on Windows and on arm64 Linux, and every GitHub Action is pinned by commit SHA.
+- Panel setting descriptions and setup wizard labels carry their Spanish accents.
 
 ## Upgrade
 
-No action is required beyond the v4.0.0 upgrade steps. Rerun the installer to get the `rhapsod` command. Docker installs from the earlier Compose file move `.env` and `data/` into the new volume once; see [deployment](../deployment.md#docker-compose-linux). Installs with `RHAPSOD_ADMIN_UIDS` set never see a claim code. `RHAPSOD_LOUDNESS_TARGET_LUFS` keeps its meaning and default (-14). `RHAPSOD_SKIP_NON_MUSIC` is off unless set to `true`.
+No action is required beyond the v4.0.0 upgrade steps. Rerun the installer to get the `rhapsod` command. Docker installs from the earlier Compose file move `.env` and `data/` into the new volume once; see [deployment](../deployment.md#docker-compose-linux). Installs with `RHAPSOD_ADMIN_UIDS` set never see a claim code. `RHAPSOD_LOUDNESS_TARGET_LUFS` keeps its meaning and default (-14). `RHAPSOD_SKIP_NON_MUSIC` is off unless set to `true`. Docker images now run Debian's ffmpeg; set `RHAPSOD_FFMPEG_PATH` to use another build.
 
 ## Verification
 

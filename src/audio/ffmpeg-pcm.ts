@@ -1,8 +1,8 @@
 import { execFile, spawn, type ChildProcessByStdio } from "node:child_process";
+import { existsSync } from "node:fs";
+import { createRequire } from "node:module";
 import { PassThrough, type Readable } from "node:stream";
 import { promisify } from "node:util";
-
-import ffmpegStaticPath from "ffmpeg-static";
 
 import { CHANNELS, SAMPLE_RATE } from "./opus-encoder.js";
 import { sanitizeSensitive, sanitizeUrl } from "../observability/metrics.js";
@@ -219,14 +219,30 @@ export function buildLoudnessFilter(
   return `volume=${gainDb.toFixed(2)}dB,alimiter=limit=${ceiling.toFixed(4)}:level=false`;
 }
 
+/**
+ * ffmpeg-static is an optional dependency: the Docker image omits it, and
+ * when its postinstall download fails the module still returns a path to a
+ * file that was never written. Either case falls back to ffmpeg on PATH.
+ */
+export function bundledFfmpegPath(
+  load: () => unknown = () => createRequire(import.meta.url)("ffmpeg-static"),
+): string | undefined {
+  try {
+    const path = load();
+    return typeof path === "string" && existsSync(path) ? path : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function resolveFfmpegBinary(binary: string | undefined): string {
-  return binary ?? ffmpegStaticPath ?? "ffmpeg";
+  return binary ?? bundledFfmpegPath() ?? "ffmpeg";
 }
 
 /**
  * Whether the binary lists `filter` in `ffmpeg -filters`. Docker runs
- * ffmpeg-static and systemd installs run the installer's build, so the two
- * can differ; a failed probe counts as missing.
+ * Debian's ffmpeg, systemd installs the installer's build and npm installs
+ * ffmpeg-static, so builds differ; a failed probe counts as missing.
  */
 export async function probeFfmpegFilter(
   binary: string,
