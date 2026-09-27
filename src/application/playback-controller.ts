@@ -6,6 +6,7 @@ import {
   type FfmpegPlaybackSession,
 } from "../audio/ffmpeg-player.js";
 import {
+  isFfmpegExit,
   isForbiddenResponse,
   type FfmpegPcmStream,
 } from "../audio/ffmpeg-pcm.js";
@@ -792,7 +793,12 @@ export class PlaybackController {
           !forbidden &&
           playbackError instanceof Error &&
           endReason === "error" &&
-          isMidPlayStall(playbackError.message) &&
+          (isMidPlayStall(playbackError.message) ||
+            // ffmpeg reconnects on its own for a few seconds, then exits;
+            // a longer outage or a 5xx on reconnect used to end the song.
+            (isFfmpegExit(playbackError.message) &&
+              !isForbiddenResponse(playbackError.message) &&
+              session.player.metrics.framesSent > 0)) &&
           stallResumes < MAX_STALL_RESUMES_PER_PLAY;
         if (forbidden || stalled) {
           if (forbidden) this.#retries.set(track, retries + 1);
@@ -1146,6 +1152,30 @@ export class PlaybackController {
           });
       }
     }
+    this.#measureLoudness(queueSnapshot[0]);
+  }
+
+  // The warm stream is built at the current track's midpoint with whatever
+  // profile is cached by then. Measuring only at that moment meant the
+  // profile was never ready for a first play; starting here gives the
+  // 120 s sample until the midpoint to finish.
+  #measureLoudness(next: Track | undefined): void {
+    const profiler = this.#loudnessProfiler;
+    // With nothing playing, the head of the queue is about to cold-start:
+    // a second download of the same audio would compete with it.
+    if (this.#current === undefined) return;
+    if (profiler === undefined || next === undefined) return;
+    const duration = next.durationSeconds;
+    if (duration === undefined || profiler.cached(next.source) !== undefined)
+      return;
+    void this.#preparedStore
+      .resolve(next, "prefetch", (t, signal) =>
+        this.#resolvePlayableAudio(t, signal),
+      )
+      .then((url) => profiler.measure(next.source, url, duration))
+      .catch(() => {
+        // The prefetch above owns the failure; measuring is best-effort.
+      });
   }
 
   isSessionStable(): boolean {
@@ -1223,10 +1253,14 @@ export class PlaybackController {
         if (!this.#epochs.isCurrent(stamp)) {
           return undefined;
         }
-        // Measuring an endless stream would burn a 120s ffmpeg sample for a
-        // profile live playback never uses (see the loudnorm bypass above).
+        // Live playback never uses a profile (see the loudnorm bypass
+        // above), and an endless stream cannot be measured to its end.
         if (next.durationSeconds !== undefined) {
-          this.#loudnessProfiler?.measure(next.source, url);
+          this.#loudnessProfiler?.measure(
+            next.source,
+            url,
+            next.durationSeconds,
+          );
         }
         if (
           this.#current === undefined ||

@@ -37,6 +37,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import threading
 import time
 from http import HTTPStatus
@@ -352,6 +353,14 @@ class Daemon:
                 del self.cache[oldest]
 
 
+def log_failure(action, message):
+    # The access log stays off (one line per song is noise), but failures
+    # go to stderr so journald keeps them: before, a broken daemon only
+    # showed up as slower song starts in the bot.
+    sys.stderr.write(f"rhapsod-ytdlp-daemon: {action} failed: {message}\n")
+    sys.stderr.flush()
+
+
 class Handler(BaseHTTPRequestHandler):
     daemon = None
 
@@ -368,8 +377,12 @@ class Handler(BaseHTTPRequestHandler):
             if parsed.path == "/invalidate":
                 self._json(self.daemon.invalidate(url))
             else:
-                self._json(self.daemon.resolve(url))
+                result = self.daemon.resolve(url)
+                if "error" in result:
+                    log_failure("resolve", result["error"])
+                self._json(result)
         except Exception as error:
+            log_failure(parsed.path.lstrip("/"), str(error))
             self._json({"error": str(error)}, status=500)
 
     def _json(self, obj, status=200):

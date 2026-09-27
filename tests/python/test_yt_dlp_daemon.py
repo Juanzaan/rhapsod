@@ -7,6 +7,7 @@ stubbed, so neither the package nor the network is needed.
 """
 
 import http.client
+import io
 import importlib.util
 import json
 import pathlib
@@ -273,6 +274,8 @@ class HandlerTest(unittest.TestCase):
             def resolve(self, url):
                 if "raise" in url:
                     raise RuntimeError("broken")
+                if "fail" in url:
+                    return {"error": "Sign in to confirm"}
                 return {"url": stream_url(), "id": VIDEO, "asked": url}
 
             def invalidate(self, url):
@@ -333,6 +336,26 @@ class HandlerTest(unittest.TestCase):
         self.assertTrue(head.startswith(b"HTTP/1.0 404 Not Found\r\n"))
         self.assertIn(b"Content-Length: %d" % len(body), head)
         self.assertEqual(json.loads(body), {"error": "missing url"})
+
+    def test_resolve_failures_are_logged_to_stderr(self):
+        # Regression: log_message is silenced, so failures left no trace.
+        captured = io.StringIO()
+        original = sys.stderr
+        sys.stderr = captured
+        try:
+            self.get("/resolve?url=raise")
+            self.get("/resolve?url=fail")
+            self.get("/resolve?url=https%3A%2F%2Fyoutu.be%2F" + VIDEO)
+        finally:
+            sys.stderr = original
+        lines = captured.getvalue().splitlines()
+        self.assertEqual(
+            lines,
+            [
+                "rhapsod-ytdlp-daemon: resolve failed: broken",
+                "rhapsod-ytdlp-daemon: resolve failed: Sign in to confirm",
+            ],
+        )
 
     def test_missing_url_and_handler_errors_answer_json(self):
         self.assertEqual(self.get("/resolve"), (200, {"error": "missing url"}))
