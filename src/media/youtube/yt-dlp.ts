@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { statSync } from "node:fs";
 import { availableParallelism } from "node:os";
 
 import type { MinimalLogger } from "../../observability/logger.js";
@@ -219,7 +220,7 @@ export class SystemYtDlpExecutor implements YtDlpExecutor {
       async ({ argumentsList, playerClient, timeoutMs }, signal) => {
         const ytDlpArguments = buildYtDlpArguments(
           argumentsList,
-          this.cookiesPath,
+          usableCookiesPath(this.cookiesPath),
           playerClient ?? "web_safari",
           this.extraExtractorArgs,
         );
@@ -868,6 +869,18 @@ export function createYtDlpResolverStack(
       : { onSearchMetrics: options.onSearchMetrics }),
   });
   return { executor, resolver };
+}
+
+// Checked on every spawn, not once: the installer creates the file empty,
+// yt-dlp rejects an empty file as "not Netscape format", and the panel can
+// fill it while the bot runs.
+export function usableCookiesPath(path?: string): string | undefined {
+  if (path === undefined) return undefined;
+  try {
+    return statSync(path).size > 0 ? path : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export function buildYtDlpArguments(
