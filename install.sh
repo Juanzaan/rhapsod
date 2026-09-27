@@ -5,8 +5,8 @@
 #
 # Supported: Ubuntu 20.04+, Debian 11+, RHEL / Oracle Linux / Rocky / Alma 9+
 # on x86_64 or aarch64 (arm64). Installs: Node 22, yt-dlp (binary + daemon package), static
-# FFmpeg, the bgutil POT provider, the bot itself, systemd units, and a weekly
-# yt-dlp updater. On a new install it asks for the TeamSpeak server, so the
+# FFmpeg, the bgutil POT provider, the bot itself, systemd units, a weekly
+# yt-dlp updater and the `rhapsod` command (status, doctor, logs). On a new install it asks for the TeamSpeak server, so the
 # bot joins it as soon as the install ends, and prints the !claim code that
 # makes the owner admin.
 #
@@ -538,6 +538,14 @@ CRON
 } > /etc/cron.weekly/rhapsod-ytdlp-update
 chmod 0755 /etc/cron.weekly/rhapsod-ytdlp-update
 
+# --- rhapsod command -----------------------------------------------------------------
+# Plain KEY=value lines: the wrapper reads them without sourcing the file.
+install -d -m 0755 /etc/rhapsod
+printf 'APP_DIR=%s\nAPP_USER=%s\nNODE_BIN=%s\n' "$APP_DIR" "$APP_USER" "$NODE_BIN" \
+  > /etc/rhapsod/install.conf
+chmod 0644 /etc/rhapsod/install.conf
+install -m 0755 "$APP_DIR/scripts/rhapsod.sh" /usr/local/bin/rhapsod
+
 systemctl daemon-reload
 systemctl enable bgutil-pot-provider rhapsod-ytdlp-daemon rhapsod
 # rhapsod starts too: with the placeholder host it boots panel-only, which
@@ -593,6 +601,8 @@ if [[ "$WARP_ADDED" == "1" ]]; then
   echo "  sudo systemctl restart rhapsod-ytdlp-daemon rhapsod"
 fi
 printf '%s\n' \
+  "" \
+  "Check on it any time:  rhapsod status   (problems: rhapsod doctor)" \
   "" \
   "Web panel (optional; settings, queue and diagnostics):" \
   "  1. On your own computer, open a tunnel:  ssh -N -L 8080:127.0.0.1:8080 <user>@<this-host>" \

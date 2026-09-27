@@ -91,7 +91,22 @@ ffmpeg -version
 ffprobe -version
 ```
 
-Confirmar que el bot entra en su canal, solicitar una pista con `!play` y revisar `!stats`. En instalaciones con el script, revisar `systemctl status rhapsod rhapsod-ytdlp-daemon` y `journalctl -u rhapsod -n 100 --no-pager`.
+Confirmar que el bot entra en su canal, solicitar una pista con `!play` y revisar `!stats`. En instalaciones con el script, ejecutar `rhapsod doctor`: imprime una línea `ok`, `WARN` o `FAIL` por comprobación (servicios, Node.js, FFmpeg, yt-dlp, puertos del daemon y del POT, panel en loopback, TeamSpeak, YouTube, disco, reloj) y termina con código distinto de cero cuando falla alguna.
+
+## El comando rhapsod
+
+El instalador agrega `/usr/local/bin/rhapsod` y registra la instalación en `/etc/rhapsod/install.conf` (`APP_DIR`, `APP_USER`, `NODE_BIN`). Pide sudo una vez, porque el archivo de entorno pertenece al usuario del servicio.
+
+| Comando            | Efecto                                                                                                                                                              |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rhapsod status`   | Estado de los servicios y del reproductor, conexión con TeamSpeak, un código de `!claim` pendiente y el comando del túnel SSH para el panel. `--json` para scripts. |
+| `rhapsod doctor`   | Las comprobaciones anteriores, con el arreglo de cada falla. No imprime secretos.                                                                                   |
+| `rhapsod password` | Escribe un `RHAPSOD_PANEL_PASSWORD` aleatorio nuevo y lo imprime.                                                                                                   |
+| `rhapsod restart`  | Reinicia el bot cuando el reproductor está en espera; `--force` reinicia durante la reproducción.                                                                   |
+| `rhapsod logs [N]` | Sigue el journal del bot y del daemon desde N líneas atrás (100 por defecto).                                                                                       |
+| `rhapsod version`  | Versión instalada.                                                                                                                                                  |
+
+Sin el instalador (Docker, instalaciones manuales), las mismas comprobaciones se ejecutan desde el checkout: `node dist/cli.js status`, `doctor`, `password` o `version`, con `RHAPSOD_ENV_FILE` apuntando al archivo de entorno cuando no es `./.env`.
 
 ## Resolución de problemas
 

@@ -23,13 +23,14 @@ Measured loudness normalization works for the first time: tracks with a loudness
 - Measured tracks play through a fixed `volume` gain followed by `alimiter` at -1.5 dBFS instead of `loudnorm` with `linear=true`, which switched to its dynamic mode without notice whenever the measured loudness range was above 11 LU: wide-range tracks were still gain-ridden and resampled to 192 kHz and back. The boost is capped at +12 dB. On a 3-minute test file this used 0.3 s of CPU and 16 MB of memory instead of 9 s and 129 MB. The bot checks `ffmpeg -filters` at startup; a build without `alimiter` logs a warning and keeps the `loudnorm` linear pass.
 - Add a Windows launcher for the panel (`tools/desktop`): it opens the SSH tunnel and the browser, keeps the connection settings in `%APPDATA%` and the panel password in the Windows Credential Manager, and embeds no host or password. CI builds it on Windows.
 - Turn the Windows launcher into a tray app: it reconnects the SSH tunnel on its own, shows what is playing in the icon, opens the panel in its own browser window with a separate profile, runs a single copy and edits its settings in a window. CI runs its self-test.
+- New `rhapsod` command on installer hosts: `status` (services, player, TeamSpeak, pending `!claim` code, panel tunnel), `doctor` (one line per check with its fix), `password` (new random panel password), `restart` (waits for idle), `logs` and `version`. The host-independent part is `node dist/cli.js`, usable from Docker or a manual install.
 - `/api/metrics` exports `rhapsod_frame_tick_lateness_seconds`, how late each 20 ms audio tick fired, and `rhapsod_clock_slips_total`, ticks more than a frame late; each `Playback session` log line carries the same numbers as `clockTiming`. They are the baseline for the gapless and loudness work planned next.
 - `/api/metrics` exports `rhapsod_inter_track_gap_seconds`, the silence from a track's last audio frame to the next track's first, and `rhapsod_command_to_first_audio_seconds`, from a request to its first audio frame on a cold start. `scripts/log-stats.mjs` reports the gap and uses the direct command measurement when the log line has it.
 - Each play measures the loudness it sent with ITU-R BS.1770 (integrated LUFS and true peak, before the `!volume` gain). `/api/metrics` exports `rhapsod_delivered_loudness_lufs` and `rhapsod_delivered_true_peak_dbtp`, the `Playback session` log line carries it as `delivered`, and `scripts/log-stats.mjs` summarizes both. On 60 s of noise the reading matches ffmpeg's `ebur128` within 0.1 LU and 0.2 dB.
 
 ## Upgrade
 
-No action is required beyond the v4.0.0 upgrade steps. Installs with `RHAPSOD_ADMIN_UIDS` set never see a claim code. `RHAPSOD_LOUDNESS_TARGET_LUFS` keeps its meaning and default (-14). `RHAPSOD_SKIP_NON_MUSIC` is off unless set to `true`.
+No action is required beyond the v4.0.0 upgrade steps. Rerun the installer to get the `rhapsod` command. Installs with `RHAPSOD_ADMIN_UIDS` set never see a claim code. `RHAPSOD_LOUDNESS_TARGET_LUFS` keeps its meaning and default (-14). `RHAPSOD_SKIP_NON_MUSIC` is off unless set to `true`.
 
 ## Verification
 
