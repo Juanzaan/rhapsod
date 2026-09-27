@@ -93,7 +93,7 @@ npm run test:coverage
 - [Instalación](docs/install.es.md) y [despliegue](docs/deployment.es.md)
 - [Comandos](docs/commands.es.md) y [arquitectura](docs/architecture.es.md)
 - [Panel y fondos animados](docs/dashboard.es.md)
-- [Lanzador de escritorio para Windows](docs/desktop.es.md)
+- [Aplicación de escritorio para Windows](docs/desktop.es.md)
 - [Versiones y publicación](docs/releases.es.md)
 - [Plan de trabajo](docs/roadmap.es.md) e [investigación](docs/research-ts3-bots.es.md)
 - [Enrutamiento opcional de voz](docs/warp-voice-egress.es.md)
