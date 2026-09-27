@@ -125,6 +125,38 @@ describe("PlaybackMetrics clock timing", () => {
   });
 });
 
+describe("PlaybackMetrics delivered loudness", () => {
+  it("buckets each play's delivered loudness and true peak", () => {
+    const playback = new PlaybackMetrics();
+    playback.record(
+      "completed",
+      { ...audio, delivered: { integratedLufs: -14.2, truePeakDbtp: -1.6 } },
+      undefined,
+    );
+    playback.record(
+      "completed",
+      { ...audio, delivered: { integratedLufs: -19, truePeakDbtp: -0.8 } },
+      undefined,
+    );
+    playback.record("error", audio, undefined);
+
+    const text = render(playback);
+    expect(text).toContain(
+      'rhapsod_delivered_loudness_lufs_bucket{le="-18"} 1',
+    );
+    expect(text).toContain(
+      'rhapsod_delivered_loudness_lufs_bucket{le="-14"} 2',
+    );
+    expect(text).toContain("rhapsod_delivered_loudness_lufs_count 2");
+    expect(text).toContain(
+      'rhapsod_delivered_true_peak_dbtp_bucket{le="-1.5"} 1',
+    );
+    expect(text).toContain(
+      'rhapsod_delivered_true_peak_dbtp_bucket{le="-0.5"} 2',
+    );
+  });
+});
+
 describe("renderPrometheus", () => {
   it("writes valid exposition lines with a HELP and TYPE per family", () => {
     const text = render(new PlaybackMetrics());

@@ -25,6 +25,7 @@ Measured loudness normalization works for the first time: tracks with a loudness
 - Turn the Windows launcher into a tray app: it reconnects the SSH tunnel on its own, shows what is playing in the icon, opens the panel in its own browser window with a separate profile, runs a single copy and edits its settings in a window. CI runs its self-test.
 - `/api/metrics` exports `rhapsod_frame_tick_lateness_seconds`, how late each 20 ms audio tick fired, and `rhapsod_clock_slips_total`, ticks more than a frame late; each `Playback session` log line carries the same numbers as `clockTiming`. They are the baseline for the gapless and loudness work planned next.
 - `/api/metrics` exports `rhapsod_inter_track_gap_seconds`, the silence from a track's last audio frame to the next track's first, and `rhapsod_command_to_first_audio_seconds`, from a request to its first audio frame on a cold start. `scripts/log-stats.mjs` reports the gap and uses the direct command measurement when the log line has it.
+- Each play measures the loudness it sent with ITU-R BS.1770 (integrated LUFS and true peak, before the `!volume` gain). `/api/metrics` exports `rhapsod_delivered_loudness_lufs` and `rhapsod_delivered_true_peak_dbtp`, the `Playback session` log line carries it as `delivered`, and `scripts/log-stats.mjs` summarizes both. On 60 s of noise the reading matches ffmpeg's `ebur128` within 0.1 LU and 0.2 dB.
 
 ## Upgrade
 
