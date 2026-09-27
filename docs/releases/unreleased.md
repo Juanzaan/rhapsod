@@ -2,8 +2,7 @@
 
 ## Summary
 
-Measured loudness normalization works for the first time: tracks with a loudness profile play at the target level without the gain riding of single-pass normalization. Optional skipping of the non-music intro and outro of YouTube music videos.
-Measured loudness normalization works for the first time: tracks with a loudness profile play at the target level without the gain riding of single-pass normalization. Adds a Windows launcher for the panel.
+Measured loudness normalization works for the first time: tracks with a loudness profile play at the target level without the gain riding of single-pass normalization. Optional skipping of the non-music intro and outro of YouTube music videos. Adds a Windows launcher for the panel.
 
 ## Changes
 

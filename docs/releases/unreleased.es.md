@@ -2,8 +2,7 @@
 
 ## Resumen
 
-La normalización de volumen medida funciona por primera vez: los temas con un perfil de sonoridad suenan al nivel objetivo sin las variaciones de ganancia de la normalización en una sola pasada. Salto opcional de la intro y el final sin música de los videoclips de YouTube.
-La normalización de volumen medida funciona por primera vez: los temas con un perfil de sonoridad suenan al nivel objetivo sin las variaciones de ganancia de la normalización en una sola pasada. Agrega un lanzador del panel para Windows.
+La normalización de volumen medida funciona por primera vez: los temas con un perfil de sonoridad suenan al nivel objetivo sin las variaciones de ganancia de la normalización en una sola pasada. Salto opcional de la intro y el final sin música de los videoclips de YouTube. Agrega un lanzador del panel para Windows.
 
 ## Cambios
 
