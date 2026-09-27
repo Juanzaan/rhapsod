@@ -391,6 +391,14 @@ export class NoticeRegistry {
     return [...this.#starts];
   }
 
+  /**
+   * Takes back this process's start on a clean stop: restarts from a
+   * deploy, the panel or `rhapsod update` must not read as a crash loop.
+   */
+  recordCleanStop(): void {
+    if (this.#starts.pop() !== undefined) this.#writer?.schedule();
+  }
+
   async flush(): Promise<void> {
     await this.#writer?.flush();
   }

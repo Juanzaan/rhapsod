@@ -44,10 +44,21 @@ La normalización de volumen medida funciona por primera vez: los temas con un p
 - Las descripciones de los ajustes del panel y las etiquetas del asistente de configuración llevan sus tildes.
 - Un tema ahora termina en el tick que envía su último audio en lugar de uno después, y su último frame parcial (menos de 20 ms) se envía completado con silencio en lugar de descartarse. Con el tema siguiente ya precargado, el silencio entre temas en el reproductor baja de unos 40 ms a 20 ms, un frame, que no se percibe como pausa. `rhapsod_inter_track_gap_seconds` muestra el paso completo, incluido el trabajo del controlador entre temas.
 - `rhapsod restart` y `rhapsod backup` ya no toman como en espera un panel que no responde: con el bot andando y el reproductor desconocido (panel apagado o caído, o una contraseña cambiada con `rhapsod password` que todavía no se cargó) se detienen y piden `--force` en lugar de cortar una canción.
+- Una detención limpia (un deploy, `rhapsod update`, el botón de reinicio del panel) ya no cuenta para el aviso de reinicios en serie; antes, cuatro deploys o reinicios desde el panel en 15 minutos lo abrían como crítico y mandaban un mensaje privado a los admins.
 
 ## Actualización
 
-No se requieren acciones además de los pasos de actualización de v4.0.0. Volver a ejecutar el instalador agrega el comando `rhapsod`. Las instalaciones de Docker hechas con el archivo de Compose anterior mueven `.env` y `data/` al volumen nuevo una vez; ver [despliegue](../deployment.es.md#docker-compose-linux). Las instalaciones con `RHAPSOD_ADMIN_UIDS` configurado nunca ven un código de `!claim`. `RHAPSOD_LOUDNESS_TARGET_LUFS` mantiene su significado y su valor por defecto (-14). `RHAPSOD_SKIP_NON_MUSIC` queda desactivado salvo que se defina en `true`. Las imágenes de Docker ahora usan el ffmpeg de Debian; para usar otra compilación, definir `RHAPSOD_FFMPEG_PATH`.
+No se requieren acciones además de los pasos de actualización de v4.0.0. Para tener el comando `rhapsod` en una instalación existente, no volver a ejecutar el instalador: en un servidor en uso hace checkout de la última etiqueta publicada en lugar de lo desplegado, corre `npm ci` y una compilación bajo el bot en marcha y reescribe las unidades de systemd, y una instalación fuera de `/home/rhapsod/rhapsod` recibe una segunda instalación vacía. Después del deploy, escribir a mano la configuración del comando como root, con el checkout, el usuario del servicio y el `node` de `ExecStart=` en `systemctl cat rhapsod`:
+
+```bash
+install -d -m 0755 /etc/rhapsod
+printf 'APP_DIR=%s\nAPP_USER=%s\nNODE_BIN=%s\n' /home/rhapsod/rhapsod rhapsod /usr/bin/node \
+  > /etc/rhapsod/install.conf
+install -m 0755 /home/rhapsod/rhapsod/scripts/rhapsod.sh /usr/local/bin/rhapsod
+rhapsod doctor
+```
+
+Las instalaciones de Docker hechas con el archivo de Compose anterior mueven `.env` y `data/` al volumen nuevo una vez; ver [despliegue](../deployment.es.md#docker-compose-linux). Las instalaciones con `RHAPSOD_ADMIN_UIDS` configurado nunca ven un código de `!claim`; con la clave vacía (administradores solo por grupo del servidor) el bot crea uno y avisa en el canal en cada arranque que no tiene administrador, hasta que alguien lo reclame o se complete la clave. `RHAPSOD_LOUDNESS_TARGET_LUFS` mantiene su significado y su valor por defecto (-14). `RHAPSOD_SKIP_NON_MUSIC` queda desactivado salvo que se defina en `true`. Las imágenes de Docker ahora usan el ffmpeg de Debian; para usar otra compilación, definir `RHAPSOD_FFMPEG_PATH`.
 
 ## Verificación
 
