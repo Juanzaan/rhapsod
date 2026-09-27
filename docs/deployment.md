@@ -128,6 +128,8 @@ scrape_configs:
 
 `rhapsod_inter_track_gap_seconds` is the silence from one track's last audio frame to the next track's first; today it sits near 320 ms, the prebuffer the next track waits for. `rhapsod_command_to_first_audio_seconds` measures from a request to its first audio frame, only when nothing else was playing. `scripts/log-stats.mjs` reports both from the `Playback session` lines (`interTrackGapMs`, `commandToFirstAudioMs`).
 
+`rhapsod_delivered_loudness_lufs` and `rhapsod_delivered_true_peak_dbtp` bucket what each play actually sent, measured with ITU-R BS.1770 (K-weighted, gated integrated loudness and 4x oversampled true peak) on the frames before the `!volume` gain. Compare them with `RHAPSOD_LOUDNESS_TARGET_LUFS` (default -14) and the -1.5 dBFS limiter ceiling: many plays with a true peak above -2 dBTP mean the limiter works often. The same reading is in the `Playback session` log line as `delivered`, and `scripts/log-stats.mjs` summarizes it. Metering adds about 0.24 ms of CPU per 20 ms frame.
+
 With a yt-dlp daemon configured, `rhapsod_ytdlp_daemon_up` drops to 0 while the daemon fails and `rhapsod_ytdlp_daemon_fallbacks_total` counts resolves that spawned yt-dlp instead. Songs still play in that state, only slower to start; the bot logs `yt-dlp daemon failed` at most once a minute and the daemon writes each failure to its journal (`journalctl -u rhapsod-ytdlp-daemon`).
 
 `GET /api/health` answers 503 while the bot is reconnecting to TeamSpeak and 200 otherwise. Its body also reports `reconnecting`, `youtubeAuthHealthy` and `ytdlpDaemon`; those two degrade the body but not the status code, so `scripts/deploy.sh` does not roll back over an expired YouTube login.
