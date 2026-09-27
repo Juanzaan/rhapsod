@@ -50,8 +50,10 @@ function render(view) {
       ? "Click en un canal para mover el bot ahí"
       : "Vista parcial: revisá permisos limitados o la conexión · click para mover el bot";
   if (chs.length === 0) {
-    box.innerHTML =
-      '<div class="em">Sin canales disponibles. Comprobá la conexión del bot.</div>';
+    setHtml(
+      box,
+      '<div class="em">Sin canales disponibles. Comprobá la conexión del bot.</div>',
+    );
     return;
   }
   var query = String(
@@ -95,11 +97,13 @@ function render(view) {
     collapsed: query ? {} : collapsed,
   });
   if (!filtered.length) {
-    box.innerHTML =
-      '<div class="em">No hay canales ni usuarios que coincidan.</div>';
+    setHtml(
+      box,
+      '<div class="em">No hay canales ni usuarios que coincidan.</div>',
+    );
     return;
   }
-  box.innerHTML = built.html;
+  setHtml(box, built.html);
   if (lastV === -1 && document.querySelectorAll)
     fxRise(document.querySelectorAll("#tree .chrow"), 30);
   lastV = view.version;

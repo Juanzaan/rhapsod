@@ -1,4 +1,5 @@
 import type { AppConfig } from "../config.js";
+import type { AdminClaim } from "../application/admin-claim.js";
 import type { Ts3Connection } from "../adapters/ts3/ts3-connection.js";
 import type { RhapsodOpusEncoder } from "../audio/opus-encoder.js";
 import { playTestTone } from "../audio/test-tone-player.js";
@@ -31,6 +32,10 @@ import {
   formatHelpMenu,
 } from "./command-registry.js";
 import { messages } from "../lib/messages.js";
+import {
+  youtubeAuthHint,
+  type YoutubeAuthFailureCategory,
+} from "../lib/youtube-auth-health.js";
 
 export interface CommandContext {
   readonly playback: YoutubePlaybackService;
@@ -52,8 +57,11 @@ export interface CommandContext {
   readonly skipVotes: SkipVotes;
   readonly encoder: RhapsodOpusEncoder;
   readonly verbose: boolean;
+  /** Present while the bot starts with no admin configured. */
+  readonly adminClaim?: AdminClaim;
   hasStartedPlaying: boolean;
   youtubeAuthHealthy: boolean;
+  readonly youtubeAuthFailure?: YoutubeAuthFailureCategory | undefined;
 }
 
 export interface CommandSender {
@@ -846,8 +854,39 @@ async function handleStats(
   });
   const authLine = ctx.youtubeAuthHealthy
     ? ""
-    : "\n⚠ Autenticación de YouTube FALLANDO — revisá las cookies del bot.";
+    : `\n⚠ ${youtubeAuthHint(
+        ctx.youtubeAuthFailure,
+        ctx.config.RHAPSOD_WARP_PROXY !== undefined,
+      )}`;
   await send(messages.statsText(statsOutput, authLine));
+}
+
+async function handleClaim(
+  ctx: CommandContext,
+  command: Extract<ChatCommand, { name: "claim" }>,
+  sender: CommandSender,
+  send: SendFn,
+): Promise<void> {
+  const result = (await ctx.adminClaim?.claim(sender.uid, command.code)) ?? {
+    status: "closed",
+  };
+  switch (result.status) {
+    case "claimed":
+      await send(
+        result.persisted
+          ? messages.claimListo
+          : messages.claimListoSinGuardar(sender.uid),
+      );
+      return;
+    case "wrong-code":
+      await send(messages.claimCodigoIncorrecto);
+      return;
+    case "locked":
+      await send(messages.claimBloqueado);
+      return;
+    case "closed":
+      await send(messages.claimCerrado);
+  }
 }
 
 async function handleDiag(
@@ -1275,6 +1314,7 @@ const COMMAND_HANDLERS: { readonly [N in CommandName]: CommandHandler<N> } = {
   skip: handleSkip,
   jump: handleJump,
   stats: handleStats,
+  claim: handleClaim,
   diag: handleDiag,
   "debug-server": handleDebugServer,
   chart: handleChart,

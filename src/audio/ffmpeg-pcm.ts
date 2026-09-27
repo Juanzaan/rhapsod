@@ -24,6 +24,12 @@ export interface FfmpegPcmOptions {
   readonly peakLimiter?: boolean;
   readonly seekSeconds?: number;
   /**
+   * Input position where the audio stops, on the track's own timeline (not
+   * relative to seekSeconds), so a 403 retry that resumes later keeps the
+   * same end.
+   */
+  readonly endSeconds?: number;
+  /**
    * Endless stream (radio). A 403 retry reconnects at the live edge instead
    * of seeking: ffmpeg would read and discard the whole seek offset first.
    */
@@ -134,6 +140,15 @@ export function buildFfmpegPcmArguments(
   }
   if (options.seekSeconds !== undefined && options.seekSeconds > 0) {
     args.push("-ss", String(options.seekSeconds));
+  }
+  // ffmpeg refuses an input -to at or before -ss; a seek past the end plays
+  // to the real end instead of failing.
+  if (
+    options.live !== true &&
+    options.endSeconds !== undefined &&
+    options.endSeconds > (options.seekSeconds ?? 0) + 1
+  ) {
+    args.push("-to", String(options.endSeconds));
   }
   // Low-latency flags: skip buffering and probe delays so the first audio
   // frames reach the Opus encoder as soon as YouTube starts delivering them.

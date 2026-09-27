@@ -27,6 +27,11 @@ export function requireInput<
   };
 }
 
+export function parseClaim(argument: string): CommandOf<"claim"> {
+  if (!argument) throw new UserError(messages.parseChatCommandUsaClaimCodigo);
+  return { code: argument, name: "claim" };
+}
+
 export function parseSearch(argument: string): CommandOf<"search"> {
   const first = argument.split(/\s+/)[0] ?? "";
   if (/^\d+$/.test(first)) {

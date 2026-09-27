@@ -26,7 +26,13 @@ La línea activa es **4.x**. Los perfiles 1.x, 2.x y 3.x son históricos; consul
 
 ## Instalación
 
-Para un VPS Linux compatible, seguir la [guía de instalación](docs/install.es.md). El instalador crea servicios systemd e inicia el asistente local.
+Para un VPS Linux compatible o un servidor hogareño, ejecutar el instalador y responder su única pregunta, la dirección del servidor de TeamSpeak:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Juanzaan/rhapsod/main/install.sh | sudo bash
+```
+
+El bot entra a ese servidor al terminar la instalación. Enviar en TeamSpeak el `!claim <código>` que muestra para quedar como administrador. La [guía de instalación](docs/install.es.md) explica las opciones y el panel web opcional.
 
 Para una instalación manual:
 
@@ -64,7 +70,7 @@ Abrir `http://127.0.0.1:8080/setup`. La referencia completa está en [`.env.exam
 !help
 ```
 
-Las respuestas del chat están en español. La mayoría de los comandos son compartidos; saltar o eliminar pistas ajenas requiere un administrador incluido en `RHAPSOD_ADMIN_UIDS`. Las pistas automáticas son compartidas. Consultar [comandos](docs/commands.es.md) para alias, permisos y límites.
+Las respuestas del chat están en español. La mayoría de los comandos son compartidos; saltar o eliminar pistas ajenas requiere un administrador incluido en `RHAPSOD_ADMIN_UIDS`; en una instalación nueva, `!claim <código>` con el código que muestra el instalador convierte al dueño en el primero. Las pistas automáticas son compartidas. Consultar [comandos](docs/commands.es.md) para alias, permisos y límites.
 
 ## Operación y actualización
 
