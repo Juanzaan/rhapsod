@@ -47,7 +47,17 @@ Measured loudness normalization works for the first time: tracks with a loudness
 
 ## Upgrade
 
-No action is required beyond the v4.0.0 upgrade steps. Rerun the installer to get the `rhapsod` command. Docker installs from the earlier Compose file move `.env` and `data/` into the new volume once; see [deployment](../deployment.md#docker-compose-linux). Installs with `RHAPSOD_ADMIN_UIDS` set never see a claim code. `RHAPSOD_LOUDNESS_TARGET_LUFS` keeps its meaning and default (-14). `RHAPSOD_SKIP_NON_MUSIC` is off unless set to `true`. Docker images now run Debian's ffmpeg; set `RHAPSOD_FFMPEG_PATH` to use another build.
+No action is required beyond the v4.0.0 upgrade steps. To get the `rhapsod` command on an existing install, do not rerun the installer: on a live host it checks out the latest release tag instead of what is deployed, runs `npm ci` and a build under the running bot and rewrites the systemd units, and an install outside `/home/rhapsod/rhapsod` gets a second, empty one. After the deploy, write the wrapper's settings by hand as root, with the checkout, the service user and the `node` from `ExecStart=` in `systemctl cat rhapsod`:
+
+```bash
+install -d -m 0755 /etc/rhapsod
+printf 'APP_DIR=%s\nAPP_USER=%s\nNODE_BIN=%s\n' /home/rhapsod/rhapsod rhapsod /usr/bin/node \
+  > /etc/rhapsod/install.conf
+install -m 0755 /home/rhapsod/rhapsod/scripts/rhapsod.sh /usr/local/bin/rhapsod
+rhapsod doctor
+```
+
+Docker installs from the earlier Compose file move `.env` and `data/` into the new volume once; see [deployment](../deployment.md#docker-compose-linux). Installs with `RHAPSOD_ADMIN_UIDS` set never see a claim code; with it empty (admins by server group only) the bot creates one and says in the channel on each start that it has no admin, until someone claims it or the key is set. `RHAPSOD_LOUDNESS_TARGET_LUFS` keeps its meaning and default (-14). `RHAPSOD_SKIP_NON_MUSIC` is off unless set to `true`. Docker images now run Debian's ffmpeg; set `RHAPSOD_FFMPEG_PATH` to use another build.
 
 ## Verification
 
