@@ -13,6 +13,7 @@ Measured loudness normalization works for the first time: tracks with a loudness
 - The next track's loudness is measured from the moment the current track starts instead of when its warm stream is built at the midpoint, so first plays use their measured profile. Nothing is measured while the queue is idle, to keep a second download away from a cold start.
 - The loudness profile covers the whole track instead of its first 120 seconds, so linear gain sized for a quiet intro cannot clip a louder chorus. Tracks longer than 15 minutes are not measured and keep the dynamic filter.
 - A song already in the queue is now skipped by its error type, not by the wording of its Spanish chat message. Before, rewording "Esa canción ya está en la cola." would make a playlist, Spotify or Apple Music collection with a queued song fail as a whole. SoundCloud DRM errors are recognized the same way; yt-dlp DRM output is still matched by its text, since yt-dlp reports it only there.
+- A song whose ffmpeg process dies after playback started (an outage longer than ffmpeg's own reconnects, a 5xx on reconnect) now resumes once from its position with a freshly resolved URL, the same way a stalled stream does. It used to end as an error and skip to the next track.
 
 ## Upgrade
 

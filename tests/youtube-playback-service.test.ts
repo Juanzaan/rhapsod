@@ -3951,19 +3951,23 @@ describe("YoutubePlaybackService", () => {
     expect(service.tracksPlayed).toBe(1);
   });
 
-  function stallingPlayback(stalls: number) {
+  function stallingPlayback(
+    stalls: number,
+    message = "Audio source stalled for 5000ms",
+    framesSent = 2_000,
+  ) {
     let remaining = stalls;
     return vi.fn((): FfmpegPlaybackSession => {
       const failing = remaining > 0;
       remaining--;
       return {
         done: failing
-          ? Promise.reject(new Error("Audio source stalled for 5000ms"))
+          ? Promise.reject(new Error(message))
           : new Promise<void>(() => {}),
         player: {
           metrics: {
             bufferedBytes: 0,
-            framesSent: failing ? 2_000 : 0,
+            framesSent: failing ? framesSent : 0,
             maxBufferedBytes: 3_840,
             rebufferEvents: 1,
             underruns: 250,
@@ -4007,6 +4011,64 @@ describe("YoutubePlaybackService", () => {
     expect(onPlaybackError).not.toHaveBeenCalled();
     // The daemon cache is only invalidated for a 403, not for a stall.
     expect(resolver.invalidateAudioUrl).not.toHaveBeenCalled();
+  });
+
+  it("resumes a song whose ffmpeg dies mid-play instead of skipping it", async () => {
+    // Regression: once ffmpeg's own reconnects ran out (outage longer than a
+    // few seconds, a 5xx on reconnect) it exited, and the song ended as an
+    // error and skipped to the next one.
+    const createPlayback = stallingPlayback(
+      1,
+      "FFmpeg exited with code 1: Connection reset by peer",
+    );
+    const {
+      onPlaybackError,
+      onPlaybackFinished,
+      onPlaybackStarted,
+      resolver,
+      service,
+    } = setup({ createPlayback });
+    resolver.getTrack.mockResolvedValue({
+      audioUrl: "https://media.example/audio",
+      durationSeconds: 200,
+      id: "first",
+      title: "Track first",
+      webpageUrl: "https://www.youtube.com/watch?v=first",
+    });
+
+    await service.enqueue("https://youtu.be/first", "user-1");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(createPlayback).toHaveBeenCalledTimes(2);
+    const resumeOptions = (
+      createPlayback.mock.calls[1] as unknown[] | undefined
+    )?.[3] as { seekSeconds?: number } | undefined;
+    expect(resumeOptions?.seekSeconds).toBe(40);
+    expect(onPlaybackStarted).toHaveBeenCalledTimes(1);
+    expect(onPlaybackFinished).not.toHaveBeenCalled();
+    expect(onPlaybackError).not.toHaveBeenCalled();
+  });
+
+  it("does not resume an ffmpeg failure before the first frame", async () => {
+    const createPlayback = stallingPlayback(
+      1,
+      "FFmpeg exited with code 1: Invalid data found when processing input",
+      0,
+    );
+    const { onPlaybackError, resolver, service } = setup({ createPlayback });
+    resolver.getTrack.mockResolvedValue({
+      audioUrl: "https://media.example/audio",
+      durationSeconds: 200,
+      id: "first",
+      title: "Track first",
+      webpageUrl: "https://www.youtube.com/watch?v=first",
+    });
+
+    await service.enqueue("https://youtu.be/first", "user-1");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(createPlayback).toHaveBeenCalledTimes(1);
+    expect(onPlaybackError).toHaveBeenCalledTimes(1);
   });
 
   it("gives up after a second stall in the same play", async () => {
