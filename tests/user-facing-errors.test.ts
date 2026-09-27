@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import { userFacingError } from "../src/lib/user-facing-error.js";
 import { parseChatCommand } from "../src/commands/chat-command.js";
-import { PlaybackQueue } from "../src/domain/playback-queue.js";
+import {
+  DuplicateTrackError,
+  PlaybackQueue,
+} from "../src/domain/playback-queue.js";
+import { SoundCloudDrmError } from "../src/media/soundcloud/public-api.js";
 import { UserError } from "../src/lib/user-error.js";
 import type { Track } from "../src/domain/track.js";
 
@@ -35,9 +39,15 @@ describe("userFacingError", () => {
   });
 
   it("duplicado → mensaje en español", () => {
-    expect(
-      userFacingError(new Error("Esa canción ya está en la cola.")),
-    ).toMatch(/ya está en la cola/);
+    expect(userFacingError(new DuplicateTrackError("t1"))).toMatch(
+      /ya está en la cola/,
+    );
+  });
+
+  it("DRM de SoundCloud → mensaje de DRM por tipo, no por texto", () => {
+    const error = new SoundCloudDrmError({ artist: "A", title: "T" });
+    error.message = "blocked";
+    expect(userFacingError(error)).toMatch(/DRM/);
   });
 
   it("fallthrough nunca filtra error.message crudo", () => {

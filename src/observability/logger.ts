@@ -108,6 +108,22 @@ export function guardFileStream(stream: FileLogStream): NodeJS.WritableStream {
   return guard;
 }
 
+/**
+ * pino-roll writes asynchronously, so process.exit() right after a crash log
+ * dropped that line from data/logs (journald still had it via stdout).
+ * Exit paths call this last; it never throws.
+ */
+export function flushLoggerSync(logger: Logger): void {
+  const stream = (logger as unknown as Record<symbol, unknown>)[
+    pino.symbols.streamSym
+  ] as { flushSync?: () => void } | undefined;
+  try {
+    stream?.flushSync?.();
+  } catch (error) {
+    reportFileStreamError(error);
+  }
+}
+
 export async function createRhapsodLogger(
   options: RhapsodLoggerOptions,
 ): Promise<Logger> {

@@ -11,6 +11,7 @@ import {
   resolveFfmpegBinary,
   createFfmpegPcmStream,
   ffmpegEnvironment,
+  isFfmpegExit,
   isForbiddenResponse,
 } from "../src/audio/ffmpeg-pcm.js";
 
@@ -788,4 +789,12 @@ describe("probeFfmpegFilter", () => {
     },
     15_000,
   );
+
+describe("isFfmpegExit", () => {
+  it("matches the error the PCM stream raises when ffmpeg dies", () => {
+    expect(isFfmpegExit("FFmpeg exited with code 1: Connection reset")).toBe(
+      true,
+    );
+    expect(isFfmpegExit("Audio source stalled for 5000ms")).toBe(false);
+  });
 });

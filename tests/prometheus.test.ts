@@ -98,4 +98,25 @@ describe("renderPrometheus", () => {
     expect(text).toContain("rhapsod_uptime_seconds 12");
     expect(text.endsWith("\n")).toBe(true);
   });
+
+  it("exports the yt-dlp daemon state and fallbacks when a daemon is set", () => {
+    const text = renderPrometheus({
+      counters,
+      memoryRssBytes: 1_000,
+      playback: new PlaybackMetrics(),
+      uptimeSeconds: 1,
+      version: "4.0.0",
+      ytdlpDaemon: {
+        state: "failing",
+        consecutiveFailures: 3,
+        fallbacksTotal: 7,
+      },
+    });
+    expect(text).toContain("rhapsod_ytdlp_daemon_up 0\n");
+    expect(text).toContain("rhapsod_ytdlp_daemon_fallbacks_total 7\n");
+  });
+
+  it("omits the daemon series without a daemon", () => {
+    expect(render(new PlaybackMetrics())).not.toContain("rhapsod_ytdlp_daemon");
+  });
 });
