@@ -73,8 +73,12 @@ ask_ts3() {
     || { echo "RHAPSOD_TS3_HOST or RHAPSOD_TS3_PASSWORD cannot be written to .env" >&2; return 1; }
 }
 
-# Tests source the functions above without running the install.
-[[ "${RHAPSOD_INSTALL_FUNCTIONS_ONLY:-0}" != "1" ]] || return 0
+# Tests run one of the functions above without running the install:
+#   RHAPSOD_INSTALL_FUNCTIONS_ONLY=1 bash install.sh ts3_env_lines host
+if [[ "${RHAPSOD_INSTALL_FUNCTIONS_ONLY:-0}" == "1" ]]; then
+  [[ $# -eq 0 ]] || { "$@"; exit $?; }
+  return 0 2>/dev/null || exit 0
+fi
 
 REPOSITORY="https://github.com/Juanzaan/rhapsod.git"
 POT_REPOSITORY="https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git"
