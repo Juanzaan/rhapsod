@@ -28,7 +28,7 @@ La normalización de volumen medida funciona por primera vez: los temas con un p
 - El panel espera un segundo antes de responder a una contraseña equivocada, para frenar intentos automatizados. Las solicitudes sin credenciales, como el primer pedido del navegador, se responden de inmediato.
 - La caché de títulos de radio en vivo descarta las entradas vencidas; antes guardaba una por estación mientras el proceso estuviera activo.
 - La CI también ejecuta las pruebas en Windows y en Linux arm64, y cada acción de GitHub queda fijada por el SHA de su commit.
-- Las descripciones de los ajustes del panel llevan sus tildes.
+- Las descripciones de los ajustes del panel y las etiquetas del asistente de configuración llevan sus tildes.
 
 ## Actualización
 

@@ -28,7 +28,7 @@ Measured loudness normalization works for the first time: tracks with a loudness
 - The panel waits one second before answering a wrong password, to slow down scripted guesses. Requests without credentials, such as the browser's first prompt, answer at once.
 - The live radio title cache drops expired entries; it kept one per station for the life of the process.
 - CI also runs the tests on Windows and on arm64 Linux, and every GitHub Action is pinned by commit SHA.
-- Panel setting descriptions carry their Spanish accents.
+- Panel setting descriptions and setup wizard labels carry their Spanish accents.
 
 ## Upgrade
 
