@@ -78,7 +78,7 @@ fi
     journalctl,
     `#!/usr/bin/env bash\necho "journalctl $*" >> ${JSON.stringify(calls)}\n`,
   );
-  // Drops the user argument, as sudo -u would after switching to it.
+  // Drops the user argument, as runuser -u would after switching to it.
   const asUser = join(root, "as-user");
   executable(asUser, `#!/usr/bin/env bash\nshift\nexec "$@"\n`);
   // Stands in for deploy.sh: records its arguments and checks out --ref,

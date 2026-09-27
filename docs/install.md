@@ -12,7 +12,7 @@ curl -fsSL https://raw.githubusercontent.com/Juanzaan/rhapsod/main/install.sh | 
 
 The installer selects the latest stable tag, installs Node 22 when absent, yt-dlp, FFmpeg, the Python daemon and optional extraction services, then creates systemd units. An existing Node installation must be >=22.19.0. New installs receive `.env`, an empty cookie file and a generated panel password; reruns preserve existing configuration and cookies.
 
-Downloads are checked against the checksums their publishers list: `SHASUMS256.txt` for Node.js, `SHA2-256SUMS` for yt-dlp and the MD5 file of the FFmpeg mirror. A mismatch stops the install; the weekly yt-dlp update keeps the installed binary instead. The POT provider server and its yt-dlp plugin are pinned to the same release. A new service user gets a `nologin` shell; run maintenance commands with `sudo -u rhapsod <command>`.
+Downloads are checked against the checksums their publishers list: `SHASUMS256.txt` for Node.js, `SHA2-256SUMS` for yt-dlp and the MD5 file of the FFmpeg mirror. A mismatch stops the install; the weekly yt-dlp update keeps the installed binary instead. The POT provider server and its yt-dlp plugin are pinned to the same release. A new service user gets a `nologin` shell; run maintenance commands with `sudo -u rhapsod env PATH="$PATH" <command>`. The `env PATH="$PATH"` part keeps `/usr/local/bin`, where the installer puts Node.js, on the RHEL family, whose sudo leaves it out of the path.
 
 On a new install, the installer first asks for the TeamSpeak server (`ts.example.com` or `ts.example.com:9987`) and its password, if it has one. It asks on the terminal, so this works through `curl | sudo bash` too. At the end, the bot joins that server and the installer prints a one-time code:
 

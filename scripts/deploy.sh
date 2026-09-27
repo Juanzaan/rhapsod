@@ -35,7 +35,9 @@ FORCE=0
 DRY_RUN=0
 # Overridable for tests; production uses the real commands.
 SYSTEMCTL="${RHAPSOD_DEPLOY_SYSTEMCTL:-systemctl}"
-AS_USER="${RHAPSOD_DEPLOY_AS_USER:-sudo -u}"
+# runuser, not sudo -u: RHEL's sudo secure_path drops /usr/local/bin, where
+# npm lives.
+AS_USER="${RHAPSOD_DEPLOY_AS_USER:-runuser -u}"
 POLL_SECONDS="${RHAPSOD_DEPLOY_POLL_SECONDS:-10}"
 # The panel starts only after the TeamSpeak connection, which may take up
 # to RHAPSOD_TS3_CONNECT_TIMEOUT_SECONDS (180 by default).

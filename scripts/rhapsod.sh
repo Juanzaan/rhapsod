@@ -25,7 +25,9 @@ CONF="${RHAPSOD_INSTALL_CONF:-/etc/rhapsod/install.conf}"
 # Overridable for tests; production uses the real commands.
 SYSTEMCTL="${RHAPSOD_SYSTEMCTL:-systemctl}"
 JOURNALCTL="${RHAPSOD_JOURNALCTL:-journalctl}"
-AS_USER="${RHAPSOD_AS_USER:-sudo -u}"
+# runuser, not sudo -u: RHEL's sudo secure_path drops /usr/local/bin, and
+# every call below already runs as root.
+AS_USER="${RHAPSOD_AS_USER:-runuser -u}"
 USERDEL="${RHAPSOD_USERDEL:-userdel}"
 # Prefix for the system paths uninstall removes; tests point it at a sandbox.
 ROOT="${RHAPSOD_ROOT:-}"
