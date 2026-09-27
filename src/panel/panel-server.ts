@@ -10,6 +10,7 @@ import type {
   ErrorSummary,
 } from "../observability/metrics.js";
 import { COMMAND_SPECS } from "../commands/command-registry.js";
+import type { DaemonHealthSnapshot } from "../media/youtube/daemon-health.js";
 import {
   isSafeEnvValue,
   loadEnvFile,
@@ -68,6 +69,10 @@ export interface PanelStatus {
   readonly tracksPlayed?: number;
   readonly uptimeMs?: number;
   readonly disconnects?: DisconnectSummary;
+  /** True while the TeamSpeak connection is being re-established. */
+  readonly reconnecting?: boolean;
+  readonly youtubeAuthHealthy?: boolean;
+  readonly ytdlpDaemon?: DaemonHealthSnapshot;
   readonly version: string;
 }
 
@@ -168,6 +173,8 @@ const ENV_DESCRIPTIONS: Record<string, string> = {
   RHAPSOD_MAX_TRACKS_PER_USER: "Tracks por usuario (1-200)",
   RHAPSOD_VOTE_SKIP:
     "Votacion para saltar: mas de la mitad del canal (true/false, default false)",
+  RHAPSOD_SKIP_NON_MUSIC:
+    "Saltar intros y outros sin musica de los videoclips via SponsorBlock (true/false, default false)",
   RHAPSOD_MOVE_GROUP_IDS: "Group IDs para !move",
   RHAPSOD_MOVE_ADMIN_CHANNELS: "Channels para move admin",
   RHAPSOD_MOVE_SENIOR_CHANNELS: "Channels para move senior",
@@ -359,7 +366,13 @@ export function createPanelServer(options: PanelOptions): {
     c.body(FAVICON_SVG, 200, { "Content-Type": "image/svg+xml" }),
   );
 
-  app.get("/api/health", (c) => c.json(options.status()));
+  // 503 only while reconnecting: deploy.sh rolls back on it. A failing
+  // YouTube login or daemon still plays through fallbacks, so it is
+  // reported in the body without failing the check.
+  app.get("/api/health", (c) => {
+    const status = options.status();
+    return c.json(status, status.reconnecting === true ? 503 : 200);
+  });
 
   app.get("/api/metrics", (c) => {
     if (options.metricsText === undefined) return c.notFound();

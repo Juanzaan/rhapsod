@@ -342,6 +342,15 @@ export const messages = {
     "Solo se pueden expandir colecciones de Spotify con !play.",
   enqueueAppleMusicCollectionEsteBotNoTiene:
     "Este bot no tiene resolución de links de Apple Music configurada.",
+  // Errors mapped for chat by userFacingError
+  errorCancionYaEnCola: "Esa canción ya está en la cola.",
+  errorDrmSoundcloud:
+    "SoundCloud no permite reproducir esta pista porque está protegida con DRM. Probá otra versión o una fuente distinta.",
+  errorFormatoNoDisponible:
+    "YouTube no ofrece un formato de audio reproducible para ese video (puede ser un directo o un video restringido). Probá otra versión.",
+  errorFalloDeRed:
+    "Fallo momentáneo de red con el proveedor (Spotify/YouTube). Probá de nuevo en unos segundos.",
+  errorGenerico: "Ocurrió un error. Probá de nuevo en unos segundos.",
   // Playback driver errors shown to users
   jumpToUsaJumpPosicion: "Usá: !jump <posición>",
   jumpToNoExisteEsaPosicion: "No existe esa posición en la cola.",

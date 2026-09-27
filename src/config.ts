@@ -154,6 +154,10 @@ const configSchema = z.object({
     .enum(["true", "false"])
     .default("false")
     .transform((value) => value === "true"),
+  RHAPSOD_SKIP_NON_MUSIC: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
   RHAPSOD_VERBOSE: z
     .enum(["true", "false"])
     .default("false")

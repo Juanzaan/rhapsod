@@ -3,6 +3,7 @@ import type {
   PlaybackEndReason,
   PlaybackKpis,
 } from "../application/playback-controller.js";
+import type { DaemonHealthSnapshot } from "../media/youtube/daemon-health.js";
 import type { MetricsCounters } from "./metrics.js";
 
 // Seconds. Starts under a second are the goal; the long tail covers slow
@@ -113,6 +114,8 @@ export interface PrometheusSnapshot {
   readonly playback: PlaybackMetrics;
   readonly uptimeSeconds: number;
   readonly version: string;
+  /** Undefined when no yt-dlp daemon is configured. */
+  readonly ytdlpDaemon?: DaemonHealthSnapshot | undefined;
 }
 
 /** Prometheus text exposition format 0.0.4. */
@@ -177,6 +180,20 @@ export function renderPrometheus(snapshot: PrometheusSnapshot): string {
       "yt-dlp jobs waiting for a slot.",
       counters.ytdlpQueuedJobs,
     ),
+    ...(snapshot.ytdlpDaemon === undefined
+      ? []
+      : [
+          ...gauge(
+            "rhapsod_ytdlp_daemon_up",
+            "0 while the yt-dlp daemon is failing and resolves fall back to spawning yt-dlp.",
+            snapshot.ytdlpDaemon.state === "failing" ? 0 : 1,
+          ),
+          ...counter(
+            "rhapsod_ytdlp_daemon_fallbacks_total",
+            "Audio URL resolves that fell back from the daemon to spawning yt-dlp.",
+            snapshot.ytdlpDaemon.fallbacksTotal,
+          ),
+        ]),
     "",
   ].join("\n");
 }

@@ -5,6 +5,7 @@ import {
   buildFfmpegPcmArguments,
   createFfmpegPcmStream,
   ffmpegEnvironment,
+  isFfmpegExit,
   isForbiddenResponse,
 } from "../src/audio/ffmpeg-pcm.js";
 
@@ -21,6 +22,37 @@ describe("FFmpeg PCM source", () => {
     expect(args).toContain(String(SAMPLE_RATE));
     expect(args).toContain(String(CHANNELS));
     expect(args.at(-1)).toBe("pipe:1");
+  });
+
+  it("stops the input at the music end, on the track's own timeline", () => {
+    const args = buildFfmpegPcmArguments("https://cdn.example.test/audio", {
+      endSeconds: 200,
+      seekSeconds: 12,
+    });
+
+    const input = args.indexOf("-i");
+    expect(args.slice(0, input)).toEqual(
+      expect.arrayContaining(["-ss", "12", "-to", "200"]),
+    );
+    expect(args.indexOf("-to")).toBeGreaterThan(args.indexOf("-ss"));
+  });
+
+  it("plays to the real end when a seek lands past the music end", () => {
+    const args = buildFfmpegPcmArguments("https://cdn.example.test/audio", {
+      endSeconds: 200,
+      seekSeconds: 230,
+    });
+
+    expect(args).not.toContain("-to");
+  });
+
+  it("never stops a live stream at a music end", () => {
+    const args = buildFfmpegPcmArguments("https://cdn.example.test/audio", {
+      endSeconds: 200,
+      live: true,
+    });
+
+    expect(args).not.toContain("-to");
   });
 
   it("applies loudness normalization when a target is configured", () => {
@@ -636,5 +668,14 @@ describe("FFmpeg network guard", () => {
     } finally {
       writeSpy.mockRestore();
     }
+  });
+});
+
+describe("isFfmpegExit", () => {
+  it("matches the error the PCM stream raises when ffmpeg dies", () => {
+    expect(isFfmpegExit("FFmpeg exited with code 1: Connection reset")).toBe(
+      true,
+    );
+    expect(isFfmpegExit("Audio source stalled for 5000ms")).toBe(false);
   });
 });

@@ -2,11 +2,26 @@
 
 ## Resumen
 
-La normalización de volumen medida funciona por primera vez: los temas con un perfil de sonoridad suenan al nivel objetivo sin las variaciones de ganancia de la normalización en una sola pasada.
+La normalización de volumen medida funciona por primera vez: los temas con un perfil de sonoridad suenan al nivel objetivo sin las variaciones de ganancia de la normalización en una sola pasada. Salto opcional de la intro y el final sin música de los videoclips de YouTube.
 
 ## Cambios
 
 - El medidor de sonoridad nunca generaba un perfil: ffmpeg se ejecutaba con `-loglevel error`, que oculta el informe de loudnorm, el informe se leía de stdout en lugar de stderr y sus valores, impresos como texto, se rechazaban. Todos los temas con duración se reproducían con `loudnorm` dinámico en una sola pasada, y cada precarga repetía la medición de 120 segundos. Los temas medidos ahora reciben normalización en dos pasadas, lineal cuando la ganancia entra bajo el techo de -1,5 dBTP.
+- Registrar y contar las fallas del daemon de yt-dlp en lugar de pasar en silencio al respaldo: el bot avisa como máximo una vez por minuto, el daemon escribe las fallas en su journal y `/api/metrics` exporta `rhapsod_ytdlp_daemon_up` y `rhapsod_ytdlp_daemon_fallbacks_total`.
+- Hacer que `/api/health` responda 503 durante la reconexión a TeamSpeak (antes informaba conectado a partir de un id de canal en caché) y agregar a su cuerpo el estado del inicio de sesión de YouTube y del daemon.
+- Vaciar el archivo de log antes de salir, para que la última línea previa a una caída o un reinicio llegue a `data/logs`.
+- La sonoridad del tema siguiente se mide desde que empieza el tema actual en lugar de cuando se prepara su flujo precargado a mitad del tema, así la primera reproducción usa su perfil medido. No se mide nada con la cola detenida, para que una segunda descarga no compita con un inicio en frío.
+- El perfil de sonoridad cubre el tema completo en lugar de sus primeros 120 segundos, así una ganancia lineal calculada para una introducción suave no puede saturar un estribillo más fuerte. Los temas de más de 15 minutos no se miden y mantienen el filtro dinámico.
+- Una canción que ya está en la cola ahora se saltea por el tipo de error y no por el texto del mensaje de chat. Antes, cambiar la frase "Esa canción ya está en la cola." hacía fallar completa una playlist o una colección de Spotify o Apple Music que tuviera una canción ya encolada. Los errores de DRM de SoundCloud se reconocen de la misma forma; la salida de DRM de yt-dlp se sigue comparando por texto, porque yt-dlp solo la informa ahí.
+- Si el proceso de ffmpeg de un tema termina con error después de empezar la reproducción (un corte más largo que las reconexiones propias de ffmpeg, un 5xx al reconectar), el tema se reanuda una vez desde su posición con una URL resuelta de nuevo, igual que un flujo que se detiene. Antes terminaba como error y pasaba al siguiente tema.
+- Panel: todas las páginas usan el mismo marco de 1320 px, así que el menú ya no se corre al cambiar de página. Las tarjetas de una fila de la consola comparten el alto y la cola se desplaza dentro de su tarjeta; Configuración y Comandos muestran cada grupo a ancho completo, con una grilla pareja de campos y comandos.
+- Panel: la página Servidor ya no reconstruye el árbol de canales cada 2,5 segundos cuando nada cambió, algo que cortaba las transiciones al pasar el puntero. Con el sistema en movimiento reducido solo se detienen el fondo y el tocadiscos; la respuesta a clics y al puntero se mantiene.
+- Panel: los estados del reproductor se muestran en español (SONANDO, EN PAUSA, CARGANDO, EN ESPERA), y el asistente de instalación indica usar `!claim` para el primer administrador, con el campo de UIDs de administrador en una sección avanzada.
+- Agregar `RHAPSOD_SKIP_NON_MUSIC` (por defecto `false`): los videoclips de YouTube empiezan donde empieza la música y terminan donde termina, según los tramos sin música (intros habladas, escenas, créditos) que los usuarios de SponsorBlock marcan con la categoría `music_offtopic`. Solo se cortan una intro y un final, nunca un tramo del medio, y se ignora un corte que dejaría menos de la mitad de la pista o menos de 30 segundos. La consulta envía un prefijo de 4 caracteres del SHA-256 del id del video, espera como máximo 1,5 segundos y corre en paralelo con la URL de audio; si falla, la pista suena completa.
+
+## Actualización
+
+No se requieren acciones además de los pasos de actualización de v4.0.0. `RHAPSOD_LOUDNESS_TARGET_LUFS` mantiene su significado y su valor por defecto (-14). `RHAPSOD_SKIP_NON_MUSIC` queda desactivado salvo que se defina en `true`.
 - Una instalación nueva pregunta por el servidor de TeamSpeak y el bot entra al terminar, sin pasar por el panel web. El instalador muestra un código de un solo uso; `!claim <código>` en TeamSpeak convierte a quien lo envía en el primer administrador y guarda su UID en `RHAPSOD_ADMIN_UIDS`, que los dueños nuevos no podían completar porque no conocen su UID de TeamSpeak.
 - El instalador ya no agrega Cloudflare WARP salvo con `RHAPSOD_WITH_WARP=1`; repetirlo conserva una instalación de WARP existente. Cuando falla la comprobación diaria de YouTube, `!stats` indica el arreglo según el tipo de falla: WARP para una dirección de servidor bloqueada, cookies cuando pide iniciar sesión.
 

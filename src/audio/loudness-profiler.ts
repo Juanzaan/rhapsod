@@ -9,7 +9,10 @@ const DEFAULT_BINARY = "ffmpeg";
 const MEASURE_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_ENTRIES = 500;
 const MAX_CONCURRENT = 2;
-const SAMPLE_SECONDS = 120;
+// Linear two-pass gain is only safe when the true peak it checks covers the
+// whole track: a 120 s sample of a quiet intro let the gain clip a louder
+// chorus. Longer tracks (mixes, podcasts) keep the dynamic filter.
+const MAX_MEASURED_SECONDS = 15 * 60;
 
 export interface LoudnessProfile {
   readonly measuredI: number;
@@ -96,19 +99,33 @@ export class LoudnessProfiler {
     return entry.profile;
   }
 
-  measure(source: string, url: string): void {
+  /**
+   * startSeconds skips a non-music intro, which would otherwise pull the
+   * measured loudness toward speech level.
+   */
+  measure(
+    source: string,
+    url: string,
+    durationSeconds: number,
+    startSeconds?: number,
+  ): void {
+    if (durationSeconds > MAX_MEASURED_SECONDS) return;
     if (this.cached(source) !== undefined) return;
     if (this.#measuring.has(source)) return;
     if (this.#activeMeasurements >= MAX_CONCURRENT) return;
     this.#measuring.add(source);
     this.#activeMeasurements++;
-    void this.#measureImpl(source, url).finally(() => {
+    void this.#measureImpl(source, url, startSeconds).finally(() => {
       this.#measuring.delete(source);
       this.#activeMeasurements--;
     });
   }
 
-  async #measureImpl(source: string, url: string): Promise<void> {
+  async #measureImpl(
+    source: string,
+    url: string,
+    startSeconds: number | undefined,
+  ): Promise<void> {
     let stderr: string;
     const env = ffmpegEnvironment(this.#egressProxyUrl);
     try {
@@ -123,8 +140,9 @@ export class LoudnessProfiler {
           "info",
           "-nostdin",
           ...ffmpegEgressArguments(this.#egressProxyUrl),
-          "-t",
-          String(SAMPLE_SECONDS),
+          ...(startSeconds !== undefined && startSeconds > 0
+            ? ["-ss", String(startSeconds)]
+            : []),
           "-i",
           url,
           "-af",
@@ -135,7 +153,7 @@ export class LoudnessProfiler {
         ],
         {
           maxBuffer: 4 * 1024 * 1024,
-          timeout: 90_000,
+          timeout: 180_000,
           windowsHide: true,
           ...(env === undefined ? {} : { env }),
         },

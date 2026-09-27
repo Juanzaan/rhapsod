@@ -6,6 +6,7 @@ import type {
 } from "../media/youtube/yt-dlp.js";
 import type { YoutubeResource } from "../media/media-input.js";
 import type { Track } from "../domain/track.js";
+import { DuplicateTrackError } from "../domain/playback-queue.js";
 import { QueueLimitError, TrackQueue } from "./track-queue.js";
 import {
   AUTOPLAY_REQUESTER,
@@ -22,6 +23,7 @@ import {
 import { fetchAutoplayVideoId } from "../media/youtube/innertube-related.js";
 import type { createPcmStream, playFfmpegUrl } from "../audio/ffmpeg-player.js";
 import type { LoudnessProfiler } from "../audio/loudness-profiler.js";
+import type { NonMusicSegmentSource } from "../media/youtube/non-music-segments.js";
 import type { RhapsodOpusEncoder } from "../audio/opus-encoder.js";
 import type { VoiceFrameOutput } from "../audio/audio-player.js";
 import type { AudioPlayerMetrics } from "../audio/audio-player.js";
@@ -48,6 +50,7 @@ import {
 } from "../media/lyrics.js";
 import { parseMusicQuery } from "../lib/query-parser.js";
 import { UserError } from "../lib/user-error.js";
+import { isDrmError } from "../lib/drm-error.js";
 import { PreparedAudioStore } from "./prepared-audio-store.js";
 import {
   PlaybackController,
@@ -99,6 +102,7 @@ interface PlaybackServiceOptions {
   readonly proxyUrl?: string;
   readonly prewarmNext?: boolean;
   readonly loudnessProfiler?: LoudnessProfiler;
+  readonly nonMusicSegments?: NonMusicSegmentSource;
   readonly onPlaybackError?: (
     track: Track,
     error: Error,
@@ -270,6 +274,9 @@ export class YoutubePlaybackService {
       ...(options.loudnessProfiler === undefined
         ? {}
         : { loudnessProfiler: options.loudnessProfiler }),
+      ...(options.nonMusicSegments === undefined
+        ? {}
+        : { nonMusicSegments: options.nonMusicSegments }),
       ...(options.onPlaybackError === undefined
         ? {}
         : { onPlaybackError: options.onPlaybackError }),
@@ -716,10 +723,7 @@ export class YoutubePlaybackService {
         added++;
       } catch (error) {
         if (error instanceof QueueLimitError) break;
-        if (
-          error instanceof Error &&
-          /ya está en la cola/i.test(error.message)
-        ) {
+        if (error instanceof DuplicateTrackError) {
           continue;
         }
         throw error;
@@ -995,10 +999,7 @@ export class YoutubePlaybackService {
           halted = true;
           break;
         }
-        if (
-          error instanceof Error &&
-          /ya está en la cola/i.test(error.message)
-        ) {
+        if (error instanceof DuplicateTrackError) {
           duplicates++;
           continue;
         }
@@ -1104,10 +1105,7 @@ export class YoutubePlaybackService {
             halted = true;
             break;
           }
-          if (
-            error instanceof Error &&
-            /ya está en la cola/i.test(error.message)
-          ) {
+          if (error instanceof DuplicateTrackError) {
             duplicates++;
             continue;
           }
@@ -1186,10 +1184,7 @@ export class YoutubePlaybackService {
             halted = true;
             break;
           }
-          if (
-            error instanceof Error &&
-            /ya está en la cola/i.test(error.message)
-          ) {
+          if (error instanceof DuplicateTrackError) {
             duplicates++;
             continue;
           }
@@ -1700,8 +1695,4 @@ export class YoutubePlaybackService {
       return undefined;
     }
   }
-}
-
-function isDrmError(error: unknown): boolean {
-  return error instanceof Error && /DRM protected/i.test(error.message);
 }

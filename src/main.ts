@@ -45,9 +45,13 @@ import { DirectUrlClient } from "./media/direct-url.js";
 import { startEgressGuard } from "./lib/egress-guard.js";
 import { PlaybackMetrics } from "./observability/prometheus.js";
 import { LyricsClient } from "./media/lyrics.js";
+import { NonMusicSegments } from "./media/youtube/non-music-segments.js";
 import { SoundCloudPublicApi } from "./media/soundcloud/public-api.js";
 import { SpotifyApi } from "./media/spotify/api.js";
-import { createRhapsodLogger } from "./observability/logger.js";
+import {
+  createRhapsodLogger,
+  flushLoggerSync,
+} from "./observability/logger.js";
 import { MetricsCollector } from "./observability/metrics.js";
 import { startWatchdog, watchdogInterval } from "./watchdog.js";
 import {
@@ -77,6 +81,7 @@ async function main(): Promise<void> {
     logDir: join(dataDir, "logs"),
     retentionDays: config.RHAPSOD_LOG_RETENTION_DAYS,
   });
+  exits.setLogFlush(() => flushLoggerSync(logger));
   const metrics = new MetricsCollector();
   const playbackMetrics = new PlaybackMetrics();
   installCrashHandlers(logger, exits);
@@ -275,6 +280,9 @@ async function main(): Promise<void> {
       }),
     prewarmNext: true,
     loudnessProfiler,
+    ...(config.RHAPSOD_SKIP_NON_MUSIC
+      ? { nonMusicSegments: new NonMusicSegments({ logger }) }
+      : {}),
     encoder,
     ...createPlaybackEvents({
       listeningHistory,
@@ -622,9 +630,12 @@ async function main(): Promise<void> {
     playbackMetrics,
     radioTitles,
     resolver: ytDlpResolver,
+    reconnecting: () => reconnector.reconnecting,
     restart: () => shutdown(1),
     scrobbler,
     serverView,
+    youtubeAuthHealthy: () => youtubeAuthState.healthy,
+    ytdlpDaemon: () => ytDlpResolver.daemonHealth(),
   });
 
   let shutdownStarted = false;

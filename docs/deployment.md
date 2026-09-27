@@ -124,6 +124,10 @@ scrape_configs:
 
 `rhapsod_play_start_delay_seconds` and `rhapsod_handoff_gap_seconds` are histograms; `rhapsod_plays_total{reason="error"}` and `rhapsod_underruns_total` are counters. Counters restart at zero when the bot restarts.
 
+With a yt-dlp daemon configured, `rhapsod_ytdlp_daemon_up` drops to 0 while the daemon fails and `rhapsod_ytdlp_daemon_fallbacks_total` counts resolves that spawned yt-dlp instead. Songs still play in that state, only slower to start; the bot logs `yt-dlp daemon failed` at most once a minute and the daemon writes each failure to its journal (`journalctl -u rhapsod-ytdlp-daemon`).
+
+`GET /api/health` answers 503 while the bot is reconnecting to TeamSpeak and 200 otherwise. Its body also reports `reconnecting`, `youtubeAuthHealthy` and `ytdlpDaemon`; those two degrade the body but not the status code, so `scripts/deploy.sh` does not roll back over an expired YouTube login.
+
 ## Docker Compose (Linux)
 
 The Compose file starts separate bot and yt-dlp containers using Linux host networking. Both services bind to localhost; no panel port is published. This layout also lets the bot reach a TeamSpeak server or optional extraction services on the host.
