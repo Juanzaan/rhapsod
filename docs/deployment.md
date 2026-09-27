@@ -136,9 +136,17 @@ With a yt-dlp daemon configured, `rhapsod_ytdlp_daemon_up` drops to 0 while the 
 
 ## Docker Compose (Linux)
 
-The Compose file runs the published multi-architecture image `ghcr.io/juanzaan/rhapsod` (linux/amd64 and linux/arm64) as separate bot and yt-dlp containers, plus the bgutil POT provider, all on Linux host networking. Every service binds to localhost; no panel port is published. This layout also lets the bot reach a TeamSpeak server or optional extraction services on the host.
+The Compose file runs the multi-architecture image `ghcr.io/juanzaan/rhapsod` (linux/amd64 and linux/arm64) as separate bot and yt-dlp containers, plus the bgutil POT provider, all on Linux host networking. Every service binds to localhost; no panel port is published. This layout also lets the bot reach a TeamSpeak server or optional extraction services on the host.
 
-Copy `docker-compose.yml` to an empty directory and start it:
+The image is published from the first release after v4.0.0 on. Until then `docker compose pull` fails with `denied`, and the image has to be built from a checkout, or the bot installed with `install.sh` instead:
+
+```bash
+git clone https://github.com/Juanzaan/rhapsod.git && cd rhapsod
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+docker compose logs rhapsod
+```
+
+Once a release lists the image, copy `docker-compose.yml` to an empty directory and start it:
 
 ```bash
 docker compose up -d
@@ -157,13 +165,9 @@ docker compose exec rhapsod node dist/cli.js doctor
 docker compose exec rhapsod node dist/cli.js password
 ```
 
-WARP stays a host service. To build the image from a checkout instead of pulling it:
+WARP stays a host service.
 
-```bash
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
-```
-
-For updates, check idle state, back up the volume and run `docker compose pull && docker compose up -d`.
+For updates, check idle state, back up the volume and run `docker compose pull && docker compose up -d`. A build from a checkout updates with `git pull` and the `--build` command above.
 
 Installs made with the earlier Compose file kept `.env` and `data/` next to it. Move both into the volume once, with the old containers stopped:
 

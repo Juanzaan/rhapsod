@@ -136,9 +136,17 @@ Con un daemon de yt-dlp configurado, `rhapsod_ytdlp_daemon_up` baja a 0 mientras
 
 ## Docker Compose (Linux)
 
-El archivo de Compose ejecuta la imagen publicada multiarquitectura `ghcr.io/juanzaan/rhapsod` (linux/amd64 y linux/arm64) en contenedores separados para el bot y yt-dlp, junto con el proveedor POT de bgutil, todos con la red del host Linux. Cada servicio escucha en localhost; no se publica ningún puerto del panel. Esta configuración permite acceder a TeamSpeak o servicios auxiliares del host.
+El archivo de Compose ejecuta la imagen multiarquitectura `ghcr.io/juanzaan/rhapsod` (linux/amd64 y linux/arm64) en contenedores separados para el bot y yt-dlp, junto con el proveedor POT de bgutil, todos con la red del host Linux. Cada servicio escucha en localhost; no se publica ningún puerto del panel. Esta configuración permite acceder a TeamSpeak o servicios auxiliares del host.
 
-Copiar `docker-compose.yml` a un directorio vacío e iniciarlo:
+La imagen se publica a partir de la primera versión posterior a v4.0.0. Hasta entonces `docker compose pull` falla con `denied`, y hay que compilar la imagen desde un checkout o instalar el bot con `install.sh`:
+
+```bash
+git clone https://github.com/Juanzaan/rhapsod.git && cd rhapsod
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+docker compose logs rhapsod
+```
+
+Cuando una versión incluya la imagen, copiar `docker-compose.yml` a un directorio vacío e iniciarlo:
 
 ```bash
 docker compose up -d
@@ -157,13 +165,9 @@ docker compose exec rhapsod node dist/cli.js doctor
 docker compose exec rhapsod node dist/cli.js password
 ```
 
-WARP sigue siendo un servicio del host. Para compilar la imagen desde un checkout en lugar de descargarla:
+WARP sigue siendo un servicio del host.
 
-```bash
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
-```
-
-Para actualizar, comprobar reposo, respaldar el volumen y ejecutar `docker compose pull && docker compose up -d`.
+Para actualizar, comprobar reposo, respaldar el volumen y ejecutar `docker compose pull && docker compose up -d`. Una compilación desde un checkout se actualiza con `git pull` y el comando con `--build` de arriba.
 
 Las instalaciones hechas con el archivo de Compose anterior guardaban `.env` y `data/` junto a él. Moverlos al volumen una vez, con los contenedores anteriores detenidos:
 
