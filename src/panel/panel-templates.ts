@@ -268,6 +268,10 @@ export function renderDashboard(status: PanelStatus): string {
       ${SCENE_TOOLS_HTML}
     </header>
     <div class="g">
+      <section class="cd notices-card" id="noticesCard" aria-labelledby="noticesTitle" hidden>
+        <div class="ct"><span id="noticesTitle">Avisos</span><span class="rv" id="noticesCount"></span></div>
+        <ul class="notice-list" id="noticeList"></ul>
+      </section>
       <div class="cd player-card" id="playerCard" data-playing="${playerState === "playing"}">
         <div class="ct"><span><span class="section-no">01 /</span> En reproducción</span><span class="rv" id="nc2">Canal ${channel}</span></div>
         <div class="deck">

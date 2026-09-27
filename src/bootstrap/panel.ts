@@ -163,6 +163,9 @@ export function startConnectedPanel(
         requestedBy: track.requestedBy,
       })),
     errors: () => metrics.errorSummary(20),
+    ...(options.commandContext.notices === undefined
+      ? {}
+      : { notices: options.commandContext.notices }),
     metricsText: () =>
       renderPrometheus({
         counters: metrics.counters(),
