@@ -8,26 +8,22 @@ const script = resolve(import.meta.dirname, "../install.sh");
 // and network downloads. Skipped on Windows, like the deploy script tests.
 const describeUnix = describe.skipIf(process.platform === "win32");
 
-// The function and its arguments go through argv, never into the -c
-// string, so no test value is parsed as shell code.
+// The script runs the named function itself, so no shell command string is
+// built here and no test value is parsed as shell code.
 function run(
   args: readonly string[],
   env: Record<string, string> = {},
 ): { code: number | null; stdout: string } {
-  const result = spawnSync(
-    "bash",
-    ["-c", 'source "$0" && "$@"', script, ...args],
-    {
-      encoding: "utf8",
-      env: {
-        PATH: process.env.PATH ?? "",
-        RHAPSOD_INSTALL_FUNCTIONS_ONLY: "1",
-        // Never prompt, even when the suite runs from a terminal.
-        RHAPSOD_INSTALL_TTY: "/nonexistent/tty",
-        ...env,
-      },
+  const result = spawnSync("bash", [script, ...args], {
+    encoding: "utf8",
+    env: {
+      PATH: process.env.PATH ?? "",
+      RHAPSOD_INSTALL_FUNCTIONS_ONLY: "1",
+      // Never prompt, even when the suite runs from a terminal.
+      RHAPSOD_INSTALL_TTY: "/nonexistent/tty",
+      ...env,
     },
-  );
+  });
   return { code: result.status, stdout: result.stdout };
 }
 
