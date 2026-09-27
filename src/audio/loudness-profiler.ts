@@ -7,6 +7,9 @@ const execFileAsync = promisify(execFile);
 
 const DEFAULT_BINARY = "ffmpeg";
 const MEASURE_TTL_MS = 24 * 60 * 60 * 1000;
+// A failed measurement (timeout, 403, DRM) is not retried on every prefetch
+// of the same track: each attempt can hold an ffmpeg download for 180 s.
+const FAILURE_RETRY_MS = 60 * 60 * 1000;
 const MAX_ENTRIES = 500;
 const MAX_CONCURRENT = 2;
 // Linear two-pass gain is only safe when the true peak it checks covers the
@@ -75,6 +78,7 @@ export class LoudnessProfiler {
     { profile: LoudnessProfile; expiresAt: number }
   >();
   readonly #measuring = new Set<string>();
+  readonly #failedUntil = new Map<string, number>();
   #activeMeasurements = 0;
 
   constructor(options: LoudnessProfilerOptions = {}) {
@@ -112,6 +116,11 @@ export class LoudnessProfiler {
     if (durationSeconds > MAX_MEASURED_SECONDS) return;
     if (this.cached(source) !== undefined) return;
     if (this.#measuring.has(source)) return;
+    const retryAt = this.#failedUntil.get(source);
+    if (retryAt !== undefined) {
+      if (retryAt > Date.now()) return;
+      this.#failedUntil.delete(source);
+    }
     if (this.#activeMeasurements >= MAX_CONCURRENT) return;
     this.#measuring.add(source);
     this.#activeMeasurements++;
@@ -162,10 +171,14 @@ export class LoudnessProfiler {
     } catch {
       // A failed measurement (network, DRM, non-embeddable) is not fatal;
       // playback falls back to the single-pass filter.
+      this.#recordFailure(source);
       return;
     }
     const profile = parseLoudnessReport(stderr);
-    if (profile === undefined) return;
+    if (profile === undefined) {
+      this.#recordFailure(source);
+      return;
+    }
     this.#profiles.set(source, {
       expiresAt: Date.now() + MEASURE_TTL_MS,
       profile,
@@ -173,6 +186,14 @@ export class LoudnessProfiler {
     if (this.#profiles.size > MAX_ENTRIES) {
       const oldest = this.#profiles.keys().next().value;
       if (oldest !== undefined) this.#profiles.delete(oldest);
+    }
+  }
+
+  #recordFailure(source: string): void {
+    this.#failedUntil.set(source, Date.now() + FAILURE_RETRY_MS);
+    if (this.#failedUntil.size > MAX_ENTRIES) {
+      const oldest = this.#failedUntil.keys().next().value;
+      if (oldest !== undefined) this.#failedUntil.delete(oldest);
     }
   }
 }

@@ -46,6 +46,7 @@ Measured loudness normalization works for the first time: tracks with a loudness
 - `rhapsod restart` and `rhapsod backup` no longer treat a panel that does not answer as idle: with the bot running and the player unknown (panel disabled or down, or a password changed by `rhapsod password` and not loaded yet) they stop and ask for `--force` instead of cutting a song.
 - With `RHAPSOD_SKIP_NON_MUSIC=true`, the outro cut now also applies to the first song after the queue was idle and to a song resumed after a stall; before, only prewarmed songs stopped at the end of the music.
 - A clean stop (a deploy, `rhapsod update`, the panel's restart button) no longer counts toward the restart-loop notice; before, four deploys or panel restarts within 15 minutes opened it as critical and sent the admins a private message.
+- The delivered-loudness meter keeps its 400 ms blocks in a fixed 0.1 LU histogram instead of a list that grew for as long as a play lasted: a radio stream playing for a day made each metrics read rescan about 864,000 blocks. A read now costs the same after a minute or a week, with the same result within 0.05 LU. A loudness measurement that fails (timeout, 403) is not retried for an hour, instead of on every prefetch of the same track.
 
 ## Upgrade
 
