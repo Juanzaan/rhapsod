@@ -660,7 +660,7 @@ async function main(): Promise<void> {
     radioTitles,
     resolver: ytDlpResolver,
     reconnecting: () => reconnector.reconnecting,
-    restart: () => shutdown(1),
+    restart: () => shutdown(1, true),
     scrobbler,
     serverView,
     youtubeAuthHealthy: () => youtubeAuthState.healthy,
@@ -668,11 +668,14 @@ async function main(): Promise<void> {
   });
 
   let shutdownStarted = false;
-  const shutdown = (code: number): void => {
+  // The panel's restart exits 1 so systemd starts the bot again; it is
+  // still a clean stop, not a crash.
+  const shutdown = (code: number, clean = code === 0): void => {
     if (shutdownStarted) return;
     shutdownStarted = true;
     logger.info("Shutdown initiated; stopping playback and flushing state");
     shuttingDown = true;
+    if (clean) notices.cleanStop();
     playback.stop(false);
     encoder.close();
     stopHeartbeat();
