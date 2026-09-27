@@ -26,7 +26,13 @@ The active release line is **4.x**. The 1.x low-resource, 2.x deployment and 3.x
 
 ## Install
 
-For a supported Linux VPS, follow the [installation guide](docs/install.md). The installer creates systemd services and starts the local setup wizard.
+For a supported Linux VPS or home server, run the installer and answer its one question, the TeamSpeak server address:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Juanzaan/rhapsod/main/install.sh | sudo bash
+```
+
+The bot joins that server when the install ends. Send the `!claim <code>` it prints in TeamSpeak to become admin. The [installation guide](docs/install.md) covers the options and the optional web panel.
 
 For a manual checkout:
 
@@ -64,7 +70,7 @@ Open `http://127.0.0.1:8080/setup`. The full setting reference is [`.env.example
 !help
 ```
 
-Chat responses are in Spanish. Most commands are shared; skipping or removing another user's tracks requires an administrator listed in `RHAPSOD_ADMIN_UIDS`. Autoplay picks are communal. See the [command reference](docs/commands.md) for aliases, permissions and limits.
+Chat responses are in Spanish. Most commands are shared; skipping or removing another user's tracks requires an administrator listed in `RHAPSOD_ADMIN_UIDS`; on a new install, `!claim <code>` with the code the installer prints makes the owner the first one. Autoplay picks are communal. See the [command reference](docs/commands.md) for aliases, permissions and limits.
 
 ## Operate and update
 

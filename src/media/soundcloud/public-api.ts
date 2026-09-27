@@ -2,6 +2,7 @@ import { readJsonFile, writeFileAtomic } from "../../lib/json-file-store.js";
 import type { MinimalLogger } from "../../observability/logger.js";
 import { noopLogger } from "../../observability/logger.js";
 import type { YoutubeTrackMetadata } from "../youtube/yt-dlp.js";
+import { DrmProtectedError } from "../../lib/drm-error.js";
 
 const HOME_URL = "https://soundcloud.com/";
 const API_URL = "https://api-v2.soundcloud.com";
@@ -35,7 +36,7 @@ export interface SoundCloudDrmMetadata {
   readonly title: string;
 }
 
-export class SoundCloudDrmError extends Error {
+export class SoundCloudDrmError extends DrmProtectedError {
   constructor(readonly metadata: SoundCloudDrmMetadata) {
     super("This SoundCloud track is DRM protected or blocked");
     this.name = "SoundCloudDrmError";

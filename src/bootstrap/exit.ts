@@ -15,6 +15,7 @@ export interface ExitCoordinatorOptions {
  */
 export class ExitCoordinator {
   #flush: (() => Promise<void>) | undefined;
+  #flushLogs: (() => void) | undefined;
   readonly #exit: (code: number) => void;
   readonly #flushTimeoutMs: number;
 
@@ -25,6 +26,11 @@ export class ExitCoordinator {
 
   setFlush(flush: (() => Promise<void>) | undefined): void {
     this.#flush = flush;
+  }
+
+  /** Runs after the state flush, right before exiting, so it logs last. */
+  setLogFlush(flushLogs: (() => void) | undefined): void {
+    this.#flushLogs = flushLogs;
   }
 
   async exit(code: number): Promise<void> {
@@ -40,6 +46,11 @@ export class ExitCoordinator {
         }),
       ]);
       clearTimeout(timer);
+    }
+    try {
+      this.#flushLogs?.();
+    } catch {
+      // Losing log lines must not keep a crashing process alive.
     }
     this.#exit(code);
   }

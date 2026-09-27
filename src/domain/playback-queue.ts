@@ -1,4 +1,13 @@
+import { messages } from "../lib/messages.js";
+import { UserError } from "../lib/user-error.js";
 import type { Track, TrackId } from "./track.js";
+
+export class DuplicateTrackError extends UserError {
+  constructor(readonly trackId: TrackId) {
+    super(messages.errorCancionYaEnCola);
+    this.name = "DuplicateTrackError";
+  }
+}
 
 export class PlaybackQueue {
   readonly #tracks: Track[] = [];
@@ -9,7 +18,7 @@ export class PlaybackQueue {
 
   add(track: Track): void {
     if (this.#tracks.some((queuedTrack) => queuedTrack.id === track.id)) {
-      throw new Error("Esa canción ya está en la cola.");
+      throw new DuplicateTrackError(track.id);
     }
     this.#tracks.push(track);
   }

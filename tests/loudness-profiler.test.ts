@@ -65,6 +65,25 @@ describe("LoudnessProfiler", () => {
     );
   });
 
+  it("measures from the music start when an intro is trimmed", async () => {
+    const execFile = vi.fn(() => Promise.resolve(MEASURED));
+    const profiler = new LoudnessProfiler({ execFile });
+    profiler.measure(
+      "https://youtu.be/abc",
+      "https://media.example/abc",
+      200,
+      14,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const args =
+      ((execFile.mock.calls[0] as unknown[] | undefined)?.[1] as
+        string[] | undefined) ?? [];
+    expect(args.slice(0, args.indexOf("-i"))).toEqual(
+      expect.arrayContaining(["-ss", "14"]),
+    );
+  });
+
   it("asks ffmpeg for the info-level report and ignores silent input", async () => {
     // With -loglevel error ffmpeg never printed the report, so no profile
     // was ever cached and every track fell back to single-pass loudnorm.
