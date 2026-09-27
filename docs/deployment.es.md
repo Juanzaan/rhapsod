@@ -132,13 +132,21 @@ scrape_configs:
 
 Con un daemon de yt-dlp configurado, `rhapsod_ytdlp_daemon_up` baja a 0 mientras el daemon falla y `rhapsod_ytdlp_daemon_fallbacks_total` cuenta las resoluciones que lanzaron yt-dlp en su lugar. En ese estado las canciones siguen sonando, pero tardan más en empezar; el bot registra `yt-dlp daemon failed` como máximo una vez por minuto y el daemon escribe cada falla en su journal (`journalctl -u rhapsod-ytdlp-daemon`).
 
-`GET /api/health` responde 503 mientras el bot se reconecta a TeamSpeak y 200 en cualquier otro caso. El cuerpo también informa `reconnecting`, `youtubeAuthHealthy` e `ytdlpDaemon`; esos dos últimos degradan el cuerpo pero no el código de estado, así que `scripts/deploy.sh` no revierte por un inicio de sesión de YouTube vencido.
+`GET /api/health` responde 503 mientras el bot se reconecta a TeamSpeak y 200 en cualquier otro caso. El cuerpo también informa `reconnecting`, `youtubeAuthHealthy` e `ytdlpDaemon`; esos dos últimos degradan el cuerpo pero no el código de estado, así que `scripts/deploy.sh` no revierte por un inicio de sesión de YouTube vencido. El cuerpo también trae `verdict` según los avisos abiertos (`ok`, `degraded` con un aviso de error, `unhealthy` con uno crítico; los avisos ignorados no cuentan) y `openNotices`. El veredicto tampoco cambia el código de estado: un aviso crítico persistente haría revertir cada despliegue, incluso el que lo arregla. `rhapsod doctor` advierte con `degraded` y falla con `unhealthy`.
 
 ## Docker Compose (Linux)
 
-El archivo de Compose ejecuta la imagen publicada multiarquitectura `ghcr.io/juanzaan/rhapsod` (linux/amd64 y linux/arm64) en contenedores separados para el bot y yt-dlp, junto con el proveedor POT de bgutil, todos con la red del host Linux. Cada servicio escucha en localhost; no se publica ningún puerto del panel. Esta configuración permite acceder a TeamSpeak o servicios auxiliares del host.
+El archivo de Compose ejecuta la imagen multiarquitectura `ghcr.io/juanzaan/rhapsod` (linux/amd64 y linux/arm64) en contenedores separados para el bot y yt-dlp, junto con el proveedor POT de bgutil, todos con la red del host Linux. Cada servicio escucha en localhost; no se publica ningún puerto del panel. Esta configuración permite acceder a TeamSpeak o servicios auxiliares del host.
 
-Copiar `docker-compose.yml` a un directorio vacío e iniciarlo:
+La imagen se publica a partir de la primera versión posterior a v4.0.0. Hasta entonces `docker compose pull` falla con `denied`, y hay que compilar la imagen desde un checkout o instalar el bot con `install.sh`:
+
+```bash
+git clone https://github.com/Juanzaan/rhapsod.git && cd rhapsod
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+docker compose logs rhapsod
+```
+
+Cuando una versión incluya la imagen, copiar `docker-compose.yml` a un directorio vacío e iniciarlo:
 
 ```bash
 docker compose up -d
@@ -157,13 +165,9 @@ docker compose exec rhapsod node dist/cli.js doctor
 docker compose exec rhapsod node dist/cli.js password
 ```
 
-WARP sigue siendo un servicio del host. Para compilar la imagen desde un checkout en lugar de descargarla:
+WARP sigue siendo un servicio del host.
 
-```bash
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
-```
-
-Para actualizar, comprobar reposo, respaldar el volumen y ejecutar `docker compose pull && docker compose up -d`.
+Para actualizar, comprobar reposo, respaldar el volumen y ejecutar `docker compose pull && docker compose up -d`. Una compilación desde un checkout se actualiza con `git pull` y el comando con `--build` de arriba.
 
 Las instalaciones hechas con el archivo de Compose anterior guardaban `.env` y `data/` junto a él. Moverlos al volumen una vez, con los contenedores anteriores detenidos:
 

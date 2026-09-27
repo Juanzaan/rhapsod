@@ -91,22 +91,42 @@ ffmpeg -version
 ffprobe -version
 ```
 
-Confirmar que el bot entra en su canal, solicitar una pista con `!play` y revisar `!stats`. En instalaciones con el script, ejecutar `rhapsod doctor`: imprime una línea `ok`, `WARN` o `FAIL` por comprobación (servicios, Node.js, FFmpeg, yt-dlp, puertos del daemon y del POT, panel en loopback, TeamSpeak, YouTube, disco, reloj) y termina con código distinto de cero cuando falla alguna.
+Confirmar que el bot entra en su canal, solicitar una pista con `!play` y revisar `!stats`. En instalaciones con el script, ejecutar `rhapsod doctor`: imprime una línea `ok`, `WARN` o `FAIL` por comprobación (servicios, Node.js, FFmpeg, yt-dlp, puertos del daemon y del POT, panel en loopback, TeamSpeak, YouTube, avisos abiertos, disco, reloj) y termina con código distinto de cero cuando falla alguna.
 
 ## El comando rhapsod
 
 El instalador agrega `/usr/local/bin/rhapsod` y registra la instalación en `/etc/rhapsod/install.conf` (`APP_DIR`, `APP_USER`, `NODE_BIN`). Pide sudo una vez, porque el archivo de entorno pertenece al usuario del servicio.
 
-| Comando            | Efecto                                                                                                                                                              |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `rhapsod status`   | Estado de los servicios y del reproductor, conexión con TeamSpeak, un código de `!claim` pendiente y el comando del túnel SSH para el panel. `--json` para scripts. |
-| `rhapsod doctor`   | Las comprobaciones anteriores, con el arreglo de cada falla. No imprime secretos.                                                                                   |
-| `rhapsod password` | Escribe un `RHAPSOD_PANEL_PASSWORD` aleatorio nuevo y lo imprime.                                                                                                   |
-| `rhapsod restart`  | Reinicia el bot cuando el reproductor está en espera; `--force` reinicia durante la reproducción.                                                                   |
-| `rhapsod logs [N]` | Sigue el journal del bot y del daemon desde N líneas atrás (100 por defecto).                                                                                       |
-| `rhapsod version`  | Versión instalada.                                                                                                                                                  |
+| Comando             | Efecto                                                                                                                                                               |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rhapsod status`    | Estado de los servicios y del reproductor, conexión con TeamSpeak, un código de `!claim` pendiente y el comando del túnel SSH para el panel. `--json` para scripts.  |
+| `rhapsod doctor`    | Las comprobaciones anteriores, con el arreglo de cada falla. No imprime secretos.                                                                                    |
+| `rhapsod password`  | Escribe un `RHAPSOD_PANEL_PASSWORD` aleatorio nuevo y lo imprime.                                                                                                    |
+| `rhapsod restart`   | Reinicia el bot cuando el reproductor está en espera; `--force` reinicia durante la reproducción.                                                                    |
+| `rhapsod logs [N]`  | Sigue el journal del bot y del daemon desde N líneas atrás (100 por defecto).                                                                                        |
+| `rhapsod version`   | Versión instalada.                                                                                                                                                   |
+| `rhapsod backup`    | Detiene el bot unos segundos y archiva `data/` y `.env` en `/home/rhapsod/backups`. Se niega durante la reproducción salvo con `--force`.                            |
+| `rhapsod update`    | Hace un backup, instala la última versión publicada (o `--ref REF`), espera a que el bot arranque sano y vuelve atrás solo si no arranca.                            |
+| `rhapsod rollback`  | Reinstala la versión que reemplazó el último `update`. Un segundo `rollback` vuelve hacia adelante.                                                                  |
+| `rhapsod uninstall` | Quita los servicios, la tarea de cron, `/etc/rhapsod` y el comando, después de un último backup. `--purge` también quita el usuario `rhapsod` y su carpeta personal. |
 
 Sin el instalador (Docker, instalaciones manuales), las mismas comprobaciones se ejecutan desde el checkout: `node dist/cli.js status`, `doctor`, `password` o `version`, con `RHAPSOD_ENV_FILE` apuntando al archivo de entorno cuando no es `./.env`.
+
+### Actualizaciones, backups y desinstalación
+
+`rhapsod update` y `rollback` esperan a que no haya nada sonando; `backup` se niega durante la reproducción. `--force` omite esa comprobación. Los backups comparten carpeta con `scripts/deploy.sh`; se conservan los cinco más nuevos. Para restaurar uno:
+
+```bash
+sudo systemctl stop rhapsod
+sudo tar -xzf /home/rhapsod/backups/rhapsod-<fecha>-<commit>.tar.gz -C /home/rhapsod/rhapsod
+sudo systemctl start rhapsod
+```
+
+`update` reemplaza el código del bot, no las unidades de systemd ni los otros componentes. Cuando las notas de la versión indican que cambió el instalador, volver a ejecutar `install.sh`; conserva `.env` y los datos.
+
+`rollback` restaura solo el código; los datos quedan como los dejó la versión más nueva. Si esa versión cambió el formato de los datos, restaurar el backup tomado antes de la actualización como se muestra arriba.
+
+`rhapsod uninstall --purge --yes` se ejecuta sin preguntar. El último backup queda en `/var/backups/rhapsod`, porque `--purge` borra la carpeta personal. Node.js, FFmpeg, yt-dlp y WARP quedan instalados, porque otros programas pueden usarlos.
 
 ## Resolución de problemas
 

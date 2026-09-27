@@ -226,6 +226,20 @@ describe("NoticeRegistry", () => {
     expect(reloaded.recordStart()).toHaveLength(2);
   });
 
+  it("does not count a start that ended in a clean stop", async () => {
+    const time = clock();
+    const filePath = tempFile();
+    for (let i = 0; i < 5; i++) {
+      const registry = new NoticeRegistry({ filePath, now: time.now });
+      registry.recordStart();
+      registry.recordCleanStop();
+      await registry.flush();
+      time.advance(MINUTE);
+    }
+    const registry = new NoticeRegistry({ filePath, now: time.now });
+    expect(registry.recordStart()).toEqual([time.now()]);
+  });
+
   it("forgets starts older than an hour", () => {
     const time = clock();
     const registry = new NoticeRegistry({ now: time.now });

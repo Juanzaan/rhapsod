@@ -65,7 +65,7 @@ export interface CommandContext {
   youtubeAuthHealthy: boolean;
   readonly youtubeAuthFailure?: YoutubeAuthFailureCategory | undefined;
   /** Absent in setup mode, where no detector runs. */
-  readonly notices?: Pick<NoticeRegistry, "ignore" | "list">;
+  readonly notices?: Pick<NoticeRegistry, "ignore" | "list" | "verdict">;
 }
 
 export interface CommandSender {

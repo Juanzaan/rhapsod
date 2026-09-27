@@ -1,8 +1,10 @@
-# Runs the published image. The first start writes data/.env inside the
-# rhapsod-data volume and prints the panel password to the bot's log:
-#   docker compose up -d && docker compose logs rhapsod
-# To build from this checkout instead, add docker-compose.dev.yml:
+# Runs the published image, which exists from the first release after
+# v4.0.0 on; before that, pulling fails with "denied" and the image has to
+# be built from this checkout with docker-compose.dev.yml:
 #   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+# The first start writes data/.env inside the rhapsod-data volume and prints
+# the panel password to the bot's log:
+#   docker compose up -d && docker compose logs rhapsod
 services:
   rhapsod:
     image: ghcr.io/juanzaan/rhapsod:${RHAPSOD_VERSION:-4}

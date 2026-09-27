@@ -238,15 +238,36 @@ fi
 
 # --- Static FFmpeg ------------------------------------------------------------
 log "Installing static FFmpeg"
-FFMPEG_NAME="ffmpeg-release-${FFMPEG_ARCH}-static.tar.xz"
-FFMPEG_URL="https://johnvansickle.com/ffmpeg/releases/$FFMPEG_NAME"
-curl -fL "$FFMPEG_URL" -o "$WORK_DIR/$FFMPEG_NAME"
-# This mirror only publishes an MD5: it catches corrupt or swapped
-# downloads, not a compromised host.
-curl -fsSL "$FFMPEG_URL.md5" -o "$WORK_DIR/ffmpeg.md5"
-verify_checksum "$WORK_DIR/$FFMPEG_NAME" "$FFMPEG_NAME" "$WORK_DIR/ffmpeg.md5" md5sum
+# Two sources: johnvansickle.com is a single host that has been unreachable
+# for minutes at a time, BtbN's builds on GitHub are the fallback. Both
+# layouts are flattened into $WORK_DIR/ffmpeg.
+case "$FFMPEG_ARCH" in amd64) BTBN_ARCH="linux64" ;; *) BTBN_ARCH="linuxarm64" ;; esac
+ffmpeg_from_johnvansickle() {
+  local name="ffmpeg-release-${FFMPEG_ARCH}-static.tar.xz"
+  local url="https://johnvansickle.com/ffmpeg/releases/$name"
+  curl -fL --connect-timeout 20 --retry 2 "$url" -o "$WORK_DIR/$name" || return 1
+  # This mirror only publishes an MD5: it catches corrupt or swapped
+  # downloads, not a compromised host.
+  curl -fsSL --connect-timeout 20 --retry 2 "$url.md5" -o "$WORK_DIR/ffmpeg.md5" || return 1
+  verify_checksum "$WORK_DIR/$name" "$name" "$WORK_DIR/ffmpeg.md5" md5sum
+  tar -xJf "$WORK_DIR/$name" -C "$WORK_DIR/ffmpeg" --strip-components=1
+}
+ffmpeg_from_btbn() {
+  local release="https://github.com/BtbN/FFmpeg-Builds/releases/download/latest" name
+  curl -fsSL --retry 2 "$release/checksums.sha256" -o "$WORK_DIR/ffmpeg.sha256" || return 1
+  # Newest numbered release build (not master), static GPL variant.
+  name="$(grep -oE "ffmpeg-n[0-9.]+-latest-$BTBN_ARCH-gpl-[0-9.]+\.tar\.xz" "$WORK_DIR/ffmpeg.sha256" | sort -V | tail -1)"
+  [[ -n "$name" ]] || return 1
+  curl -fL --retry 2 "$release/$name" -o "$WORK_DIR/$name" || return 1
+  verify_checksum "$WORK_DIR/$name" "$name" "$WORK_DIR/ffmpeg.sha256"
+  tar -xJf "$WORK_DIR/$name" -C "$WORK_DIR/ffmpeg" --strip-components=2 --wildcards '*/bin/ffmpeg' '*/bin/ffprobe'
+}
 mkdir "$WORK_DIR/ffmpeg"
-tar -xJf "$WORK_DIR/$FFMPEG_NAME" -C "$WORK_DIR/ffmpeg" --strip-components=1
+if ! ffmpeg_from_johnvansickle; then
+  warn "johnvansickle.com did not answer; downloading FFmpeg from BtbN's GitHub builds"
+  rm -rf "$WORK_DIR/ffmpeg" && mkdir "$WORK_DIR/ffmpeg"
+  ffmpeg_from_btbn || fail "could not download FFmpeg from either source"
+fi
 install -m 0755 "$WORK_DIR/ffmpeg/ffmpeg" /usr/local/bin/ffmpeg
 install -m 0755 "$WORK_DIR/ffmpeg/ffprobe" /usr/local/bin/ffprobe
 /usr/local/bin/ffmpeg -version 2>&1 | head -1
