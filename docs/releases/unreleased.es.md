@@ -18,10 +18,12 @@ La normalización de volumen medida funciona por primera vez: los temas con un p
 - Panel: la página Servidor ya no reconstruye el árbol de canales cada 2,5 segundos cuando nada cambió, algo que cortaba las transiciones al pasar el puntero. Con el sistema en movimiento reducido solo se detienen el fondo y el tocadiscos; la respuesta a clics y al puntero se mantiene.
 - Panel: los estados del reproductor se muestran en español (SONANDO, EN PAUSA, CARGANDO, EN ESPERA), y el asistente de instalación indica usar `!claim` para el primer administrador, con el campo de UIDs de administrador en una sección avanzada.
 - Agregar `RHAPSOD_SKIP_NON_MUSIC` (por defecto `false`): los videoclips de YouTube empiezan donde empieza la música y terminan donde termina, según los tramos sin música (intros habladas, escenas, créditos) que los usuarios de SponsorBlock marcan con la categoría `music_offtopic`. Solo se cortan una intro y un final, nunca un tramo del medio, y se ignora un corte que dejaría menos de la mitad de la pista o menos de 30 segundos. La consulta envía un prefijo de 4 caracteres del SHA-256 del id del video, espera como máximo 1,5 segundos y corre en paralelo con la URL de audio; si falla, la pista suena completa.
+- Una instalación nueva pregunta por el servidor de TeamSpeak y el bot entra al terminar, sin pasar por el panel web. El instalador muestra un código de un solo uso; `!claim <código>` en TeamSpeak convierte a quien lo envía en el primer administrador y guarda su UID en `RHAPSOD_ADMIN_UIDS`, que los dueños nuevos no podían completar porque no conocen su UID de TeamSpeak.
+- El instalador ya no agrega Cloudflare WARP salvo con `RHAPSOD_WITH_WARP=1`; repetirlo conserva una instalación de WARP existente. Cuando falla la comprobación diaria de YouTube, `!stats` indica el arreglo según el tipo de falla: WARP para una dirección de servidor bloqueada, cookies cuando pide iniciar sesión.
 
 ## Actualización
 
-No se requieren acciones además de los pasos de actualización de v4.0.0. `RHAPSOD_LOUDNESS_TARGET_LUFS` mantiene su significado y su valor por defecto (-14). `RHAPSOD_SKIP_NON_MUSIC` queda desactivado salvo que se defina en `true`.
+No se requieren acciones además de los pasos de actualización de v4.0.0. Las instalaciones con `RHAPSOD_ADMIN_UIDS` configurado nunca ven un código de `!claim`. `RHAPSOD_LOUDNESS_TARGET_LUFS` mantiene su significado y su valor por defecto (-14). `RHAPSOD_SKIP_NON_MUSIC` queda desactivado salvo que se defina en `true`.
 
 ## Verificación
 
