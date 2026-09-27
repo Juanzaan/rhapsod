@@ -1,9 +1,10 @@
 name: Install E2E
 
-# Runs install.sh on a fresh runner the way a new owner would on a clean
-# VPS, against a real TeamSpeak server in a container (3, and the official
-# 6 beta), then checks that the bot joined, the panel answers and
-# `rhapsod doctor` reports no failure.
+# Runs install.sh the way a new owner would on a clean VPS: on fresh Ubuntu
+# runners, and on Debian and RHEL-family machines booted in containers.
+# Each run joins a real TeamSpeak server in a container (3, and the
+# official 6 beta) and checks that the panel answers and `rhapsod doctor`
+# reports no failure.
 on:
   pull_request:
     branches: [main]
@@ -198,4 +199,80 @@ jobs:
         if: failure()
         run: |
           sudo journalctl -u rhapsod -u rhapsod-ytdlp-daemon -u bgutil-pot-provider --no-pager -n 300 || true
+          docker logs ts 2>&1 | tail -50 || true
+
+  # GitHub has no Debian or RHEL-family runners, so these run the installer
+  # inside a container booted with systemd, on an Ubuntu host that runs the
+  # TeamSpeak server. Oracle Linux is what OCI's free tier offers.
+  install-distro:
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ["debian:12", "rockylinux/rockylinux:9", "oraclelinux:9"]
+    name: install (${{ matrix.image }}, ts3)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Start a TeamSpeak 3 server
+        run: |
+          docker run -d --name ts --network host -e TS3SERVER_LICENSE=accept teamspeak:3.13
+          for _ in $(seq 1 90); do
+            if (: </dev/tcp/127.0.0.1/10011) 2>/dev/null; then exit 0; fi
+            sleep 2
+          done
+          docker logs ts
+          exit 1
+
+      # systemd, sudo and git are the only additions to the base image: a
+      # cloud image has all three. git reads the checkout, owned by the
+      # runner's user, only with safe.directory.
+      - name: Boot a clean ${{ matrix.image }} machine
+        run: |
+          git branch -f e2e HEAD
+          sudo cp -a "$GITHUB_WORKSPACE" /opt/rhapsod-src
+          sudo chmod -R a+rX /opt/rhapsod-src
+          docker build -t e2e-os - <<DOCKERFILE
+          FROM ${{ matrix.image }}
+          RUN if command -v apt-get >/dev/null; then \
+                apt-get update && apt-get install -y systemd systemd-sysv sudo git procps; \
+              else \
+                dnf install -y systemd sudo git procps-ng; \
+              fi
+          RUN git config --system --add safe.directory '*'
+          STOPSIGNAL SIGRTMIN+3
+          CMD ["/sbin/init"]
+          DOCKERFILE
+          docker run -d --name os --privileged --network host \
+            --tmpfs /run --tmpfs /run/lock \
+            -v /opt/rhapsod-src:/opt/rhapsod-src:ro e2e-os
+          docker exec os systemctl is-system-running --wait || true
+          cat > "$RUNNER_TEMP/wait-connected" <<'SH'
+          for _ in $(seq 1 100); do
+            docker exec os rhapsod status 2>/dev/null | grep -q 'TeamSpeak:  connected' && exit 0
+            sleep 3
+          done
+          docker exec os rhapsod status
+          exit 1
+          SH
+
+      - name: Install
+        run: |
+          docker exec -e RHAPSOD_REPOSITORY=/opt/rhapsod-src -e RHAPSOD_REF=e2e \
+            -e RHAPSOD_TS3_HOST=127.0.0.1 os bash /opt/rhapsod-src/install.sh 2>&1 | tee install.log
+
+      - name: Check the bot
+        run: |
+          grep -q 'The bot is in your TeamSpeak server.' install.log
+          bash "$RUNNER_TEMP/wait-connected"
+          docker exec os rhapsod doctor
+
+      - name: Logs
+        if: failure()
+        run: |
+          docker exec os journalctl -u rhapsod -u rhapsod-ytdlp-daemon -u bgutil-pot-provider --no-pager -n 300 || true
+          docker exec os systemctl --failed --no-pager || true
           docker logs ts 2>&1 | tail -50 || true
