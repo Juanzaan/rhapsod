@@ -1,0 +1,150 @@
+name: Image
+
+# Publishes ghcr.io/juanzaan/rhapsod for linux/amd64 and linux/arm64, each
+# built on its own runner (no QEMU), then joined into one manifest tagged
+# 4.1.2, 4.1, 4 and latest. Called by the release workflow for each new
+# tag; the weekly run rebuilds the latest release with the newest yt-dlp,
+# since YouTube changes break older yt-dlp versions within weeks.
+on:
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to build (empty for the latest release)
+        type: string
+        required: false
+  schedule:
+    - cron: "23 5 * * 1"
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: image
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/juanzaan/rhapsod
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+      ytdlp: ${{ steps.resolve.outputs.ytdlp }}
+    steps:
+      - id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          tag="$INPUT_TAG"
+          if [ -z "$tag" ]; then
+            tag="$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)"
+          fi
+          if ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::not a release tag: $tag"
+            exit 1
+          fi
+          ytdlp="$(curl -fsSL https://pypi.org/pypi/yt-dlp/json | jq -r .info.version)"
+          if ! [[ "$ytdlp" =~ ^[0-9]+(\.[0-9]+)+$ ]]; then
+            echo "::error::unexpected yt-dlp version: $ytdlp"
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "ytdlp=$ytdlp" >> "$GITHUB_OUTPUT"
+          echo "Building $tag with yt-dlp $ytdlp" >> "$GITHUB_STEP_SUMMARY"
+
+  build:
+    needs: resolve
+    strategy:
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+            arch: amd64
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.resolve.outputs.tag }}
+      # The weekly run starts from main; the label names the tag's commit.
+      - id: revision
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          build-args: YTDLP_VERSION=${{ needs.resolve.outputs.ytdlp }}
+          labels: |
+            org.opencontainers.image.version=${{ needs.resolve.outputs.tag }}
+            org.opencontainers.image.revision=${{ steps.revision.outputs.sha }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+      - name: Export digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/digests"
+          touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: digest-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          retention-days: 1
+
+  publish:
+    needs: [resolve, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: digest-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/digests
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=semver,pattern={{version}},value=${{ needs.resolve.outputs.tag }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.resolve.outputs.tag }}
+            type=semver,pattern={{major}},value=${{ needs.resolve.outputs.tag }}
+            type=raw,value=latest
+      - name: Join the platform images
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          # shellcheck disable=SC2046 # one argument per tag and per digest.
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf "$IMAGE@sha256:%s " *)
+      - name: Check both platforms
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          docker buildx imagetools inspect "$IMAGE:$VERSION" | tee manifest.txt
+          grep -q 'linux/amd64' manifest.txt
+          grep -q 'linux/arm64' manifest.txt
