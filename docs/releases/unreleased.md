@@ -33,6 +33,7 @@ Measured loudness normalization works for the first time: tracks with a loudness
 - The installer failed on a server where the service user did not exist yet: installing the daemon's Python packages created `/home/rhapsod` as root before `useradd`, and cloning the POT provider into it was denied. The user is now created first, and a rerun fixes a home left owned by root. A new CI workflow installs on fresh Ubuntu 22.04, 24.04 and arm64 runners against a TeamSpeak 3 server to catch this kind of failure.
 - On a fresh install YouTube failed until cookies were loaded: the installer and the Docker image create an empty `youtube-cookies.txt`, and yt-dlp rejects an empty file as "not a Netscape format cookies file". The bot and the yt-dlp daemon now skip a missing or empty cookie file, and the panel no longer reports it as broken.
 - `rhapsod backup`, `rhapsod update`, `rhapsod rollback` and `rhapsod uninstall`. `update` installs the latest release through `scripts/deploy.sh`, so it waits for idle, backs up and rolls back when the new version does not come up healthy; `rollback` returns to the version the last update replaced. `uninstall --purge` also removes the service user and its home, after a last backup in `/var/backups/rhapsod`. The installer test in CI now runs all four, including an update to a version that crashes on start.
+- The installer no longer fails when johnvansickle.com, the only FFmpeg source, does not answer: it retries, then falls back to the static builds BtbN publishes on GitHub (checked by SHA-256).
 
 ## Upgrade
 
