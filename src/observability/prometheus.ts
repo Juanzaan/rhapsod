@@ -14,6 +14,12 @@ const LATENCY_BUCKETS = [0.1, 0.25, 0.5, 1, 2, 4, 8, 16, 32, 64];
 const GAP_BUCKETS = [
   0.01, 0.02, 0.04, 0.08, 0.16, 0.32, 0.64, 1.28, 2.56, 5.12,
 ];
+// LUFS and dBTP of what plays sent, for tuning the loudness chain around its
+// -14 LUFS default and -1.5 dBFS limiter ceiling.
+const DELIVERED_LOUDNESS_BUCKETS = [
+  -30, -26, -23, -20, -18, -16, -15, -14, -13, -12, -10,
+];
+const DELIVERED_PEAK_BUCKETS = [-6, -3, -2, -1.5, -1, -0.5, 0, 0.5, 1];
 const TICK_LATENESS_BUCKETS = TICK_LATENESS_BOUNDS_MS.map((ms) => ms / 1_000);
 
 class Histogram {
@@ -70,6 +76,8 @@ export class PlaybackMetrics {
   readonly #commandToFirstAudio = new Histogram(LATENCY_BUCKETS);
   readonly #handoffs = { cold: 0, prewarmed: 0 };
   readonly #tickLateness = new Histogram(TICK_LATENESS_BUCKETS);
+  readonly #deliveredLoudness = new Histogram(DELIVERED_LOUDNESS_BUCKETS);
+  readonly #deliveredPeak = new Histogram(DELIVERED_PEAK_BUCKETS);
   #clockSlips = 0;
   #underruns = 0;
   #rebuffers = 0;
@@ -82,6 +90,11 @@ export class PlaybackMetrics {
     this.#plays.set(reason, (this.#plays.get(reason) ?? 0) + 1);
     this.#underruns += metrics.underruns;
     this.#rebuffers += metrics.rebufferEvents;
+    const delivered = metrics.delivered;
+    if (delivered?.integratedLufs !== undefined)
+      this.#deliveredLoudness.observe(delivered.integratedLufs);
+    if (delivered?.truePeakDbtp !== undefined)
+      this.#deliveredPeak.observe(delivered.truePeakDbtp);
     const timing = metrics.clockTiming;
     if (timing !== undefined) {
       this.#tickLateness.addCounts(
@@ -145,6 +158,14 @@ export class PlaybackMetrics {
       ...this.#tickLateness.lines(
         "rhapsod_frame_tick_lateness_seconds",
         "How late each 20 ms audio tick fired against its deadline.",
+      ),
+      ...this.#deliveredLoudness.lines(
+        "rhapsod_delivered_loudness_lufs",
+        "Integrated BS.1770 loudness each play sent, before the !volume gain.",
+      ),
+      ...this.#deliveredPeak.lines(
+        "rhapsod_delivered_true_peak_dbtp",
+        "BS.1770 true peak each play sent, before the !volume gain.",
       ),
       "# HELP rhapsod_clock_slips_total Audio ticks more than a frame late, where the clock dropped its base.",
       "# TYPE rhapsod_clock_slips_total counter",

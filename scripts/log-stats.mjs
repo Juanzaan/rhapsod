@@ -156,6 +156,8 @@ export function analyzeLogs(lines) {
   const startDelayMs = [];
   const handoffGapMs = [];
   const interTrackGapMs = [];
+  const deliveredLufs = [];
+  const deliveredTruePeak = [];
   const underrunsPerPlay = [];
   const rebuffersPerPlay = [];
   const handoffs = { prewarmed: 0, cold: 0 };
@@ -212,6 +214,10 @@ export function analyzeLogs(lines) {
         handoffGapMs.push(record.handoffGapMs);
       if (typeof record.interTrackGapMs === "number")
         interTrackGapMs.push(record.interTrackGapMs);
+      if (typeof record.delivered?.integratedLufs === "number")
+        deliveredLufs.push(record.delivered.integratedLufs);
+      if (typeof record.delivered?.truePeakDbtp === "number")
+        deliveredTruePeak.push(record.delivered.truePeakDbtp);
       if (record.coldStart === false) {
         if (record.prewarmed === true) handoffs.prewarmed++;
         else handoffs.cold++;
@@ -295,6 +301,8 @@ export function analyzeLogs(lines) {
       startDelayMs: summarize(startDelayMs),
       handoffGapMs: summarize(handoffGapMs),
       interTrackGapMs: summarize(interTrackGapMs),
+      deliveredLufs: summarize(deliveredLufs),
+      deliveredTruePeak: summarize(deliveredTruePeak),
       underrunsPerPlay: summarize(underrunsPerPlay),
       rebuffersPerPlay: summarize(rebuffersPerPlay),
       handoffs,
@@ -373,6 +381,12 @@ export function formatStats(stats, options = {}) {
   lines.push(`  Pausa entre pistas: ${fmtSummary(stats.kpis.handoffGapMs)}`);
   lines.push(
     `  Silencio entre pistas (último a primer audio): ${fmtSummary(stats.kpis.interTrackGapMs)}`,
+  );
+  lines.push(
+    `  Sonoridad entregada (LUFS): ${fmtSummary(stats.kpis.deliveredLufs)}`,
+  );
+  lines.push(
+    `  Pico real entregado (dBTP): ${fmtSummary(stats.kpis.deliveredTruePeak)}`,
   );
   lines.push(
     `  Cambios precargados: ${stats.kpis.handoffs.prewarmed} de ${stats.kpis.handoffs.prewarmed + stats.kpis.handoffs.cold} (${stats.kpis.prewarmRate}%)`,

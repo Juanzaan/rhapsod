@@ -70,6 +70,27 @@ describe("AudioPlayer", () => {
     }
   });
 
+  it("meters the loudness it sends, before the volume gain", () => {
+    const { clock, player } = setup();
+    player.setVolume(0.5);
+    const source = new PassThrough();
+    void player.play(source);
+    const frames = 30;
+    const pcm = Buffer.alloc(PCM_FRAME_BYTES * frames);
+    const amplitude = 10 ** (-23 / 20) * 32_767;
+    for (let i = 0; i < (PCM_FRAME_BYTES * frames) / 4; i++) {
+      const value = Math.round(
+        amplitude * Math.sin((2 * Math.PI * 1_000 * i) / 48_000),
+      );
+      pcm.writeInt16LE(value, i * 4);
+      pcm.writeInt16LE(value, i * 4 + 2);
+    }
+    source.write(pcm);
+    for (let frame = 0; frame < frames; frame++) clock.tick();
+
+    expect(player.metrics.delivered?.integratedLufs).toBeCloseTo(-23, 0);
+  });
+
   it("reports its clock's tick timing with the play metrics", () => {
     const { encoder, output } = setup();
     const timing = {
