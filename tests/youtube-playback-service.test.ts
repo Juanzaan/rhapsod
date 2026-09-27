@@ -3694,6 +3694,68 @@ describe("YoutubePlaybackService", () => {
     );
   });
 
+  it("measures the next track early enough for its first play to use the profile", async () => {
+    // The profile used to be measured only when the warm stream was built,
+    // and read back in the same tick: every first play fell back to
+    // single-pass loudnorm. Measuring from the prefetch gives the sample
+    // until the current track's midpoint to finish.
+    const metrics = {
+      bufferedBytes: 0,
+      framesSent: 0,
+      maxBufferedBytes: 3_840,
+      rebufferEvents: 0,
+      underruns: 0,
+    };
+    const execFile = vi.fn(
+      () =>
+        new Promise<{ stderr: string; stdout: string }>((resolve) =>
+          setTimeout(
+            () =>
+              resolve({
+                stderr:
+                  '{"input_i":"-9.50","input_tp":"-0.20","input_lra":"6.10","input_thresh":"-19.80"}',
+                stdout: "",
+              }),
+            5,
+          ),
+        ),
+    );
+    const { createPcmStreamMock, resolver, service } = setup({
+      metrics,
+      prewarmNext: true,
+      loudnessProfiler: new LoudnessProfiler({ execFile, targetLufs: -16 }),
+    });
+    resolver.getTrack.mockImplementation((resource: { id: string }) =>
+      Promise.resolve({
+        durationSeconds: 120,
+        ...(resource.id === "first"
+          ? { audioUrl: "https://media.example/first" }
+          : {}),
+        id: resource.id,
+        title: `Track ${resource.id}`,
+        webpageUrl: `https://www.youtube.com/watch?v=${resource.id}`,
+      }),
+    );
+
+    await service.enqueue("https://youtu.be/first", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(execFile).not.toHaveBeenCalled();
+    metrics.framesSent = 1;
+    await service.enqueue("https://youtu.be/second", "user-1");
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(execFile).toHaveBeenCalledTimes(1);
+    metrics.framesSent = Math.ceil(65_000 / 20);
+    await new Promise((resolve) => setTimeout(resolve, 180));
+
+    expect(createPcmStreamMock).toHaveBeenCalled();
+    const options = createPcmStreamMock?.mock.calls.at(-1)?.[1] as
+      Record<string, unknown> | undefined;
+    expect(options).toMatchObject({
+      loudnessProfile: { measuredI: -9.5 },
+      loudnessTargetLufs: -16,
+    });
+  });
+
   it("bakes loudness options into the prewarm stream", async () => {
     // Warm-started tracks must sound identical to cold-started ones; the
     // prewarm stream used to omit loudness entirely.
