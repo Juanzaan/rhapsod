@@ -10,10 +10,12 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import ffmpegStaticPath from "ffmpeg-static";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { createFfmpegPcmStream } from "../src/audio/ffmpeg-pcm.js";
+import {
+  bundledFfmpegPath,
+  createFfmpegPcmStream,
+} from "../src/audio/ffmpeg-pcm.js";
 import { startEgressGuard, type EgressGuard } from "../src/lib/egress-guard.js";
 
 function listen(server: NetServer): Promise<number> {
@@ -267,10 +269,12 @@ function sineWav(seconds: number): Buffer {
   return Buffer.concat([header, data]);
 }
 
+const ffmpegStaticPath = bundledFfmpegPath();
+
 // End to end with the bundled ffmpeg: an HTTPS source answers 302 to a
 // plain-HTTP "internal" server, the case the protocol whitelist missed.
 describe.skipIf(
-  ffmpegStaticPath === null || process.platform === "win32" || !openssl(),
+  ffmpegStaticPath === undefined || process.platform === "win32" || !openssl(),
 )("ffmpeg through the egress guard", () => {
   const internalHits: string[] = [];
   const internal = createHttpServer((request, response) => {

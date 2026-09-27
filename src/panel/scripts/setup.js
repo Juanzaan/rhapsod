@@ -49,7 +49,7 @@ function render() {
 
 function rW() {
   return (
-    '<div class="wt"><h1>Rhapsod</h1><p>Bot de música para TeamSpeak 3.<br>Configuremoslo en unos pasos.</p></div>' +
+    '<div class="wt"><h1>Rhapsod</h1><p>Bot de música para TeamSpeak 3.<br>Configurémoslo en unos pasos.</p></div>' +
     '<div class="fe"><div class="fi"><span class="fn">01</span></div><div class="ft"><strong>YouTube, Spotify, SoundCloud</strong><br><span>Música desde múltiples fuentes</span></div></div>' +
     '<div class="fe"><div class="fi"><span class="fn">02</span></div><div class="ft"><strong>Cola inteligente</strong><br><span>Colas, mezclas y repetición</span></div></div>' +
     '<div class="fe"><div class="fi"><span class="fn">03</span></div><div class="ft"><strong>Fácil de usar</strong><br><span>Comandos simples desde el chat de TS3</span></div></div>' +
@@ -59,8 +59,8 @@ function rW() {
 
 function rT() {
   return (
-    '<h1>Servidor TeamSpeak</h1><p class="sub">Datos de conexion al servidor TS3</p>' +
-    '<div class="f" id="fh"><label>Direccion del servidor</label><input id="ih" placeholder="ts.example.com" value="' +
+    '<h1>Servidor TeamSpeak</h1><p class="sub">Datos de conexión al servidor TS3</p>' +
+    '<div class="f" id="fh"><label>Dirección del servidor</label><input id="ih" placeholder="ts.example.com" value="' +
     (vals.RHAPSOD_TS3_HOST || "") +
     '"><div class="h">Hostname o IP del servidor</div><div class="e">Requerido</div></div>' +
     '<div class="f"><label>Puerto</label><input id="ip" type="number" placeholder="9987" value="' +
@@ -68,20 +68,20 @@ function rT() {
     '"><div class="h">Default: 9987</div></div>' +
     '<div class="f"><label>Nombre del bot</label><input id="in" placeholder="Rhapsod" value="' +
     (vals.RHAPSOD_TS3_NICKNAME || "Rhapsod") +
-    '"><div class="h">Maximo 30 caracteres</div></div>' +
-    '<div class="f"><label>Contrasena <span class="ob">opcional</span></label><input id="iw" type="password" placeholder="Si el servidor tiene contrasena"></div>' +
+    '"><div class="h">Máximo 30 caracteres</div></div>' +
+    '<div class="f"><label>Contraseña <span class="ob">opcional</span></label><input id="iw" type="password" placeholder="Si el servidor tiene contraseña"></div>' +
     '<div id="tt" class="tr"></div>' +
-    '<div class="a"><button class="b bs" onclick="prev()">Atras</button><button class="b bp" onclick="testTs3()">Probar y siguiente</button></div>'
+    '<div class="a"><button class="b bs" onclick="prev()">Atrás</button><button class="b bp" onclick="testTs3()">Probar y siguiente</button></div>'
   );
 }
 
 function rC() {
   var useId = vals.RHAPSOD_TS3_CHANNEL_ID ? "block" : "none";
   return (
-    '<h1>Canal</h1><p class="sub">A que canal debe unirse el bot</p>' +
-    '<div class="f"><label>Nombre del canal</label><input id="ic" placeholder="Musica" value="' +
+    '<h1>Canal</h1><p class="sub">A qué canal debe unirse el bot</p>' +
+    '<div class="f"><label>Nombre del canal</label><input id="ic" placeholder="Música" value="' +
     (vals.RHAPSOD_TS3_CHANNEL_NAME || "") +
-    '"><div class="h">El bot buscara este canal al conectarse</div></div>' +
+    '"><div class="h">El bot buscará este canal al conectarse</div></div>' +
     '<div class="f"><label style="display:flex;align-items:center;gap:.5rem"><input type="checkbox" id="iu"' +
     (vals.RHAPSOD_TS3_CHANNEL_ID ? " checked" : "") +
     "> Usar ID del canal en vez de nombre</label></div>" +
@@ -89,32 +89,32 @@ function rC() {
     useId +
     '"><label>Channel ID</label><input id="icid" type="number" placeholder="110" value="' +
     (vals.RHAPSOD_TS3_CHANNEL_ID || "") +
-    '"><div class="h">Lo podes encontrar en el cliente TS3</div></div>' +
-    '<div class="f"><label>Contrasena del canal <span class="ob">opcional</span></label><input id="icp" type="password" placeholder="Si el canal tiene contrasena"></div>' +
-    '<div class="a"><button class="b bs" onclick="prev()">Atras</button><button class="b bp" onclick="next()">Siguiente</button></div>'
+    '"><div class="h">Lo podés encontrar en el cliente TS3</div></div>' +
+    '<div class="f"><label>Contraseña del canal <span class="ob">opcional</span></label><input id="icp" type="password" placeholder="Si el canal tiene contraseña"></div>' +
+    '<div class="a"><button class="b bs" onclick="prev()">Atrás</button><button class="b bp" onclick="next()">Siguiente</button></div>'
   );
 }
 
 function rA() {
   var br = vals.RHAPSOD_OPUS_BITRATE || "128000";
   return (
-    '<h1>Audio</h1><p class="sub">Configuracion de calidad de audio</p>' +
+    '<h1>Audio</h1><p class="sub">Configuración de calidad de audio</p>' +
     '<div class="f"><label>Bitrate (kbps)</label><select id="ibr"><option value="64000"' +
     (br === "64000" ? " selected" : "") +
     '>64 kbps</option><option value="96000"' +
     (br === "96000" ? " selected" : "") +
     '>96 kbps</option><option value="128000"' +
     (br === "128000" ? " selected" : "") +
-    '>128 kbps (default)</option></select><div class="h">Mas alto = mejor calidad, mas ancho de banda</div></div>' +
+    '>128 kbps (default)</option></select><div class="h">Más alto = mejor calidad, más ancho de banda</div></div>' +
     '<div class="f"><label>Volumen normalizado (LUFS)</label><input id="il" type="number" min="-30" max="0" step="1" placeholder="-14" value="' +
     (vals.RHAPSOD_LOUDNESS_TARGET_LUFS || "-14") +
-    '"><div class="h">-14 es estandar de streaming. -16 es mas conservador.</div></div>' +
+    '"><div class="h">-14 es estándar de streaming. -16 es más conservador.</div></div>' +
     '<div class="f"><label>Modo verbose</label><select id="iv"><option value="false"' +
     (vals.RHAPSOD_VERBOSE !== "true" ? " selected" : "") +
     '>No (minimalista)</option><option value="true"' +
     (vals.RHAPSOD_VERBOSE === "true" ? " selected" : "") +
-    '>Si (mensajes detallados)</option></select><div class="h">Verbose muestra mensajes de progreso</div></div>' +
-    '<div class="a"><button class="b bs" onclick="prev()">Atras</button><button class="b bp" onclick="next()">Siguiente</button></div>'
+    '>Sí (mensajes detallados)</option></select><div class="h">Verbose muestra mensajes de progreso</div></div>' +
+    '<div class="a"><button class="b bs" onclick="prev()">Atrás</button><button class="b bp" onclick="next()">Siguiente</button></div>'
   );
 }
 
@@ -131,13 +131,13 @@ function rY() {
           "</div>"
         : '<div class="tr ld">Probando YouTube...</div>';
   return (
-    '<h1>YouTube</h1><p class="sub">Sin esto el bot no reproduce musica de YouTube</p>' +
+    '<h1>YouTube</h1><p class="sub">Sin esto el bot no reproduce música de YouTube</p>' +
     '<div id="yh">' +
     st +
     "</div>" +
     '<div class="f"><label>Cookies de YouTube (cookies.txt) <span class="ob">recomendado</span></label><textarea id="ick2" rows="4" style="width:100%;padding:.6rem .8rem;background:#0b0b0d;border:1px solid #2b2b30;border-radius:6px;color:var(--tx);font-size:.8rem" placeholder="Pega aca el contenido de tu cookies.txt"></textarea><div class="h">En tu navegador: extension Get cookies.txt LOCALLY, exportar estando logueado en youtube.com, pegar el contenido</div></div>' +
     '<div id="yts" class="tr"></div>' +
-    '<div class="a"><button class="b bs" onclick="prev()">Atras</button><button class="b bs" onclick="saveCookies()">Guardar cookies</button><button class="b bp" onclick="next()">Siguiente</button></div>'
+    '<div class="a"><button class="b bs" onclick="prev()">Atrás</button><button class="b bs" onclick="saveCookies()">Guardar cookies</button><button class="b bp" onclick="next()">Siguiente</button></div>'
   );
 }
 
@@ -167,7 +167,7 @@ function checkYt() {
         el.innerHTML =
           '<div class="tr fl">Fallo: ' +
           escJs(d.error || "desconocido") +
-          ". Pega tus cookies abajo y proba de nuevo.</div>";
+          ". Pegá tus cookies abajo y probá de nuevo.</div>";
       }
     })
     .catch(function (e) {
@@ -184,7 +184,7 @@ function saveCookies() {
   );
   var body = t ? t.value.trim() : "";
   if (!body) {
-    toast("Pega el contenido de cookies.txt primero");
+    toast("Pegá el contenido de cookies.txt primero");
     return;
   }
   var el = document.getElementById("yts");
@@ -230,7 +230,7 @@ function rO() {
     '"><div class="h">Para evitar limitaciones de rate-limit</div></div>' +
     '<div class="f"><label>yt-dlp Daemon URL <span class="ob">opcional</span></label><input id="ida" placeholder="http://127.0.0.1:8765" value="' +
     (vals.RHAPSOD_YTDLP_DAEMON_URL || "") +
-    '"><div class="h">Para resolucion mas rapida de URLs</div></div>' +
+    '"><div class="h">Para resolución más rápida de URLs</div></div>' +
     '<div class="dv"></div>' +
     '<p class="h">Para hacerte admin, escribí <code>!claim &lt;código&gt;</code> en el chat de TeamSpeak cuando el bot se conecte. El código está en el log del bot.</p>' +
     "<details" +
@@ -239,7 +239,7 @@ function rO() {
     '<div class="f"><label>UIDs de admin <span class="ob">opcional</span></label><input id="iua" placeholder="uid1,uid2,uid3" value="' +
     (vals.RHAPSOD_ADMIN_UIDS || "") +
     '"><div class="h">Separados por coma. Dan acceso a !move, !diag, etc.</div></div></details>' +
-    '<div class="a"><button class="b bs" onclick="prev()">Atras</button><button class="b bp" onclick="next()">Siguiente</button></div>'
+    '<div class="a"><button class="b bs" onclick="prev()">Atrás</button><button class="b bp" onclick="next()">Siguiente</button></div>'
   );
 }
 
@@ -255,7 +255,7 @@ function rR() {
         "(default)",
     ],
     ["Bitrate", (vals.RHAPSOD_OPUS_BITRATE || "128000") / 1000 + " kbps"],
-    ["Normalizacion", (vals.RHAPSOD_LOUDNESS_TARGET_LUFS || "-14") + " LUFS"],
+    ["Normalización", (vals.RHAPSOD_LOUDNESS_TARGET_LUFS || "-14") + " LUFS"],
     ["Spotify", vals.RHAPSOD_SPOTIFY_CLIENT_ID ? "Configurado" : "No"],
     [
       "YouTube",
@@ -270,7 +270,7 @@ function rR() {
     ["Admins", vals.RHAPSOD_ADMIN_UIDS || "Con !claim en TeamSpeak"],
   ];
   var h =
-    '<h1>Resumen</h1><p class="sub">Revisa la configuracion antes de guardar</p>';
+    '<h1>Resumen</h1><p class="sub">Revisá la configuración antes de guardar</p>';
   for (var i = 0; i < rows.length; i++) {
     h +=
       '<div style="display:flex;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid #2b2b30;font-size:.85rem"><span style="color:var(--dm)">' +
@@ -280,7 +280,7 @@ function rR() {
       "</span></div>";
   }
   h +=
-    '<div class="a"><button class="b bs" onclick="prev()">Atras</button><button class="b bp" onclick="save()">Guardar y reiniciar</button></div>';
+    '<div class="a"><button class="b bs" onclick="prev()">Atrás</button><button class="b bp" onclick="save()">Guardar y reiniciar</button></div>';
   return h;
 }
 
@@ -349,7 +349,7 @@ function testTs3() {
   }
   var el = document.getElementById("tt");
   el.className = "tr ld";
-  el.textContent = "Probando conexion...";
+  el.textContent = "Probando conexión...";
   el.style.display = "block";
   fetch("/api/test-connection", {
     method: "POST",
@@ -362,7 +362,7 @@ function testTs3() {
     .then(function (d) {
       if (d.ok) {
         el.className = "tr ok";
-        el.textContent = "Conexion exitosa: " + d.serverName;
+        el.textContent = "Conexión exitosa: " + d.serverName;
         next();
       } else {
         testFailed(el, "Error: " + d.error);
