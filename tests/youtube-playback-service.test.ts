@@ -1838,6 +1838,36 @@ describe("YoutubePlaybackService", () => {
     });
   });
 
+  it("skips Spotify tracks that are already queued and keeps going", async () => {
+    const { service, spotifyResolver } = setup({ spotifyResolver: true });
+    const tracks = [
+      { artist: "A", durationSeconds: 180, id: "s1", title: "One" },
+      { artist: "B", durationSeconds: 181, id: "s2", title: "Two" },
+      { artist: "C", durationSeconds: 182, id: "s3", title: "Three" },
+    ];
+    spotifyResolver!.expandPlaylist.mockResolvedValueOnce({ tracks });
+    await service.enqueueSpotifyCollection(
+      { id: "p1", type: "playlist" },
+      "user-1",
+    );
+    const queuedBefore = service.queue().length;
+    spotifyResolver!.expandPlaylist.mockResolvedValueOnce({
+      tracks: [
+        ...tracks,
+        { artist: "D", durationSeconds: 183, id: "s4", title: "Four" },
+      ],
+    });
+
+    const result = await service.enqueueSpotifyCollection(
+      { id: "p2", type: "playlist" },
+      "user-1",
+    );
+
+    // s1 is playing, so only s2 and s3 hit the queue's duplicate check.
+    expect(result.added.map((track) => track.id)).toEqual(["s1", "s4"]);
+    expect(service.queue().length).toBe(queuedBefore + result.added.length);
+  });
+
   it("rejects Spotify collections through the single-track path", async () => {
     const { service } = setup({ spotifyResolver: true });
 
