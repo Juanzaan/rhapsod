@@ -1051,7 +1051,11 @@ describe("panel-server notices", () => {
 
   it("lists open notices in /api/state without their hidden data", async () => {
     const state = startTestPanel("", 23616, {
-      notices: { list: () => [notice], ignore: () => true },
+      notices: {
+        list: () => [notice],
+        ignore: () => true,
+        verdict: () => "degraded" as const,
+      },
     });
     try {
       const res = await fetch(`${state.baseUrl}/api/state`, {
@@ -1075,11 +1079,45 @@ describe("panel-server notices", () => {
     }
   });
 
+  it("reports the notice verdict in /api/health without failing it", async () => {
+    const ignoredNotice: Notice = {
+      ...notice,
+      key: "disk.data-low",
+      detector: "disk.data-low",
+      severity: "warning",
+      state: "ignored",
+    };
+    const state = startTestPanel("", 23620, {
+      notices: {
+        list: () => [notice, ignoredNotice],
+        ignore: () => true,
+        verdict: () => "unhealthy" as const,
+      },
+    });
+    try {
+      const res = await fetch(`${state.baseUrl}/api/health`, {
+        headers: { authorization: state.auth },
+      });
+      // deploy.sh rolls back on any non-200 answer.
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        verdict: string;
+        openNotices: number;
+      };
+      expect(body.verdict).toBe("unhealthy");
+      expect(body.openNotices).toBe(1);
+    } finally {
+      await state.close();
+      rmSync(state.dir, { recursive: true, force: true });
+    }
+  });
+
   it("ignores an open notice and rejects bad or stale keys", async () => {
     const ignored: string[] = [];
     const state = startTestPanel("", 23617, {
       notices: {
         list: () => [notice],
+        verdict: () => "degraded" as const,
         ignore: (key) => {
           if (key !== notice.key) return false;
           ignored.push(key);
@@ -1131,6 +1169,7 @@ describe("panel-server notices", () => {
     const state = startTestPanel("", 23619, {
       notices: {
         list: () => [notice],
+        verdict: () => "degraded" as const,
         ignore: (key) => {
           ignored.push(key);
           return true;

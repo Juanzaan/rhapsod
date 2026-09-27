@@ -150,6 +150,34 @@ describe("rhapsod cli", () => {
       });
     });
 
+    it("shows the notice verdict when something is open", async () => {
+      const { deps, out } = harness({
+        fetch: panelFetch(200, {
+          ...HEALTHY,
+          verdict: "degraded",
+          openNotices: 2,
+        }),
+      });
+      expect(await runCli(["status"], deps)).toBe(0);
+      expect(out.join("\n")).toContain(
+        "Notices:    degraded, 2 open notices; list them with !avisos",
+      );
+      out.length = 0;
+      expect(await runCli(["status", "--json"], deps)).toBe(0);
+      expect(JSON.parse(out[0]!)).toMatchObject({
+        verdict: "degraded",
+        openNotices: 2,
+      });
+    });
+
+    it("prints no notice line while the verdict is ok", async () => {
+      const { deps, out } = harness({
+        fetch: panelFetch(200, { ...HEALTHY, verdict: "ok", openNotices: 0 }),
+      });
+      await runCli(["status"], deps);
+      expect(out.join("\n")).not.toContain("Notices:");
+    });
+
     it("stops on a config the bot would reject", async () => {
       const { deps, err } = harness({
         env: { ...BASE_ENV, RHAPSOD_PANEL_PORT: "99999" },
@@ -241,6 +269,29 @@ describe("rhapsod cli", () => {
       expect(text).toContain("WARN  Disk: 0.5 GiB free");
       expect(text).toContain("WARN  Clock: not synchronized");
       expect(text).toContain("0 failed, 2 warnings.");
+    });
+
+    it("warns on a degraded verdict and fails an unhealthy one", async () => {
+      const degraded = harness({
+        fetch: panelFetch(200, {
+          ...HEALTHY,
+          verdict: "degraded",
+          openNotices: 1,
+        }),
+      });
+      expect(await runCli(["doctor"], degraded.deps)).toBe(0);
+      expect(degraded.out.join("\n")).toContain(
+        "WARN  Notices: degraded, 1 open notice;",
+      );
+      const unhealthy = harness({
+        fetch: panelFetch(200, {
+          ...HEALTHY,
+          verdict: "unhealthy",
+          openNotices: 1,
+        }),
+      });
+      expect(await runCli(["doctor"], unhealthy.deps)).toBe(1);
+      expect(unhealthy.out.join("\n")).toContain("FAIL  Notices: unhealthy");
     });
 
     it("fails when the bot is not running", async () => {

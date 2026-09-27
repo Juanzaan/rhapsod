@@ -1,5 +1,5 @@
 import { validateConfig, loadConfig, type AppConfig } from "../config.js";
-import type { PanelStatus } from "../panel/panel-server.js";
+import type { PanelHealth } from "../panel/panel-server.js";
 
 export interface CliIo {
   readonly out: (line: string) => void;
@@ -93,7 +93,7 @@ function panelBaseUrl(config: AppConfig): string {
 }
 
 type PanelAnswer =
-  | { readonly kind: "ok"; readonly status: PanelStatus }
+  | { readonly kind: "ok"; readonly status: PanelHealth }
   | { readonly kind: "disabled" }
   | { readonly kind: "unauthorized" }
   | { readonly kind: "down"; readonly detail: string };
@@ -117,13 +117,18 @@ async function readPanel(
     if (response.status !== 200 && response.status !== 503) {
       return { kind: "down", detail: `HTTP ${response.status}` };
     }
-    return { kind: "ok", status: (await response.json()) as PanelStatus };
+    return { kind: "ok", status: (await response.json()) as PanelHealth };
   } catch (error: unknown) {
     return {
       kind: "down",
       detail: error instanceof Error ? error.message : String(error),
     };
   }
+}
+
+function noticesLine(s: PanelHealth): string {
+  const count = s.openNotices ?? 0;
+  return `${s.verdict ?? "ok"}, ${String(count)} open ${count === 1 ? "notice" : "notices"}; list them with !avisos in TeamSpeak or on the panel console`;
 }
 
 function formatUptime(ms: number): string {
@@ -166,6 +171,12 @@ async function status(deps: CliDeps, json: boolean): Promise<number> {
               playerState: panel.status.playerState ?? "idle",
               connected: panel.status.connected,
               reconnecting: panel.status.reconnecting === true,
+              ...(panel.status.verdict === undefined
+                ? {}
+                : {
+                    verdict: panel.status.verdict,
+                    openNotices: panel.status.openNotices ?? 0,
+                  }),
             }
           : {}),
         adminClaimPending: claimCode !== undefined,
@@ -189,6 +200,9 @@ async function status(deps: CliDeps, json: boolean): Promise<number> {
       );
       if (s.youtubeAuthHealthy === false) {
         deps.out("YouTube:    failing; run the doctor for the fix");
+      }
+      if (s.verdict !== undefined && s.verdict !== "ok") {
+        deps.out(`Notices:    ${noticesLine(s)}`);
       }
       if (s.uptimeMs !== undefined) {
         deps.out(`Uptime:     ${formatUptime(s.uptimeMs)}`);
@@ -381,6 +395,13 @@ async function doctor(deps: CliDeps): Promise<number> {
           config.RHAPSOD_WARP_PROXY === undefined
             ? "failing; on a cloud VPS YouTube often blocks the IP: rerun the installer with RHAPSOD_WITH_WARP=1, or load account cookies in the panel's YouTube step"
             : "failing even through WARP; load account cookies in the panel's YouTube step",
+      });
+    }
+    if (s.verdict !== undefined && s.verdict !== "ok") {
+      add({
+        level: s.verdict === "unhealthy" ? "fail" : "warn",
+        name: "Notices",
+        detail: noticesLine(s),
       });
     }
     if (s.ytdlpDaemon?.state === "failing") {
