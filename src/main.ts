@@ -38,6 +38,7 @@ import { RadioTitleCache } from "./media/radio-icy.js";
 import { RadioScrobbler } from "./application/radio-scrobbler.js";
 import { ChatLog, isOwnEcho } from "./application/chat-log.js";
 import type { YoutubePlaybackResolver } from "./media/youtube/youtube-resolver.js";
+import type { DaemonHealthSnapshot } from "./media/youtube/daemon-health.js";
 import { RedirectResolver } from "./media/redirect-resolver.js";
 import { resolveTuneInUrl } from "./media/tunein.js";
 import { SongLinkClient } from "./media/song-link.js";
@@ -66,6 +67,7 @@ import { Reconnector } from "./bootstrap/reconnect.js";
 import { startConnectedPanel } from "./bootstrap/panel.js";
 import { createPlaybackEvents } from "./bootstrap/playback-events.js";
 import { ServerViewSync } from "./bootstrap/server-view.js";
+import { NoticeMonitor } from "./bootstrap/notices.js";
 import { flushStores, openStores } from "./bootstrap/stores.js";
 import { ytDlpStackOptions } from "./bootstrap/yt-dlp-options.js";
 
@@ -137,6 +139,16 @@ async function main(): Promise<void> {
   // and Node exited with code 0, which Restart=on-failure never restarts.
   // The bot now only stops through exits.exit().
   setInterval(() => undefined, 2 ** 31 - 1);
+  const daemonHealthRef: {
+    get: () => DaemonHealthSnapshot | undefined;
+  } = { get: () => undefined };
+  const notices = new NoticeMonitor({
+    config,
+    dataDir,
+    logger,
+    daemonHealth: () => daemonHealthRef.get(),
+  });
+  notices.start();
   const identity = await new Ts3IdentityStore(
     join(dataDir, "ts3-identity.txt"),
   ).loadOrCreate();
@@ -179,6 +191,7 @@ async function main(): Promise<void> {
       intervalMs: watchdog.intervalMs,
       onTimeout: (driftMs) => {
         logger.error({ driftMs }, "Watchdog: event loop blocked; restarting");
+        notices.eventLoopStall(driftMs);
         void exits.exit(1);
       },
     });
@@ -248,6 +261,7 @@ async function main(): Promise<void> {
       onSearchMetrics: (m) => metrics.recordSearchMetrics(m),
     });
   ytDlpMetricsRef.getMetrics = () => ytDlpExecutor.metrics();
+  daemonHealthRef.get = () => ytDlpResolver.daemonHealth();
   const resolver: YoutubePlaybackResolver = ytDlpResolver;
   const playback = new YoutubePlaybackService({
     createPlayback: (url, playbackEncoder, output, options) =>
@@ -335,10 +349,15 @@ async function main(): Promise<void> {
     ...(spotifyResolver ? { spotifyResolver } : {}),
   });
   const flushState = (): Promise<void> =>
-    flushStores(stores, () => playback.flushState());
+    flushStores(
+      stores,
+      () => playback.flushState(),
+      () => notices.flush(),
+    );
   exits.setFlush(flushState);
   const youtubeAuthCheckUrl = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
   const youtubeAuthCheckIntervalMs = 24 * 60 * 60 * 1_000;
+  const youtubeAuthRetryIntervalMs = 15 * 60 * 1_000;
   const youtubeAuthState: {
     healthy: boolean;
     category?: YoutubeAuthFailureCategory;
@@ -350,6 +369,7 @@ async function main(): Promise<void> {
         25_000,
         "metadata",
       );
+      notices.youtubeCheckPassed();
       if (!youtubeAuthState.healthy) {
         logger.info("YouTube authentication recovered");
         youtubeAuthState.healthy = true;
@@ -358,6 +378,7 @@ async function main(): Promise<void> {
     } catch (error) {
       const category = classifyYoutubeAuthFailure(error);
       youtubeAuthState.category = category;
+      notices.youtubeCheckFailed(category);
       if (youtubeAuthState.healthy) {
         logger.error(
           { err: error, category },
@@ -367,11 +388,17 @@ async function main(): Promise<void> {
       youtubeAuthState.healthy = false;
     }
   };
-  setInterval(
-    () => void checkYoutubeAuth(),
-    youtubeAuthCheckIntervalMs,
-  ).unref();
-  void checkYoutubeAuth();
+  // Daily while healthy; every 15 minutes while failing, so a fix (new
+  // cookies, a yt-dlp update) clears the notice without waiting a day.
+  const scheduleYoutubeAuthCheck = (): void => {
+    setTimeout(
+      () => void checkYoutubeAuth().finally(scheduleYoutubeAuthCheck),
+      youtubeAuthState.healthy
+        ? youtubeAuthCheckIntervalMs
+        : youtubeAuthRetryIntervalMs,
+    ).unref();
+  };
+  void checkYoutubeAuth().finally(scheduleYoutubeAuthCheck);
   const commandRateLimiter = new CommandRateLimiter();
   const commandContext: CommandContext = {
     playback,
@@ -482,6 +509,7 @@ async function main(): Promise<void> {
     const current = await connection.canTalkInCurrentChannel();
     if (current === canTalk) return;
     canTalk = current;
+    notices.talkPower(canTalk, connection.getCurrentChannelId());
     logger.info({ reason, canTalk }, "Talk power changed");
   };
   await checkTalkPower("startup");
@@ -568,7 +596,11 @@ async function main(): Promise<void> {
       metrics.recordDisconnect(reason);
       playback.pause();
     },
+    onAttempt: (attempt, maxAttempts) => {
+      notices.reconnectAttempt(attempt, maxAttempts);
+    },
     onGiveUp: async () => {
+      notices.reconnectGaveUp();
       shuttingDown = true;
       stopHeartbeat();
       playback.stop(false);
@@ -581,6 +613,7 @@ async function main(): Promise<void> {
       await logCurrentChannel("reconnect");
     },
     onResumed: async () => {
+      notices.reconnected();
       await checkTalkPower("reconnect");
       playback.resume();
     },

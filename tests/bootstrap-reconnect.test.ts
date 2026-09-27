@@ -107,4 +107,30 @@ describe("Reconnector", () => {
     expect(calls.filter((call) => call === "disconnect")).toHaveLength(5);
     expect(calls.at(-1)).toBe("give up");
   });
+
+  it("reports each attempt with the limit before its backoff", async () => {
+    const attempts: string[] = [];
+    let connects = 0;
+    const reconnector = new Reconnector({
+      connection: {
+        connect: () =>
+          ++connects < 3
+            ? Promise.reject(new Error("refused"))
+            : Promise.resolve(),
+        disconnect: () => Promise.resolve(),
+      },
+      isShuttingDown: () => false,
+      logger: noopLogger,
+      maxAttempts: 4,
+      onAttempt: (attempt, max) =>
+        attempts.push(`${String(attempt)}/${String(max)}`),
+      onDisconnect: () => undefined,
+      onGiveUp: () => Promise.resolve(),
+      onReconnected: () => Promise.resolve(),
+      onResumed: () => Promise.resolve(),
+      sleep: () => Promise.resolve(),
+    });
+    await reconnector.connectionLost("timeout");
+    expect(attempts).toEqual(["1/4", "2/4", "3/4"]);
+  });
 });
