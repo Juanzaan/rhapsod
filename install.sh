@@ -12,6 +12,8 @@
 #
 # Optional environment overrides:
 #   RHAPSOD_REF           git ref to install (default: latest stable tag)
+#   RHAPSOD_REPOSITORY    git URL or local path to install from (CI installs
+#                         the checkout under test this way)
 #   RHAPSOD_APP_DIR       install dir (default: /home/rhapsod/rhapsod)
 #   RHAPSOD_USER          service user (default: rhapsod)
 #   RHAPSOD_TS3_HOST      TeamSpeak server (host or host:port); skips the question
@@ -80,7 +82,7 @@ if [[ "${RHAPSOD_INSTALL_FUNCTIONS_ONLY:-0}" == "1" ]]; then
   return 0 2>/dev/null || exit 0
 fi
 
-REPOSITORY="https://github.com/Juanzaan/rhapsod.git"
+REPOSITORY="${RHAPSOD_REPOSITORY:-https://github.com/Juanzaan/rhapsod.git}"
 POT_REPOSITORY="https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git"
 # Server checkout and pip plugin must match: they share a protocol version.
 POT_VERSION="2.0.0"

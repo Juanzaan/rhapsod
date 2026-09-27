@@ -1,0 +1,104 @@
+name: Install E2E
+
+# Runs install.sh on a fresh runner the way a new owner would on a clean
+# VPS, against a real TeamSpeak 3 server in a container, then checks that
+# the bot joined, the panel answers and `rhapsod doctor` reports no failure.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - install.sh
+      - scripts/**
+      - deploy/**
+      - .github/workflows/install-e2e.yml
+  schedule:
+    - cron: "41 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# -o pipefail: the install is piped through tee and must still fail the step.
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: install-e2e-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  install:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-22.04, ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # The TeamSpeak 3 server is published for amd64 only; arm64 runs it
+      # under emulation, which is slower but speaks the same protocol.
+      - if: runner.arch == 'ARM64'
+        uses: docker/setup-qemu-action@v4
+        with:
+          platforms: amd64
+      - name: Start a TeamSpeak 3 server
+        run: |
+          docker run -d --name ts3 --network host --platform linux/amd64 \
+            -e TS3SERVER_LICENSE=accept teamspeak:3.13
+          for _ in $(seq 1 90); do
+            if (: </dev/tcp/127.0.0.1/10011) 2>/dev/null; then exit 0; fi
+            sleep 2
+          done
+          docker logs ts3
+          exit 1
+
+      # Runner images ship Node 20 in /usr/local/bin; a clean VPS has none,
+      # so the installer's own Node 22 download is what gets tested. The
+      # checkout is copied where the service user can read it.
+      - name: Make the runner look like a clean server
+        run: |
+          sudo rm -f /usr/local/bin/node /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
+          git branch -f e2e HEAD
+          sudo cp -a "$GITHUB_WORKSPACE" /opt/rhapsod-src
+          sudo chmod -R a+rX /opt/rhapsod-src
+          sudo git config --system --add safe.directory '*'
+
+      - name: Install
+        run: |
+          start="$(date +%s)"
+          sudo env RHAPSOD_REPOSITORY=/opt/rhapsod-src RHAPSOD_REF=e2e \
+            RHAPSOD_TS3_HOST=127.0.0.1 bash install.sh </dev/null 2>&1 | tee install.log
+          elapsed="$(( $(date +%s) - start ))"
+          echo "Install on ${{ matrix.runner }}: ${elapsed}s" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check the bot
+        run: |
+          grep -q 'The bot is in your TeamSpeak server.' install.log
+          grep -Eq '!claim [a-z0-9]{5}-[a-z0-9]{5}' install.log
+          rhapsod status | tee status.txt
+          grep -q 'TeamSpeak:  connected' status.txt
+          rhapsod doctor
+
+      # A rerun must keep the install working and not ask anything again.
+      - name: Rerun the installer
+        run: |
+          sudo env RHAPSOD_REPOSITORY=/opt/rhapsod-src RHAPSOD_REF=e2e \
+            bash install.sh </dev/null 2>&1 | tee rerun.log
+          grep -q '(existing password preserved)' rerun.log
+          for _ in $(seq 1 30); do
+            rhapsod status >/dev/null 2>&1 && break
+            sleep 2
+          done
+          rhapsod status
+          rhapsod doctor
+
+      - name: Logs
+        if: failure()
+        run: |
+          sudo journalctl -u rhapsod -u rhapsod-ytdlp-daemon -u bgutil-pot-provider --no-pager -n 300 || true
+          docker logs ts3 2>&1 | tail -50 || true
