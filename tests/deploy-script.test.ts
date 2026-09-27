@@ -41,7 +41,10 @@ function executable(path: string, body: string): void {
   chmodSync(path, 0o755);
 }
 
-function createSandbox(env = "RHAPSOD_PANEL_ENABLED=false\n"): Sandbox {
+function createSandbox(
+  env = "RHAPSOD_PANEL_ENABLED=false\n",
+  { daemonChanged = false } = {},
+): Sandbox {
   const root = mkdtempSync(join(tmpdir(), "rhapsod-deploy-"));
   sandboxes.push(root);
   const work = join(root, "work");
@@ -54,6 +57,11 @@ function createSandbox(env = "RHAPSOD_PANEL_ENABLED=false\n"): Sandbox {
   git(work, "commit", "--quiet", "-m", "v1");
   const previous = git(work, "rev-parse", "HEAD");
   writeFileSync(join(work, "version.txt"), "2\n");
+  if (daemonChanged) {
+    mkdirSync(join(work, "scripts"));
+    writeFileSync(join(work, "scripts", "yt-dlp-daemon.py"), "# v2\n");
+    git(work, "add", ".");
+  }
   git(work, "commit", "--quiet", "-am", "v2");
   const target = git(work, "rev-parse", "HEAD");
   git(root, "clone", "--quiet", "--bare", work, "origin.git");
@@ -77,7 +85,11 @@ echo "$*" >> "${systemctlLog}"
 case "$1" in
   start) echo active > "${stateFile}" ;;
   stop) echo inactive > "${stateFile}" ;;
-  is-active) grep -q '^active$' "${stateFile}" ;;
+  is-active)
+    if [ -n "$UNHEALTHY_AT" ] && [ "$(git -C "${app}" rev-parse HEAD)" = "$UNHEALTHY_AT" ]; then
+      exit 1
+    fi
+    grep -q '^active$' "${stateFile}" ;;
   show) echo 0 ;;
 esac
 `,
@@ -187,6 +199,24 @@ describeUnix("scripts/deploy.sh", { timeout: 60_000 }, () => {
     expect(systemctlCalls(sandbox)).toEqual([
       "stop rhapsod",
       "stop rhapsod",
+      "start rhapsod",
+    ]);
+  });
+
+  it("restarts the daemon again when it rolls back a daemon change", async () => {
+    const sandbox = createSandbox(undefined, { daemonChanged: true });
+    const run = await runDeploy(sandbox, ["--force"], {
+      UNHEALTHY_AT: sandbox.target,
+    });
+    expect(run.status).not.toBe(0);
+    expect(run.output).toContain("rolled back");
+    expect(git(sandbox.app, "rev-parse", "HEAD")).toBe(sandbox.previous);
+    expect(systemctlCalls(sandbox)).toEqual([
+      "stop rhapsod",
+      "restart rhapsod-ytdlp-daemon",
+      "start rhapsod",
+      "stop rhapsod",
+      "restart rhapsod-ytdlp-daemon",
       "start rhapsod",
     ]);
   });

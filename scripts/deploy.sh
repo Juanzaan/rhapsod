@@ -181,6 +181,7 @@ if [[ "$TARGET" == "$PREVIOUS" ]]; then
   exit 0
 fi
 DAEMON_CHANGED=0
+DAEMON_RESTARTED=0
 if ! as_app git -C "$APP_DIR" diff --quiet "$PREVIOUS" "$TARGET" -- scripts/yt-dlp-daemon.py; then
   DAEMON_CHANGED=1
 fi
@@ -225,6 +226,10 @@ rollback() {
   warn "$1; rolling back to ${PREVIOUS:0:7}"
   $SYSTEMCTL stop "$SERVICE" || true
   if build_at "$PREVIOUS"; then
+    # The daemon keeps running the target's script until it restarts too.
+    if [[ "$DAEMON_RESTARTED" == "1" ]]; then
+      $SYSTEMCTL restart "$DAEMON_SERVICE" || warn "$DAEMON_SERVICE did not restart"
+    fi
     $SYSTEMCTL start "$SERVICE" || true
   fi
   fail "deploy of ${TARGET:0:7} failed and was rolled back; data backup: $BACKUP"
@@ -234,6 +239,7 @@ log "building ${TARGET:0:7}"
 build_at "$TARGET" || rollback "build failed"
 if [[ "$DAEMON_CHANGED" == "1" ]]; then
   log "restarting $DAEMON_SERVICE (daemon script changed)"
+  DAEMON_RESTARTED=1
   $SYSTEMCTL restart "$DAEMON_SERVICE" || warn "$DAEMON_SERVICE did not restart"
 fi
 log "starting $SERVICE"
