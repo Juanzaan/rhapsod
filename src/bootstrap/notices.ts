@@ -125,6 +125,11 @@ export class NoticeMonitor {
     return this.registry.flush();
   }
 
+  /** Call on a graceful shutdown, before the final flush. */
+  cleanStop(): void {
+    this.registry.recordCleanStop();
+  }
+
   youtubeCheckPassed(): void {
     for (const detector of YOUTUBE_AUTH_DETECTORS) this.registry.ok(detector);
   }
