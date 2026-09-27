@@ -226,6 +226,20 @@ describe("NoticeRegistry", () => {
     expect(reloaded.recordStart()).toHaveLength(2);
   });
 
+  it("drops the ignore of an unsaved notice a day after it was set", async () => {
+    const filePath = tempFile();
+    const time = clock();
+    const registry = new NoticeRegistry({ filePath, now: time.now });
+    registry.report(talkPower);
+    registry.ignore("ts3.no-talk-power");
+    await registry.flush();
+
+    time.advance(25 * 60 * MINUTE);
+    const reloaded = new NoticeRegistry({ filePath, now: time.now });
+    reloaded.report(talkPower);
+    expect(reloaded.get("ts3.no-talk-power")?.state).toBe("open");
+  });
+
   it("does not count a start that ended in a clean stop", async () => {
     const time = clock();
     const filePath = tempFile();
