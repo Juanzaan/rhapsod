@@ -267,6 +267,26 @@ describe("renderDashboard console", () => {
       connected: true,
       version: "2.2.0",
       queue: [{ title: "A", requestedBy: "Dj" }, { title: "B" }],
+      notices: [
+        {
+          key: "ts3.no-talk-power",
+          severity: "error",
+          title: "Sin <b>talk power</b>",
+          detail: "Darle talk power al bot.",
+          ignored: false,
+          since: Date.now() - 5 * 60_000,
+          count: 3,
+        },
+        {
+          key: "disk.data-low",
+          severity: "warning",
+          title: "Poco disco",
+          detail: "Liberar espacio en data/.",
+          ignored: true,
+          since: Date.now(),
+          count: 1,
+        },
+      ],
       chat: [
         { ts: 1_700_000_000_000, from: "Ana", text: "hola!", outgoing: false },
         { ts: 1_700_000_001_000, from: "Bot", text: "OK", outgoing: true },
@@ -347,6 +367,18 @@ describe("renderDashboard console", () => {
     expect(srv.indexOf("Alpha")).toBeLessThan(srv.indexOf("Zulu"));
     expect(srv).toContain('onclick="moveBot(20)"');
     expect(getEl("srvCount").textContent).toBe("1 usuario");
+    const noticesCard = getEl("noticesCard") as FakeEl & { hidden?: boolean };
+    expect(noticesCard.hidden).toBe(false);
+    expect(noticesCard.attrs["data-worst"]).toBe("error");
+    expect(getEl("noticesCount").textContent).toBe("1 abierto · 1 ignorado");
+    const notices = getEl("noticeList").innerHTML;
+    expect(notices).toContain('<span class="sev sev-error">Error</span>');
+    expect(notices).toContain("Sin &lt;b&gt;talk power&lt;/b&gt;");
+    expect(notices).toContain("hace 5 min · 3 veces");
+    expect(notices).toContain('data-key="ts3.no-talk-power"');
+    expect(notices).not.toContain('data-key="disk.data-low"');
+    expect(notices).toContain('class="notice ignored"');
+    expect(notices).toContain("ignorado hasta que empeore");
   });
 
   it("shares the console design system across pages", () => {
