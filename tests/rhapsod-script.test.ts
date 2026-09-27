@@ -1,8 +1,10 @@
 import { spawnSync } from "node:child_process";
 import {
   chmodSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -79,8 +81,46 @@ fi
   // Drops the user argument, as sudo -u would after switching to it.
   const asUser = join(root, "as-user");
   executable(asUser, `#!/usr/bin/env bash\nshift\nexec "$@"\n`);
+  // Stands in for deploy.sh: records its arguments and checks out --ref,
+  // or fails like a rolled-back deploy when DEPLOY_FAILS is set.
+  const deploy = join(root, "deploy.sh");
+  executable(
+    deploy,
+    `#!/usr/bin/env bash
+echo "deploy $*" >> ${JSON.stringify(calls)}
+[[ -z "\${DEPLOY_FAILS:-}" ]] || exit 1
+while [[ $# -gt 0 ]]; do
+  if [[ "$1" == "--ref" ]]; then git -C ${JSON.stringify(app)} checkout -q --detach "$2"; fi
+  shift
+done
+`,
+  );
+  const userdel = join(root, "userdel");
+  executable(
+    userdel,
+    `#!/usr/bin/env bash\necho "userdel $*" >> ${JSON.stringify(calls)}\n`,
+  );
+  const system = join(root, "system");
+  mkdirSync(join(system, "etc", "systemd", "system"), { recursive: true });
+  mkdirSync(join(system, "etc", "rhapsod"), { recursive: true });
+  mkdirSync(join(system, "etc", "cron.weekly"), { recursive: true });
+  mkdirSync(join(system, "usr", "local", "bin"), { recursive: true });
+  for (const unit of [
+    "rhapsod",
+    "rhapsod-ytdlp-daemon",
+    "bgutil-pot-provider",
+  ]) {
+    writeFileSync(
+      join(system, "etc", "systemd", "system", `${unit}.service`),
+      "",
+    );
+  }
+  writeFileSync(join(system, "etc", "cron.weekly", "rhapsod-ytdlp-update"), "");
+  writeFileSync(join(system, "usr", "local", "bin", "rhapsod"), "old");
+  const backups = join(root, "backups");
 
-  const run = (...args: string[]) => {
+  const run = (...args: string[]) => runWith({}, ...args);
+  const runWith = (extra: Record<string, string>, ...args: string[]) => {
     const result = spawnSync("bash", [script, ...args], {
       encoding: "utf8",
       env: {
@@ -90,6 +130,13 @@ fi
         RHAPSOD_JOURNALCTL: journalctl,
         RHAPSOD_AS_USER: asUser,
         RHAPSOD_NO_SUDO: "1",
+        RHAPSOD_DEPLOY: deploy,
+        RHAPSOD_USERDEL: userdel,
+        RHAPSOD_ROOT: system,
+        RHAPSOD_BACKUP_DIR: backups,
+        GIT_CONFIG_NOSYSTEM: "1",
+        HOME: root,
+        ...extra,
       },
     });
     return {
@@ -99,7 +146,45 @@ fi
       calls: readFileSync(calls, "utf8"),
     };
   };
-  return { run, conf };
+  return { run, runWith, conf, app, backups, system, calls };
+}
+
+function git(cwd: string, ...args: string[]): string {
+  const result = spawnSync(
+    "git",
+    ["-c", "user.name=test", "-c", "user.email=test@localhost", ...args],
+    { cwd, encoding: "utf8" },
+  );
+  if (result.status !== 0) throw new Error(result.stderr);
+  return result.stdout.trim();
+}
+
+// Two tagged releases in a repository that is its own origin, installed at
+// the older one, so update, rollback and backup run real git.
+function withReleases(box: ReturnType<typeof sandbox>) {
+  const { app } = box;
+  mkdirSync(join(app, "data"), { recursive: true });
+  writeFileSync(join(app, "data", "state.json"), "{}");
+  writeFileSync(join(app, ".env"), "RHAPSOD_PANEL_PASSWORD=secret\n");
+  writeFileSync(join(app, ".gitignore"), "data/\n.env\ndist/\n");
+  const release = (version: string) => {
+    writeFileSync(
+      join(app, "package.json"),
+      JSON.stringify({ name: "rhapsod", version, type: "commonjs" }, null, 2),
+    );
+    git(app, "add", "-A");
+    git(app, "commit", "-q", "-m", version);
+    git(app, "tag", `v${version}`);
+    return git(app, "rev-parse", "HEAD");
+  };
+  git(app, "init", "-q");
+  mkdirSync(join(app, "scripts"), { recursive: true });
+  writeFileSync(join(app, "scripts", "rhapsod.sh"), "new");
+  const first = release("4.0.0");
+  const second = release("4.1.0");
+  git(app, "remote", "add", "origin", app);
+  git(app, "checkout", "-q", "--detach", "v4.0.0");
+  return { first, second };
 }
 
 describeUnix("rhapsod wrapper", () => {
@@ -153,6 +238,117 @@ describeUnix("rhapsod wrapper", () => {
       "journalctl -u rhapsod -u rhapsod-ytdlp-daemon -n 20 -f\n",
     );
     expect(box.run("logs", "all").code).toBe(1);
+  });
+
+  it("backs up data and .env with the bot stopped, then starts it", () => {
+    const box = sandbox();
+    withReleases(box);
+    const result = box.run("backup");
+    expect(result.code, result.stderr).toBe(0);
+    const file = /^Backup: (.+)$/m.exec(result.stdout)?.[1] ?? "";
+    expect(file).toMatch(/rhapsod-\d{8}-\d{6}-[0-9a-f]{7}\.tar\.gz$/);
+    const listing = spawnSync("tar", ["-tzf", file], { encoding: "utf8" });
+    expect(listing.stdout).toContain("data/state.json");
+    expect(listing.stdout).toContain(".env");
+    expect(result.calls.indexOf("systemctl stop rhapsod")).toBeLessThan(
+      result.calls.indexOf("systemctl start rhapsod"),
+    );
+  });
+
+  it("refuses to back up during playback", () => {
+    const box = sandbox("playing");
+    withReleases(box);
+    const result = box.run("backup");
+    expect(result.code).toBe(1);
+    expect(result.calls).not.toContain("systemctl stop");
+  });
+
+  it("updates to the latest release and records the version it replaced", () => {
+    const box = sandbox();
+    const { first, second } = withReleases(box);
+    const result = box.run("update");
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.calls).toContain(`--ref v4.1.0`);
+    expect(git(box.app, "rev-parse", "HEAD")).toBe(second);
+    expect(
+      readFileSync(join(box.backups, "previous-version"), "utf8").trim(),
+    ).toBe(first);
+    expect(
+      readFileSync(join(box.system, "usr", "local", "bin", "rhapsod"), "utf8"),
+    ).toBe("new");
+    expect(result.stdout).toContain("rhapsod rollback");
+  });
+
+  it("does nothing when the latest release is installed", () => {
+    const box = sandbox();
+    withReleases(box);
+    git(box.app, "checkout", "-q", "--detach", "v4.1.0");
+    const result = box.run("update");
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("Up to date: v4.1.0");
+    expect(result.calls).not.toContain("deploy");
+  });
+
+  it("keeps the old version recorded when the update rolls back", () => {
+    const box = sandbox();
+    const { first } = withReleases(box);
+    const result = box.runWith({ DEPLOY_FAILS: "1" }, "update", "--force");
+    expect(result.code).toBe(1);
+    expect(result.calls).toContain("--ref v4.1.0 --force");
+    expect(result.stderr).toContain("update to v4.1.0 failed");
+    expect(git(box.app, "rev-parse", "HEAD")).toBe(first);
+    expect(
+      readFileSync(join(box.system, "usr", "local", "bin", "rhapsod"), "utf8"),
+    ).toBe("old");
+  });
+
+  it("rolls back to the version the last update replaced, and forward again", () => {
+    const box = sandbox();
+    const { first, second } = withReleases(box);
+    expect(box.run("rollback").stderr).toContain("no previous version");
+    box.run("update");
+    expect(box.run("rollback").code).toBe(0);
+    expect(git(box.app, "rev-parse", "HEAD")).toBe(first);
+    box.run("rollback");
+    expect(git(box.app, "rev-parse", "HEAD")).toBe(second);
+  });
+
+  it("uninstalls the services and the command, keeping the data", () => {
+    const box = sandbox();
+    withReleases(box);
+    const result = box.run("uninstall", "--yes");
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.calls).toContain("systemctl disable --now rhapsod\n");
+    expect(readdirSync(join(box.system, "etc", "systemd", "system"))).toEqual(
+      [],
+    );
+    expect(existsSync(join(box.system, "etc", "rhapsod"))).toBe(false);
+    expect(existsSync(join(box.system, "usr", "local", "bin", "rhapsod"))).toBe(
+      false,
+    );
+    expect(existsSync(join(box.app, "data", "state.json"))).toBe(true);
+    expect(readdirSync(box.backups)).toHaveLength(1);
+    expect(result.calls).not.toContain("userdel");
+  });
+
+  it("purges the user and the checkout, leaving a backup in /var/backups", () => {
+    const box = sandbox();
+    withReleases(box);
+    const result = box.run("uninstall", "--purge", "--yes");
+    expect(result.code, result.stderr).toBe(0);
+    expect(existsSync(box.app)).toBe(false);
+    expect(result.calls).toContain("userdel --remove rhapsod\n");
+    expect(
+      readdirSync(join(box.system, "var", "backups", "rhapsod")),
+    ).toHaveLength(1);
+  });
+
+  it("asks before uninstalling when not told --yes", () => {
+    const box = sandbox();
+    const result = box.run("uninstall");
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("pass --yes");
+    expect(result.calls).not.toContain("disable");
   });
 
   it("points at the installer when install.conf is missing", () => {

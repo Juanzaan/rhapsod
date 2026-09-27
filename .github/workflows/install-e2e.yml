@@ -67,6 +67,18 @@ jobs:
           sudo cp -a "$GITHUB_WORKSPACE" /opt/rhapsod-src
           sudo chmod -R a+rX /opt/rhapsod-src
           sudo git config --system --add safe.directory '*'
+          # Later steps commit new "releases" on e2e for update and rollback.
+          sudo git -C /opt/rhapsod-src checkout -q e2e
+          # Five minutes: under QEMU a TeamSpeak handshake can stall until the
+          # bot's own connect timeout (180 s) and systemd's restart retry it.
+          cat > "$RUNNER_TEMP/wait-connected" <<'SH'
+          for _ in $(seq 1 100); do
+            rhapsod status 2>/dev/null | grep -q 'TeamSpeak:  connected' && exit 0
+            sleep 3
+          done
+          rhapsod status
+          exit 1
+          SH
 
       - name: Install
         run: |
@@ -82,12 +94,7 @@ jobs:
           grep -Eq '!claim [a-z0-9]{5}-[a-z0-9]{5}' install.log
           # The installer returns once the bot joined; the panel may still be
           # a moment away from listening.
-          for _ in $(seq 1 30); do
-            rhapsod status >/dev/null 2>&1 && break
-            sleep 2
-          done
-          rhapsod status | tee status.txt
-          grep -q 'TeamSpeak:  connected' status.txt
+          bash "$RUNNER_TEMP/wait-connected"
           rhapsod doctor
 
       # A rerun must keep the install working and not ask anything again.
@@ -96,11 +103,66 @@ jobs:
           sudo env RHAPSOD_REPOSITORY=/opt/rhapsod-src RHAPSOD_REF=e2e \
             bash install.sh </dev/null 2>&1 | tee rerun.log
           grep -q '(existing password preserved)' rerun.log
-          for _ in $(seq 1 30); do
-            rhapsod status >/dev/null 2>&1 && break
-            sleep 2
-          done
-          rhapsod status
+          bash "$RUNNER_TEMP/wait-connected"
+          rhapsod doctor
+
+      - name: Back up
+        run: |
+          sudo rhapsod backup | tee backup.txt
+          file="$(sed -n 's/^Backup: //p' backup.txt)"
+          sudo tar -tzf "$file" > backup-list.txt
+          grep -qx '.env' backup-list.txt
+          grep -q '^data/' backup-list.txt
+          bash "$RUNNER_TEMP/wait-connected"
+
+      - name: Update to a new version
+        run: |
+          sudo -u rhapsod git -C /home/rhapsod/rhapsod rev-parse HEAD > installed.sha
+          sudo git -C /opt/rhapsod-src -c user.name=e2e -c user.email=e2e@localhost \
+            commit -q --allow-empty -m "e2e: next version"
+          git -C /opt/rhapsod-src rev-parse HEAD > updated.sha
+          sudo rhapsod update --ref e2e
+          test "$(sudo -u rhapsod git -C /home/rhapsod/rhapsod rev-parse HEAD)" = "$(cat updated.sha)"
+          bash "$RUNNER_TEMP/wait-connected"
+
+      # A version that crashes on start must be rolled back by the update.
+      - name: Update to a broken version
+        run: |
+          sudo sed -i '1i process.exit(1);' /opt/rhapsod-src/src/main.ts
+          sudo git -C /opt/rhapsod-src -c user.name=e2e -c user.email=e2e@localhost \
+            commit -q -a -m "e2e: version that crashes"
+          if sudo rhapsod update --ref e2e; then
+            echo "the broken update was not rolled back"
+            exit 1
+          fi
+          test "$(sudo -u rhapsod git -C /home/rhapsod/rhapsod rev-parse HEAD)" = "$(cat updated.sha)"
+          bash "$RUNNER_TEMP/wait-connected"
+
+      - name: Roll back
+        run: |
+          sudo rhapsod rollback
+          test "$(sudo -u rhapsod git -C /home/rhapsod/rhapsod rev-parse HEAD)" = "$(cat installed.sha)"
+          bash "$RUNNER_TEMP/wait-connected"
+
+      - name: Uninstall
+        run: |
+          sudo rhapsod uninstall --purge --yes
+          if id rhapsod 2>/dev/null; then echo "user left behind"; exit 1; fi
+          if [[ -e /home/rhapsod || -e /usr/local/bin/rhapsod || -e /etc/rhapsod ]]; then
+            echo "files left behind"
+            exit 1
+          fi
+          if systemctl cat rhapsod >/dev/null 2>&1; then echo "unit left behind"; exit 1; fi
+          sudo ls /var/backups/rhapsod/ | grep -q '^rhapsod-.*\.tar\.gz$'
+
+      # A server that had Rhapsod before must take a new install cleanly.
+      - name: Install again
+        run: |
+          sudo git -C /opt/rhapsod-src reset -q --hard "$(cat updated.sha)"
+          sudo env RHAPSOD_REPOSITORY=/opt/rhapsod-src RHAPSOD_REF=e2e \
+            RHAPSOD_TS3_HOST=127.0.0.1 bash install.sh </dev/null 2>&1 | tee reinstall.log
+          grep -q 'The bot is in your TeamSpeak server.' reinstall.log
+          bash "$RUNNER_TEMP/wait-connected"
           rhapsod doctor
 
       - name: Logs
