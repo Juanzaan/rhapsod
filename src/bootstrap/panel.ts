@@ -19,6 +19,7 @@ import type { AppConfig } from "../config.js";
 import type { Track } from "../domain/track.js";
 import { APP_VERSION } from "../lib/version.js";
 import type { RadioTitleCache } from "../media/radio-icy.js";
+import type { DaemonHealthSnapshot } from "../media/youtube/daemon-health.js";
 import type { YoutubePlaybackResolver } from "../media/youtube/youtube-resolver.js";
 import type { MetricsCollector } from "../observability/metrics.js";
 import {
@@ -79,6 +80,10 @@ export interface PanelStatusSources {
   readonly radioTitles: Pick<RadioTitleCache, "peek">;
   readonly scrobbler: Pick<RadioScrobbler, "confirmedCount">;
   readonly uptimeSeconds?: () => number;
+  readonly reconnecting?: () => boolean;
+  readonly youtubeAuthHealthy?: () => boolean;
+  /** Undefined when no yt-dlp daemon is configured. */
+  readonly ytdlpDaemon?: () => DaemonHealthSnapshot | undefined;
 }
 
 /** Live radio shows the song the station is playing, not the station. */
@@ -95,8 +100,14 @@ export function panelStatus(sources: PanelStatusSources): PanelStatus {
   const channelId = connection.getCurrentChannelId();
   const current = playback.current;
   const uptimeSeconds = sources.uptimeSeconds?.() ?? process.uptime();
+  // The channel id is cached by the client and outlives a dropped
+  // connection, so it alone reported "connected" during reconnects.
+  const reconnecting = sources.reconnecting?.() ?? false;
+  const youtubeAuthHealthy = sources.youtubeAuthHealthy?.();
+  const ytdlpDaemon = sources.ytdlpDaemon?.();
   return {
-    connected: channelId > 0,
+    connected: channelId > 0 && !reconnecting,
+    reconnecting,
     ...(channelId > 0 ? { currentChannelId: channelId } : {}),
     queueLength: playback.queue().length,
     ...(current === undefined
@@ -113,6 +124,8 @@ export function panelStatus(sources: PanelStatusSources): PanelStatus {
     tracksPlayed: playback.tracksPlayed + scrobbler.confirmedCount,
     uptimeMs: Math.round(uptimeSeconds * 1000),
     disconnects: metrics.disconnectSummary(),
+    ...(youtubeAuthHealthy === undefined ? {} : { youtubeAuthHealthy }),
+    ...(ytdlpDaemon === undefined ? {} : { ytdlpDaemon }),
     version: APP_VERSION,
   };
 }
@@ -157,6 +170,7 @@ export function startConnectedPanel(
         playback: options.playbackMetrics,
         uptimeSeconds: process.uptime(),
         version: APP_VERSION,
+        ytdlpDaemon: options.ytdlpDaemon?.(),
       }),
     chat: () => options.chatLog.snapshot(),
     sendChat: (text: string) => connection.sendChannelMessage(text),

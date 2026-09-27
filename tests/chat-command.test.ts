@@ -36,6 +36,11 @@ describe("parseChatCommand", () => {
     expect(parseChatCommand("!stats")).toEqual({ name: "stats" });
     expect(parseChatCommand("!st")).toEqual({ name: "stats" });
     expect(parseChatCommand("!diag")).toEqual({ name: "diag" });
+    expect(parseChatCommand("!claim abcde-fghjk")).toEqual({
+      code: "abcde-fghjk",
+      name: "claim",
+    });
+    expect(() => parseChatCommand("!claim")).toThrow("!claim <código>");
     expect(parseChatCommand("!hist")).toEqual({ name: "history" });
     expect(parseChatCommand("!pn duki rockstar")).toEqual({
       input: "duki rockstar",
@@ -368,5 +373,10 @@ describe("runsWithoutTalkPower", () => {
     const play = parseChatCommand("!play algo");
     expect(move && runsWithoutTalkPower(move)).toBe(true);
     expect(play && runsWithoutTalkPower(play)).toBe(false);
+  });
+
+  it("lets !claim through so a fresh install can get its first admin", () => {
+    const claim = parseChatCommand("!claim abcde-fghjk");
+    expect(claim && runsWithoutTalkPower(claim)).toBe(true);
   });
 });

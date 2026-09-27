@@ -79,3 +79,28 @@ jobs:
           docker run --rm rhapsod:ci yt-dlp --version
           docker run --rm rhapsod:ci python3 -c 'import yt_dlp'
           docker run --rm rhapsod:ci ffmpeg -version
+
+  desktop:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build the Windows launcher
+        shell: pwsh
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File tools\desktop\build.ps1
+      # The app is a tray program with no console; --self-test runs its
+      # non-UI checks (settings round trip, port validation, telling a
+      # foreign HTTP service from the panel) and writes a report.
+      - name: Self-test
+        shell: pwsh
+        run: |
+          $report = Join-Path $env:RUNNER_TEMP 'dashboard-self-test.txt'
+          $process = Start-Process -FilePath tools/desktop/bin/RhapsodDashboard.exe `
+            -ArgumentList '--self-test', "`"$report`"" -Wait -PassThru
+          Get-Content $report
+          if ($process.ExitCode -ne 0) { throw "self-test failed with exit code $($process.ExitCode)" }
+      - uses: actions/upload-artifact@v7
+        with:
+          name: rhapsod-dashboard
+          path: tools/desktop/bin/RhapsodDashboard.exe
+          retention-days: 14

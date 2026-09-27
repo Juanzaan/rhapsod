@@ -28,6 +28,7 @@ import type { PlaybackState } from "../src/domain/state-store.js";
 import { AudioUrlCache } from "../src/application/audio-url-cache.js";
 import { PlaylistStore } from "../src/application/playlist-store.js";
 import type { RedirectResolver } from "../src/media/redirect-resolver.js";
+import type { NonMusicSegmentSource } from "../src/media/youtube/non-music-segments.js";
 
 interface TimingCall {
   readonly stage: string;
@@ -52,6 +53,7 @@ function setup(
       underruns: number;
     };
     loudnessProfiler?: LoudnessProfiler;
+    nonMusicSegments?: NonMusicSegmentSource;
     prewarmNext?: boolean;
     restoredState?: {
       autoplay?: boolean;
@@ -333,6 +335,9 @@ function setup(
       ? { loudnessProfiler: options.loudnessProfiler }
       : {}),
     ...(options.proxyUrl === undefined ? {} : { proxyUrl: options.proxyUrl }),
+    ...(options.nonMusicSegments
+      ? { nonMusicSegments: options.nonMusicSegments }
+      : {}),
     ...(options.autoplayProfile
       ? {
           autoplayProfile: {
@@ -1836,6 +1841,36 @@ describe("YoutubePlaybackService", () => {
       id: "search-result",
       requestedBy: "user-1",
     });
+  });
+
+  it("skips Spotify tracks that are already queued and keeps going", async () => {
+    const { service, spotifyResolver } = setup({ spotifyResolver: true });
+    const tracks = [
+      { artist: "A", durationSeconds: 180, id: "s1", title: "One" },
+      { artist: "B", durationSeconds: 181, id: "s2", title: "Two" },
+      { artist: "C", durationSeconds: 182, id: "s3", title: "Three" },
+    ];
+    spotifyResolver!.expandPlaylist.mockResolvedValueOnce({ tracks });
+    await service.enqueueSpotifyCollection(
+      { id: "p1", type: "playlist" },
+      "user-1",
+    );
+    const queuedBefore = service.queue().length;
+    spotifyResolver!.expandPlaylist.mockResolvedValueOnce({
+      tracks: [
+        ...tracks,
+        { artist: "D", durationSeconds: 183, id: "s4", title: "Four" },
+      ],
+    });
+
+    const result = await service.enqueueSpotifyCollection(
+      { id: "p2", type: "playlist" },
+      "user-1",
+    );
+
+    // s1 is playing, so only s2 and s3 hit the queue's duplicate check.
+    expect(result.added.map((track) => track.id)).toEqual(["s1", "s4"]);
+    expect(service.queue().length).toBe(queuedBefore + result.added.length);
   });
 
   it("rejects Spotify collections through the single-track path", async () => {
@@ -3543,6 +3578,172 @@ describe("YoutubePlaybackService", () => {
     expect(call?.[3]).not.toHaveProperty("handoffGapMs");
   });
 
+  it("starts and ends a track at the music bounds of its video", async () => {
+    const boundsFor = vi.fn<NonMusicSegmentSource["boundsFor"]>((track) =>
+      Promise.resolve(
+        track.id === "first"
+          ? { endSeconds: 200, startSeconds: 12 }
+          : undefined,
+      ),
+    );
+    const { createPlayback, resolver, service } = setup({
+      nonMusicSegments: { boundsFor },
+    });
+    resolver.getTrack.mockImplementation((resource: { id: string }) =>
+      Promise.resolve({
+        durationSeconds: 240,
+        id: resource.id,
+        title: `Track ${resource.id}`,
+        webpageUrl: `https://www.youtube.com/watch?v=${resource.id}`,
+      }),
+    );
+
+    await service.enqueue("https://youtu.be/first", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(service.current?.id).toBe("first");
+    expect((createPlayback as Mock).mock.calls.at(-1)?.[3]).toMatchObject({
+      endSeconds: 200,
+      seekSeconds: 12,
+    });
+  });
+
+  it("keeps the music end when a seek restarts the track", async () => {
+    const { createPlayback, playbackResolvers, resolver, service } = setup({
+      nonMusicSegments: {
+        boundsFor: () => Promise.resolve({ endSeconds: 200, startSeconds: 12 }),
+      },
+    });
+    resolver.getTrack.mockImplementation((resource: { id: string }) =>
+      Promise.resolve({
+        durationSeconds: 240,
+        id: resource.id,
+        title: `Track ${resource.id}`,
+        webpageUrl: `https://www.youtube.com/watch?v=${resource.id}`,
+      }),
+    );
+    await service.enqueue("https://youtu.be/first", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    service.seek(30);
+    playbackResolvers[0]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(service.current?.id).toBe("first");
+    expect((createPlayback as Mock).mock.calls.at(-1)?.[3]).toMatchObject({
+      endSeconds: 200,
+      seekSeconds: 30,
+    });
+  });
+
+  it("plays the whole track when the segment lookup fails", async () => {
+    const { createPlayback, resolver, service } = setup({
+      nonMusicSegments: {
+        boundsFor: () => Promise.reject(new Error("lookup down")),
+      },
+    });
+    resolver.getTrack.mockImplementation((resource: { id: string }) =>
+      Promise.resolve({
+        durationSeconds: 240,
+        id: resource.id,
+        title: `Track ${resource.id}`,
+        webpageUrl: `https://www.youtube.com/watch?v=${resource.id}`,
+      }),
+    );
+
+    await service.enqueue("https://youtu.be/first", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(service.current?.id).toBe("first");
+    const options = (createPlayback as Mock).mock.calls.at(-1)?.[3] as {
+      endSeconds?: number;
+      seekSeconds?: number;
+    };
+    expect(options.seekSeconds).toBeUndefined();
+    expect(options.endSeconds).toBeUndefined();
+  });
+
+  it("spawns the prewarmed stream at the next track's music bounds", async () => {
+    const metrics = {
+      bufferedBytes: 0,
+      framesSent: 0,
+      maxBufferedBytes: 3_840,
+      rebufferEvents: 0,
+      underruns: 0,
+    };
+    const { createPcmStreamMock, resolver, service } = setup({
+      metrics,
+      nonMusicSegments: {
+        boundsFor: (track) =>
+          Promise.resolve(
+            track.id === "second"
+              ? { endSeconds: 110, startSeconds: 8 }
+              : undefined,
+          ),
+      },
+      prewarmNext: true,
+    });
+    resolver.getTrack.mockImplementation((resource: { id: string }) =>
+      Promise.resolve({
+        durationSeconds: 120,
+        id: resource.id,
+        title: `Track ${resource.id}`,
+        webpageUrl: `https://www.youtube.com/watch?v=${resource.id}`,
+      }),
+    );
+    await service.enqueue("https://youtu.be/first", "user-1");
+    await service.enqueue("https://youtu.be/second", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+    metrics.framesSent = Math.ceil(65_000 / 20);
+    await new Promise((resolve) => setTimeout(resolve, 180));
+
+    expect(createPcmStreamMock).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ endSeconds: 110, seekSeconds: 8 }),
+    );
+  });
+
+  it("prewarms at the midpoint of the trimmed track, not of the video", async () => {
+    const metrics = {
+      bufferedBytes: 0,
+      framesSent: 0,
+      maxBufferedBytes: 3_840,
+      rebufferEvents: 0,
+      underruns: 0,
+    };
+    const { createPcmStreamMock, resolver, service } = setup({
+      metrics,
+      nonMusicSegments: {
+        boundsFor: (track) =>
+          Promise.resolve(
+            track.id === "first"
+              ? { endSeconds: 100, startSeconds: 10 }
+              : undefined,
+          ),
+      },
+      prewarmNext: true,
+    });
+    resolver.getTrack.mockImplementation((resource: { id: string }) =>
+      Promise.resolve({
+        durationSeconds: 240,
+        id: resource.id,
+        title: `Track ${resource.id}`,
+        webpageUrl: `https://www.youtube.com/watch?v=${resource.id}`,
+      }),
+    );
+    await service.enqueue("https://youtu.be/first", "user-1");
+    await service.enqueue("https://youtu.be/second", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+    // 50 s into a play that runs from 10 s to 100 s: past its midpoint, but
+    // short of half the 240 s video.
+    metrics.framesSent = Math.ceil(50_000 / 20);
+    await new Promise((resolve) => setTimeout(resolve, 180));
+
+    expect(createPcmStreamMock).toHaveBeenCalled();
+  });
+
   it("marks a play started from the prewarmed stream", async () => {
     const metrics = {
       bufferedBytes: 0,
@@ -3756,6 +3957,63 @@ describe("YoutubePlaybackService", () => {
     });
   });
 
+  it("measures the next track from its music start when the intro is trimmed", async () => {
+    // The prefetch measurement runs before the warm stream and caches the
+    // profile, so without the bounds here a spoken intro was always measured.
+    const metrics = {
+      bufferedBytes: 0,
+      framesSent: 0,
+      maxBufferedBytes: 3_840,
+      rebufferEvents: 0,
+      underruns: 0,
+    };
+    const execFile = vi.fn(() =>
+      Promise.resolve({
+        stderr:
+          '{"input_i":"-9.50","input_tp":"-0.20","input_lra":"6.10","input_thresh":"-19.80"}',
+        stdout: "",
+      }),
+    );
+    const { resolver, service } = setup({
+      metrics,
+      prewarmNext: true,
+      loudnessProfiler: new LoudnessProfiler({ execFile, targetLufs: -16 }),
+      nonMusicSegments: {
+        boundsFor: (track) =>
+          Promise.resolve(
+            track.source.includes("second")
+              ? { endSeconds: 110, startSeconds: 12 }
+              : undefined,
+          ),
+      },
+    });
+    resolver.getTrack.mockImplementation((resource: { id: string }) =>
+      Promise.resolve({
+        durationSeconds: 120,
+        ...(resource.id === "first"
+          ? { audioUrl: "https://media.example/first" }
+          : {}),
+        id: resource.id,
+        title: `Track ${resource.id}`,
+        webpageUrl: `https://www.youtube.com/watch?v=${resource.id}`,
+      }),
+    );
+
+    await service.enqueue("https://youtu.be/first", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+    metrics.framesSent = 1;
+    await service.enqueue("https://youtu.be/second", "user-1");
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    expect(execFile).toHaveBeenCalledTimes(1);
+    const args =
+      ((execFile.mock.calls[0] as unknown[] | undefined)?.[1] as
+        string[] | undefined) ?? [];
+    expect(args.slice(0, args.indexOf("-i"))).toEqual(
+      expect.arrayContaining(["-ss", "12"]),
+    );
+  });
+
   it("bakes loudness options into the prewarm stream", async () => {
     // Warm-started tracks must sound identical to cold-started ones; the
     // prewarm stream used to omit loudness entirely.
@@ -3921,19 +4179,23 @@ describe("YoutubePlaybackService", () => {
     expect(service.tracksPlayed).toBe(1);
   });
 
-  function stallingPlayback(stalls: number) {
+  function stallingPlayback(
+    stalls: number,
+    message = "Audio source stalled for 5000ms",
+    framesSent = 2_000,
+  ) {
     let remaining = stalls;
     return vi.fn((): FfmpegPlaybackSession => {
       const failing = remaining > 0;
       remaining--;
       return {
         done: failing
-          ? Promise.reject(new Error("Audio source stalled for 5000ms"))
+          ? Promise.reject(new Error(message))
           : new Promise<void>(() => {}),
         player: {
           metrics: {
             bufferedBytes: 0,
-            framesSent: failing ? 2_000 : 0,
+            framesSent: failing ? framesSent : 0,
             maxBufferedBytes: 3_840,
             rebufferEvents: 1,
             underruns: 250,
@@ -3977,6 +4239,64 @@ describe("YoutubePlaybackService", () => {
     expect(onPlaybackError).not.toHaveBeenCalled();
     // The daemon cache is only invalidated for a 403, not for a stall.
     expect(resolver.invalidateAudioUrl).not.toHaveBeenCalled();
+  });
+
+  it("resumes a song whose ffmpeg dies mid-play instead of skipping it", async () => {
+    // Regression: once ffmpeg's own reconnects ran out (outage longer than a
+    // few seconds, a 5xx on reconnect) it exited, and the song ended as an
+    // error and skipped to the next one.
+    const createPlayback = stallingPlayback(
+      1,
+      "FFmpeg exited with code 1: Connection reset by peer",
+    );
+    const {
+      onPlaybackError,
+      onPlaybackFinished,
+      onPlaybackStarted,
+      resolver,
+      service,
+    } = setup({ createPlayback });
+    resolver.getTrack.mockResolvedValue({
+      audioUrl: "https://media.example/audio",
+      durationSeconds: 200,
+      id: "first",
+      title: "Track first",
+      webpageUrl: "https://www.youtube.com/watch?v=first",
+    });
+
+    await service.enqueue("https://youtu.be/first", "user-1");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(createPlayback).toHaveBeenCalledTimes(2);
+    const resumeOptions = (
+      createPlayback.mock.calls[1] as unknown[] | undefined
+    )?.[3] as { seekSeconds?: number } | undefined;
+    expect(resumeOptions?.seekSeconds).toBe(40);
+    expect(onPlaybackStarted).toHaveBeenCalledTimes(1);
+    expect(onPlaybackFinished).not.toHaveBeenCalled();
+    expect(onPlaybackError).not.toHaveBeenCalled();
+  });
+
+  it("does not resume an ffmpeg failure before the first frame", async () => {
+    const createPlayback = stallingPlayback(
+      1,
+      "FFmpeg exited with code 1: Invalid data found when processing input",
+      0,
+    );
+    const { onPlaybackError, resolver, service } = setup({ createPlayback });
+    resolver.getTrack.mockResolvedValue({
+      audioUrl: "https://media.example/audio",
+      durationSeconds: 200,
+      id: "first",
+      title: "Track first",
+      webpageUrl: "https://www.youtube.com/watch?v=first",
+    });
+
+    await service.enqueue("https://youtu.be/first", "user-1");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(createPlayback).toHaveBeenCalledTimes(1);
+    expect(onPlaybackError).toHaveBeenCalledTimes(1);
   });
 
   it("gives up after a second stall in the same play", async () => {

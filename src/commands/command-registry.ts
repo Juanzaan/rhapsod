@@ -4,6 +4,7 @@ import type { ChatCommand } from "./chat-command.js";
 import {
   noArgument,
   parseAutoplay,
+  parseClaim,
   parseFavPlay,
   parseFuente,
   parseJump,
@@ -351,6 +352,15 @@ export const COMMANDS: CommandTable = {
       "channel-move",
       messages.parseChatCommandUsaChannelMoveNombre,
     ),
+  },
+  claim: {
+    name: "claim",
+    aliases: [],
+    group: "misc",
+    adminOnly: false,
+    usage: "claim <código>",
+    summary: "Hacerte admin con el código que mostró la instalación",
+    parse: parseClaim,
   },
   diag: {
     name: "diag",

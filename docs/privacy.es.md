@@ -22,6 +22,10 @@ Cada comando del chat queda registrado con su texto, el apodo y el UID de quien 
 
 La vista de chat del panel conserva los últimos 50 mensajes del canal solo en memoria; un reinicio los borra.
 
+## Servicios externos
+
+Con `RHAPSOD_SKIP_NON_MUSIC=true`, cada pista de YouTube se consulta en `sponsor.ajay.app` (SponsorBlock). El pedido lleva los primeros 4 caracteres del SHA-256 del id del video, que coinciden con muchos videos ajenos, y ningún dato de usuarios de TeamSpeak. Con el valor por defecto `false` no se hace ningún pedido.
+
 ## Borrar los datos de un usuario
 
 1. Buscar el UID a partir de un apodo que el bot haya visto:

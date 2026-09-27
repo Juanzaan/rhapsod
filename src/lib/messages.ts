@@ -138,6 +138,18 @@ export const messages = {
     statsOutput: string | number,
     authLine: string | number,
   ): string => `${statsOutput}${authLine}`,
+  parseChatCommandUsaClaimCodigo:
+    "Usá !claim <código>. El código lo muestra la instalación y está en data/admin-claim-code en el servidor.",
+  claimListo: "Listo, ahora sos admin de Rhapsod.",
+  claimListoSinGuardar: (uid: string): string =>
+    `Sos admin hasta el próximo reinicio: no pude guardar el cambio. Agregá ${uid} a RHAPSOD_ADMIN_UIDS en el archivo .env para que quede.`,
+  claimCerrado:
+    "Rhapsod ya tiene admin; !claim solo sirve en una instalación nueva.",
+  claimCodigoIncorrecto: "Código incorrecto.",
+  claimBloqueado:
+    "Demasiados intentos con un código incorrecto. Reiniciá el bot en el servidor para volver a intentar.",
+  claimAvisoCanal:
+    "Hola, soy Rhapsod. Todavía no tengo admin: quien me instaló puede escribir !claim <código> con el código que mostró la instalación.",
   diagSoloLosAdministradoresPueden:
     "Solo los administradores pueden usar este comando.",
   debugServerSoloLosAdministradoresPueden:
@@ -330,6 +342,15 @@ export const messages = {
     "Solo se pueden expandir colecciones de Spotify con !play.",
   enqueueAppleMusicCollectionEsteBotNoTiene:
     "Este bot no tiene resolución de links de Apple Music configurada.",
+  // Errors mapped for chat by userFacingError
+  errorCancionYaEnCola: "Esa canción ya está en la cola.",
+  errorDrmSoundcloud:
+    "SoundCloud no permite reproducir esta pista porque está protegida con DRM. Probá otra versión o una fuente distinta.",
+  errorFormatoNoDisponible:
+    "YouTube no ofrece un formato de audio reproducible para ese video (puede ser un directo o un video restringido). Probá otra versión.",
+  errorFalloDeRed:
+    "Fallo momentáneo de red con el proveedor (Spotify/YouTube). Probá de nuevo en unos segundos.",
+  errorGenerico: "Ocurrió un error. Probá de nuevo en unos segundos.",
   // Playback driver errors shown to users
   jumpToUsaJumpPosicion: "Usá: !jump <posición>",
   jumpToNoExisteEsaPosicion: "No existe esa posición en la cola.",

@@ -186,6 +186,7 @@ function makeHarness(
   const config = {
     RHAPSOD_TS3_NICKNAME: "Bot",
     RHAPSOD_VOTE_SKIP: overrides.voteSkip ?? false,
+    RHAPSOD_SKIP_NON_MUSIC: false,
   };
   const ctx = {
     playback,
@@ -251,6 +252,7 @@ describe("dispatchCommand", () => {
       ["autoplay-on", "!autoplay on"],
       ["autoplay-off", "!autoplay off"],
       ["stats", "!stats"],
+      ["claim", "!claim abcde-fghjk"],
       ["diag", "!diag"],
       ["debug-server", "!debug-server"],
       ["chart", "!chart"],
@@ -285,6 +287,66 @@ describe("dispatchCommand", () => {
       ).resolves.toBeUndefined();
       expect(send, `${name} should send a response`).toHaveBeenCalled();
     }
+  });
+
+  it("makes the sender admin with the pending claim code", async () => {
+    const { ctx, send, sender } = makeHarness();
+    const claim = vi.fn(() =>
+      Promise.resolve({ status: "claimed" as const, persisted: true }),
+    );
+    const withClaim = {
+      ...ctx,
+      adminClaim: { claim },
+    } as unknown as CommandContext;
+    await dispatchCommand(
+      withClaim,
+      parseChatCommand("!claim abcde-fghjk")!,
+      sender,
+      send,
+    );
+    expect(claim).toHaveBeenCalledWith("uid-1", "abcde-fghjk");
+    expect(send).toHaveBeenCalledWith("Listo, ahora sos admin de Rhapsod.");
+  });
+
+  it("tells the sender how to finish a claim that could not be saved", async () => {
+    const { ctx, send, sender } = makeHarness();
+    const claim = vi.fn(() =>
+      Promise.resolve({ status: "claimed" as const, persisted: false }),
+    );
+    const withClaim = {
+      ...ctx,
+      adminClaim: { claim },
+    } as unknown as CommandContext;
+    await dispatchCommand(
+      withClaim,
+      parseChatCommand("!claim x")!,
+      sender,
+      send,
+    );
+    expect(send).toHaveBeenCalledWith(
+      expect.stringContaining("Agregá uid-1 a RHAPSOD_ADMIN_UIDS"),
+    );
+  });
+
+  it("refuses !claim once the bot has an admin", async () => {
+    const { ctx, send, sender } = makeHarness();
+    await dispatchCommand(ctx, parseChatCommand("!claim x")!, sender, send);
+    expect(send).toHaveBeenCalledWith(
+      "Rhapsod ya tiene admin; !claim solo sirve en una instalación nueva.",
+    );
+  });
+
+  it("names the WARP fix in !stats when YouTube blocks the server address", async () => {
+    const { ctx, send, sender } = makeHarness();
+    const blocked = {
+      ...ctx,
+      youtubeAuthHealthy: false,
+      youtubeAuthFailure: "soft-block",
+    } as CommandContext;
+    await dispatchCommand(blocked, parseChatCommand("!stats")!, sender, send);
+    expect(send).toHaveBeenCalledWith(
+      expect.stringContaining("RHAPSOD_WITH_WARP=1"),
+    );
   });
 
   it("routes a command to exactly one handler (no double execution)", async () => {

@@ -5,16 +5,80 @@
 #
 # Supported: Ubuntu 20.04+, Debian 11+, RHEL / Oracle Linux / Rocky / Alma 9+
 # on x86_64 or aarch64 (arm64). Installs: Node 22, yt-dlp (binary + daemon package), static
-# FFmpeg, Cloudflare WARP (proxy mode, fallback egress for YouTube 403s),
-# the bgutil POT provider, the bot itself, systemd units, and a weekly
-# yt-dlp updater. Ends by printing the panel password and next steps.
+# FFmpeg, the bgutil POT provider, the bot itself, systemd units, and a weekly
+# yt-dlp updater. On a new install it asks for the TeamSpeak server, so the
+# bot joins it as soon as the install ends, and prints the !claim code that
+# makes the owner admin.
 #
 # Optional environment overrides:
-#   RHAPSOD_REF        git ref to install (default: latest stable tag)
-#   RHAPSOD_APP_DIR    install dir (default: /home/rhapsod/rhapsod)
-#   RHAPSOD_USER       service user (default: rhapsod)
-#   RHAPSOD_SKIP_WARP  set to 1 to skip Cloudflare WARP
+#   RHAPSOD_REF           git ref to install (default: latest stable tag)
+#   RHAPSOD_APP_DIR       install dir (default: /home/rhapsod/rhapsod)
+#   RHAPSOD_USER          service user (default: rhapsod)
+#   RHAPSOD_TS3_HOST      TeamSpeak server (host or host:port); skips the question
+#   RHAPSOD_TS3_PASSWORD  TeamSpeak server password, if it has one
+#   RHAPSOD_WITH_WARP     set to 1 to add Cloudflare WARP (proxy mode), the
+#                         fallback egress when YouTube blocks the server's IP
+#   RHAPSOD_SKIP_WARP     set to 1 to leave WARP out even if already installed
 set -Eeuo pipefail
+
+# Turns the TeamSpeak answer ("host", "host:port" or "[ipv6]:port") into .env
+# lines. Fails on values that cannot be one .env line or one port.
+ts3_env_lines() {
+  local answer="$1" password="${2:-}" host port=""
+  # dotenv ends an unquoted value at "#" and strips quotes and spaces.
+  [[ "$answer$password" != *[[:space:]\#\"\']* ]] || return 1
+  if [[ "$answer" =~ ^\[([0-9A-Fa-f:.]+)\](:([0-9]+))?$ ]]; then
+    host="${BASH_REMATCH[1]}"
+    port="${BASH_REMATCH[3]}"
+  elif [[ "$answer" =~ ^([^:]+):([0-9]+)$ ]]; then
+    host="${BASH_REMATCH[1]}"
+    port="${BASH_REMATCH[2]}"
+  elif [[ "$answer" =~ ^[^:]+$ || "$answer" =~ ^[0-9A-Fa-f]*:[0-9A-Fa-f]*:[0-9A-Fa-f:.]*$ ]]; then
+    host="$answer"
+  else
+    return 1
+  fi
+  [[ -n "$host" ]] || return 1
+  if [[ -n "$port" ]] && (( 10#$port < 1 || 10#$port > 65535 )); then
+    return 1
+  fi
+  printf 'RHAPSOD_TS3_HOST=%s\n' "$host"
+  [[ -z "$port" ]] || printf 'RHAPSOD_TS3_PORT=%s\n' "$((10#$port))"
+  [[ -z "$password" ]] || printf 'RHAPSOD_TS3_PASSWORD=%s\n' "$password"
+  printf 'RHAPSOD_TS3_AUTO_CONNECT=true\n'
+}
+
+# Asks on the terminal even under `curl | sudo bash`, where stdin is the
+# script. Without a terminal and without RHAPSOD_TS3_HOST it prints nothing
+# and the bot boots panel-only, as before.
+ask_ts3() {
+  local answer="${RHAPSOD_TS3_HOST:-}" password="${RHAPSOD_TS3_PASSWORD:-}" lines
+  # Overridable so tests never prompt, even when run from a terminal.
+  local tty="${RHAPSOD_INSTALL_TTY:-/dev/tty}"
+  if [[ -z "$answer" ]] && { : <"$tty"; } 2>/dev/null; then
+    while true; do
+      read -rp "TeamSpeak server (address or address:port, Enter to set it later in the panel): " answer <"$tty"
+      [[ -n "$answer" ]] || return 0
+      read -rsp "Server password (Enter if none): " password <"$tty"
+      echo >"$tty"
+      if lines="$(ts3_env_lines "$answer" "$password")"; then
+        printf '%s\n' "$lines"
+        return 0
+      fi
+      echo "Use an address like ts.example.com or ts.example.com:9987. A password with spaces, #, or quotes has to be set later in the panel." >"$tty"
+    done
+  fi
+  [[ -n "$answer" ]] || return 0
+  ts3_env_lines "$answer" "$password" \
+    || { echo "RHAPSOD_TS3_HOST or RHAPSOD_TS3_PASSWORD cannot be written to .env" >&2; return 1; }
+}
+
+# Tests run one of the functions above without running the install:
+#   RHAPSOD_INSTALL_FUNCTIONS_ONLY=1 bash install.sh ts3_env_lines host
+if [[ "${RHAPSOD_INSTALL_FUNCTIONS_ONLY:-0}" == "1" ]]; then
+  [[ $# -eq 0 ]] || { "$@"; exit $?; }
+  return 0 2>/dev/null || exit 0
+fi
 
 REPOSITORY="https://github.com/Juanzaan/rhapsod.git"
 POT_REPOSITORY="https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git"
@@ -28,7 +92,16 @@ POT_DIR="/home/$APP_USER/bgutil-ytdlp-pot-provider"
 DAEMON_DEPS="/home/$APP_USER/ytdlp-deps"
 POT_PORT="4416"
 WARP_PROXY="socks5h://127.0.0.1:40000"
-SKIP_WARP="${RHAPSOD_SKIP_WARP:-0}"
+# WARP only helps when YouTube blocks the server's address, which happens on
+# cloud VPS ranges and rarely on a home connection, so it is opt-in. A rerun
+# keeps an existing WARP setup: dropping it would change the daemon's egress.
+if [[ "${RHAPSOD_SKIP_WARP:-0}" == "1" ]]; then
+  SKIP_WARP=1
+elif [[ "${RHAPSOD_WITH_WARP:-0}" == "1" ]] || command -v warp-cli >/dev/null 2>&1; then
+  SKIP_WARP=0
+else
+  SKIP_WARP=1
+fi
 
 log() { printf '=== RHAPSOD: %s ===\n' "$1"; }
 warn() { printf '=== RHAPSOD WARNING: %s ===\n' "$1" >&2; }
@@ -74,6 +147,14 @@ case "${ID:-}" in
     ;;
 esac
 log "Detected distro family: $DISTRO_FAMILY (${ID:-?} ${VERSION_ID:-?})"
+
+# Asked before the long downloads so the owner can answer and walk away.
+TS3_ENV=""
+FRESH_INSTALL=0
+if [[ ! -e "$APP_DIR/.env" ]]; then
+  FRESH_INSTALL=1
+  TS3_ENV="$(ask_ts3)" || fail "invalid RHAPSOD_TS3_HOST"
+fi
 
 install_base_debian() {
   export DEBIAN_FRONTEND=noninteractive
@@ -179,7 +260,7 @@ install_warp_rhel() {
 }
 
 if [[ "$SKIP_WARP" == "1" ]]; then
-  warn "skipping WARP (RHAPSOD_SKIP_WARP=1); 403 fallback will be disabled"
+  log "Skipping Cloudflare WARP (add it with RHAPSOD_WITH_WARP=1 if YouTube blocks this server)"
 else
   log "Installing Cloudflare WARP"
   if [[ "$DISTRO_FAMILY" == "debian" ]]; then
@@ -245,12 +326,15 @@ PANEL_PASSWORD="(existing password preserved)"
 if [[ ! -e "$APP_DIR/.env" ]]; then
   install -o "$APP_USER" -g "$APP_USER" -m 0600 /dev/null "$APP_DIR/.env"
   PANEL_PASSWORD="$(openssl rand -hex 12)"
+  if [[ -z "$TS3_ENV" ]]; then
+    # Placeholder until the wizard saves a real host; the bot boots
+    # panel-only (AUTO_CONNECT=false) so /setup is reachable out of the box.
+    # Completing the wizard's TeamSpeak step writes the real host and flips
+    # AUTO_CONNECT=true.
+    TS3_ENV=$'RHAPSOD_TS3_HOST=setup.invalid\nRHAPSOD_TS3_AUTO_CONNECT=false'
+  fi
   sudo -u "$APP_USER" tee "$APP_DIR/.env" >/dev/null <<ENV
-# Placeholder until the wizard saves a real host; the bot boots panel-only
-# (AUTO_CONNECT=false) so /setup is reachable out of the box. Completing the
-# wizard's TeamSpeak step writes the real host and flips AUTO_CONNECT=true.
-RHAPSOD_TS3_HOST=setup.invalid
-RHAPSOD_TS3_AUTO_CONNECT=false
+$TS3_ENV
 RHAPSOD_DATA_DIR=./data
 RHAPSOD_YTDLP_PATH=/usr/local/bin/yt-dlp
 RHAPSOD_YTDLP_COOKIES_PATH=/home/$APP_USER/youtube-cookies.txt
@@ -263,10 +347,12 @@ RHAPSOD_PANEL_PORT=8080
 RHAPSOD_PANEL_USER=admin
 RHAPSOD_PANEL_PASSWORD=$PANEL_PASSWORD
 ENV
-  if [[ "$SKIP_WARP" != "1" ]]; then
-    echo "RHAPSOD_WARP_PROXY=$WARP_PROXY" | sudo -u "$APP_USER" tee -a "$APP_DIR/.env" >/dev/null
-  fi
   chmod 0600 "$APP_DIR/.env"
+fi
+WARP_ADDED=0
+if [[ "$SKIP_WARP" != "1" ]] && ! grep -q '^RHAPSOD_WARP_PROXY=' "$APP_DIR/.env"; then
+  echo "RHAPSOD_WARP_PROXY=$WARP_PROXY" | sudo -u "$APP_USER" tee -a "$APP_DIR/.env" >/dev/null
+  WARP_ADDED=1
 fi
 
 # --- systemd units --------------------------------------------------------------------
@@ -459,13 +545,58 @@ systemctl enable bgutil-pot-provider rhapsod-ytdlp-daemon rhapsod
 systemctl start bgutil-pot-provider rhapsod-ytdlp-daemon rhapsod
 
 log "Setup complete"
+
+# The bot writes the code while no admin is configured; see admin-claim.ts.
+CLAIM_FILE="$APP_DIR/data/admin-claim-code"
+CONNECTED=0
+WAITED=0
+# A rerun does not restart a running bot, so only a new install is waited on.
+if [[ "$FRESH_INSTALL" == "1" ]] && grep -q '^RHAPSOD_TS3_AUTO_CONNECT=true' "$APP_DIR/.env"; then
+  WAITED=1
+  log "Waiting for the bot to join TeamSpeak"
+  for _ in $(seq 1 45); do
+    if journalctl -u rhapsod --since "-2min" --no-pager 2>/dev/null \
+      | grep -q "Connected to TeamSpeak 3"; then
+      CONNECTED=1
+      break
+    fi
+    sleep 2
+  done
+fi
+# The bot writes it right after starting; a rerun with an admin has none.
+if [[ "$FRESH_INSTALL" == "1" ]]; then
+  for _ in $(seq 1 15); do
+    [[ ! -s "$CLAIM_FILE" ]] || break
+    sleep 1
+  done
+fi
+CLAIM_CODE="$(cat "$CLAIM_FILE" 2>/dev/null || true)"
+
+echo
+if [[ "$CONNECTED" == "1" ]]; then
+  echo "The bot is in your TeamSpeak server."
+  if [[ -n "$CLAIM_CODE" ]]; then
+    echo "Make yourself its admin: in TeamSpeak, send the bot or its channel"
+    echo "  !claim $CLAIM_CODE"
+  fi
+  echo "Then try:  !play <song or link>"
+elif [[ "$WAITED" == "1" ]]; then
+  echo "The bot has not joined TeamSpeak yet. Check the address and password:"
+  echo "  journalctl -u rhapsod -n 50 --no-pager"
+  [[ -z "$CLAIM_CODE" ]] || echo "Once it joins, send  !claim $CLAIM_CODE  to become its admin."
+elif [[ -n "$CLAIM_CODE" ]]; then
+  echo "Set the TeamSpeak server in the web panel below. Once the bot joins,"
+  echo "send  !claim $CLAIM_CODE  in TeamSpeak to become its admin."
+fi
+if [[ "$WARP_ADDED" == "1" ]]; then
+  echo "WARP was added. When nothing is playing, apply it with:"
+  echo "  sudo systemctl restart rhapsod-ytdlp-daemon rhapsod"
+fi
 printf '%s\n' \
   "" \
-  "Next steps (2 minutes):" \
-  "  1. Open an SSH tunnel:  ssh -L 8080:127.0.0.1:8080 <user>@<this-host>" \
-  "  2. Open http://127.0.0.1:8080/setup and follow the wizard." \
+  "Web panel (optional; settings, queue and diagnostics):" \
+  "  1. On your own computer, open a tunnel:  ssh -N -L 8080:127.0.0.1:8080 <user>@<this-host>" \
+  "  2. Open http://127.0.0.1:8080/ (first time without TeamSpeak set: /setup)." \
+  "  Login: admin / $PANEL_PASSWORD" \
   "" \
-  "Panel login:  admin / $PANEL_PASSWORD" \
-  "WARP egress:  $([[ "$SKIP_WARP" == "1" ]] && echo disabled || echo "$WARP_PROXY")" \
-  "YouTube cookies: paste them in the wizard (YouTube step) or replace" \
-  "  /home/$APP_USER/youtube-cookies.txt and restart the daemon + bot."
+  "WARP egress: $([[ "$SKIP_WARP" == "1" ]] && echo "off (rerun with RHAPSOD_WITH_WARP=1 if YouTube blocks this server)" || echo "$WARP_PROXY")"

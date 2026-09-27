@@ -101,6 +101,17 @@ describe("setup wizard", () => {
     expect(w.run("vals.RHAPSOD_OPUS_BITRATE")).toBe("96000");
   });
 
+  it("points new installs to !claim and keeps admin UIDs as an advanced field", () => {
+    const w = wizard();
+    const fresh = String(w.run("rO()"));
+    expect(fresh).toContain("!claim");
+    expect(fresh).toContain("<details>");
+    expect(fresh).toContain('id="iua"');
+
+    w.run('vals.RHAPSOD_ADMIN_UIDS = "abc="');
+    expect(String(w.run("rO()"))).toContain("<details open>");
+  });
+
   it("moves on after a successful connection test", async () => {
     const w = wizard();
     w.run("cur = 1");

@@ -1,10 +1,17 @@
+import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
+
 import { describe, expect, it, vi } from "vitest";
 
 import { CHANNELS, SAMPLE_RATE } from "../src/audio/opus-encoder.js";
 import {
   buildFfmpegPcmArguments,
+  buildLoudnessFilter,
+  probeFfmpegFilter,
+  resolveFfmpegBinary,
   createFfmpegPcmStream,
   ffmpegEnvironment,
+  isFfmpegExit,
   isForbiddenResponse,
 } from "../src/audio/ffmpeg-pcm.js";
 
@@ -21,6 +28,37 @@ describe("FFmpeg PCM source", () => {
     expect(args).toContain(String(SAMPLE_RATE));
     expect(args).toContain(String(CHANNELS));
     expect(args.at(-1)).toBe("pipe:1");
+  });
+
+  it("stops the input at the music end, on the track's own timeline", () => {
+    const args = buildFfmpegPcmArguments("https://cdn.example.test/audio", {
+      endSeconds: 200,
+      seekSeconds: 12,
+    });
+
+    const input = args.indexOf("-i");
+    expect(args.slice(0, input)).toEqual(
+      expect.arrayContaining(["-ss", "12", "-to", "200"]),
+    );
+    expect(args.indexOf("-to")).toBeGreaterThan(args.indexOf("-ss"));
+  });
+
+  it("plays to the real end when a seek lands past the music end", () => {
+    const args = buildFfmpegPcmArguments("https://cdn.example.test/audio", {
+      endSeconds: 200,
+      seekSeconds: 230,
+    });
+
+    expect(args).not.toContain("-to");
+  });
+
+  it("never stops a live stream at a music end", () => {
+    const args = buildFfmpegPcmArguments("https://cdn.example.test/audio", {
+      endSeconds: 200,
+      live: true,
+    });
+
+    expect(args).not.toContain("-to");
   });
 
   it("applies loudness normalization when a target is configured", () => {
@@ -636,5 +674,159 @@ describe("FFmpeg network guard", () => {
     } finally {
       writeSpy.mockRestore();
     }
+  });
+});
+
+describe("buildLoudnessFilter", () => {
+  const wideRange = {
+    measuredI: -20,
+    measuredLra: 18,
+    measuredThresh: -31,
+    measuredTp: -3,
+  };
+
+  it("applies a measured profile as a fixed gain plus a peak limiter", () => {
+    expect(
+      buildLoudnessFilter({
+        loudnessProfile: {
+          measuredI: -9.5,
+          measuredLra: 9.8,
+          measuredThresh: -23.1,
+          measuredTp: -0.2,
+        },
+        loudnessTargetLufs: -14,
+        peakLimiter: true,
+      }),
+    ).toBe("volume=-4.50dB,alimiter=limit=0.8414:level=false");
+  });
+
+  // loudnorm linear=true drops to its dynamic mode when measured_LRA exceeds
+  // LRA=11, so wide-range tracks were gain-ridden despite a profile.
+  it("keeps wide-range tracks on the fixed gain", () => {
+    const filter = buildLoudnessFilter({
+      loudnessProfile: wideRange,
+      loudnessTargetLufs: -14,
+      peakLimiter: true,
+    });
+
+    expect(filter).toBe("volume=6.00dB,alimiter=limit=0.8414:level=false");
+  });
+
+  it("caps the boost for near-silent tracks", () => {
+    expect(
+      buildLoudnessFilter({
+        loudnessProfile: { ...wideRange, measuredI: -45, measuredTp: -30 },
+        loudnessTargetLufs: -14,
+        peakLimiter: true,
+      }),
+    ).toBe("volume=12.00dB,alimiter=limit=0.8414:level=false");
+  });
+
+  it("keeps loudnorm's linear pass when alimiter is missing", () => {
+    const filter = buildLoudnessFilter({
+      loudnessProfile: wideRange,
+      loudnessTargetLufs: -14,
+      peakLimiter: false,
+    });
+
+    expect(filter).toContain("linear=true");
+    expect(filter).not.toContain("alimiter");
+  });
+
+  it("does nothing when normalization is disabled", () => {
+    expect(
+      buildLoudnessFilter({
+        loudnessProfile: wideRange,
+        loudnessTargetLufs: 0,
+        peakLimiter: true,
+      }),
+    ).toBeUndefined();
+  });
+});
+
+describe("probeFfmpegFilter", () => {
+  const listing = [
+    "Filters:",
+    "  T.. = Timeline support",
+    " ------",
+    " T.C alimiter          A->A       Audio lookahead limiter.",
+    " ... loudnorm          A->A       EBU R128 loudness normalization",
+  ].join("\n");
+
+  it("finds a filter by its name column", async () => {
+    const run = vi.fn(() => Promise.resolve({ stdout: listing }));
+
+    await expect(probeFfmpegFilter("ffmpeg", "alimiter", run)).resolves.toBe(
+      true,
+    );
+    expect(run).toHaveBeenCalledWith("ffmpeg", ["-hide_banner", "-filters"]);
+  });
+
+  it("does not match a name inside a description", async () => {
+    const run = vi.fn(() => Promise.resolve({ stdout: listing }));
+
+    await expect(probeFfmpegFilter("ffmpeg", "lookahead", run)).resolves.toBe(
+      false,
+    );
+  });
+
+  it("treats a binary that fails to run as missing the filter", async () => {
+    const run = vi.fn(() => Promise.reject(new Error("ENOENT")));
+
+    await expect(probeFfmpegFilter("ffmpeg", "alimiter", run)).resolves.toBe(
+      false,
+    );
+  });
+
+  const bundled = resolveFfmpegBinary(undefined);
+  it.skipIf(!existsSync(bundled))(
+    "keeps a boosted track under the ceiling with the real binary",
+    async () => {
+      await expect(probeFfmpegFilter(bundled, "alimiter")).resolves.toBe(true);
+      // A 0.9 amplitude sine boosted by 6 dB would hit full scale; the
+      // limiter holds it near the -1.5 dBFS ceiling.
+      const filter = buildLoudnessFilter({
+        loudnessProfile: {
+          measuredI: -20,
+          measuredLra: 1,
+          measuredThresh: -30,
+          measuredTp: -1,
+        },
+        loudnessTargetLufs: -14,
+        peakLimiter: true,
+      });
+      const pcm = execFileSync(bundled, [
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-f",
+        "lavfi",
+        "-i",
+        "aevalsrc=0.9*sin(2*PI*440*t):d=2",
+        "-af",
+        filter!,
+        "-f",
+        "s16le",
+        "-ac",
+        "1",
+        "pipe:1",
+      ]);
+      let peak = 0;
+      for (let i = 0; i + 1 < pcm.length; i += 2) {
+        peak = Math.max(peak, Math.abs(pcm.readInt16LE(i)));
+      }
+      expect(peak / 32768).toBeLessThanOrEqual(0.85);
+      expect(peak / 32768).toBeGreaterThan(0.8);
+    },
+    15_000,
+  );
+});
+
+describe("isFfmpegExit", () => {
+  it("matches the error the PCM stream raises when ffmpeg dies", () => {
+    expect(isFfmpegExit("FFmpeg exited with code 1: Connection reset")).toBe(
+      true,
+    );
+    expect(isFfmpegExit("Audio source stalled for 5000ms")).toBe(false);
   });
 });
