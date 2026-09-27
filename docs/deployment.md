@@ -136,35 +136,43 @@ With a yt-dlp daemon configured, `rhapsod_ytdlp_daemon_up` drops to 0 while the 
 
 ## Docker Compose (Linux)
 
-The Compose file starts separate bot and yt-dlp containers using Linux host networking. Both services bind to localhost; no panel port is published. This layout also lets the bot reach a TeamSpeak server or optional extraction services on the host.
+The Compose file runs the published multi-architecture image `ghcr.io/juanzaan/rhapsod` (linux/amd64 and linux/arm64) as separate bot and yt-dlp containers, plus the bgutil POT provider, all on Linux host networking. Every service binds to localhost; no panel port is published. This layout also lets the bot reach a TeamSpeak server or optional extraction services on the host.
 
-Prepare `.env` and set container paths:
-
-```dotenv
-RHAPSOD_DATA_DIR=/app/data
-RHAPSOD_YTDLP_PATH=yt-dlp
-RHAPSOD_FFMPEG_PATH=/usr/bin/ffmpeg
-RHAPSOD_FFPROBE_PATH=/usr/bin/ffprobe
-RHAPSOD_YTDLP_COOKIES_PATH=/app/data/youtube-cookies.txt
-```
-
-Create `data/` and place a cookie file there if required. The bot mounts data read/write; the daemon reads it read-only. `.env` is mounted for panel edits; recreate containers after changing environment values because Compose injects them at container creation.
-
-The containers run as the unprivileged `node` user (uid 1000). Make the mounted files writable by that uid:
+Copy `docker-compose.yml` to an empty directory and start it:
 
 ```bash
-sudo chown -R 1000:1000 data .env
+docker compose up -d
+docker compose logs rhapsod
 ```
 
-Compose also starts the bgutil POT provider, bound to `127.0.0.1:4416` and pinned to the plugin version in the image. WARP stays a host service.
+The first start needs no `.env`. The bot's container writes `data/.env` inside the `rhapsod-data` volume with container paths, boots the panel-only setup mode and prints `panel login admin / <password>` once to its log. Set `RHAPSOD_TS3_HOST` under the `rhapsod` service's `environment:` before the first start to join TeamSpeak right away instead; the bot then logs the `!claim` code. Open the panel through an SSH tunnel as in [installation](install.md), and load cookies through its YouTube step when needed.
+
+`RHAPSOD_VERSION` picks the image tag: `4` (default) follows 4.x releases, `4.1` stays on one minor, `4.1.2` pins a release. Tags are rebuilt every week with the newest yt-dlp. Values under `environment:` override `data/.env`.
+
+The containers run as the unprivileged `node` user (uid 1000), which owns the named volume. Copy files in or out with `docker compose cp`. The image's healthcheck reads the panel with the password from `data/.env`, so `docker compose ps` shows `healthy` only while the panel is enabled and answering; the same checks as the host command run inside the container:
 
 ```bash
-docker compose config --quiet
-docker compose up -d --build
-docker compose logs --tail=100 rhapsod ytdlp
+docker compose exec rhapsod node dist/cli.js status
+docker compose exec rhapsod node dist/cli.js doctor
+docker compose exec rhapsod node dist/cli.js password
 ```
 
-For updates, check idle state, back up data, fetch the chosen source revision and run `docker compose up -d --build --force-recreate`. The image installs Python dependencies in a virtual environment and excludes development npm packages from runtime.
+WARP stays a host service. To build the image from a checkout instead of pulling it:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+```
+
+For updates, check idle state, back up the volume and run `docker compose pull && docker compose up -d`.
+
+Installs made with the earlier Compose file kept `.env` and `data/` next to it. Move both into the volume once, with the old containers stopped:
+
+```bash
+docker compose down
+docker compose run --rm --no-deps -v "$PWD:/old:ro" --entrypoint sh rhapsod \
+  -c 'cp -a /old/data/. /app/data/ && cp /old/.env /app/data/.env'
+docker compose up -d
+```
 
 ## Multiple instances
 
