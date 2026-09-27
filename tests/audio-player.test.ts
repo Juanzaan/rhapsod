@@ -47,6 +47,29 @@ function setup() {
 }
 
 describe("AudioPlayer", () => {
+  it("stamps the last frame of source audio, not the silence after it", () => {
+    vi.useFakeTimers({ now: 10_000 });
+    try {
+      const { clock, player } = setup();
+      const source = new PassThrough();
+      void player.play(source);
+      expect(player.metrics).not.toHaveProperty("lastAudioFrameAt");
+      source.write(Buffer.alloc(PCM_FRAME_BYTES * 16, 7));
+      clock.tick();
+      vi.setSystemTime(10_500);
+      clock.tick();
+      expect(player.metrics.lastAudioFrameAt).toBe(10_500);
+
+      for (let frame = 0; frame < 14; frame++) clock.tick();
+      vi.setSystemTime(11_000);
+      clock.tick(); // buffer empty: an underrun frame of silence
+      expect(player.metrics.underruns).toBe(1);
+      expect(player.metrics.lastAudioFrameAt).toBe(10_500);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("reports its clock's tick timing with the play metrics", () => {
     const { encoder, output } = setup();
     const timing = {
