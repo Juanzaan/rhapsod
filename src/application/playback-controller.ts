@@ -59,10 +59,16 @@ type SessionEndReason = PlaybackEndReason | "restart";
  *   (resolution, ffmpeg startup and buffering).
  * - handoffGapMs: from the previous track's end to this track's first frame,
  *   the silence listeners hear; absent after the driver sat idle.
+ * - interTrackGapMs: from the previous track's last frame of audio to this
+ *   track's first, without the end-of-session bookkeeping in handoffGapMs.
+ * - commandToFirstAudioMs: from the request that queued this track to its
+ *   first frame; only for a cold start, where nothing else was playing.
  */
 export interface PlaybackKpis {
   readonly coldStart: boolean;
+  readonly commandToFirstAudioMs?: number;
   readonly handoffGapMs?: number;
+  readonly interTrackGapMs?: number;
   readonly prewarmed: boolean;
   readonly startDelayMs?: number;
 }
@@ -73,6 +79,7 @@ interface PlayStart {
   readonly player: { readonly metrics: AudioPlayerMetrics };
   readonly prewarmed: boolean;
   readonly previousEndedAt: number | undefined;
+  readonly previousLastAudioAt: number | undefined;
 }
 
 export interface PlaybackTiming {
@@ -199,9 +206,11 @@ export class PlaybackController {
   ) => void;
   readonly #onTiming: (timing: PlaybackTiming) => void;
   readonly #playStarts = new WeakMap<Track, PlayStart>();
+  readonly #requestedAt = new WeakMap<Track, number>();
   // When the last session ended while more was queued; cleared when the
   // driver goes idle so a start after silence counts as cold, not a gap.
   #lastSessionEndedAt: number | undefined;
+  #lastAudioFrameAt: number | undefined;
   readonly #onStateChanged: () => void;
   readonly #autoplayProvider: (() => Promise<Track | undefined>) | undefined;
   readonly #autoplayTimeoutMs: number;
@@ -355,8 +364,17 @@ export class PlaybackController {
     const delay = start.player.metrics.firstFrameDelayMs;
     const firstFrameAt =
       delay === undefined ? undefined : start.createdAt + delay;
+    const coldStart = start.previousEndedAt === undefined;
+    const requestedAt = this.#requestedAt.get(track);
+    this.#requestedAt.delete(track);
     return {
-      coldStart: start.previousEndedAt === undefined,
+      coldStart,
+      ...(firstFrameAt === undefined || !coldStart || requestedAt === undefined
+        ? {}
+        : { commandToFirstAudioMs: firstFrameAt - requestedAt }),
+      ...(firstFrameAt === undefined || start.previousLastAudioAt === undefined
+        ? {}
+        : { interTrackGapMs: firstFrameAt - start.previousLastAudioAt }),
       prewarmed: start.prewarmed,
       ...(firstFrameAt === undefined
         ? {}
@@ -565,6 +583,11 @@ export class PlaybackController {
 
   resume(): void {
     this.#session?.player.resume();
+  }
+
+  /** When the command that queued this track arrived, for its KPIs. */
+  noteRequested(track: Track, at: number): void {
+    this.#requestedAt.set(track, at);
   }
 
   requestNext(): void {
@@ -794,6 +817,10 @@ export class PlaybackController {
             player: session.player,
             prewarmed,
             previousEndedAt: this.#lastSessionEndedAt,
+            previousLastAudioAt:
+              this.#lastSessionEndedAt === undefined
+                ? undefined
+                : this.#lastAudioFrameAt,
           });
           this.#tracksPlayed++;
           this.#recordHistory(track);
@@ -807,6 +834,8 @@ export class PlaybackController {
           playbackError = error;
         }
         this.#lastSessionEndedAt = Date.now();
+        this.#lastAudioFrameAt =
+          session.player.metrics.lastAudioFrameAt ?? this.#lastAudioFrameAt;
         const endReason =
           this.#sessionEndReasons.get(session) ??
           (playbackError !== undefined ? "error" : "completed");
