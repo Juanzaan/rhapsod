@@ -18,16 +18,12 @@ Measured loudness normalization works for the first time: tracks with a loudness
 - Panel: the Server page no longer rebuilds the channel tree every 2.5 seconds when nothing changed, which cut hover transitions mid-way. With the system set to reduce motion, only the background and the turntable stop; click and hover feedback stay.
 - Panel: player states read in Spanish (SONANDO, EN PAUSA, CARGANDO, EN ESPERA), and the setup wizard points new installs to `!claim` for the first admin, with the admin UID field moved to an advanced section.
 - Add `RHAPSOD_SKIP_NON_MUSIC` (default `false`): YouTube music videos start where the music starts and end where it ends, using the non-music segments (spoken intros, scenes, credits) that SponsorBlock users mark with the `music_offtopic` category. Only an intro and an outro are cut, never a segment in the middle, and a cut that would keep less than half the track or less than 30 seconds is ignored. The lookup sends a 4-character prefix of the SHA-256 of the video id, waits at most 1.5 seconds and runs in parallel with the audio URL; when it fails the track plays whole.
-
-## Upgrade
-
-No action is required beyond the v4.0.0 upgrade steps. `RHAPSOD_LOUDNESS_TARGET_LUFS` keeps its meaning and default (-14). `RHAPSOD_SKIP_NON_MUSIC` is off unless set to `true`.
 - A new install asks for the TeamSpeak server and the bot joins it when the install ends, without the web panel. The installer prints a one-time code; `!claim <code>` in TeamSpeak makes the sender the first admin and saves the UID in `RHAPSOD_ADMIN_UIDS`, which new owners could not fill because they do not know their TeamSpeak UID.
 - The installer no longer adds Cloudflare WARP unless `RHAPSOD_WITH_WARP=1` is set; a rerun keeps an existing WARP setup. When the daily YouTube check fails, `!stats` names the fix for the kind of failure: WARP for a blocked server address, cookies for a login request.
 
 ## Upgrade
 
-No action is required beyond the v4.0.0 upgrade steps. Installs with `RHAPSOD_ADMIN_UIDS` set never see a claim code. `RHAPSOD_LOUDNESS_TARGET_LUFS` keeps its meaning and default (-14).
+No action is required beyond the v4.0.0 upgrade steps. Installs with `RHAPSOD_ADMIN_UIDS` set never see a claim code. `RHAPSOD_LOUDNESS_TARGET_LUFS` keeps its meaning and default (-14). `RHAPSOD_SKIP_NON_MUSIC` is off unless set to `true`.
 
 ## Verification
 
