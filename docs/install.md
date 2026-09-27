@@ -102,7 +102,7 @@ The installer adds `/usr/local/bin/rhapsod` and records the install in `/etc/rha
 | `rhapsod status`    | Service states, player state, TeamSpeak connection, a pending `!claim` code and the SSH tunnel command for the panel. `--json` for scripts.      |
 | `rhapsod doctor`    | The checks above, with the fix for each failure. Prints no secrets.                                                                              |
 | `rhapsod password`  | Writes a new random `RHAPSOD_PANEL_PASSWORD` and prints it.                                                                                      |
-| `rhapsod restart`   | Restarts the bot when the player is idle; `--force` restarts during playback.                                                                    |
+| `rhapsod restart`   | Restarts the bot when the player is idle, or refuses when the panel cannot tell; `--force` skips the check.                                      |
 | `rhapsod logs [N]`  | Follows the bot and daemon journal from N lines back (default 100).                                                                              |
 | `rhapsod version`   | Installed version.                                                                                                                               |
 | `rhapsod backup`    | Stops the bot for a few seconds and archives `data/` and `.env` to `/home/rhapsod/backups`. Refuses during playback unless `--force`.            |
