@@ -179,9 +179,8 @@ export function buildFfmpegPcmArguments(
 }
 
 const PEAK_CEILING_DB = -1.5;
-// A profile of a near-silent track asks for a 20-30 dB boost: the limiter
-// would flatten the whole track and lift its noise floor with it. Quiet
-// tracks stay a little quiet instead.
+// A profile of a near-silent track asks for a 20-30 dB boost, which lifts its
+// noise floor with it. Quiet tracks stay a little quiet instead.
 const MAX_BOOST_DB = 12;
 
 /**
@@ -206,7 +205,16 @@ export function buildLoudnessFilter(
   if (options.peakLimiter !== true) {
     return `loudnorm=I=${target}:TP=${PEAK_CEILING_DB}:LRA=11:measured_I=${profile.measuredI}:measured_TP=${profile.measuredTp}:measured_LRA=${profile.measuredLra}:measured_thresh=${profile.measuredThresh}:offset=0:linear=true`;
   }
-  const gainDb = Math.min(MAX_BOOST_DB, target - profile.measuredI);
+  // The gain also stops where the measured true peak meets the ceiling, so
+  // the limiter is a safety net rather than part of the sound: a dynamic
+  // track with loud peaks plays a little under the target instead of having
+  // its peaks squashed, as in Spotify's default mode. Loud masters are still
+  // cut to the target.
+  const gainDb = Math.min(
+    target - profile.measuredI,
+    MAX_BOOST_DB,
+    PEAK_CEILING_DB - profile.measuredTp,
+  );
   const ceiling = 10 ** (PEAK_CEILING_DB / 20);
   return `volume=${gainDb.toFixed(2)}dB,alimiter=limit=${ceiling.toFixed(4)}:level=false`;
 }
