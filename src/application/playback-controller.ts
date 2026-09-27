@@ -335,10 +335,12 @@ export class PlaybackController {
   }
 
   #sessionPositionMs(session: FfmpegPlaybackSession): number {
+    const { framesSent, underruns } = session.player.metrics;
+    // Underruns are silence frames sent while the source starved; counting
+    // them put a resume up to 5 s past where the music stopped.
     return Math.max(
       0,
-      this.#sessionOffsetMs +
-        session.player.metrics.framesSent * FRAME_DURATION_MS,
+      this.#sessionOffsetMs + (framesSent - underruns) * FRAME_DURATION_MS,
     );
   }
 
