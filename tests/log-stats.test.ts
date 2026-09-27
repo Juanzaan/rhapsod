@@ -409,6 +409,7 @@ describe("log-stats playback KPIs", () => {
       session({
         coldStart: false,
         handoffGapMs: 80,
+        interTrackGapMs: 65,
         prewarmed: true,
         rebufferEvents: 1,
         startDelayMs: 60,
@@ -422,13 +423,21 @@ describe("log-stats playback KPIs", () => {
         startDelayMs: 1_400,
         underruns: 0,
       }),
+      // A direct measurement wins over the metadata + start delay estimate.
+      session({
+        coldStart: true,
+        commandToFirstAudioMs: 2_000,
+        metadataMs: 100,
+        startDelayMs: 200,
+      }),
       // Older lines without the new fields still count as sessions.
       session({ firstFrameDelayMs: 50 }),
     ]);
 
-    expect(stats.playbackSessions).toBe(4);
-    expect(stats.kpis.commandToAudioMs).toMatchObject({ count: 1, max: 1_300 });
-    expect(stats.kpis.startDelayMs).toMatchObject({ count: 3, max: 1_400 });
+    expect(stats.playbackSessions).toBe(5);
+    expect(stats.kpis.commandToAudioMs).toMatchObject({ count: 2, max: 2_000 });
+    expect(stats.kpis.interTrackGapMs).toMatchObject({ count: 1, p50: 65 });
+    expect(stats.kpis.startDelayMs).toMatchObject({ count: 4, max: 1_400 });
     expect(stats.kpis.handoffGapMs).toMatchObject({ count: 2, p50: 80 });
     expect(stats.kpis.handoffs).toEqual({ prewarmed: 1, cold: 1 });
     expect(stats.kpis.prewarmRate).toBe(50);
@@ -436,6 +445,9 @@ describe("log-stats playback KPIs", () => {
 
     const report = formatStats(stats);
     expect(report).toContain("Pausa entre pistas: n=2");
+    expect(report).toContain(
+      "Silencio entre pistas (último a primer audio): n=1",
+    );
     expect(report).toContain("Cambios precargados: 1 de 2 (50%)");
   });
 

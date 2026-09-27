@@ -24,6 +24,7 @@ Measured loudness normalization works for the first time: tracks with a loudness
 - Add a Windows launcher for the panel (`tools/desktop`): it opens the SSH tunnel and the browser, keeps the connection settings in `%APPDATA%` and the panel password in the Windows Credential Manager, and embeds no host or password. CI builds it on Windows.
 - Turn the Windows launcher into a tray app: it reconnects the SSH tunnel on its own, shows what is playing in the icon, opens the panel in its own browser window with a separate profile, runs a single copy and edits its settings in a window. CI runs its self-test.
 - `/api/metrics` exports `rhapsod_frame_tick_lateness_seconds`, how late each 20 ms audio tick fired, and `rhapsod_clock_slips_total`, ticks more than a frame late; each `Playback session` log line carries the same numbers as `clockTiming`. They are the baseline for the gapless and loudness work planned next.
+- `/api/metrics` exports `rhapsod_inter_track_gap_seconds`, the silence from a track's last audio frame to the next track's first, and `rhapsod_command_to_first_audio_seconds`, from a request to its first audio frame on a cold start. `scripts/log-stats.mjs` reports the gap and uses the direct command measurement when the log line has it.
 
 ## Upgrade
 

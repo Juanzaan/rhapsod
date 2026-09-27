@@ -10,6 +10,10 @@ import type { MetricsCounters } from "./metrics.js";
 // Seconds. Starts under a second are the goal; the long tail covers slow
 // resolutions up to the 90 s resolve watchdog.
 const LATENCY_BUCKETS = [0.1, 0.25, 0.5, 1, 2, 4, 8, 16, 32, 64];
+// Seconds. The gapless target is under 40 ms; 320 ms is today's prebuffer.
+const GAP_BUCKETS = [
+  0.01, 0.02, 0.04, 0.08, 0.16, 0.32, 0.64, 1.28, 2.56, 5.12,
+];
 const TICK_LATENESS_BUCKETS = TICK_LATENESS_BOUNDS_MS.map((ms) => ms / 1_000);
 
 class Histogram {
@@ -62,6 +66,8 @@ export class PlaybackMetrics {
   readonly #plays = new Map<PlaybackEndReason, number>();
   readonly #startDelay = new Histogram(LATENCY_BUCKETS);
   readonly #handoffGap = new Histogram(LATENCY_BUCKETS);
+  readonly #interTrackGap = new Histogram(GAP_BUCKETS);
+  readonly #commandToFirstAudio = new Histogram(LATENCY_BUCKETS);
   readonly #handoffs = { cold: 0, prewarmed: 0 };
   readonly #tickLateness = new Histogram(TICK_LATENESS_BUCKETS);
   #clockSlips = 0;
@@ -89,6 +95,10 @@ export class PlaybackMetrics {
       this.#startDelay.observe(kpis.startDelayMs / 1_000);
     if (kpis.handoffGapMs !== undefined)
       this.#handoffGap.observe(kpis.handoffGapMs / 1_000);
+    if (kpis.interTrackGapMs !== undefined)
+      this.#interTrackGap.observe(kpis.interTrackGapMs / 1_000);
+    if (kpis.commandToFirstAudioMs !== undefined)
+      this.#commandToFirstAudio.observe(kpis.commandToFirstAudioMs / 1_000);
     if (!kpis.coldStart) {
       if (kpis.prewarmed) this.#handoffs.prewarmed++;
       else this.#handoffs.cold++;
@@ -116,6 +126,14 @@ export class PlaybackMetrics {
       ...this.#handoffGap.lines(
         "rhapsod_handoff_gap_seconds",
         "Silence between one track's end and the next track's first frame.",
+      ),
+      ...this.#interTrackGap.lines(
+        "rhapsod_inter_track_gap_seconds",
+        "Silence from one track's last audio frame to the next track's first.",
+      ),
+      ...this.#commandToFirstAudio.lines(
+        "rhapsod_command_to_first_audio_seconds",
+        "From a request to its track's first audio frame, on a cold start.",
       ),
       "# HELP rhapsod_handoffs_total Track changes without idle, by whether the next stream was prewarmed.",
       "# TYPE rhapsod_handoffs_total counter",

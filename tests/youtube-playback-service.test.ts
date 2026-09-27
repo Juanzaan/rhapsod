@@ -47,6 +47,7 @@ function setup(
     metrics?: {
       bufferedBytes: number;
       firstFrameDelayMs?: number;
+      lastAudioFrameAt?: number;
       framesSent: number;
       maxBufferedBytes: number;
       rebufferEvents: number;
@@ -3547,6 +3548,48 @@ describe("YoutubePlaybackService", () => {
     await new Promise((resolve) => setImmediate(resolve));
     expect(kpisFor("third")).toMatchObject({ coldStart: true });
     expect(kpisFor("third")).not.toHaveProperty("handoffGapMs");
+  });
+
+  it("reports the silence between tracks and the wait from command to audio", async () => {
+    const lastAudioFrameAt = Date.now() - 500;
+    const { onPlaybackFinished, playbackResolvers, service } = setup({
+      metrics: {
+        bufferedBytes: 0,
+        firstFrameDelayMs: 40,
+        framesSent: 1,
+        lastAudioFrameAt,
+        maxBufferedBytes: 3_840,
+        rebufferEvents: 0,
+        underruns: 0,
+      },
+    });
+    const requestedAt = Date.now();
+    await service.enqueue("https://youtu.be/first", "user-1");
+    await service.enqueue("https://youtu.be/second", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+    playbackResolvers[0]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+    playbackResolvers[1]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const kpisFor = (id: string): Record<string, number> | undefined =>
+      (
+        onPlaybackFinished.mock.calls.find(
+          (call) => (call[0] as { id: string }).id === id,
+        ) as unknown[] | undefined
+      )?.[3] as Record<string, number> | undefined;
+    const first = kpisFor("first");
+    const second = kpisFor("second");
+    // Measured from the first play's last audio frame, not from when its
+    // session was torn down.
+    expect(second?.interTrackGapMs).toBeGreaterThanOrEqual(540);
+    expect(first).not.toHaveProperty("interTrackGapMs");
+    // Only the cold start measures from the command.
+    expect(first?.commandToFirstAudioMs).toBeGreaterThanOrEqual(40);
+    expect(first?.commandToFirstAudioMs).toBeLessThan(
+      Date.now() - requestedAt + 40 + 1,
+    );
+    expect(second).not.toHaveProperty("commandToFirstAudioMs");
   });
 
   it("counts the first play after !stop as a cold start", async () => {

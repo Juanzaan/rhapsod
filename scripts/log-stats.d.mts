@@ -19,6 +19,7 @@ export interface PlaybackKpiStats {
   commandToAudioMs: Summary;
   startDelayMs: Summary;
   handoffGapMs: Summary;
+  interTrackGapMs: Summary;
   underrunsPerPlay: Summary;
   rebuffersPerPlay: Summary;
   handoffs: { prewarmed: number; cold: number };
