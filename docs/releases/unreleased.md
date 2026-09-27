@@ -29,10 +29,11 @@ Measured loudness normalization works for the first time: tracks with a loudness
 - `/api/metrics` exports `rhapsod_inter_track_gap_seconds`, the silence from a track's last audio frame to the next track's first, and `rhapsod_command_to_first_audio_seconds`, from a request to its first audio frame on a cold start. `scripts/log-stats.mjs` reports the gap and uses the direct command measurement when the log line has it.
 - Each play measures the loudness it sent with ITU-R BS.1770 (integrated LUFS and true peak, before the `!volume` gain). `/api/metrics` exports `rhapsod_delivered_loudness_lufs` and `rhapsod_delivered_true_peak_dbtp`, the `Playback session` log line carries it as `delivered`, and `scripts/log-stats.mjs` summarizes both. On 60 s of noise the reading matches ffmpeg's `ebur128` within 0.1 LU and 0.2 dB.
 - Admins can list the bot's open notices with `!avisos` and hide one until it gets worse with `!avisos ignorar <n>`. Error and critical notices also reach the admins who are online as a private message when they open and when they resolve, never the channel: notices that open together go in one message, the same notice is not sent again within 6 hours, and admins get at most 5 of these messages an hour. With no admin online, the message waits for the first one who enters.
+- Docker: releases publish `ghcr.io/juanzaan/rhapsod` for linux/amd64 and linux/arm64, tagged by version, minor, major and `latest`, and rebuilt weekly with the newest yt-dlp. The Compose file pulls it instead of building. The first start needs no `.env`: the container writes `data/.env` in the `rhapsod-data` volume, boots the setup mode and logs the panel password once. The image has a healthcheck against the panel, pins yt-dlp by build argument and the POT provider by digest.
 
 ## Upgrade
 
-No action is required beyond the v4.0.0 upgrade steps. Rerun the installer to get the `rhapsod` command. Installs with `RHAPSOD_ADMIN_UIDS` set never see a claim code. `RHAPSOD_LOUDNESS_TARGET_LUFS` keeps its meaning and default (-14). `RHAPSOD_SKIP_NON_MUSIC` is off unless set to `true`.
+No action is required beyond the v4.0.0 upgrade steps. Rerun the installer to get the `rhapsod` command. Docker installs from the earlier Compose file move `.env` and `data/` into the new volume once; see [deployment](../deployment.md#docker-compose-linux). Installs with `RHAPSOD_ADMIN_UIDS` set never see a claim code. `RHAPSOD_LOUDNESS_TARGET_LUFS` keeps its meaning and default (-14). `RHAPSOD_SKIP_NON_MUSIC` is off unless set to `true`.
 
 ## Verification
 

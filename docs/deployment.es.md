@@ -136,35 +136,43 @@ Con un daemon de yt-dlp configurado, `rhapsod_ytdlp_daemon_up` baja a 0 mientras
 
 ## Docker Compose (Linux)
 
-Compose inicia contenedores separados para el bot y yt-dlp con la red del host Linux. Ambos servicios escuchan en localhost; no se publica ningún puerto del panel. Esta configuración permite acceder a TeamSpeak o servicios auxiliares del host.
+El archivo de Compose ejecuta la imagen publicada multiarquitectura `ghcr.io/juanzaan/rhapsod` (linux/amd64 y linux/arm64) en contenedores separados para el bot y yt-dlp, junto con el proveedor POT de bgutil, todos con la red del host Linux. Cada servicio escucha en localhost; no se publica ningún puerto del panel. Esta configuración permite acceder a TeamSpeak o servicios auxiliares del host.
 
-Preparar `.env` con rutas del contenedor:
-
-```dotenv
-RHAPSOD_DATA_DIR=/app/data
-RHAPSOD_YTDLP_PATH=yt-dlp
-RHAPSOD_FFMPEG_PATH=/usr/bin/ffmpeg
-RHAPSOD_FFPROBE_PATH=/usr/bin/ffprobe
-RHAPSOD_YTDLP_COOKIES_PATH=/app/data/youtube-cookies.txt
-```
-
-Crear `data/` y colocar las cookies si son necesarias. El bot monta datos con escritura; el servicio los lee sin modificarlos. `.env` se monta para el panel; recrear contenedores tras cambiar el entorno, ya que Compose lo inyecta al crearlos.
-
-Los contenedores se ejecutan con el usuario sin privilegios `node` (uid 1000). Dar permisos de escritura a ese uid sobre los archivos montados:
+Copiar `docker-compose.yml` a un directorio vacío e iniciarlo:
 
 ```bash
-sudo chown -R 1000:1000 data .env
+docker compose up -d
+docker compose logs rhapsod
 ```
 
-Compose también inicia el proveedor POT de bgutil, escuchando en `127.0.0.1:4416` y con la misma versión que el complemento de la imagen. WARP sigue siendo un servicio del host.
+El primer inicio no necesita `.env`. El contenedor del bot escribe `data/.env` dentro del volumen `rhapsod-data` con rutas del contenedor, arranca el modo de configuración solo con el panel e imprime una vez `panel login admin / <contraseña>` en su log. Para entrar a TeamSpeak desde el principio, definir `RHAPSOD_TS3_HOST` en `environment:` del servicio `rhapsod` antes del primer inicio; el bot registra entonces el código de `!claim`. Abrir el panel con un túnel SSH como en [instalación](install.es.md) y cargar las cookies en su paso YouTube si hacen falta.
+
+`RHAPSOD_VERSION` elige la etiqueta de la imagen: `4` (por defecto) sigue las versiones 4.x, `4.1` se queda en una versión menor y `4.1.2` fija una versión. Las etiquetas se reconstruyen cada semana con el yt-dlp más reciente. Los valores de `environment:` tienen prioridad sobre `data/.env`.
+
+Los contenedores se ejecutan con el usuario sin privilegios `node` (uid 1000), dueño del volumen con nombre. Copiar archivos hacia el volumen o desde él con `docker compose cp`. El chequeo de salud de la imagen consulta el panel con la contraseña de `data/.env`, así que `docker compose ps` muestra `healthy` solo con el panel activado y respondiendo; las mismas comprobaciones que el comando del host se ejecutan dentro del contenedor:
 
 ```bash
-docker compose config --quiet
-docker compose up -d --build
-docker compose logs --tail=100 rhapsod ytdlp
+docker compose exec rhapsod node dist/cli.js status
+docker compose exec rhapsod node dist/cli.js doctor
+docker compose exec rhapsod node dist/cli.js password
 ```
 
-Para actualizar, comprobar reposo, respaldar datos, obtener la revisión elegida y ejecutar `docker compose up -d --build --force-recreate`. La imagen instala Python en un entorno virtual y excluye dependencias npm de desarrollo en ejecución.
+WARP sigue siendo un servicio del host. Para compilar la imagen desde un checkout en lugar de descargarla:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+```
+
+Para actualizar, comprobar reposo, respaldar el volumen y ejecutar `docker compose pull && docker compose up -d`.
+
+Las instalaciones hechas con el archivo de Compose anterior guardaban `.env` y `data/` junto a él. Moverlos al volumen una vez, con los contenedores anteriores detenidos:
+
+```bash
+docker compose down
+docker compose run --rm --no-deps -v "$PWD:/old:ro" --entrypoint sh rhapsod \
+  -c 'cp -a /old/data/. /app/data/ && cp /old/.env /app/data/.env'
+docker compose up -d
+```
 
 ## Varias instancias
 
