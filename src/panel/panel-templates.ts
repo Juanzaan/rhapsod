@@ -17,7 +17,7 @@ const CHROME_CSS = `
 *{margin:0;padding:0;box-sizing:border-box}
 ::selection{background:var(--ac);color:#05240F}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--tx);min-height:100vh}
-@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition-duration:.15s!important}}
 :focus-visible{outline:2px solid var(--bl);outline-offset:2px}
 .nv{background:#0b0b0d;border-bottom:1px solid var(--ln);padding:0 1.5rem;display:flex;align-items:center;height:52px;gap:1.5rem;position:sticky;top:0;z-index:10}
 .nb{font-weight:800;font-size:.9rem;letter-spacing:.35em;color:var(--tx);text-decoration:none}
@@ -139,12 +139,12 @@ export function renderDashboard(status: PanelStatus): string {
     playerState === "playing" ? "on" : playerState === "idle" ? "" : "buf";
   const stateLabel =
     playerState === "playing"
-      ? "PLAYING"
+      ? "SONANDO"
       : playerState === "paused"
-        ? "PAUSED"
+        ? "EN PAUSA"
         : playerState === "buffering"
-          ? "BUFFERING"
-          : "STANDBY";
+          ? "CARGANDO"
+          : "EN ESPERA";
   const fmtT = (ms: number | undefined): string => {
     if (ms === undefined || !Number.isFinite(ms) || ms < 0) return "--:--";
     const s = Math.floor(ms / 1000);
