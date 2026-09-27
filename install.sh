@@ -123,6 +123,10 @@ verify_checksum() {
   echo "$expected  $file" | "$tool" -c --quiet - \
     || fail "checksum mismatch for $name; refusing to install it"
 }
+# Same check without exiting, for a download that has another source.
+checksum_ok() {
+  (verify_checksum "$@") 2>/dev/null
+}
 
 [[ "$(id -u)" == "0" ]] || fail "run as root (e.g. sudo bash install.sh)"
 # Every downloaded artifact exists for both: Node.js tarballs, yt-dlp's
@@ -158,16 +162,22 @@ if [[ ! -e "$APP_DIR/.env" ]]; then
   TS3_ENV="$(ask_ts3)" || fail "invalid RHAPSOD_TS3_HOST"
 fi
 
+# cron runs the weekly yt-dlp update below; minimal images leave it out.
 install_base_debian() {
   export DEBIAN_FRONTEND=noninteractive
   apt-get update
   apt-get install -y curl git python3 python3-pip tar xz-utils ca-certificates \
-    gnupg lsb-release openssl
+    gnupg lsb-release openssl cron
 }
 
 install_base_rhel() {
-  dnf install -y curl git python3 python3-pip tar xz ca-certificates \
-    gnupg2 openssl
+  # RHEL 9 images ship curl-minimal, which conflicts with the curl package
+  # and already does everything this script needs.
+  local packages=(git python3 python3-pip tar xz ca-certificates gnupg2 openssl cronie)
+  command -v curl >/dev/null 2>&1 || packages+=(curl)
+  dnf install -y "${packages[@]}"
+  # cronie is installed disabled on RHEL.
+  systemctl enable --now crond
   # EPEL is required by the WARP package (tray/captive-portal deps).
   if [[ "$SKIP_WARP" != "1" ]]; then
     dnf install -y oracle-epel-release-el9 2>/dev/null \
@@ -209,9 +219,13 @@ NODE_BIN="$(command -v node)"
 log "Creating $APP_USER user"
 if ! id "$APP_USER" >/dev/null 2>&1; then
   # A service account needs no login shell; the installer runs its commands
-  # through sudo -u, which does not use it. Existing users are left as is.
+  # through runuser, which does not use it. Existing users are left as is.
   useradd --create-home --shell "$(command -v nologin || echo /usr/sbin/nologin)" "$APP_USER"
 fi
+# runuser, not sudo -u: RHEL's sudo secure_path leaves out /usr/local/bin,
+# where Node lives, and runuser needs neither the sudo package nor its PAM
+# account check.
+as_app() { runuser -u "$APP_USER" -- "$@"; }
 # A run that failed with that bug left the home owned by root.
 if [[ -d "/home/$APP_USER" && "$(stat -c %U "/home/$APP_USER")" == "root" ]]; then
   chown "$APP_USER:" "/home/$APP_USER"
@@ -249,7 +263,9 @@ ffmpeg_from_johnvansickle() {
   # This mirror only publishes an MD5: it catches corrupt or swapped
   # downloads, not a compromised host.
   curl -fsSL --connect-timeout 20 --retry 2 "$url.md5" -o "$WORK_DIR/ffmpeg.md5" || return 1
-  verify_checksum "$WORK_DIR/$name" "$name" "$WORK_DIR/ffmpeg.md5" md5sum
+  # The host has also answered with an HTML page instead of the files; that
+  # fails this check and moves on to the other source.
+  checksum_ok "$WORK_DIR/$name" "$name" "$WORK_DIR/ffmpeg.md5" md5sum || return 1
   tar -xJf "$WORK_DIR/$name" -C "$WORK_DIR/ffmpeg" --strip-components=1
 }
 ffmpeg_from_btbn() {
@@ -264,7 +280,7 @@ ffmpeg_from_btbn() {
 }
 mkdir "$WORK_DIR/ffmpeg"
 if ! ffmpeg_from_johnvansickle; then
-  warn "johnvansickle.com did not answer; downloading FFmpeg from BtbN's GitHub builds"
+  warn "johnvansickle.com did not answer or failed its checksum; downloading FFmpeg from BtbN's GitHub builds"
   rm -rf "$WORK_DIR/ffmpeg" && mkdir "$WORK_DIR/ffmpeg"
   ffmpeg_from_btbn || fail "could not download FFmpeg from either source"
 fi
@@ -319,15 +335,15 @@ fi
 # --- bgutil POT provider ----------------------------------------------------------
 log "Installing bgutil POT provider"
 if [[ ! -d "$POT_DIR/.git" ]]; then
-  sudo -u "$APP_USER" git clone --depth 1 --branch "$POT_VERSION" "$POT_REPOSITORY" "$POT_DIR"
+  as_app git clone --depth 1 --branch "$POT_VERSION" "$POT_REPOSITORY" "$POT_DIR"
 else
-  sudo -u "$APP_USER" git -C "$POT_DIR" fetch --depth 1 origin tag "$POT_VERSION"
-  sudo -u "$APP_USER" git -C "$POT_DIR" checkout --detach "$POT_VERSION"
+  as_app git -C "$POT_DIR" fetch --depth 1 origin tag "$POT_VERSION"
+  as_app git -C "$POT_DIR" checkout --detach "$POT_VERSION"
 fi
 (
   cd "$POT_DIR/server"
-  sudo -u "$APP_USER" npm ci
-  sudo -u "$APP_USER" npx tsc
+  as_app npm ci
+  as_app npx tsc
 ) || warn "POT provider build failed; YouTube may ask for login without it"
 
 # --- Bot code ---------------------------------------------------------------------
@@ -339,12 +355,12 @@ if [[ -z "$REF" ]]; then
 fi
 log "Installing Rhapsod $REF"
 if [[ ! -d "$APP_DIR/.git" ]]; then
-  sudo -u "$APP_USER" git clone --depth 1 --branch "$REF" "$REPOSITORY" "$APP_DIR"
+  as_app git clone --depth 1 --branch "$REF" "$REPOSITORY" "$APP_DIR"
 fi
-sudo -u "$APP_USER" git -C "$APP_DIR" fetch --tags origin
-sudo -u "$APP_USER" git -C "$APP_DIR" checkout --detach "$REF"
-sudo -u "$APP_USER" npm --prefix "$APP_DIR" ci
-sudo -u "$APP_USER" npm --prefix "$APP_DIR" run build
+as_app git -C "$APP_DIR" fetch --tags origin
+as_app git -C "$APP_DIR" checkout --detach "$REF"
+as_app npm --prefix "$APP_DIR" ci
+as_app npm --prefix "$APP_DIR" run build
 
 # --- Runtime files ------------------------------------------------------------------
 log "Preparing runtime files"
@@ -363,7 +379,7 @@ if [[ ! -e "$APP_DIR/.env" ]]; then
     # AUTO_CONNECT=true.
     TS3_ENV=$'RHAPSOD_TS3_HOST=setup.invalid\nRHAPSOD_TS3_AUTO_CONNECT=false'
   fi
-  sudo -u "$APP_USER" tee "$APP_DIR/.env" >/dev/null <<ENV
+  as_app tee "$APP_DIR/.env" >/dev/null <<ENV
 $TS3_ENV
 RHAPSOD_DATA_DIR=./data
 RHAPSOD_YTDLP_PATH=/usr/local/bin/yt-dlp
@@ -381,7 +397,7 @@ ENV
 fi
 WARP_ADDED=0
 if [[ "$SKIP_WARP" != "1" ]] && ! grep -q '^RHAPSOD_WARP_PROXY=' "$APP_DIR/.env"; then
-  echo "RHAPSOD_WARP_PROXY=$WARP_PROXY" | sudo -u "$APP_USER" tee -a "$APP_DIR/.env" >/dev/null
+  echo "RHAPSOD_WARP_PROXY=$WARP_PROXY" | as_app tee -a "$APP_DIR/.env" >/dev/null
   WARP_ADDED=1
 fi
 
