@@ -6,7 +6,11 @@ import type { Logger } from "pino";
 
 import { validateConfig, type AppConfig } from "../config.js";
 import type { ChatEntry } from "../application/chat-log.js";
-import type { Notice, NoticeSeverity } from "../application/notices/notice.js";
+import type {
+  HealthVerdict,
+  Notice,
+  NoticeSeverity,
+} from "../application/notices/notice.js";
 import type {
   DisconnectSummary,
   ErrorSummary,
@@ -101,6 +105,13 @@ export interface PanelStatus {
   readonly version: string;
 }
 
+/** Body of GET /api/health: the status plus the notice verdict. */
+export interface PanelHealth extends PanelStatus {
+  readonly verdict?: HealthVerdict;
+  /** Open notices the owner has not ignored. */
+  readonly openNotices?: number;
+}
+
 export interface PanelOptions {
   readonly config: AppConfig;
   readonly envFilePath: string;
@@ -116,6 +127,7 @@ export interface PanelOptions {
   readonly notices?: {
     list(): readonly Notice[];
     ignore(key: string): boolean;
+    verdict(): HealthVerdict;
   };
   /** Prometheus text for GET /api/metrics; the route 404s without it. */
   readonly metricsText?: () => string;
@@ -415,9 +427,23 @@ export function createPanelServer(options: PanelOptions): {
   // 503 only while reconnecting: deploy.sh rolls back on it. A failing
   // YouTube login or daemon still plays through fallbacks, so it is
   // reported in the body without failing the check.
+  // The notice verdict rides in the body only. The status code stays a
+  // liveness signal for deploy.sh, which rolls back on anything but 200: a
+  // persistent critical notice (a reconnect give-up, an exposed panel) would
+  // otherwise roll back every deploy, including the one that fixes it.
   app.get("/api/health", (c) => {
     const status = options.status();
-    return c.json(status, status.reconnecting === true ? 503 : 200);
+    const body: PanelHealth =
+      options.notices === undefined
+        ? status
+        : {
+            ...status,
+            verdict: options.notices.verdict(),
+            openNotices: options.notices
+              .list()
+              .filter((notice) => notice.state !== "ignored").length,
+          };
+    return c.json(body, status.reconnecting === true ? 503 : 200);
   });
 
   app.get("/api/metrics", (c) => {
