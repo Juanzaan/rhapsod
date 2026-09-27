@@ -1,5 +1,6 @@
-import { spawn, type ChildProcessByStdio } from "node:child_process";
+import { execFile, spawn, type ChildProcessByStdio } from "node:child_process";
 import { PassThrough, type Readable } from "node:stream";
+import { promisify } from "node:util";
 
 import ffmpegStaticPath from "ffmpeg-static";
 
@@ -16,6 +17,11 @@ export interface FfmpegPcmOptions {
     readonly measuredThresh: number;
     readonly measuredTp: number;
   };
+  /**
+   * The binary has the alimiter filter (see probeFfmpegFilter). Without it,
+   * a measured profile keeps loudnorm's own linear pass.
+   */
+  readonly peakLimiter?: boolean;
   readonly seekSeconds?: number;
   /**
    * Endless stream (radio). A 403 retry reconnects at the live edge instead
@@ -45,6 +51,7 @@ export interface FfmpegPcmStream {
 }
 
 const STOP_GRACE_MS = 3_000;
+const execFileAsync = promisify(execFile);
 
 // The input URL is checked to be public HTTPS before ffmpeg runs, but ffmpeg
 // then opens HLS segment and key URLs on its own; a public playlist listing
@@ -148,20 +155,73 @@ export function buildFfmpegPcmArguments(
     "-acodec",
     "pcm_s16le",
   );
-  const loudnessFilter =
-    options.loudnessProfile !== undefined &&
-    options.loudnessTargetLufs !== undefined &&
-    options.loudnessTargetLufs < 0
-      ? `loudnorm=I=${options.loudnessTargetLufs}:TP=-1.5:LRA=11:measured_I=${options.loudnessProfile.measuredI}:measured_TP=${options.loudnessProfile.measuredTp}:measured_LRA=${options.loudnessProfile.measuredLra}:measured_thresh=${options.loudnessProfile.measuredThresh}:offset=0:linear=true`
-      : options.loudnessTargetLufs !== undefined &&
-          options.loudnessTargetLufs < 0
-        ? `loudnorm=I=${options.loudnessTargetLufs}:TP=-1.5:LRA=11`
-        : undefined;
+  const loudnessFilter = buildLoudnessFilter(options);
   if (loudnessFilter !== undefined) {
     args.push("-af", loudnessFilter);
   }
   args.push("pipe:1");
   return args;
+}
+
+const PEAK_CEILING_DB = -1.5;
+// A profile of a near-silent track asks for a 20-30 dB boost: the limiter
+// would flatten the whole track and lift its noise floor with it. Quiet
+// tracks stay a little quiet instead.
+const MAX_BOOST_DB = 12;
+
+/**
+ * With a measured profile and alimiter available, a fixed gain plus a peak
+ * limiter. loudnorm with linear=true silently switches to its dynamic mode
+ * whenever the measured LRA exceeds its target or the gained peak would pass
+ * the ceiling, so wide-range tracks were gain-ridden at 192 kHz despite the
+ * profile. `level=false` keeps alimiter from re-normalizing its own output.
+ */
+export function buildLoudnessFilter(
+  options: Pick<
+    FfmpegPcmOptions,
+    "loudnessProfile" | "loudnessTargetLufs" | "peakLimiter"
+  >,
+): string | undefined {
+  const target = options.loudnessTargetLufs;
+  if (target === undefined || target >= 0) return undefined;
+  const profile = options.loudnessProfile;
+  if (profile === undefined) {
+    return `loudnorm=I=${target}:TP=${PEAK_CEILING_DB}:LRA=11`;
+  }
+  if (options.peakLimiter !== true) {
+    return `loudnorm=I=${target}:TP=${PEAK_CEILING_DB}:LRA=11:measured_I=${profile.measuredI}:measured_TP=${profile.measuredTp}:measured_LRA=${profile.measuredLra}:measured_thresh=${profile.measuredThresh}:offset=0:linear=true`;
+  }
+  const gainDb = Math.min(MAX_BOOST_DB, target - profile.measuredI);
+  const ceiling = 10 ** (PEAK_CEILING_DB / 20);
+  return `volume=${gainDb.toFixed(2)}dB,alimiter=limit=${ceiling.toFixed(4)}:level=false`;
+}
+
+export function resolveFfmpegBinary(binary: string | undefined): string {
+  return binary ?? ffmpegStaticPath ?? "ffmpeg";
+}
+
+/**
+ * Whether the binary lists `filter` in `ffmpeg -filters`. Docker runs
+ * ffmpeg-static and systemd installs run the installer's build, so the two
+ * can differ; a failed probe counts as missing.
+ */
+export async function probeFfmpegFilter(
+  binary: string,
+  filter: string,
+  run: (
+    file: string,
+    args: readonly string[],
+  ) => Promise<{ stdout: string }> = (file, args) =>
+    execFileAsync(file, [...args], { timeout: 10_000, windowsHide: true }),
+): Promise<boolean> {
+  try {
+    const { stdout } = await run(binary, ["-hide_banner", "-filters"]);
+    return stdout
+      .split("\n")
+      .some((line) => line.trim().split(/\s+/)[1] === filter);
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -183,7 +243,7 @@ export function createFfmpegPcmStream(
   options: FfmpegPcmOptions = {},
 ): FfmpegPcmStream {
   const spawnProcess = options.spawnProcess ?? spawn;
-  const binary = options.binary ?? ffmpegStaticPath ?? "ffmpeg";
+  const binary = resolveFfmpegBinary(options.binary);
   const stream = new PassThrough({ highWaterMark: 256 * 1024 });
   let stopped = false;
   let child = null as unknown as ChildProcessByStdio<null, Readable, Readable>;

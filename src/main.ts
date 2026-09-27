@@ -10,6 +10,7 @@ import {
 } from "./adapters/ts3/ts3-connection.js";
 import { createRhapsodOpusEncoder } from "./audio/opus-encoder.js";
 import { createPcmStream, playFfmpegUrl } from "./audio/ffmpeg-player.js";
+import { probeFfmpegFilter, resolveFfmpegBinary } from "./audio/ffmpeg-pcm.js";
 import { LoudnessProfiler } from "./audio/loudness-profiler.js";
 import { playTestTone } from "./audio/test-tone-player.js";
 import { YoutubePlaybackService } from "./application/youtube-playback-service.js";
@@ -197,6 +198,15 @@ async function main(): Promise<void> {
       : undefined;
   const ffmpegPath = config.RHAPSOD_FFMPEG_PATH;
   const ffmpegUserAgent = config.RHAPSOD_FFMPEG_USER_AGENT;
+  const peakLimiter = await probeFfmpegFilter(
+    resolveFfmpegBinary(ffmpegPath),
+    "alimiter",
+  );
+  if (!peakLimiter) {
+    logger.warn(
+      "FFmpeg has no alimiter filter: measured tracks keep loudnorm's linear pass",
+    );
+  }
   const { proxyUrl: egressProxyUrl } = await startEgressGuard({ logger });
   const loudnessProfiler = new LoudnessProfiler({
     ...(ffmpegPath === undefined ? {} : { binary: ffmpegPath }),
@@ -218,6 +228,7 @@ async function main(): Promise<void> {
       playFfmpegUrl(url, playbackEncoder, output, {
         ...(ffmpegPath === undefined ? {} : { binary: ffmpegPath }),
         egressProxyUrl,
+        peakLimiter,
         // The controller decides per track: finite tracks carry a target,
         // live radio omits it so endless streams skip dynamic loudnorm.
         ...(options?.loudnessTargetLufs === undefined
@@ -248,6 +259,7 @@ async function main(): Promise<void> {
         ...options,
         ...(ffmpegPath === undefined ? {} : { binary: ffmpegPath }),
         egressProxyUrl,
+        peakLimiter,
         ...(ffmpegUserAgent === undefined
           ? {}
           : { userAgent: ffmpegUserAgent }),
