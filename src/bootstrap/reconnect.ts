@@ -13,6 +13,8 @@ export interface ReconnectorOptions {
   /** Runs once `reconnecting` is false again; then playback resumes. */
   readonly onResumed: () => Promise<void>;
   readonly onGiveUp: () => Promise<void>;
+  /** Runs before each attempt's backoff; feeds the reconnect notice. */
+  readonly onAttempt?: (attempt: number, maxAttempts: number) => void;
   readonly isShuttingDown: () => boolean;
   readonly maxAttempts?: number;
   readonly attemptTimeoutMs?: number;
@@ -66,6 +68,7 @@ export class Reconnector {
     const maxReconnectAttempts = this.#maxAttempts;
     for (let attempt = 1; attempt <= maxReconnectAttempts; attempt++) {
       const delayMs = reconnectDelayMs(attempt);
+      this.#options.onAttempt?.(attempt, maxReconnectAttempts);
       logger.warn(
         {
           attempt,
