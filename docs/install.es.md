@@ -47,7 +47,7 @@ Cloudflare WARP no se instala por defecto. Solo sirve cuando YouTube bloquea la 
 sudo env RHAPSOD_WITH_WARP=1 bash "$HOME/rhapsod-install.sh"
 ```
 
-Luego reiniciar el servicio de yt-dlp y el bot cuando no haya nada sonando. Repetir el instalador conserva WARP si ya está instalado; `RHAPSOD_SKIP_WARP=1` lo deja afuera. Las otras opciones del instalador son `RHAPSOD_REF`, `RHAPSOD_APP_DIR` y `RHAPSOD_USER`.
+Luego reiniciar el servicio de yt-dlp y el bot cuando no haya nada sonando. Repetir el instalador conserva WARP si ya está instalado; `RHAPSOD_SKIP_WARP=1` lo deja afuera. Las otras opciones del instalador son `RHAPSOD_REF`, `RHAPSOD_REPOSITORY` (una URL de git o una ruta local, para forks y CI), `RHAPSOD_APP_DIR` y `RHAPSOD_USER`.
 
 El instalador configura una actualización semanal de yt-dlp. Actualizar Rhapsod por separado mediante el [procedimiento de despliegue](deployment.es.md).
 
