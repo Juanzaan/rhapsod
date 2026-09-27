@@ -126,7 +126,7 @@ sudo systemctl start rhapsod
 
 `rollback` restores the code only; the data stays as the newer version left it. When that version changed the data format, restore the backup taken before the update as shown above.
 
-`rhapsod uninstall --purge --yes` runs without a prompt. The last backup goes to `/var/backups/rhapsod`, because `--purge` deletes the home. Node.js, FFmpeg, yt-dlp and WARP stay installed, since other software may use them.
+`rhapsod uninstall --purge --yes` runs without a prompt. The last backup goes to `/var/backups/rhapsod`, because `--purge` deletes the home. A service user that can log in (an existing account passed as `RHAPSOD_USER`) is kept with its home; only the checkout is removed. Node.js, FFmpeg, yt-dlp and WARP stay installed, since other software may use them.
 
 ## Troubleshooting
 
