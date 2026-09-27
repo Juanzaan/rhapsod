@@ -43,6 +43,7 @@ Measured loudness normalization works for the first time: tracks with a loudness
 - CI also runs the tests on Windows and on arm64 Linux, and every GitHub Action is pinned by commit SHA.
 - Panel setting descriptions and setup wizard labels carry their Spanish accents.
 - A track now ends on the tick that sends its last audio instead of one tick later, and its last partial frame (under 20 ms) is sent padded with silence instead of dropped. With the next track already prewarmed, the silence between tracks at the player drops from about 40 ms to 20 ms, one frame, which listeners hear as no gap. `rhapsod_inter_track_gap_seconds` shows the full handoff, including the controller's work between tracks.
+- `rhapsod restart` and `rhapsod backup` no longer treat a panel that does not answer as idle: with the bot running and the player unknown (panel disabled or down, or a password changed by `rhapsod password` and not loaded yet) they stop and ask for `--force` instead of cutting a song.
 - With `RHAPSOD_SKIP_NON_MUSIC=true`, the outro cut now also applies to the first song after the queue was idle and to a song resumed after a stall; before, only prewarmed songs stopped at the end of the music.
 - A clean stop (a deploy, `rhapsod update`, the panel's restart button) no longer counts toward the restart-loop notice; before, four deploys or panel restarts within 15 minutes opened it as critical and sent the admins a private message.
 
