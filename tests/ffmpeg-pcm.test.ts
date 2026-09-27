@@ -8,6 +8,7 @@ import {
   buildFfmpegPcmArguments,
   buildLoudnessFilter,
   probeFfmpegFilter,
+  bundledFfmpegPath,
   resolveFfmpegBinary,
   createFfmpegPcmStream,
   ffmpegEnvironment,
@@ -704,7 +705,7 @@ describe("buildLoudnessFilter", () => {
   // LRA=11, so wide-range tracks were gain-ridden despite a profile.
   it("keeps wide-range tracks on the fixed gain", () => {
     const filter = buildLoudnessFilter({
-      loudnessProfile: wideRange,
+      loudnessProfile: { ...wideRange, measuredTp: -9 },
       loudnessTargetLufs: -14,
       peakLimiter: true,
     });
@@ -720,6 +721,28 @@ describe("buildLoudnessFilter", () => {
         peakLimiter: true,
       }),
     ).toBe("volume=12.00dB,alimiter=limit=0.8414:level=false");
+  });
+
+  // A quiet track with loud peaks: boosting it to the target would push its
+  // peaks 4.5 dB into the limiter. It stops where the peak meets the ceiling.
+  it("stops the boost where the measured true peak meets the ceiling", () => {
+    expect(
+      buildLoudnessFilter({
+        loudnessProfile: wideRange,
+        loudnessTargetLufs: -14,
+        peakLimiter: true,
+      }),
+    ).toBe("volume=1.50dB,alimiter=limit=0.8414:level=false");
+  });
+
+  it("cuts a track whose peaks are already over the ceiling", () => {
+    expect(
+      buildLoudnessFilter({
+        loudnessProfile: { ...wideRange, measuredI: -16, measuredTp: 0.4 },
+        loudnessTargetLufs: -14,
+        peakLimiter: true,
+      }),
+    ).toBe("volume=-1.90dB,alimiter=limit=0.8414:level=false");
   });
 
   it("keeps loudnorm's linear pass when alimiter is missing", () => {
@@ -776,6 +799,20 @@ describe("probeFfmpegFilter", () => {
     await expect(probeFfmpegFilter("ffmpeg", "alimiter", run)).resolves.toBe(
       false,
     );
+  });
+
+  // Regression: a failed ffmpeg-static download still resolved to a path
+  // with no file behind it, so spawns failed with ENOENT instead of using
+  // ffmpeg from PATH.
+  it("ignores a bundled ffmpeg path with no file behind it", () => {
+    expect(bundledFfmpegPath(() => "/nonexistent/ffmpeg")).toBeUndefined();
+    expect(bundledFfmpegPath(() => null)).toBeUndefined();
+    expect(
+      bundledFfmpegPath(() => {
+        throw new Error("Cannot find module 'ffmpeg-static'");
+      }),
+    ).toBeUndefined();
+    expect(bundledFfmpegPath(() => process.execPath)).toBe(process.execPath);
   });
 
   const bundled = resolveFfmpegBinary(undefined);

@@ -121,6 +121,10 @@ export class RadioTitleCache {
     this.#ttlMs = options.ttlMs ?? DEFAULT_TTL_MS;
   }
 
+  get size(): number {
+    return this.#titles.size;
+  }
+
   peek(url: string): string | undefined {
     return this.#fresh(url)?.title;
   }
@@ -134,7 +138,13 @@ export class RadioTitleCache {
       ...(this.#fetch === undefined ? {} : { fetch: this.#fetch }),
       ...(this.#timeoutMs === undefined ? {} : { timeoutMs: this.#timeoutMs }),
     }).then((title) => {
-      this.#titles.set(url, { expiresAt: Date.now() + this.#ttlMs, title });
+      const now = Date.now();
+      // Entries were only replaced, never dropped: every station ever
+      // played kept one for the life of the process.
+      for (const [key, entry] of this.#titles) {
+        if (entry.expiresAt <= now) this.#titles.delete(key);
+      }
+      this.#titles.set(url, { expiresAt: now + this.#ttlMs, title });
       return title;
     });
     const tracked = pending.finally(() => {

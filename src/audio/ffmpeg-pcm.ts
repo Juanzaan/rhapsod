@@ -1,8 +1,8 @@
 import { execFile, spawn, type ChildProcessByStdio } from "node:child_process";
+import { existsSync } from "node:fs";
+import { createRequire } from "node:module";
 import { PassThrough, type Readable } from "node:stream";
 import { promisify } from "node:util";
-
-import ffmpegStaticPath from "ffmpeg-static";
 
 import { CHANNELS, SAMPLE_RATE } from "./opus-encoder.js";
 import { sanitizeSensitive, sanitizeUrl } from "../observability/metrics.js";
@@ -179,9 +179,8 @@ export function buildFfmpegPcmArguments(
 }
 
 const PEAK_CEILING_DB = -1.5;
-// A profile of a near-silent track asks for a 20-30 dB boost: the limiter
-// would flatten the whole track and lift its noise floor with it. Quiet
-// tracks stay a little quiet instead.
+// A profile of a near-silent track asks for a 20-30 dB boost, which lifts its
+// noise floor with it. Quiet tracks stay a little quiet instead.
 const MAX_BOOST_DB = 12;
 
 /**
@@ -206,19 +205,44 @@ export function buildLoudnessFilter(
   if (options.peakLimiter !== true) {
     return `loudnorm=I=${target}:TP=${PEAK_CEILING_DB}:LRA=11:measured_I=${profile.measuredI}:measured_TP=${profile.measuredTp}:measured_LRA=${profile.measuredLra}:measured_thresh=${profile.measuredThresh}:offset=0:linear=true`;
   }
-  const gainDb = Math.min(MAX_BOOST_DB, target - profile.measuredI);
+  // The gain also stops where the measured true peak meets the ceiling, so
+  // the limiter is a safety net rather than part of the sound: a dynamic
+  // track with loud peaks plays a little under the target instead of having
+  // its peaks squashed, as in Spotify's default mode. Loud masters are still
+  // cut to the target.
+  const gainDb = Math.min(
+    target - profile.measuredI,
+    MAX_BOOST_DB,
+    PEAK_CEILING_DB - profile.measuredTp,
+  );
   const ceiling = 10 ** (PEAK_CEILING_DB / 20);
   return `volume=${gainDb.toFixed(2)}dB,alimiter=limit=${ceiling.toFixed(4)}:level=false`;
 }
 
+/**
+ * ffmpeg-static is an optional dependency: the Docker image omits it, and
+ * when its postinstall download fails the module still returns a path to a
+ * file that was never written. Either case falls back to ffmpeg on PATH.
+ */
+export function bundledFfmpegPath(
+  load: () => unknown = () => createRequire(import.meta.url)("ffmpeg-static"),
+): string | undefined {
+  try {
+    const path = load();
+    return typeof path === "string" && existsSync(path) ? path : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function resolveFfmpegBinary(binary: string | undefined): string {
-  return binary ?? ffmpegStaticPath ?? "ffmpeg";
+  return binary ?? bundledFfmpegPath() ?? "ffmpeg";
 }
 
 /**
  * Whether the binary lists `filter` in `ffmpeg -filters`. Docker runs
- * ffmpeg-static and systemd installs run the installer's build, so the two
- * can differ; a failed probe counts as missing.
+ * Debian's ffmpeg, systemd installs the installer's build and npm installs
+ * ffmpeg-static, so builds differ; a failed probe counts as missing.
  */
 export async function probeFfmpegFilter(
   binary: string,

@@ -133,6 +133,22 @@ describe("RadioTitleCache", () => {
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 
+  it("drops expired entries for other streams", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(() =>
+      Promise.resolve(icyResponse(16, "StreamTitle='Live';")),
+    );
+    const cache = new RadioTitleCache({ fetch, ttlMs: 10 });
+
+    await cache.get("https://ice.example/one");
+    await cache.get("https://ice.example/two");
+    expect(cache.size).toBe(2);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await cache.get("https://ice.example/three");
+
+    expect(cache.size).toBe(1);
+    expect(cache.peek("https://ice.example/three")).toBe("Live");
+  });
+
   it("caches misses so dead streams do not hammer", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>(() =>
       Promise.resolve(new Response("audio-bytes")),

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { createPanelServer } from "../src/panel/panel-server.js";
+import type { Notice } from "../src/application/notices/notice.js";
 import type { AppConfig } from "../src/config.js";
 
 const noop = () => undefined;
@@ -715,6 +716,34 @@ describe("panel-server", () => {
     }
   });
 
+  it("pauses before answering a wrong password, not a missing one", async () => {
+    const port = 23616;
+    const state = startTestPanel("", port, { failedLoginDelayMs: 400 });
+    try {
+      let started = Date.now();
+      const anonymous = await fetch(`${state.baseUrl}/api/health`);
+      expect(anonymous.status).toBe(401);
+      expect(Date.now() - started).toBeLessThan(400);
+
+      started = Date.now();
+      const wrong = await fetch(`${state.baseUrl}/api/health`, {
+        headers: {
+          authorization: `Basic ${Buffer.from("admin:nope").toString("base64")}`,
+        },
+      });
+      expect(wrong.status).toBe(401);
+      expect(Date.now() - started).toBeGreaterThanOrEqual(380);
+
+      const ok = await fetch(`${state.baseUrl}/api/health`, {
+        headers: { authorization: state.auth },
+      });
+      expect(ok.status).toBe(200);
+    } finally {
+      await state.close();
+      rmSync(state.dir, { recursive: true, force: true });
+    }
+  });
+
   it("serves Prometheus metrics behind the panel auth", async () => {
     const port = 23613;
     const state = startTestPanel("RHAPSOD_TS3_HOST=ts.example.com\n", port, {
@@ -996,6 +1025,129 @@ describe("panel-server write protection", () => {
       expect(errors.join(" ")).toContain("RHAPSOD_PANEL_PASSWORD");
     } finally {
       await panel.close();
+    }
+  });
+});
+
+describe("panel-server notices", () => {
+  const notice: Notice = {
+    key: "ts3.no-talk-power",
+    detector: "ts3.no-talk-power",
+    severity: "error",
+    titleEs: "El bot no puede hablar",
+    detailEs: "Darle talk power al bot en el canal.",
+    data: { channelId: 8 },
+    state: "open",
+    persistent: false,
+    flapping: false,
+    firstSeen: 1_700_000_000_000,
+    lastSeen: 1_700_000_060_000,
+    occurrences: 3,
+  };
+  const json = (auth: string) => ({
+    authorization: auth,
+    "content-type": "application/json",
+  });
+
+  it("lists open notices in /api/state without their hidden data", async () => {
+    const state = startTestPanel("", 23616, {
+      notices: { list: () => [notice], ignore: () => true },
+    });
+    try {
+      const res = await fetch(`${state.baseUrl}/api/state`, {
+        headers: { authorization: state.auth },
+      });
+      const body = (await res.json()) as { notices: unknown[] };
+      expect(body.notices).toEqual([
+        {
+          key: "ts3.no-talk-power",
+          severity: "error",
+          title: "El bot no puede hablar",
+          detail: "Darle talk power al bot en el canal.",
+          ignored: false,
+          since: 1_700_000_000_000,
+          count: 3,
+        },
+      ]);
+    } finally {
+      await state.close();
+      rmSync(state.dir, { recursive: true, force: true });
+    }
+  });
+
+  it("ignores an open notice and rejects bad or stale keys", async () => {
+    const ignored: string[] = [];
+    const state = startTestPanel("", 23617, {
+      notices: {
+        list: () => [notice],
+        ignore: (key) => {
+          if (key !== notice.key) return false;
+          ignored.push(key);
+          return true;
+        },
+      },
+    });
+    const post = (body: unknown) =>
+      fetch(`${state.baseUrl}/api/notices/ignore`, {
+        method: "POST",
+        headers: json(state.auth),
+        body: JSON.stringify(body),
+      });
+    try {
+      expect((await post({ key: notice.key })).status).toBe(200);
+      expect(ignored).toEqual([notice.key]);
+      expect((await post({ key: "disk.data-low" })).status).toBe(404);
+      expect((await post({ key: "" })).status).toBe(400);
+      expect((await post({ key: "x".repeat(201) })).status).toBe(400);
+      expect((await post({})).status).toBe(400);
+      expect(ignored).toEqual([notice.key]);
+    } finally {
+      await state.close();
+      rmSync(state.dir, { recursive: true, force: true });
+    }
+  });
+
+  it("answers 501 and an empty list without a notice registry", async () => {
+    const state = startTestPanel("", 23618);
+    try {
+      const res = await fetch(`${state.baseUrl}/api/notices/ignore`, {
+        method: "POST",
+        headers: json(state.auth),
+        body: JSON.stringify({ key: notice.key }),
+      });
+      expect(res.status).toBe(501);
+      const st = await fetch(`${state.baseUrl}/api/state`, {
+        headers: { authorization: state.auth },
+      });
+      expect(((await st.json()) as { notices: unknown[] }).notices).toEqual([]);
+    } finally {
+      await state.close();
+      rmSync(state.dir, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses a cross-site ignore", async () => {
+    const ignored: string[] = [];
+    const state = startTestPanel("", 23619, {
+      notices: {
+        list: () => [notice],
+        ignore: (key) => {
+          ignored.push(key);
+          return true;
+        },
+      },
+    });
+    try {
+      const res = await fetch(`${state.baseUrl}/api/notices/ignore`, {
+        method: "POST",
+        headers: { ...json(state.auth), origin: "https://evil.example" },
+        body: JSON.stringify({ key: notice.key }),
+      });
+      expect(res.status).toBe(403);
+      expect(ignored).toEqual([]);
+    } finally {
+      await state.close();
+      rmSync(state.dir, { recursive: true, force: true });
     }
   });
 });

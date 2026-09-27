@@ -1,10 +1,12 @@
 import { basicAuth } from "hono/basic-auth";
 import { Hono } from "hono";
+import { timingSafeEqual } from "hono/utils/buffer";
 import { serve } from "@hono/node-server";
 import type { Logger } from "pino";
 
 import { validateConfig, type AppConfig } from "../config.js";
 import type { ChatEntry } from "../application/chat-log.js";
+import type { Notice, NoticeSeverity } from "../application/notices/notice.js";
 import type {
   DisconnectSummary,
   ErrorSummary,
@@ -55,6 +57,29 @@ export interface ServerView {
   readonly clients: readonly ServerViewClient[];
 }
 
+/** What the dashboard shows of a notice; detector data stays server-side. */
+export interface PanelNotice {
+  readonly key: string;
+  readonly severity: NoticeSeverity;
+  readonly title: string;
+  readonly detail: string;
+  readonly ignored: boolean;
+  readonly since: number;
+  readonly count: number;
+}
+
+export function toPanelNotice(notice: Notice): PanelNotice {
+  return {
+    key: notice.key,
+    severity: notice.severity,
+    title: notice.titleEs,
+    detail: notice.detailEs,
+    ignored: notice.state === "ignored",
+    since: notice.firstSeen,
+    count: notice.occurrences,
+  };
+}
+
 export interface PanelStatus {
   readonly connected: boolean;
   readonly currentChannelId?: number;
@@ -87,6 +112,11 @@ export interface PanelOptions {
   readonly serverView?: () => ServerView;
   readonly moveBot?: (cid: number) => Promise<void>;
   readonly errors?: () => ErrorSummary;
+  /** Open notices from the registry; ignoring one hides it until it worsens. */
+  readonly notices?: {
+    list(): readonly Notice[];
+    ignore(key: string): boolean;
+  };
   /** Prometheus text for GET /api/metrics; the route 404s without it. */
   readonly metricsText?: () => string;
   readonly youtubeHealth?: () => Promise<{
@@ -101,7 +131,11 @@ export interface PanelOptions {
     host: string,
     port: number,
   ) => Promise<{ ok: boolean; error?: string; serverName?: string }>;
+  /** Pause before answering a wrong password; tests shorten it. */
+  readonly failedLoginDelayMs?: number;
 }
+
+const FAILED_LOGIN_DELAY_MS = 1_000;
 
 const SECRET_KEYS = new Set([
   "RHAPSOD_TS3_PASSWORD",
@@ -117,28 +151,28 @@ const MASKED_KEYS = new Set([
 ]);
 
 const ENV_DESCRIPTIONS: Record<string, string> = {
-  RHAPSOD_TS3_HOST: "Direccion del servidor TeamSpeak",
+  RHAPSOD_TS3_HOST: "Dirección del servidor TeamSpeak",
   RHAPSOD_TS3_PORT: "Puerto de voz (default 9987)",
   RHAPSOD_TS3_NICKNAME: "Nombre del bot",
-  RHAPSOD_TS3_PASSWORD: "Contrasena del servidor (si tiene)",
-  RHAPSOD_TS3_CHANNEL_NAME: "Canal al que entrar (vacio = default)",
+  RHAPSOD_TS3_PASSWORD: "Contraseña del servidor (si tiene)",
+  RHAPSOD_TS3_CHANNEL_NAME: "Canal al que entrar (vacío = default)",
   RHAPSOD_TS3_CHANNEL_ID: "ID del canal (override de CHANNEL_NAME)",
-  RHAPSOD_TS3_CHANNEL_PASSWORD: "Contrasena del canal",
-  RHAPSOD_TS3_AUTO_CONNECT: "Conectar automaticamente (true/false)",
+  RHAPSOD_TS3_CHANNEL_PASSWORD: "Contraseña del canal",
+  RHAPSOD_TS3_AUTO_CONNECT: "Conectar automáticamente (true/false)",
   RHAPSOD_TS3_HEARTBEAT_SECONDS: "Heartbeat en segundos (0 = off)",
-  RHAPSOD_TS3_CONNECT_TIMEOUT_SECONDS: "Timeout de conexion (15-300s)",
-  RHAPSOD_TS3_CLIENT_DESCRIPTION: "Descripcion del bot en el servidor",
+  RHAPSOD_TS3_CONNECT_TIMEOUT_SECONDS: "Timeout de conexión (15-300s)",
+  RHAPSOD_TS3_CLIENT_DESCRIPTION: "Descripción del bot en el servidor",
   RHAPSOD_ADMIN_UIDS: "UIDs de admin separados por coma",
   RHAPSOD_DATA_DIR: "Directorio de datos (identidad TS3, estado)",
   RHAPSOD_INSTANCE_ID:
-    "ID de instancia (vacio = unica; datos en instances/<id>)",
+    "ID de instancia (vacío = única; datos en instances/<id>)",
   RHAPSOD_ENV_FILE: "Ruta del archivo .env (solo desde el entorno real)",
   RHAPSOD_PRIVATE_COMMAND_UIDS: "UIDs con acceso a comandos privados",
   RHAPSOD_YTDLP_PATH: "Ruta del binario yt-dlp (solo lectura)",
   RHAPSOD_YTDLP_COOKIES_PATH: "Ruta a cookies.txt de YouTube",
   RHAPSOD_YTDLP_DAEMON_URL: "URL del daemon yt-dlp (http://127.0.0.1:8765)",
   RHAPSOD_YTDLP_EXTRACTOR_ARGS: "Args extra para yt-dlp",
-  RHAPSOD_YTDLP_SEARCH_TIMEOUT_MS: "Timeout de busqueda yt-dlp (4000-20000 ms)",
+  RHAPSOD_YTDLP_SEARCH_TIMEOUT_MS: "Timeout de búsqueda yt-dlp (4000-20000 ms)",
   RHAPSOD_YTDLP_AUDIO_URL_TIMEOUT_MS:
     "Timeout de URL de audio yt-dlp (5000-30000 ms)",
   RHAPSOD_YTDLP_DOWNLOAD_TIMEOUT_MS:
@@ -147,34 +181,34 @@ const ENV_DESCRIPTIONS: Record<string, string> = {
     "Timeout de metadatos yt-dlp (10000-60000 ms)",
   RHAPSOD_YTDLP_PLAYLIST_TIMEOUT_MS:
     "Timeout de playlists yt-dlp (15000-120000 ms)",
-  RHAPSOD_WARP_PROXY: "Egress fallback para 403 (vacio = solo directo)",
+  RHAPSOD_WARP_PROXY: "Egress fallback para 403 (vacío = solo directo)",
   RHAPSOD_FFMPEG_PATH: "Ruta del binario ffmpeg (solo lectura)",
   RHAPSOD_FFMPEG_USER_AGENT: "User-Agent para ffmpeg",
   RHAPSOD_FFPROBE_PATH: "Ruta del binario ffprobe (solo lectura)",
   RHAPSOD_LOUDNESS_TARGET_LUFS:
-    "Normalizacion de volumen (-30 a 0, default -14)",
+    "Normalización de volumen (-30 a 0, default -14)",
   RHAPSOD_OPUS_BITRATE: "Bitrate de Opus (64000-160000)",
   RHAPSOD_OPUS_COMPLEXITY: "Complejidad de Opus (0-10)",
-  RHAPSOD_OPUS_PACKET_LOSS_PERCENT: "Perdida de packets Opus (0-30)",
+  RHAPSOD_OPUS_PACKET_LOSS_PERCENT: "Pérdida de paquetes Opus (0-30)",
   RHAPSOD_SPOTIFY_CLIENT_ID: "Spotify Client ID (opcional)",
   RHAPSOD_SPOTIFY_CLIENT_SECRET: "Spotify Client Secret (opcional)",
   RHAPSOD_SPOTIFY_REFRESH_TOKEN: "Spotify Refresh Token (opcional)",
   RHAPSOD_AUDIO_TEST_TONE_SECONDS: "Tono de prueba al iniciar (0 = off)",
   RHAPSOD_LOG_LEVEL: "Nivel de log (trace/debug/info/warn/error/fatal)",
-  RHAPSOD_LOG_RETENTION_DAYS: "Dias de retencion de logs (1-90)",
-  RHAPSOD_METRICS_INTERVAL_MINUTES: "Intervalo de metricas (0 = off)",
+  RHAPSOD_LOG_RETENTION_DAYS: "Días de retención de logs (1-90)",
+  RHAPSOD_METRICS_INTERVAL_MINUTES: "Intervalo de métricas (0 = off)",
   RHAPSOD_WATCHDOG_INTERVAL_SECONDS:
     "Intervalo del watchdog en segundos (0 = off, default 15)",
   RHAPSOD_WATCHDOG_INTERVAL_MINUTES:
     "Obsoleto: usar RHAPSOD_WATCHDOG_INTERVAL_SECONDS (solo 0 = off)",
-  RHAPSOD_MAX_CONCURRENT_COMMANDS: "Comandos concurrentes max (1-20)",
+  RHAPSOD_MAX_CONCURRENT_COMMANDS: "Comandos concurrentes máx. (1-20)",
   RHAPSOD_MAX_CONCURRENT_YTDLP_JOBS: "Jobs yt-dlp concurrentes (1-4)",
-  RHAPSOD_MAX_QUEUE_TRACKS: "Tracks max en cola (1-1000)",
+  RHAPSOD_MAX_QUEUE_TRACKS: "Tracks máx. en cola (1-1000)",
   RHAPSOD_MAX_TRACKS_PER_USER: "Tracks por usuario (1-200)",
   RHAPSOD_VOTE_SKIP:
-    "Votacion para saltar: mas de la mitad del canal (true/false, default false)",
+    "Votación para saltar: más de la mitad del canal (true/false, default false)",
   RHAPSOD_SKIP_NON_MUSIC:
-    "Saltar intros y outros sin musica de los videoclips via SponsorBlock (true/false, default false)",
+    "Saltar intros y outros sin música de los videoclips vía SponsorBlock (true/false, default false)",
   RHAPSOD_MOVE_GROUP_IDS: "Group IDs para !move",
   RHAPSOD_MOVE_ADMIN_CHANNELS: "Channels para move admin",
   RHAPSOD_MOVE_SENIOR_CHANNELS: "Channels para move senior",
@@ -184,7 +218,7 @@ const ENV_DESCRIPTIONS: Record<string, string> = {
   RHAPSOD_PANEL_ENABLED: "Panel habilitado (true/false)",
   RHAPSOD_PANEL_PORT: "Puerto del panel (default 8080)",
   RHAPSOD_PANEL_USER: "Usuario del panel",
-  RHAPSOD_PANEL_PASSWORD: "Contrasena del panel",
+  RHAPSOD_PANEL_PASSWORD: "Contraseña del panel",
   RHAPSOD_PANEL_HOST: "Bind del panel (solo lectura, default 127.0.0.1)",
 };
 
@@ -288,11 +322,23 @@ export function createPanelServer(options: PanelOptions): {
     );
   }
 
+  const failedLoginDelayMs =
+    options.failedLoginDelayMs ?? FAILED_LOGIN_DELAY_MS;
+  // A tunnel user can still script password guesses; a pause per wrong
+  // password slows that down. verifyUser only runs when the request carries
+  // credentials, so the browser's first prompt answers at once.
   app.use(
     "*",
     basicAuth({
-      username: panelUser,
-      password: panelPassword,
+      verifyUser: async (username, password) => {
+        const matches = await Promise.all([
+          timingSafeEqual(panelUser, username),
+          timingSafeEqual(panelPassword, password),
+        ]);
+        if (matches.every(Boolean)) return true;
+        await new Promise((resolve) => setTimeout(resolve, failedLoginDelayMs));
+        return false;
+      },
     }),
   );
 
@@ -395,7 +441,29 @@ export function createPanelServer(options: PanelOptions): {
       options.serverView === undefined
         ? { version: 0, botChannelId: 0, channels: [], clients: [] }
         : options.serverView();
-    return c.json({ ...status, queue, errors, chat, server });
+    const notices =
+      options.notices === undefined
+        ? []
+        : options.notices.list().map(toPanelNotice);
+    return c.json({ ...status, queue, errors, chat, server, notices });
+  });
+
+  app.post("/api/notices/ignore", async (c) => {
+    if (options.notices === undefined) {
+      return c.json({ ok: false, error: "Avisos no disponibles" }, 501);
+    }
+    const body: unknown = await c.req.json().catch(() => undefined);
+    const key =
+      typeof body === "object" && body !== null
+        ? (body as Record<string, unknown>).key
+        : undefined;
+    if (typeof key !== "string" || key.length === 0 || key.length > 200) {
+      return c.json({ ok: false, error: "Aviso inválido" }, 400);
+    }
+    if (!options.notices.ignore(key)) {
+      return c.json({ ok: false, error: "El aviso ya no está abierto" }, 404);
+    }
+    return c.json({ ok: true });
   });
 
   app.post("/api/chat", async (c) => {
