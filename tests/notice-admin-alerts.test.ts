@@ -1,4 +1,7 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   AdminAlerts,
@@ -26,9 +29,13 @@ const lowDisk: Finding = {
 };
 
 const alerts: AdminAlerts[] = [];
+const dirs: string[] = [];
 
 afterEach(() => {
   for (const created of alerts.splice(0)) created.stop();
+  for (const dir of dirs.splice(0))
+    rmSync(dir, { recursive: true, force: true });
+  vi.useRealTimers();
 });
 
 function harness(options: { online?: OnlineClient[]; start?: number } = {}) {
@@ -210,6 +217,121 @@ describe("AdminAlerts", () => {
     later.alerts.start();
     await later.alerts.deliver();
     expect(later.sent).toEqual([]);
+  });
+});
+
+describe("AdminAlerts across restarts and failures", () => {
+  const stall: Finding = {
+    ...talkPower,
+    detector: "process.event-loop-stall",
+    titleEs: "El bot se trabó y se reinició",
+  };
+
+  function boot(filePath: string, now: () => number) {
+    const registry = new NoticeRegistry({ filePath, now });
+    const sent: string[] = [];
+    const admin = new AdminAlerts({
+      registry,
+      adminUids: () => new Set(["admin"]),
+      listClients: () => Promise.resolve([{ clid: 7, uid: "admin" }]),
+      sendPrivateMessage: (_clid, text) => {
+        sent.push(text);
+        return Promise.resolve();
+      },
+      now,
+      coalesceMs: HOUR,
+    });
+    alerts.push(admin);
+    return { registry, admin, sent };
+  }
+
+  it("does not page the same notice on every start of a crash loop", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "rhapsod-alerts-"));
+    dirs.push(dir);
+    const filePath = join(dir, "notices.json");
+    let now = 1_000_000;
+    const clock = () => now;
+    let total = 0;
+    for (let start = 0; start < 6; start++) {
+      const { registry, admin, sent } = boot(filePath, clock);
+      registry.report(stall);
+      admin.start();
+      await admin.deliver();
+      await registry.flush();
+      admin.stop();
+      total += sent.length;
+      now += 40_000;
+    }
+    expect(total).toBe(1);
+  });
+
+  it("drops a queued resolution when the notice opens again", async () => {
+    const { advance, alerts: admin, online, registry, sent } = harness();
+    admin.start();
+    registry.report(talkPower);
+    await admin.deliver();
+    online.splice(0);
+    registry.ok("ts3.no-talk-power");
+    await admin.deliver();
+    advance(HOUR);
+    registry.report(talkPower);
+    online.push({ clid: 7, uid: "admin" });
+    admin.adminEntered("admin");
+    await admin.deliver();
+    expect(sent.map((message) => message.text)).not.toContain(
+      expect.stringContaining("[Resuelto]"),
+    );
+    expect(sent).toHaveLength(1);
+  });
+
+  it("retries on its own after the client list fails", async () => {
+    vi.useFakeTimers();
+    const registry = new NoticeRegistry();
+    let failures = 1;
+    const sent: string[] = [];
+    const admin = new AdminAlerts({
+      registry,
+      adminUids: () => new Set(["admin"]),
+      listClients: () =>
+        failures-- > 0
+          ? Promise.reject(new Error("reconnecting"))
+          : Promise.resolve([{ clid: 7, uid: "admin" }]),
+      sendPrivateMessage: (_clid, text) => {
+        sent.push(text);
+        return Promise.resolve();
+      },
+    });
+    alerts.push(admin);
+    admin.start();
+    registry.report(talkPower);
+    await admin.deliver();
+    expect(sent).toEqual([]);
+    await vi.advanceTimersByTimeAsync(MINUTE);
+    expect(sent).toHaveLength(1);
+  });
+
+  it("sends what the hourly cap held back once the hour passes", async () => {
+    vi.useFakeTimers();
+    const registry = new NoticeRegistry();
+    const sent: string[] = [];
+    const admin = new AdminAlerts({
+      registry,
+      adminUids: () => new Set(["admin"]),
+      listClients: () => Promise.resolve([{ clid: 7, uid: "admin" }]),
+      sendPrivateMessage: (_clid, text) => {
+        sent.push(text);
+        return Promise.resolve();
+      },
+    });
+    alerts.push(admin);
+    admin.start();
+    for (let i = 0; i < 6; i++) {
+      registry.report({ ...talkPower, subject: String(i) });
+      await admin.deliver();
+    }
+    expect(sent).toHaveLength(5);
+    await vi.advanceTimersByTimeAsync(HOUR);
+    expect(sent).toHaveLength(6);
   });
 });
 

@@ -14,6 +14,8 @@ const HOURLY_LIMIT = 5;
 // one message instead of several.
 const COALESCE_MS = 10_000;
 const STARTUP_RECENT_MS = 15 * MINUTE;
+// A failed client list (usually a TeamSpeak reconnect) is retried this soon.
+const RETRY_MS = MINUTE;
 
 export interface OnlineClient {
   readonly clid: number;
@@ -21,7 +23,8 @@ export interface OnlineClient {
 }
 
 export interface AdminAlertsOptions {
-  readonly registry: Pick<NoticeRegistry, "get" | "list" | "onTransition">;
+  readonly registry: Pick<NoticeRegistry, "get" | "list" | "onTransition"> &
+    Partial<Pick<NoticeRegistry, "alertState" | "saveAlertState">>;
   /** Read on each send: `!claim` adds admins at runtime. */
   readonly adminUids: () => ReadonlySet<string>;
   readonly listClients: () => Promise<readonly OnlineClient[]>;
@@ -45,9 +48,9 @@ export class AdminAlerts {
   readonly #options: AdminAlertsOptions;
   readonly #logger: MinimalLogger;
   readonly #now: () => number;
-  readonly #lastPaged = new Map<string, number>();
-  readonly #paged = new Set<string>();
-  #sentAt: number[] = [];
+  readonly #lastPaged: Map<string, number>;
+  readonly #paged: Set<string>;
+  #sentAt: number[];
   #pending: Line[] = [];
   #timer: NodeJS.Timeout | undefined;
   #unsubscribe: (() => void) | undefined;
@@ -56,6 +59,11 @@ export class AdminAlerts {
     this.#options = options;
     this.#logger = options.logger ?? noopLogger;
     this.#now = options.now ?? Date.now;
+    // Loaded from notices.json: a restart must not reset what was sent.
+    const saved = options.registry.alertState?.();
+    this.#lastPaged = new Map(Object.entries(saved?.lastPaged ?? {}));
+    this.#paged = new Set(saved?.paged);
+    this.#sentAt = [...(saved?.sentAt ?? [])];
   }
 
   /**
@@ -69,6 +77,7 @@ export class AdminAlerts {
       if (notice.state !== "open") continue;
       if (SEVERITY_RANK[notice.severity] < SEVERITY_RANK.error) continue;
       if (now - notice.lastSeen > STARTUP_RECENT_MS) continue;
+      if (this.#pagedRecently(notice.key)) continue;
       this.#pending.push({ kind: "open", notice });
     }
     if (this.#pending.length > 0) this.#schedule();
@@ -107,6 +116,7 @@ export class AdminAlerts {
         "Admin notice messages rate-limited; they stay queued",
       );
       this.#pending = lines;
+      this.#scheduleIn(Math.max(0, Math.min(...this.#sentAt) + HOUR - now));
       return;
     }
     const admins = this.#options.adminUids();
@@ -118,6 +128,7 @@ export class AdminAlerts {
     } catch (error) {
       this.#logger.warn({ err: error }, "Could not list clients for notices");
       this.#pending = lines;
+      this.#scheduleIn(RETRY_MS);
       return;
     }
     if (targets.length === 0) {
@@ -134,6 +145,11 @@ export class AdminAlerts {
         this.#paged.delete(line.notice.key);
       }
     }
+    this.#options.registry.saveAlertState?.({
+      lastPaged: Object.fromEntries(this.#lastPaged),
+      paged: [...this.#paged],
+      sentAt: this.#sentAt,
+    });
     const text = formatAdminAlert(lines);
     await Promise.all(
       targets.map((target) =>
@@ -164,34 +180,38 @@ export class AdminAlerts {
       return;
     }
     if (SEVERITY_RANK[notice.severity] < SEVERITY_RANK.error) return;
-    const last = this.#lastPaged.get(notice.key);
-    const escalated = transition.kind === "escalated";
-    if (
-      !escalated &&
-      last !== undefined &&
-      this.#now() - last < NOTICE_RESEND_MS
-    ) {
-      return;
-    }
+    // A queued resolution of this notice is stale now that it is open again.
     this.#pending = this.#pending.filter(
       (line) => line.notice.key !== notice.key,
     );
+    if (transition.kind !== "escalated" && this.#pagedRecently(notice.key))
+      return;
     this.#pending.push({ kind: "open", notice });
     this.#schedule();
   }
 
+  /** Paged inside the resend window, by this process or an earlier one. */
+  #pagedRecently(key: string): boolean {
+    const last = this.#lastPaged.get(key);
+    return last !== undefined && this.#now() - last < NOTICE_RESEND_MS;
+  }
+
   #stillRelevant(line: Line): boolean {
-    if (line.kind === "resolved") return true;
     const current = this.#options.registry.get(line.notice.key);
+    if (line.kind === "resolved") return current?.state !== "open";
     return current !== undefined && current.state === "open";
   }
 
   #schedule(): void {
+    this.#scheduleIn(this.#options.coalesceMs ?? COALESCE_MS);
+  }
+
+  #scheduleIn(delayMs: number): void {
     if (this.#timer !== undefined) return;
     const timer = setTimeout(() => {
       this.#timer = undefined;
       void this.deliver();
-    }, this.#options.coalesceMs ?? COALESCE_MS);
+    }, delayMs);
     timer.unref();
     this.#timer = timer;
   }
