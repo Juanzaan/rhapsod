@@ -2,7 +2,7 @@
 
 ## Summary
 
-Measured loudness normalization works for the first time: tracks with a loudness profile play at the target level without the gain riding of single-pass normalization. Optional skipping of the non-music intro and outro of YouTube music videos.
+Measured loudness normalization works for the first time: tracks with a loudness profile play at the target level without the gain riding of single-pass normalization. Optional skipping of the non-music intro and outro of YouTube music videos. Adds a Windows launcher for the panel.
 
 ## Changes
 
@@ -21,6 +21,7 @@ Measured loudness normalization works for the first time: tracks with a loudness
 - A new install asks for the TeamSpeak server and the bot joins it when the install ends, without the web panel. The installer prints a one-time code; `!claim <code>` in TeamSpeak makes the sender the first admin and saves the UID in `RHAPSOD_ADMIN_UIDS`, which new owners could not fill because they do not know their TeamSpeak UID.
 - The installer no longer adds Cloudflare WARP unless `RHAPSOD_WITH_WARP=1` is set; a rerun keeps an existing WARP setup. When the daily YouTube check fails, `!stats` names the fix for the kind of failure: WARP for a blocked server address, cookies for a login request.
 - Measured tracks play through a fixed `volume` gain followed by `alimiter` at -1.5 dBFS instead of `loudnorm` with `linear=true`, which switched to its dynamic mode without notice whenever the measured loudness range was above 11 LU: wide-range tracks were still gain-ridden and resampled to 192 kHz and back. The boost is capped at +12 dB. On a 3-minute test file this used 0.3 s of CPU and 16 MB of memory instead of 9 s and 129 MB. The bot checks `ffmpeg -filters` at startup; a build without `alimiter` logs a warning and keeps the `loudnorm` linear pass.
+- Add a Windows launcher for the panel (`tools/desktop`): it opens the SSH tunnel and the browser, keeps the connection settings in `%APPDATA%` and the panel password in the Windows Credential Manager, and embeds no host or password. CI builds it on Windows.
 
 ## Upgrade
 
