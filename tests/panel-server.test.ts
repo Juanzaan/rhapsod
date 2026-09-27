@@ -715,6 +715,34 @@ describe("panel-server", () => {
     }
   });
 
+  it("pauses before answering a wrong password, not a missing one", async () => {
+    const port = 23616;
+    const state = startTestPanel("", port, { failedLoginDelayMs: 400 });
+    try {
+      let started = Date.now();
+      const anonymous = await fetch(`${state.baseUrl}/api/health`);
+      expect(anonymous.status).toBe(401);
+      expect(Date.now() - started).toBeLessThan(400);
+
+      started = Date.now();
+      const wrong = await fetch(`${state.baseUrl}/api/health`, {
+        headers: {
+          authorization: `Basic ${Buffer.from("admin:nope").toString("base64")}`,
+        },
+      });
+      expect(wrong.status).toBe(401);
+      expect(Date.now() - started).toBeGreaterThanOrEqual(380);
+
+      const ok = await fetch(`${state.baseUrl}/api/health`, {
+        headers: { authorization: state.auth },
+      });
+      expect(ok.status).toBe(200);
+    } finally {
+      await state.close();
+      rmSync(state.dir, { recursive: true, force: true });
+    }
+  });
+
   it("serves Prometheus metrics behind the panel auth", async () => {
     const port = 23613;
     const state = startTestPanel("RHAPSOD_TS3_HOST=ts.example.com\n", port, {
