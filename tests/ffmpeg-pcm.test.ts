@@ -789,6 +789,7 @@ describe("probeFfmpegFilter", () => {
     },
     15_000,
   );
+});
 
 describe("isFfmpegExit", () => {
   it("matches the error the PCM stream raises when ffmpeg dies", () => {
