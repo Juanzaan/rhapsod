@@ -123,6 +123,10 @@ verify_checksum() {
   echo "$expected  $file" | "$tool" -c --quiet - \
     || fail "checksum mismatch for $name; refusing to install it"
 }
+# Same check without exiting, for a download that has another source.
+checksum_ok() {
+  (verify_checksum "$@") 2>/dev/null
+}
 
 [[ "$(id -u)" == "0" ]] || fail "run as root (e.g. sudo bash install.sh)"
 # Every downloaded artifact exists for both: Node.js tarballs, yt-dlp's
@@ -259,7 +263,9 @@ ffmpeg_from_johnvansickle() {
   # This mirror only publishes an MD5: it catches corrupt or swapped
   # downloads, not a compromised host.
   curl -fsSL --connect-timeout 20 --retry 2 "$url.md5" -o "$WORK_DIR/ffmpeg.md5" || return 1
-  verify_checksum "$WORK_DIR/$name" "$name" "$WORK_DIR/ffmpeg.md5" md5sum
+  # The host has also answered with an HTML page instead of the files; that
+  # fails this check and moves on to the other source.
+  checksum_ok "$WORK_DIR/$name" "$name" "$WORK_DIR/ffmpeg.md5" md5sum || return 1
   tar -xJf "$WORK_DIR/$name" -C "$WORK_DIR/ffmpeg" --strip-components=1
 }
 ffmpeg_from_btbn() {
@@ -274,7 +280,7 @@ ffmpeg_from_btbn() {
 }
 mkdir "$WORK_DIR/ffmpeg"
 if ! ffmpeg_from_johnvansickle; then
-  warn "johnvansickle.com did not answer; downloading FFmpeg from BtbN's GitHub builds"
+  warn "johnvansickle.com did not answer or failed its checksum; downloading FFmpeg from BtbN's GitHub builds"
   rm -rf "$WORK_DIR/ffmpeg" && mkdir "$WORK_DIR/ffmpeg"
   ffmpeg_from_btbn || fail "could not download FFmpeg from either source"
 fi
