@@ -26,6 +26,7 @@ chat once the TS3 adapter is connected.
 | `!diag`                               | -                     | Internal diagnostics (admins only).                                                                                                  |
 | `!debug-server`                       | `!ds`                 | TeamSpeak server info (admins only).                                                                                                 |
 | `!chart`                              | -                     | User telemetry chart (admins only).                                                                                                  |
+| `!avisos [ignorar <n>]`               | `!notices`            | List the bot's open notices (YouTube, TeamSpeak, disk, panel); `ignorar <n>` hides one until its severity rises (admins only).       |
 | `!claim <code>`                       | -                     | Become the first admin with the code the installer printed (only while no admin is configured).                                      |
 | `!remove <n\|from-to>`                | `!rm`                 | Remove one position or an inclusive range (requesters may remove only their own tracks).                                             |
 | `!clear`                              | `!c`                  | Clear pending tracks (only when every pending track is yours or an autoplay pick, or as an admin).                                   |

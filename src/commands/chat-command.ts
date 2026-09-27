@@ -10,6 +10,7 @@ import { messages } from "../lib/messages.js";
 export type ChatCommand =
   | { readonly name: "channel-move"; readonly input: string }
   | { readonly name: "chart" }
+  | { readonly ignore?: number; readonly name: "avisos" }
   | { readonly code: string; readonly name: "claim" }
   | { readonly name: "clear" }
   | { readonly name: "debug-server" }

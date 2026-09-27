@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, type Mock } from "vitest";
 
+import { NoticeRegistry } from "../src/application/notices/notice-registry.js";
 import { SkipVotes } from "../src/application/skip-votes.js";
 import { parseChatCommand } from "../src/commands/chat-command.js";
 import {
@@ -256,6 +257,7 @@ describe("dispatchCommand", () => {
       ["diag", "!diag"],
       ["debug-server", "!debug-server"],
       ["chart", "!chart"],
+      ["avisos", "!avisos"],
       ["stop", "!stop"],
       ["test-tone", "!test-tone"],
       ["help", "!help"],
@@ -449,6 +451,65 @@ describe("dispatchCommand", () => {
     const diag = parseChatCommand("!diag")!;
     await dispatchCommand(ctx, diag, sender, send);
     expect(metrics.formatDiag).toHaveBeenCalledTimes(1);
+  });
+
+  it("lists open notices and ignores one by its number, for admins only", async () => {
+    const { ctx, send, sender } = makeHarness({
+      adminUids: new Set(["uid-1"]),
+    });
+    const registry = new NoticeRegistry();
+    registry.report({
+      detector: "ts3.no-talk-power",
+      severity: "error",
+      titleEs: "El bot no puede hablar en su canal",
+      detailEs: "Dar talk power al bot.",
+    });
+    const withNotices = { ...ctx, notices: registry } as CommandContext;
+    await dispatchCommand(
+      withNotices,
+      parseChatCommand("!avisos")!,
+      sender,
+      send,
+    );
+    expect(send).toHaveBeenLastCalledWith(
+      expect.stringContaining(
+        "1. [Error] El bot no puede hablar en su canal. Dar talk power al bot.",
+      ),
+    );
+    await dispatchCommand(
+      withNotices,
+      parseChatCommand("!avisos ignorar 2")!,
+      sender,
+      send,
+    );
+    expect(send).toHaveBeenLastCalledWith(
+      "No hay un aviso abierto con el número 2.",
+    );
+    await dispatchCommand(
+      withNotices,
+      parseChatCommand("!notices ignorar 1")!,
+      sender,
+      send,
+    );
+    expect(registry.list()[0]?.state).toBe("ignored");
+
+    const outsider = { ...sender, uid: "uid-2" };
+    await dispatchCommand(
+      withNotices,
+      parseChatCommand("!avisos")!,
+      outsider,
+      send,
+    );
+    expect(send).toHaveBeenLastCalledWith(
+      "Solo los administradores pueden usar este comando.",
+    );
+  });
+
+  it("rejects malformed !avisos arguments", () => {
+    expect(() => parseChatCommand("!avisos borrar 1")).toThrow(
+      "Uso: !avisos o !avisos ignorar <n>.",
+    );
+    expect(() => parseChatCommand("!avisos ignorar x")).toThrow();
   });
 
   it("skips running the test tone while music is playing", async () => {
