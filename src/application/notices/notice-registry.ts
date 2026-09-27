@@ -28,6 +28,8 @@ export interface DetectorPolicy {
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
+// How long an ignore outlives its notice when the notice was not saved.
+const ORPHAN_IGNORE_MS = 24 * HOUR;
 
 /**
  * Thresholds per detector. Event-driven signals that are already debounced
@@ -504,7 +506,17 @@ export class NoticeRegistry {
         clearRequested: false,
       });
     }
+    const now = this.#now();
     for (const ignored of stored.ignored) {
+      // A non-persistent notice is not saved, so it cannot resolve across a
+      // restart and clear its ignore: without this, the same problem coming
+      // back days later would open already hidden.
+      if (
+        !this.#entries.has(ignored.key) &&
+        now - ignored.at >= ORPHAN_IGNORE_MS
+      ) {
+        continue;
+      }
       this.#ignored.set(ignored.key, {
         severity: ignored.severity,
         at: ignored.at,
