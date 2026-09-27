@@ -174,7 +174,23 @@ interface StoredFile {
     readonly at: number;
   }[];
   readonly starts: readonly number[];
+  readonly alerts?: StoredAlertState;
 }
+
+/**
+ * What AdminAlerts told the admins, kept with the notices so a crash loop
+ * does not reset the resend window and the hourly cap on every start.
+ */
+export interface StoredAlertState {
+  /** Key -> when its open line was last sent. */
+  readonly lastPaged: Readonly<Record<string, number>>;
+  /** Keys whose open line was sent and whose resolution was not yet. */
+  readonly paged: readonly string[];
+  readonly sentAt: readonly number[];
+}
+
+// Longer than any resend window or rate limit that reads it.
+const ALERT_HISTORY_MS = 24 * HOUR;
 
 export interface NoticeRegistryOptions {
   /** `data/notices.json`; omitted keeps everything in memory. */
@@ -202,6 +218,7 @@ export class NoticeRegistry {
   readonly #filePath: string | undefined;
   readonly #writer: DebouncedWriter | undefined;
   #starts: number[] = [];
+  #alerts: StoredAlertState = { lastPaged: {}, paged: [], sentAt: [] };
 
   constructor(options: NoticeRegistryOptions = {}) {
     this.#logger = options.logger ?? noopLogger;
@@ -391,6 +408,22 @@ export class NoticeRegistry {
     return [...this.#starts];
   }
 
+  alertState(): StoredAlertState {
+    return this.#alerts;
+  }
+
+  saveAlertState(state: StoredAlertState): void {
+    const since = this.#now() - ALERT_HISTORY_MS;
+    this.#alerts = {
+      lastPaged: Object.fromEntries(
+        Object.entries(state.lastPaged).filter(([, at]) => at > since),
+      ),
+      paged: [...state.paged],
+      sentAt: state.sentAt.filter((at) => at > since),
+    };
+    this.#writer?.schedule();
+  }
+
   /**
    * Takes back this process's start on a clean stop: restarts from a
    * deploy, the panel or `rhapsod update` must not read as a crash loop.
@@ -478,6 +511,7 @@ export class NoticeRegistry {
       });
     }
     this.#starts = [...stored.starts];
+    if (stored.alerts !== undefined) this.#alerts = stored.alerts;
   }
 
   async #save(): Promise<void> {
@@ -499,6 +533,7 @@ export class NoticeRegistry {
         })),
       ignored: [...this.#ignored].map(([key, value]) => ({ key, ...value })),
       starts: this.#starts,
+      alerts: this.#alerts,
     };
     try {
       await writeJsonFile(this.#filePath, file);
@@ -588,5 +623,28 @@ export function parseStoredFile(raw: unknown): StoredFile | undefined {
   const starts = Array.isArray(raw.starts)
     ? raw.starts.filter(isFiniteNumber)
     : [];
-  return { version: 1, notices, ignored, starts };
+  const alerts = parseAlertState(raw.alerts);
+  return {
+    version: 1,
+    notices,
+    ignored,
+    starts,
+    ...(alerts === undefined ? {} : { alerts }),
+  };
+}
+
+function parseAlertState(value: unknown): StoredAlertState | undefined {
+  if (!isRecord(value)) return undefined;
+  const lastPaged = isRecord(value.lastPaged)
+    ? Object.fromEntries(
+        Object.entries(value.lastPaged).filter(([, at]) => isFiniteNumber(at)),
+      )
+    : {};
+  const paged = Array.isArray(value.paged)
+    ? value.paged.filter((key): key is string => typeof key === "string")
+    : [];
+  const sentAt = Array.isArray(value.sentAt)
+    ? value.sentAt.filter(isFiniteNumber)
+    : [];
+  return { lastPaged: lastPaged as Record<string, number>, paged, sentAt };
 }
