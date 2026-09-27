@@ -4,7 +4,7 @@ import { readFile, statfs } from "node:fs/promises";
 import { connect } from "node:net";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
-import ffmpegStaticPath from "ffmpeg-static";
+import { resolveFfmpegBinary } from "./audio/ffmpeg-pcm.js";
 import { runCli } from "./cli/run-cli.js";
 import { APP_VERSION } from "./lib/version.js";
 import { loadEnvFile, saveEnvFile } from "./panel/env-file.js";
@@ -69,7 +69,7 @@ process.exitCode = await runCli(process.argv.slice(2), {
   saveEnv: saveEnvFile,
   loadEnv: (path) => loadEnvFile(path).values,
   generatePassword: () => randomBytes(12).toString("hex"),
-  defaultFfmpeg: ffmpegStaticPath ?? "ffmpeg",
+  defaultFfmpeg: resolveFfmpegBinary(undefined),
   out: (line) => process.stdout.write(`${line}\n`),
   err: (line) => process.stderr.write(`${line}\n`),
 });
