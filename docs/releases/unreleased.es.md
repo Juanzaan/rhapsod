@@ -23,10 +23,15 @@ La normalización de volumen medida funciona por primera vez: los temas con un p
 - Los temas medidos se reproducen con una ganancia fija de `volume` seguida de `alimiter` a -1,5 dBFS en lugar de `loudnorm` con `linear=true`, que cambiaba a su modo dinámico sin aviso cuando el rango de sonoridad medido superaba 11 LU: los temas con mucho rango seguían con ganancia variable y remuestreados a 192 kHz y de vuelta. La subida queda limitada a +12 dB. Con un archivo de prueba de 3 minutos esto usó 0,3 s de CPU y 16 MB de memoria, en lugar de 9 s y 129 MB. Al arrancar, el bot revisa `ffmpeg -filters`; si la versión instalada no tiene `alimiter`, deja una advertencia en el log y sigue con la pasada lineal de `loudnorm`.
 - Agregar un lanzador del panel para Windows (`tools/desktop`): abre el túnel SSH y el navegador, guarda la conexión en `%APPDATA%` y la contraseña del panel en el Administrador de credenciales de Windows, y no incluye servidor ni contraseña en el ejecutable. La integración continua lo compila en Windows.
 - Convertir el lanzador de Windows en una aplicación de bandeja: reconecta sola el túnel SSH, muestra en el icono qué se está reproduciendo, abre el panel en una ventana propia con un perfil separado, ejecuta una sola copia y edita su configuración en una ventana. La integración continua ejecuta su autoprueba.
+- `ffmpeg-static` pasa a ser una dependencia opcional y la imagen de Docker ya no la instala: el contenedor reproduce con el ffmpeg que instala desde Debian en lugar de una segunda copia empaquetada. Cuando falla la descarga empaquetada, el bot usa el ffmpeg del `PATH` en lugar de una ruta a un archivo que nunca se escribió.
+- El panel espera un segundo antes de responder a una contraseña equivocada, para frenar intentos automatizados. Las solicitudes sin credenciales, como el primer pedido del navegador, se responden de inmediato.
+- La caché de títulos de radio en vivo descarta las entradas vencidas; antes guardaba una por estación mientras el proceso estuviera activo.
+- La CI también ejecuta las pruebas en Windows y en Linux arm64, y cada acción de GitHub queda fijada por el SHA de su commit.
+- Las descripciones de los ajustes del panel llevan sus tildes.
 
 ## Actualización
 
-No se requieren acciones además de los pasos de actualización de v4.0.0. Las instalaciones con `RHAPSOD_ADMIN_UIDS` configurado nunca ven un código de `!claim`. `RHAPSOD_LOUDNESS_TARGET_LUFS` mantiene su significado y su valor por defecto (-14). `RHAPSOD_SKIP_NON_MUSIC` queda desactivado salvo que se defina en `true`.
+No se requieren acciones además de los pasos de actualización de v4.0.0. Las instalaciones con `RHAPSOD_ADMIN_UIDS` configurado nunca ven un código de `!claim`. `RHAPSOD_LOUDNESS_TARGET_LUFS` mantiene su significado y su valor por defecto (-14). `RHAPSOD_SKIP_NON_MUSIC` queda desactivado salvo que se defina en `true`. Las imágenes de Docker ahora usan el ffmpeg de Debian; para usar otra compilación, definir `RHAPSOD_FFMPEG_PATH`.
 
 ## Verificación
 
