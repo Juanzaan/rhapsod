@@ -48,6 +48,7 @@ Measured loudness normalization works for the first time: tracks with a loudness
 - A clean stop (a deploy, `rhapsod update`, the panel's restart button) no longer counts toward the restart-loop notice; before, four deploys or panel restarts within 15 minutes opened it as critical and sent the admins a private message.
 - The delivered-loudness meter keeps its 400 ms blocks in a fixed 0.1 LU histogram instead of a list that grew for as long as a play lasted: a radio stream playing for a day made each metrics read rescan about 864,000 blocks. A read now costs the same after a minute or a week, with the same result within 0.05 LU. A loudness measurement that fails (timeout, 403) is not retried for an hour, instead of on every prefetch of the same track.
 - A song resumed after a stall or an ffmpeg exit starts where its music stopped: the position no longer counts the silence sent while the stream starved, which skipped up to 5 seconds of the song. The panel and `!np` show the same corrected position.
+- `rhapsod uninstall --purge` no longer deletes a service user that can log in: with `RHAPSOD_USER` set to an existing account such as `ubuntu`, it deleted that account and its home, SSH keys included. Only an account with a `nologin` or `false` shell is removed now.
 
 ## Upgrade
 
