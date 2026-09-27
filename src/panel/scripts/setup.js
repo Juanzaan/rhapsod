@@ -232,9 +232,13 @@ function rO() {
     (vals.RHAPSOD_YTDLP_DAEMON_URL || "") +
     '"><div class="h">Para resolucion mas rapida de URLs</div></div>' +
     '<div class="dv"></div>' +
+    '<p class="h">Para hacerte admin, escribí <code>!claim &lt;código&gt;</code> en el chat de TeamSpeak cuando el bot se conecte. El código está en el log del bot.</p>' +
+    "<details" +
+    (vals.RHAPSOD_ADMIN_UIDS ? " open" : "") +
+    '><summary class="h">Avanzado: cargar UIDs de admin a mano</summary>' +
     '<div class="f"><label>UIDs de admin <span class="ob">opcional</span></label><input id="iua" placeholder="uid1,uid2,uid3" value="' +
     (vals.RHAPSOD_ADMIN_UIDS || "") +
-    '"><div class="h">Separados por coma. Dan acceso a !move, !diag, etc.</div></div>' +
+    '"><div class="h">Separados por coma. Dan acceso a !move, !diag, etc.</div></div></details>' +
     '<div class="a"><button class="b bs" onclick="prev()">Atras</button><button class="b bp" onclick="next()">Siguiente</button></div>'
   );
 }
@@ -263,7 +267,7 @@ function rR() {
     ],
     ["Cookies", vals.RHAPSOD_YTDLP_COOKIES_PATH ? "Configurado" : "No"],
     ["Daemon", vals.RHAPSOD_YTDLP_DAEMON_URL ? "Configurado" : "No"],
-    ["Admins", vals.RHAPSOD_ADMIN_UIDS || "(ninguno)"],
+    ["Admins", vals.RHAPSOD_ADMIN_UIDS || "Con !claim en TeamSpeak"],
   ];
   var h =
     '<h1>Resumen</h1><p class="sub">Revisa la configuracion antes de guardar</p>';
