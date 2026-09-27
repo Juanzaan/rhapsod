@@ -2,7 +2,7 @@
 
 ## Summary
 
-Measured loudness normalization works for the first time: tracks with a loudness profile play at the target level without the gain riding of single-pass normalization.
+Measured loudness normalization works for the first time: tracks with a loudness profile play at the target level without the gain riding of single-pass normalization. Optional skipping of the non-music intro and outro of YouTube music videos.
 
 ## Changes
 
@@ -17,10 +17,11 @@ Measured loudness normalization works for the first time: tracks with a loudness
 - Panel: every page uses the same 1320px frame, so the nav no longer shifts between pages. Cards in a console row share their height and the queue scrolls inside its card; Settings and Commands show each group full width with an even grid of fields and commands.
 - Panel: the Server page no longer rebuilds the channel tree every 2.5 seconds when nothing changed, which cut hover transitions mid-way. With the system set to reduce motion, only the background and the turntable stop; click and hover feedback stay.
 - Panel: player states read in Spanish (SONANDO, EN PAUSA, CARGANDO, EN ESPERA), and the setup wizard points new installs to `!claim` for the first admin, with the admin UID field moved to an advanced section.
+- Add `RHAPSOD_SKIP_NON_MUSIC` (default `false`): YouTube music videos start where the music starts and end where it ends, using the non-music segments (spoken intros, scenes, credits) that SponsorBlock users mark with the `music_offtopic` category. Only an intro and an outro are cut, never a segment in the middle, and a cut that would keep less than half the track or less than 30 seconds is ignored. The lookup sends a 4-character prefix of the SHA-256 of the video id, waits at most 1.5 seconds and runs in parallel with the audio URL; when it fails the track plays whole.
 
 ## Upgrade
 
-No action is required beyond the v4.0.0 upgrade steps. `RHAPSOD_LOUDNESS_TARGET_LUFS` keeps its meaning and default (-14).
+No action is required beyond the v4.0.0 upgrade steps. `RHAPSOD_LOUDNESS_TARGET_LUFS` keeps its meaning and default (-14). `RHAPSOD_SKIP_NON_MUSIC` is off unless set to `true`.
 
 ## Verification
 

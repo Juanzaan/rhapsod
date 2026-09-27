@@ -186,6 +186,7 @@ function makeHarness(
   const config = {
     RHAPSOD_TS3_NICKNAME: "Bot",
     RHAPSOD_VOTE_SKIP: overrides.voteSkip ?? false,
+    RHAPSOD_SKIP_NON_MUSIC: false,
   };
   const ctx = {
     playback,

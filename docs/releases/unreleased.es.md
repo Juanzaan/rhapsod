@@ -2,7 +2,7 @@
 
 ## Resumen
 
-La normalización de volumen medida funciona por primera vez: los temas con un perfil de sonoridad suenan al nivel objetivo sin las variaciones de ganancia de la normalización en una sola pasada.
+La normalización de volumen medida funciona por primera vez: los temas con un perfil de sonoridad suenan al nivel objetivo sin las variaciones de ganancia de la normalización en una sola pasada. Salto opcional de la intro y el final sin música de los videoclips de YouTube.
 
 ## Cambios
 
@@ -17,10 +17,11 @@ La normalización de volumen medida funciona por primera vez: los temas con un p
 - Panel: todas las páginas usan el mismo marco de 1320 px, así que el menú ya no se corre al cambiar de página. Las tarjetas de una fila de la consola comparten el alto y la cola se desplaza dentro de su tarjeta; Configuración y Comandos muestran cada grupo a ancho completo, con una grilla pareja de campos y comandos.
 - Panel: la página Servidor ya no reconstruye el árbol de canales cada 2,5 segundos cuando nada cambió, algo que cortaba las transiciones al pasar el puntero. Con el sistema en movimiento reducido solo se detienen el fondo y el tocadiscos; la respuesta a clics y al puntero se mantiene.
 - Panel: los estados del reproductor se muestran en español (SONANDO, EN PAUSA, CARGANDO, EN ESPERA), y el asistente de instalación indica usar `!claim` para el primer administrador, con el campo de UIDs de administrador en una sección avanzada.
+- Agregar `RHAPSOD_SKIP_NON_MUSIC` (por defecto `false`): los videoclips de YouTube empiezan donde empieza la música y terminan donde termina, según los tramos sin música (intros habladas, escenas, créditos) que los usuarios de SponsorBlock marcan con la categoría `music_offtopic`. Solo se cortan una intro y un final, nunca un tramo del medio, y se ignora un corte que dejaría menos de la mitad de la pista o menos de 30 segundos. La consulta envía un prefijo de 4 caracteres del SHA-256 del id del video, espera como máximo 1,5 segundos y corre en paralelo con la URL de audio; si falla, la pista suena completa.
 
 ## Actualización
 
-No se requieren acciones además de los pasos de actualización de v4.0.0. `RHAPSOD_LOUDNESS_TARGET_LUFS` mantiene su significado y su valor por defecto (-14).
+No se requieren acciones además de los pasos de actualización de v4.0.0. `RHAPSOD_LOUDNESS_TARGET_LUFS` mantiene su significado y su valor por defecto (-14). `RHAPSOD_SKIP_NON_MUSIC` queda desactivado salvo que se defina en `true`.
 
 ## Verificación
 
