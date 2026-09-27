@@ -215,6 +215,15 @@ describe("NoticeMonitor", () => {
     });
   });
 
+  it("treats an empty cookies file as no cookies, not a broken one", async () => {
+    const notices = monitor({
+      config: { RHAPSOD_YTDLP_COOKIES_PATH: "/data/youtube-cookies.txt" },
+      readCookies: () => Promise.resolve(""),
+    });
+    await notices.checkCookies();
+    expect(notices.registry.list()).toEqual([]);
+  });
+
   describe("PO token provider", () => {
     let server: Server | undefined;
     afterEach(async () => {

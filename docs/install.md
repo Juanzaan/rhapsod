@@ -47,7 +47,7 @@ Cloudflare WARP is not installed by default. It only helps when YouTube blocks t
 sudo env RHAPSOD_WITH_WARP=1 bash "$HOME/rhapsod-install.sh"
 ```
 
-Then restart the daemon and the bot while nothing is playing. A rerun keeps WARP when it is already installed; `RHAPSOD_SKIP_WARP=1` leaves it out. Other installer overrides are `RHAPSOD_REF`, `RHAPSOD_APP_DIR` and `RHAPSOD_USER`.
+Then restart the daemon and the bot while nothing is playing. A rerun keeps WARP when it is already installed; `RHAPSOD_SKIP_WARP=1` leaves it out. Other installer overrides are `RHAPSOD_REF`, `RHAPSOD_REPOSITORY` (a git URL or local path, for forks and CI), `RHAPSOD_APP_DIR` and `RHAPSOD_USER`.
 
 The installer configures a weekly yt-dlp updater. Rhapsod itself is updated separately using the [deployment procedure](deployment.md).
 
