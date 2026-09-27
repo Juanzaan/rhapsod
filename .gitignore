@@ -15,3 +15,4 @@ Thumbs.db
 /cookies.txt
 /rhapsod-data.tar.gz
 __pycache__/
+tools/desktop/bin/

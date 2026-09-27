@@ -2,7 +2,7 @@
 
 ## Resumen
 
-La normalización de volumen medida funciona por primera vez: los temas con un perfil de sonoridad suenan al nivel objetivo sin las variaciones de ganancia de la normalización en una sola pasada. Salto opcional de la intro y el final sin música de los videoclips de YouTube.
+La normalización de volumen medida funciona por primera vez: los temas con un perfil de sonoridad suenan al nivel objetivo sin las variaciones de ganancia de la normalización en una sola pasada. Salto opcional de la intro y el final sin música de los videoclips de YouTube. Agrega un lanzador del panel para Windows.
 
 ## Cambios
 
@@ -21,6 +21,7 @@ La normalización de volumen medida funciona por primera vez: los temas con un p
 - Una instalación nueva pregunta por el servidor de TeamSpeak y el bot entra al terminar, sin pasar por el panel web. El instalador muestra un código de un solo uso; `!claim <código>` en TeamSpeak convierte a quien lo envía en el primer administrador y guarda su UID en `RHAPSOD_ADMIN_UIDS`, que los dueños nuevos no podían completar porque no conocen su UID de TeamSpeak.
 - El instalador ya no agrega Cloudflare WARP salvo con `RHAPSOD_WITH_WARP=1`; repetirlo conserva una instalación de WARP existente. Cuando falla la comprobación diaria de YouTube, `!stats` indica el arreglo según el tipo de falla: WARP para una dirección de servidor bloqueada, cookies cuando pide iniciar sesión.
 - Los temas medidos se reproducen con una ganancia fija de `volume` seguida de `alimiter` a -1,5 dBFS en lugar de `loudnorm` con `linear=true`, que cambiaba a su modo dinámico sin aviso cuando el rango de sonoridad medido superaba 11 LU: los temas con mucho rango seguían con ganancia variable y remuestreados a 192 kHz y de vuelta. La subida queda limitada a +12 dB. Con un archivo de prueba de 3 minutos esto usó 0,3 s de CPU y 16 MB de memoria, en lugar de 9 s y 129 MB. Al arrancar, el bot revisa `ffmpeg -filters`; si la versión instalada no tiene `alimiter`, deja una advertencia en el log y sigue con la pasada lineal de `loudnorm`.
+- Agregar un lanzador del panel para Windows (`tools/desktop`): abre el túnel SSH y el navegador, guarda la conexión en `%APPDATA%` y la contraseña del panel en el Administrador de credenciales de Windows, y no incluye servidor ni contraseña en el ejecutable. La integración continua lo compila en Windows.
 
 ## Actualización
 
