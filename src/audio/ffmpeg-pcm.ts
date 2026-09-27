@@ -188,6 +188,13 @@ export function isForbiddenResponse(text: string): boolean {
   return /server returned 403|http error 403|\b403 forbidden\b/i.test(text);
 }
 
+const FFMPEG_EXIT = "FFmpeg exited with code ";
+
+/** True for an ffmpeg process that died with an error, whatever the cause. */
+export function isFfmpegExit(message: string): boolean {
+  return message.startsWith(FFMPEG_EXIT);
+}
+
 const PCM_BYTES_PER_SECOND = SAMPLE_RATE * CHANNELS * 2;
 
 const FFMPEG_403_RETRY_COUNT = 2;
@@ -269,7 +276,7 @@ export function createFfmpegPcmStream(
           const detail = stderr.trim();
           stream.destroy(
             new Error(
-              `FFmpeg exited with code ${code ?? "unknown"}${detail ? `: ${detail}` : ""}`,
+              `${FFMPEG_EXIT}${code ?? "unknown"}${detail ? `: ${detail}` : ""}`,
             ),
           );
         }
@@ -302,7 +309,7 @@ export function createFfmpegPcmStream(
       const detail = stderr.trim();
       stream.destroy(
         new Error(
-          `FFmpeg exited with code ${code ?? "unknown"}${detail ? `: ${detail}` : ""}`,
+          `${FFMPEG_EXIT}${code ?? "unknown"}${detail ? `: ${detail}` : ""}`,
         ),
       );
     });

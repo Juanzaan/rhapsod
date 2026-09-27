@@ -422,19 +422,19 @@ function setLamp(state) {
   );
   if (state === "playing") {
     lamp.className = "lamp on";
-    lab.textContent = "PLAYING";
+    lab.textContent = "SONANDO";
     pp.innerHTML = "&#9208;";
   } else if (state === "buffering") {
     lamp.className = "lamp buf";
-    lab.textContent = "BUFFERING";
+    lab.textContent = "CARGANDO";
     pp.innerHTML = "&#9208;";
   } else if (state === "paused") {
     lamp.className = "lamp";
-    lab.textContent = "PAUSED";
+    lab.textContent = "EN PAUSA";
     pp.innerHTML = "&#9654;";
   } else {
     lamp.className = "lamp";
-    lab.textContent = "STANDBY";
+    lab.textContent = "EN ESPERA";
     pp.innerHTML = "&#9654;";
   }
 }

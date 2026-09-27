@@ -30,6 +30,10 @@ Output #0, null, to 'pipe:':
 `;
 const MEASURED = { stderr: FFMPEG_STDERR, stdout: "" };
 
+// 130 s of a quiet tone, then 20 s at nearly full scale (sine starts at 1/8).
+const QUIET_INTRO_LOUD_CHORUS =
+  "sine=frequency=440:duration=150,volume='if(lt(t,130),0.4,7.2)':eval=frame";
+
 function hasFfmpeg(): boolean {
   return spawnSync("ffmpeg", ["-version"]).status === 0;
 }
@@ -38,7 +42,7 @@ describe("LoudnessProfiler", () => {
   it("caches a profile measured from ffmpeg loudnorm pass 1", async () => {
     const execFile = vi.fn(() => Promise.resolve(MEASURED));
     const profiler = new LoudnessProfiler({ execFile });
-    profiler.measure("https://youtu.be/abc", "https://media.example/abc");
+    profiler.measure("https://youtu.be/abc", "https://media.example/abc", 200);
     await new Promise((resolve) => setTimeout(resolve, 10));
 
     const profile = profiler.cached("https://youtu.be/abc");
@@ -57,14 +61,19 @@ describe("LoudnessProfiler", () => {
         "-af",
         "loudnorm=I=-14:TP=-1.5:LRA=11:print_format=json",
       ]),
-      expect.objectContaining({ timeout: 90_000 }),
+      expect.objectContaining({ timeout: 180_000 }),
     );
   });
 
   it("measures from the music start when an intro is trimmed", async () => {
     const execFile = vi.fn(() => Promise.resolve(MEASURED));
     const profiler = new LoudnessProfiler({ execFile });
-    profiler.measure("https://youtu.be/abc", "https://media.example/abc", 14);
+    profiler.measure(
+      "https://youtu.be/abc",
+      "https://media.example/abc",
+      200,
+      14,
+    );
     await new Promise((resolve) => setTimeout(resolve, 10));
 
     const args =
@@ -83,7 +92,7 @@ describe("LoudnessProfiler", () => {
       Promise.resolve({ stderr: silent, stdout: "" }),
     );
     const profiler = new LoudnessProfiler({ execFile });
-    profiler.measure("https://youtu.be/abc", "https://media.example/abc");
+    profiler.measure("https://youtu.be/abc", "https://media.example/abc", 200);
     await new Promise((resolve) => setTimeout(resolve, 10));
 
     const args = (execFile.mock.calls[0] as unknown[] | undefined)?.[1];
@@ -93,7 +102,7 @@ describe("LoudnessProfiler", () => {
   });
 
   it.skipIf(!hasFfmpeg())(
-    "reads a profile from the real ffmpeg binary",
+    "measures the whole track with the real ffmpeg binary",
     async () => {
       // Same arguments as production, with the network input swapped for a
       // generated tone: this is what the fixture above stands in for.
@@ -106,24 +115,49 @@ describe("LoudnessProfiler", () => {
         for (let i = 0; i < args.length; i++) {
           if (args[i] === "-protocol_whitelist") i++;
           else if (args[i] === "-i") {
-            local.push("-f", "lavfi", "-i", "sine=frequency=440:duration=3");
+            local.push("-f", "lavfi", "-i", QUIET_INTRO_LOUD_CHORUS);
             i++;
           } else local.push(args[i]!);
         }
         return promisify(execFileCallback)(file, local, options);
       };
       const profiler = new LoudnessProfiler({ execFile });
-      profiler.measure("https://youtu.be/tone", "https://media.example/tone");
+      profiler.measure(
+        "https://youtu.be/tone",
+        "https://media.example/tone",
+        150,
+      );
       await vi.waitFor(
         () => expect(profiler.cached("https://youtu.be/tone")).toBeDefined(),
         { timeout: 10_000 },
       );
-      expect(profiler.cached("https://youtu.be/tone")?.measuredI).toBeLessThan(
-        0,
-      );
+      // The true peak must come from the chorus: with only the first 120 s
+      // measured, linear gain sized for the intro clipped 74% of the
+      // chorus samples.
+      expect(
+        profiler.cached("https://youtu.be/tone")?.measuredTp,
+      ).toBeGreaterThan(-3);
     },
     15_000,
   );
+
+  it("measures whole tracks and leaves long ones to the dynamic filter", async () => {
+    const execFile = vi.fn(() => Promise.resolve(MEASURED));
+    const profiler = new LoudnessProfiler({ execFile });
+    profiler.measure(
+      "https://youtu.be/mix",
+      "https://media.example/mix",
+      3_600,
+    );
+    profiler.measure("https://youtu.be/abc", "https://media.example/abc", 200);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(execFile).toHaveBeenCalledTimes(1);
+    expect(
+      (execFile.mock.calls[0] as unknown[] | undefined)?.[1],
+    ).not.toContain("-t");
+    expect(profiler.cached("https://youtu.be/mix")).toBeUndefined();
+  });
 
   it("returns undefined for an unmeasured source", () => {
     const profiler = new LoudnessProfiler();
@@ -133,11 +167,11 @@ describe("LoudnessProfiler", () => {
   it("does not re-measure a source that already has a profile", async () => {
     const execFile = vi.fn(() => Promise.resolve(MEASURED));
     const profiler = new LoudnessProfiler({ execFile });
-    profiler.measure("https://youtu.be/abc", "https://media.example/abc");
+    profiler.measure("https://youtu.be/abc", "https://media.example/abc", 200);
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(execFile).toHaveBeenCalledTimes(1);
 
-    profiler.measure("https://youtu.be/abc", "https://media.example/abc");
+    profiler.measure("https://youtu.be/abc", "https://media.example/abc", 200);
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(execFile).toHaveBeenCalledTimes(1);
   });
@@ -145,7 +179,7 @@ describe("LoudnessProfiler", () => {
   it("does not cache a profile when ffmpeg fails", async () => {
     const execFile = vi.fn(() => Promise.reject(new Error("network down")));
     const profiler = new LoudnessProfiler({ execFile });
-    profiler.measure("https://youtu.be/abc", "https://media.example/abc");
+    profiler.measure("https://youtu.be/abc", "https://media.example/abc", 200);
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(profiler.cached("https://youtu.be/abc")).toBeUndefined();
   });
@@ -156,7 +190,7 @@ describe("LoudnessProfiler", () => {
       execFile,
       egressProxyUrl: "http://127.0.0.1:45000",
     });
-    profiler.measure("https://youtu.be/abc", "https://media.example/abc");
+    profiler.measure("https://youtu.be/abc", "https://media.example/abc", 200);
     await new Promise((resolve) => setTimeout(resolve, 10));
 
     expect(execFile).toHaveBeenCalledWith(

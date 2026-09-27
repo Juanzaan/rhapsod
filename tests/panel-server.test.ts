@@ -104,6 +104,35 @@ function startTestPanel(
 }
 
 describe("panel-server", () => {
+  it("answers /api/health with 503 while the bot reconnects", async () => {
+    let reconnecting = true;
+    const state = startTestPanel("", 23615, {
+      status: () => ({
+        connected: !reconnecting,
+        queueLength: 0,
+        reconnecting,
+        version: "4.0.0",
+      }),
+    });
+    try {
+      const down = await fetch(`${state.baseUrl}/api/health`, {
+        headers: { authorization: state.auth },
+      });
+      expect(down.status).toBe(503);
+      expect(
+        ((await down.json()) as { reconnecting: boolean }).reconnecting,
+      ).toBe(true);
+      reconnecting = false;
+      const up = await fetch(`${state.baseUrl}/api/health`, {
+        headers: { authorization: state.auth },
+      });
+      expect(up.status).toBe(200);
+    } finally {
+      await state.close();
+      rmSync(state.dir, { force: true, recursive: true });
+    }
+  });
+
   it("serves health and env over HTTP with basic auth", async () => {
     const port = 23456;
     const state = startTestPanel("RHAPSOD_TS3_HOST=ts.example.com\n", port);
