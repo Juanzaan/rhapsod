@@ -1,3 +1,7 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { describe, expect, it, vi, type Mock } from "vitest";
 
 import { fetchInnertubePlayerAudioUrl } from "../src/media/youtube/innertube-player.js";
@@ -7,6 +11,7 @@ import {
 } from "../src/media/youtube/innertube-search.js";
 import {
   buildYtDlpArguments,
+  usableCookiesPath,
   buildYtDlpCommand,
   runYtDlpCommand,
   YTDLP_ABORT_ERROR,
@@ -60,6 +65,23 @@ class SequencedExecutor implements YtDlpExecutor {
     return Promise.resolve(output);
   }
 }
+
+describe("usableCookiesPath", () => {
+  it("skips a cookies file that is missing or empty", () => {
+    const dir = mkdtempSync(join(tmpdir(), "rhapsod-cookies-"));
+    try {
+      const path = join(dir, "youtube-cookies.txt");
+      expect(usableCookiesPath(path)).toBeUndefined();
+      writeFileSync(path, "");
+      expect(usableCookiesPath(path)).toBeUndefined();
+      writeFileSync(path, "# Netscape HTTP Cookie File\n");
+      expect(usableCookiesPath(path)).toBe(path);
+      expect(usableCookiesPath(undefined)).toBeUndefined();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
 
 describe("YoutubeResolver", () => {
   it("passes a private cookies file to yt-dlp when configured", () => {

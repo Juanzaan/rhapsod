@@ -196,6 +196,12 @@ export class NoticeMonitor {
     let summary: CookiesFileSummary | "missing";
     try {
       const text = await read(path);
+      // A fresh install leaves the file empty until the owner loads cookies,
+      // which is a valid setup (YouTube often works without them).
+      if (text !== undefined && text.trim() === "") {
+        this.registry.ok("youtube.cookies-expiring");
+        return;
+      }
       summary = text === undefined ? "missing" : summarizeCookiesFile(text);
     } catch (error) {
       this.#options.logger.debug({ err: error }, "Cookies check failed");

@@ -67,6 +67,17 @@ DEFAULT_TTL_S = 6 * 3600
 EXPIRY_MARGIN_S = 15 * 60
 MAX_CACHE_ENTRIES = 500
 
+
+def cookie_options(path):
+    # The installer creates the cookie file empty so the panel can fill it
+    # later; yt-dlp rejects an empty file as "not Netscape format" and every
+    # extraction would fail until cookies are loaded.
+    try:
+        return {"cookiefile": path} if os.path.getsize(path) > 0 else {}
+    except OSError:
+        return {}
+
+
 BASE = {
     "quiet": True,
     "no_warnings": True,
@@ -75,7 +86,7 @@ BASE = {
     "socket_timeout": 5,
     "extractor_retries": 2,
     "fragment_retries": 2,
-    "cookiefile": COOKIES_PATH,
+    **cookie_options(COOKIES_PATH),
     "extract_flat": "discard",
     "js_runtimes": {"node": {}},
     "remote_components": {"ejs": "github"},

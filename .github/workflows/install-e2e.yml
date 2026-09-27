@@ -80,6 +80,12 @@ jobs:
         run: |
           grep -q 'The bot is in your TeamSpeak server.' install.log
           grep -Eq '!claim [a-z0-9]{5}-[a-z0-9]{5}' install.log
+          # The installer returns once the bot joined; the panel may still be
+          # a moment away from listening.
+          for _ in $(seq 1 30); do
+            rhapsod status >/dev/null 2>&1 && break
+            sleep 2
+          done
           rhapsod status | tee status.txt
           grep -q 'TeamSpeak:  connected' status.txt
           rhapsod doctor

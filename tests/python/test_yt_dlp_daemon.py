@@ -10,8 +10,10 @@ import http.client
 import io
 import importlib.util
 import json
+import os
 import pathlib
 import sys
+import tempfile
 import threading
 import time
 import types
@@ -46,6 +48,20 @@ def stream_url(expire=None):
     if expire is not None:
         query += f"&expire={expire}"
     return f"https://rr1---sn-test.googlevideo.com/videoplayback?{query}"
+
+
+class CookieOptionsTest(unittest.TestCase):
+    def test_skips_a_missing_or_empty_cookie_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "youtube-cookies.txt")
+            self.assertEqual(daemon_module.cookie_options(path), {})
+            open(path, "w").close()
+            self.assertEqual(daemon_module.cookie_options(path), {})
+            with open(path, "w") as handle:
+                handle.write("# Netscape HTTP Cookie File\n")
+            self.assertEqual(
+                daemon_module.cookie_options(path), {"cookiefile": path}
+            )
 
 
 class VideoIdTest(unittest.TestCase):
