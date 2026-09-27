@@ -97,16 +97,36 @@ Confirm the bot joins its channel, request a track with `!play` and inspect `!st
 
 The installer adds `/usr/local/bin/rhapsod` and records the install in `/etc/rhapsod/install.conf` (`APP_DIR`, `APP_USER`, `NODE_BIN`). It asks for sudo once, since the env file belongs to the service user.
 
-| Command            | Effect                                                                                                                                      |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `rhapsod status`   | Service states, player state, TeamSpeak connection, a pending `!claim` code and the SSH tunnel command for the panel. `--json` for scripts. |
-| `rhapsod doctor`   | The checks above, with the fix for each failure. Prints no secrets.                                                                         |
-| `rhapsod password` | Writes a new random `RHAPSOD_PANEL_PASSWORD` and prints it.                                                                                 |
-| `rhapsod restart`  | Restarts the bot when the player is idle; `--force` restarts during playback.                                                               |
-| `rhapsod logs [N]` | Follows the bot and daemon journal from N lines back (default 100).                                                                         |
-| `rhapsod version`  | Installed version.                                                                                                                          |
+| Command             | Effect                                                                                                                                           |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `rhapsod status`    | Service states, player state, TeamSpeak connection, a pending `!claim` code and the SSH tunnel command for the panel. `--json` for scripts.      |
+| `rhapsod doctor`    | The checks above, with the fix for each failure. Prints no secrets.                                                                              |
+| `rhapsod password`  | Writes a new random `RHAPSOD_PANEL_PASSWORD` and prints it.                                                                                      |
+| `rhapsod restart`   | Restarts the bot when the player is idle; `--force` restarts during playback.                                                                    |
+| `rhapsod logs [N]`  | Follows the bot and daemon journal from N lines back (default 100).                                                                              |
+| `rhapsod version`   | Installed version.                                                                                                                               |
+| `rhapsod backup`    | Stops the bot for a few seconds and archives `data/` and `.env` to `/home/rhapsod/backups`. Refuses during playback unless `--force`.            |
+| `rhapsod update`    | Backs up, installs the latest release (or `--ref REF`), waits for the bot to come up healthy and rolls back on its own if it does not.           |
+| `rhapsod rollback`  | Reinstalls the version the last `update` replaced. A second `rollback` goes forward again.                                                       |
+| `rhapsod uninstall` | Removes the services, the cron job, `/etc/rhapsod` and the command, after a last backup. `--purge` also removes the `rhapsod` user and its home. |
 
 Without the installer (Docker, manual installs), run the same checks from the checkout: `node dist/cli.js status`, `doctor`, `password` or `version`, with `RHAPSOD_ENV_FILE` pointing at the env file when it is not `./.env`.
+
+### Updates, backups and removal
+
+`rhapsod update` and `rollback` wait until nothing is playing; `backup` refuses during playback. `--force` skips either check. Backups share one folder with `scripts/deploy.sh`; the newest five are kept. To restore one:
+
+```bash
+sudo systemctl stop rhapsod
+sudo tar -xzf /home/rhapsod/backups/rhapsod-<date>-<commit>.tar.gz -C /home/rhapsod/rhapsod
+sudo systemctl start rhapsod
+```
+
+`update` replaces the bot's code, not the systemd units or the other components. When the release notes say the installer changed, rerun `install.sh`; it keeps `.env` and the data.
+
+`rollback` restores the code only; the data stays as the newer version left it. When that version changed the data format, restore the backup taken before the update as shown above.
+
+`rhapsod uninstall --purge --yes` runs without a prompt. The last backup goes to `/var/backups/rhapsod`, because `--purge` deletes the home. Node.js, FFmpeg, yt-dlp and WARP stay installed, since other software may use them.
 
 ## Troubleshooting
 
