@@ -2,7 +2,7 @@
 
 ## Resumen
 
-La normalización de volumen medida funciona por primera vez: los temas con un perfil de sonoridad suenan al nivel objetivo sin las variaciones de ganancia de la normalización en una sola pasada. Salto opcional de la intro y el final sin música de los videoclips de YouTube.
+La normalización de volumen medida funciona por primera vez: los temas con un perfil de sonoridad suenan al nivel objetivo sin las variaciones de ganancia de la normalización en una sola pasada. Salto opcional de la intro y el final sin música de los videoclips de YouTube. Agrega una aplicación de bandeja para Windows que abre el panel.
 
 ## Cambios
 
@@ -20,6 +20,9 @@ La normalización de volumen medida funciona por primera vez: los temas con un p
 - Agregar `RHAPSOD_SKIP_NON_MUSIC` (por defecto `false`): los videoclips de YouTube empiezan donde empieza la música y terminan donde termina, según los tramos sin música (intros habladas, escenas, créditos) que los usuarios de SponsorBlock marcan con la categoría `music_offtopic`. Solo se cortan una intro y un final, nunca un tramo del medio, y se ignora un corte que dejaría menos de la mitad de la pista o menos de 30 segundos. La consulta envía un prefijo de 4 caracteres del SHA-256 del id del video, espera como máximo 1,5 segundos y corre en paralelo con la URL de audio; si falla, la pista suena completa.
 - Una instalación nueva pregunta por el servidor de TeamSpeak y el bot entra al terminar, sin pasar por el panel web. El instalador muestra un código de un solo uso; `!claim <código>` en TeamSpeak convierte a quien lo envía en el primer administrador y guarda su UID en `RHAPSOD_ADMIN_UIDS`, que los dueños nuevos no podían completar porque no conocen su UID de TeamSpeak.
 - El instalador ya no agrega Cloudflare WARP salvo con `RHAPSOD_WITH_WARP=1`; repetirlo conserva una instalación de WARP existente. Cuando falla la comprobación diaria de YouTube, `!stats` indica el arreglo según el tipo de falla: WARP para una dirección de servidor bloqueada, cookies cuando pide iniciar sesión.
+- Los temas medidos se reproducen con una ganancia fija de `volume` seguida de `alimiter` a -1,5 dBFS en lugar de `loudnorm` con `linear=true`, que cambiaba a su modo dinámico sin aviso cuando el rango de sonoridad medido superaba 11 LU: los temas con mucho rango seguían con ganancia variable y remuestreados a 192 kHz y de vuelta. La subida queda limitada a +12 dB. Con un archivo de prueba de 3 minutos esto usó 0,3 s de CPU y 16 MB de memoria, en lugar de 9 s y 129 MB. Al arrancar, el bot revisa `ffmpeg -filters`; si la versión instalada no tiene `alimiter`, deja una advertencia en el log y sigue con la pasada lineal de `loudnorm`.
+- Agregar un lanzador del panel para Windows (`tools/desktop`): abre el túnel SSH y el navegador, guarda la conexión en `%APPDATA%` y la contraseña del panel en el Administrador de credenciales de Windows, y no incluye servidor ni contraseña en el ejecutable. La integración continua lo compila en Windows.
+- Convertir el lanzador de Windows en una aplicación de bandeja: reconecta sola el túnel SSH, muestra en el icono qué se está reproduciendo, abre el panel en una ventana propia con un perfil separado, ejecuta una sola copia y edita su configuración en una ventana. La integración continua ejecuta su autoprueba.
 
 ## Actualización
 

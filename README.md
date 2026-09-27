@@ -93,6 +93,7 @@ npm run test:coverage
 - [Install](docs/install.md) and [deployment](docs/deployment.md)
 - [Commands](docs/commands.md) and [architecture](docs/architecture.md)
 - [Dashboard and animated backgrounds](docs/dashboard.md)
+- [Windows desktop app](docs/desktop.md)
 - [Releases and publishing](docs/releases.md)
 - [Roadmap](docs/roadmap.md) and [bot research](docs/research-ts3-bots.md)
 - [Optional voice routing](docs/warp-voice-egress.md)
