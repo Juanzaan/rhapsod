@@ -10,6 +10,8 @@ Measured loudness normalization works for the first time: tracks with a loudness
 - Log and count yt-dlp daemon failures instead of falling back silently: the bot warns at most once a minute, the daemon writes failures to its journal, and `/api/metrics` exports `rhapsod_ytdlp_daemon_up` and `rhapsod_ytdlp_daemon_fallbacks_total`.
 - Make `/api/health` answer 503 while reconnecting to TeamSpeak (it reported connected from a cached channel id) and add the YouTube login and daemon state to its body.
 - Flush the log file before exiting, so the last line before a crash or restart reaches `data/logs`.
+- The next track's loudness is measured from the moment the current track starts instead of when its warm stream is built at the midpoint, so first plays use their measured profile. Nothing is measured while the queue is idle, to keep a second download away from a cold start.
+- The loudness profile covers the whole track instead of its first 120 seconds, so linear gain sized for a quiet intro cannot clip a louder chorus. Tracks longer than 15 minutes are not measured and keep the dynamic filter.
 
 ## Upgrade
 
