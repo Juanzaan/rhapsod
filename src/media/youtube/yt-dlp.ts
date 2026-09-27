@@ -7,6 +7,10 @@ import { UserError } from "../../lib/user-error.js";
 import type { SearchMetrics } from "../../observability/metrics.js";
 import { parseMediaInput, type YoutubeResource } from "../media-input.js";
 import { rankYoutubeCandidatesScored } from "./search-ranking.js";
+import {
+  YtDlpDaemonHealth,
+  type DaemonHealthSnapshot,
+} from "./daemon-health.js";
 import type { TimeoutConfig } from "../../lib/timeout-config.js";
 import { fetchInnertubePlayerAudioUrl } from "./innertube-player.js";
 import {
@@ -367,6 +371,7 @@ export class YoutubeResolver {
   readonly #timeouts: TimeoutConfig | undefined;
   readonly #daemonUrl: string | undefined;
   readonly #daemonFetch: typeof fetch;
+  readonly #daemonHealth: YtDlpDaemonHealth | undefined;
 
   constructor(
     private readonly executor: YtDlpExecutor,
@@ -383,6 +388,15 @@ export class YoutubeResolver {
     this.#timeouts = options?.timeouts;
     this.#daemonUrl = options?.daemonUrl;
     this.#daemonFetch = options?.daemonFetch ?? fetch;
+    this.#daemonHealth =
+      options?.daemonUrl === undefined
+        ? undefined
+        : new YtDlpDaemonHealth({ logger: this.#logger });
+  }
+
+  /** Undefined when no daemon is configured. */
+  daemonHealth(): DaemonHealthSnapshot | undefined {
+    return this.#daemonHealth?.snapshot();
   }
 
   async getTrack(resource: YoutubeResource): Promise<YoutubeTrackMetadata> {
@@ -719,18 +733,48 @@ export class YoutubeResolver {
       signal === undefined
         ? controller.signal
         : AbortSignal.any([signal, controller.signal]);
+    const health = this.#daemonHealth;
     try {
       const response = await this.#daemonFetch(
         `${this.#daemonUrl}/resolve?url=${encodeURIComponent(url)}`,
         { signal: combinedSignal },
       );
-      if (!response.ok) return undefined;
-      const body = (await response.json()) as { readonly url?: string };
-      if (typeof body.url === "string" && /^https:\/\//i.test(body.url)) {
+      let body:
+        { readonly url?: unknown; readonly error?: unknown } | undefined;
+      try {
+        body = (await response.json()) as typeof body;
+      } catch {
+        body = undefined;
+      }
+      if (!response.ok) {
+        health?.recordFailure(
+          typeof body?.error === "string" ? "daemon-error" : "http-error",
+          typeof body?.error === "string"
+            ? body.error
+            : `HTTP ${response.status}`,
+        );
+        return undefined;
+      }
+      if (typeof body?.url === "string" && /^https:\/\//i.test(body.url)) {
+        health?.recordSuccess();
         return body.url;
       }
+      health?.recordFailure(
+        typeof body?.error === "string" ? "daemon-error" : "invalid-response",
+        typeof body?.error === "string" ? body.error : undefined,
+      );
       return undefined;
-    } catch {
+    } catch (error) {
+      // The caller gave up (skip, stop): not the daemon's fault.
+      if (signal?.aborted) return undefined;
+      if (controller.signal.aborted) {
+        health?.recordFailure("timeout", `${DAEMON_TIMEOUT_MS} ms`);
+      } else {
+        health?.recordFailure(
+          "unreachable",
+          error instanceof Error ? error.message : String(error),
+        );
+      }
       return undefined;
     } finally {
       clearTimeout(timer);

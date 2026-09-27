@@ -10,12 +10,17 @@ import {
 } from "./adapters/ts3/ts3-connection.js";
 import { createRhapsodOpusEncoder } from "./audio/opus-encoder.js";
 import { createPcmStream, playFfmpegUrl } from "./audio/ffmpeg-player.js";
+import { probeFfmpegFilter, resolveFfmpegBinary } from "./audio/ffmpeg-pcm.js";
 import { LoudnessProfiler } from "./audio/loudness-profiler.js";
 import { playTestTone } from "./audio/test-tone-player.js";
 import { YoutubePlaybackService } from "./application/youtube-playback-service.js";
 import { PlaylistStore } from "./application/playlist-store.js";
+import { AdminClaim } from "./application/admin-claim.js";
 import type { CommandContext } from "./commands/command-handlers.js";
-import { classifyYoutubeAuthFailure } from "./lib/youtube-auth-health.js";
+import {
+  classifyYoutubeAuthFailure,
+  type YoutubeAuthFailureCategory,
+} from "./lib/youtube-auth-health.js";
 import { CommandRateLimiter } from "./commands/command-rate-limiter.js";
 import { SkipVotes } from "./application/skip-votes.js";
 import { loadConfig } from "./config.js";
@@ -27,6 +32,8 @@ import {
 } from "./commands/permissions.js";
 import { createYtDlpResolverStack } from "./media/youtube/yt-dlp.js";
 import { resolveInstanceDir } from "./lib/instance-dir.js";
+import { messages } from "./lib/messages.js";
+import { loadEnvFile, saveEnvFile } from "./panel/env-file.js";
 import { RadioTitleCache } from "./media/radio-icy.js";
 import { RadioScrobbler } from "./application/radio-scrobbler.js";
 import { ChatLog, isOwnEcho } from "./application/chat-log.js";
@@ -39,9 +46,13 @@ import { DirectUrlClient } from "./media/direct-url.js";
 import { startEgressGuard } from "./lib/egress-guard.js";
 import { PlaybackMetrics } from "./observability/prometheus.js";
 import { LyricsClient } from "./media/lyrics.js";
+import { NonMusicSegments } from "./media/youtube/non-music-segments.js";
 import { SoundCloudPublicApi } from "./media/soundcloud/public-api.js";
 import { SpotifyApi } from "./media/spotify/api.js";
-import { createRhapsodLogger } from "./observability/logger.js";
+import {
+  createRhapsodLogger,
+  flushLoggerSync,
+} from "./observability/logger.js";
 import { MetricsCollector } from "./observability/metrics.js";
 import { startWatchdog, watchdogInterval } from "./watchdog.js";
 import {
@@ -71,10 +82,26 @@ async function main(): Promise<void> {
     logDir: join(dataDir, "logs"),
     retentionDays: config.RHAPSOD_LOG_RETENTION_DAYS,
   });
+  exits.setLogFlush(() => flushLoggerSync(logger));
   const metrics = new MetricsCollector();
   const playbackMetrics = new PlaybackMetrics();
   installCrashHandlers(logger, exits);
-  const adminUids = parseAdminUids(config.RHAPSOD_ADMIN_UIDS);
+  const adminUids = new Set(parseAdminUids(config.RHAPSOD_ADMIN_UIDS));
+  const adminClaim = await AdminClaim.open({
+    adminUids,
+    codePath: join(dataDir, "admin-claim-code"),
+    persist: async (uids) => {
+      const env = loadEnvFile(config.RHAPSOD_ENV_FILE);
+      env.values.RHAPSOD_ADMIN_UIDS = uids.join(",");
+      await saveEnvFile(env.path, env.values);
+    },
+  });
+  if (adminClaim.code !== undefined) {
+    logger.warn(
+      { code: adminClaim.code },
+      "No admin configured: send !claim <code> in TeamSpeak to become admin",
+    );
+  }
   const privateCommandUids =
     config.RHAPSOD_PRIVATE_COMMAND_UIDS === undefined ||
     config.RHAPSOD_PRIVATE_COMMAND_UIDS === ""
@@ -197,6 +224,15 @@ async function main(): Promise<void> {
       : undefined;
   const ffmpegPath = config.RHAPSOD_FFMPEG_PATH;
   const ffmpegUserAgent = config.RHAPSOD_FFMPEG_USER_AGENT;
+  const peakLimiter = await probeFfmpegFilter(
+    resolveFfmpegBinary(ffmpegPath),
+    "alimiter",
+  );
+  if (!peakLimiter) {
+    logger.warn(
+      "FFmpeg has no alimiter filter: measured tracks keep loudnorm's linear pass",
+    );
+  }
   const { proxyUrl: egressProxyUrl } = await startEgressGuard({ logger });
   const loudnessProfiler = new LoudnessProfiler({
     ...(ffmpegPath === undefined ? {} : { binary: ffmpegPath }),
@@ -218,6 +254,7 @@ async function main(): Promise<void> {
       playFfmpegUrl(url, playbackEncoder, output, {
         ...(ffmpegPath === undefined ? {} : { binary: ffmpegPath }),
         egressProxyUrl,
+        peakLimiter,
         // The controller decides per track: finite tracks carry a target,
         // live radio omits it so endless streams skip dynamic loudnorm.
         ...(options?.loudnessTargetLufs === undefined
@@ -248,12 +285,16 @@ async function main(): Promise<void> {
         ...options,
         ...(ffmpegPath === undefined ? {} : { binary: ffmpegPath }),
         egressProxyUrl,
+        peakLimiter,
         ...(ffmpegUserAgent === undefined
           ? {}
           : { userAgent: ffmpegUserAgent }),
       }),
     prewarmNext: true,
     loudnessProfiler,
+    ...(config.RHAPSOD_SKIP_NON_MUSIC
+      ? { nonMusicSegments: new NonMusicSegments({ logger }) }
+      : {}),
     encoder,
     ...createPlaybackEvents({
       listeningHistory,
@@ -298,7 +339,10 @@ async function main(): Promise<void> {
   exits.setFlush(flushState);
   const youtubeAuthCheckUrl = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
   const youtubeAuthCheckIntervalMs = 24 * 60 * 60 * 1_000;
-  const youtubeAuthState = { healthy: true };
+  const youtubeAuthState: {
+    healthy: boolean;
+    category?: YoutubeAuthFailureCategory;
+  } = { healthy: true };
   const checkYoutubeAuth = async (): Promise<void> => {
     try {
       await ytDlpExecutor.run(
@@ -309,10 +353,12 @@ async function main(): Promise<void> {
       if (!youtubeAuthState.healthy) {
         logger.info("YouTube authentication recovered");
         youtubeAuthState.healthy = true;
+        delete youtubeAuthState.category;
       }
     } catch (error) {
+      const category = classifyYoutubeAuthFailure(error);
+      youtubeAuthState.category = category;
       if (youtubeAuthState.healthy) {
-        const category = classifyYoutubeAuthFailure(error);
         logger.error(
           { err: error, category },
           "YouTube authentication health check FAILED",
@@ -332,6 +378,7 @@ async function main(): Promise<void> {
     connection,
     config,
     adminUids,
+    ...(adminClaim.code === undefined ? {} : { adminClaim }),
     moveGroupIds,
     adminGroupIds,
     seniorGroupIds,
@@ -350,6 +397,9 @@ async function main(): Promise<void> {
     hasStartedPlaying: false,
     get youtubeAuthHealthy() {
       return youtubeAuthState.healthy;
+    },
+    get youtubeAuthFailure() {
+      return youtubeAuthState.category;
     },
   };
   let canTalk = true;
@@ -386,6 +436,11 @@ async function main(): Promise<void> {
   );
   await connection.connect();
   logger.info("Connected to TeamSpeak 3");
+  if (adminClaim.code !== undefined) {
+    void connection
+      .sendChannelMessage(messages.claimAvisoCanal)
+      .catch(() => undefined);
+  }
   telemetry.resetClients();
   const seedTelemetry = async (): Promise<void> => {
     try {
@@ -587,9 +642,12 @@ async function main(): Promise<void> {
     playbackMetrics,
     radioTitles,
     resolver: ytDlpResolver,
+    reconnecting: () => reconnector.reconnecting,
     restart: () => shutdown(1),
     scrobbler,
     serverView,
+    youtubeAuthHealthy: () => youtubeAuthState.healthy,
+    ytdlpDaemon: () => ytDlpResolver.daemonHealth(),
   });
 
   let shutdownStarted = false;

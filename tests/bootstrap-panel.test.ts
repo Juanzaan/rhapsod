@@ -105,6 +105,33 @@ describe("panelStatus", () => {
     expect(status).not.toHaveProperty("durationMs");
   });
 
+  it("reports disconnected while reconnecting despite a cached channel id", () => {
+    const status = panelStatus({
+      ...sources(undefined, 5),
+      reconnecting: () => true,
+    });
+    expect(status.connected).toBe(false);
+    expect(status.reconnecting).toBe(true);
+  });
+
+  it("includes YouTube login and daemon health when known", () => {
+    const status = panelStatus({
+      ...sources(undefined),
+      youtubeAuthHealthy: () => false,
+      ytdlpDaemon: () => ({
+        state: "failing",
+        consecutiveFailures: 2,
+        fallbacksTotal: 5,
+      }),
+    });
+    expect(status).toMatchObject({
+      connected: true,
+      reconnecting: false,
+      youtubeAuthHealthy: false,
+      ytdlpDaemon: { state: "failing", fallbacksTotal: 5 },
+    });
+  });
+
   it("reports disconnected without a channel id", () => {
     const status = panelStatus(sources(undefined, 0));
     expect(status.connected).toBe(false);

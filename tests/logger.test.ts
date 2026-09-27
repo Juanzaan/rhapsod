@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   createRhapsodLogger,
+  flushLoggerSync,
   guardFileStream,
 } from "../src/observability/logger.js";
 
@@ -47,6 +48,28 @@ describe("createRhapsodLogger", () => {
     expect(content).toContain("Playback session");
     expect(content).toContain('"trackId":"abc"');
     expect(content).toContain('"firstFrameDelayMs":1234');
+  });
+
+  it("puts the last line on disk synchronously before an exit", async () => {
+    const logDir = makeTempLogDir();
+    const logger = await createRhapsodLogger({ level: "info", logDir });
+    // A running bot has long had its log file open.
+    logger.info("Rhapsod is ready");
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    // The first write keeps the async file stream busy, so the crash line
+    // behind it waits in memory: the state process.exit() used to discard.
+    logger.info({ padding: "x".repeat(64 * 1024) }, "Last metrics");
+    logger.error("Uncaught exception; restarting");
+    flushLoggerSync(logger);
+
+    const logFile = readdirSync(logDir).find((file) =>
+      file.startsWith("rhapsod"),
+    );
+    expect(logFile).toBeDefined();
+    expect(readFileSync(join(logDir, logFile!), "utf8")).toContain(
+      "Uncaught exception; restarting",
+    );
   });
 
   it("redacts cookies, tokens and URLs embedded in error messages", async () => {

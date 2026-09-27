@@ -76,7 +76,13 @@ function motionOn() {
   );
 }
 function fx(el, frames, opts) {
-  if (!el || typeof el.animate !== "function" || !motionOn()) return null;
+  if (!motionOn()) return null;
+  return fxAlways(el, frames, opts);
+}
+// Feedback to a click stays on under reduced or paused motion: it is short,
+// the person caused it, and without it buttons read as unresponsive.
+function fxAlways(el, frames, opts) {
+  if (!el || typeof el.animate !== "function") return null;
   try {
     return el.animate(frames, opts);
   } catch (e) {
@@ -102,7 +108,7 @@ function fxRise(nodes, step) {
   }
 }
 function fxPress(el) {
-  fx(
+  fxAlways(
     el,
     [
       { transform: "scale(1)" },
@@ -114,8 +120,7 @@ function fxPress(el) {
   );
 }
 function fxRipple(el, ev) {
-  if (!motionOn() || !el.getBoundingClientRect || !document.createElement)
-    return;
+  if (!el.getBoundingClientRect || !document.createElement) return;
   var r = el.getBoundingClientRect();
   var size = Math.max(r.width, r.height) * 2.2;
   var dot = document.createElement("span");
@@ -128,7 +133,7 @@ function fxRipple(el, ev) {
   var done = function () {
     if (dot.parentNode) dot.parentNode.removeChild(dot);
   };
-  var a = fx(
+  var a = fxAlways(
     dot,
     [
       { transform: "scale(0)", opacity: 0.3 },
@@ -206,7 +211,7 @@ function setLive(on) {
   if (root && root.setAttribute)
     root.setAttribute("data-live", on ? "true" : "false");
 }
-var FX_TARGETS = ".tb,.go,.ch,.sg button,.qx,.btn,.scene-tools button";
+var FX_TARGETS = ".tb,.go,.ch,.sg button,.qx,.btn,.b,.scene-tools button";
 var spotEvent = null,
   spotFrame = 0;
 function paintSpot() {
@@ -318,4 +323,15 @@ function copyText(text) {
     }
   } catch (e) {}
   done(false);
+}
+// Polling rebuilds the same markup every few seconds; writing it anyway
+// replaces the nodes under the pointer, which cuts hover and focus
+// transitions mid-way and made them look broken.
+var lastHtml = typeof WeakMap === "function" ? new WeakMap() : null;
+function setHtml(el, html) {
+  if (!el) return false;
+  if (lastHtml && lastHtml.get(el) === html) return false;
+  el.innerHTML = html;
+  if (lastHtml) lastHtml.set(el, html);
+  return true;
 }

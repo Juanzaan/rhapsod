@@ -24,6 +24,7 @@ Los comandos utilizan `!` por defecto y se procesan en el chat de TeamSpeak cuan
 | `!diag`                               | -                     | Diagnóstico interno; solo administradores.                                                                                                       |
 | `!debug-server`                       | `!ds`                 | Información del servidor; solo administradores.                                                                                                  |
 | `!chart`                              | -                     | Gráfico de actividad; solo administradores.                                                                                                      |
+| `!claim <código>`                     | -                     | Quedar como primer administrador con el código que mostró el instalador; solo mientras no haya administradores.                                  |
 | `!remove <n\|inicio-fin>`             | `!rm`                 | Eliminar pistas propias o, con permisos, ajenas.                                                                                                 |
 | `!clear`                              | `!c`                  | Vaciar pendientes; con pistas ajenas, solo administradores.                                                                                      |
 | `!shuffle`                            | -                     | Mezclar pistas pendientes.                                                                                                                       |
@@ -44,7 +45,7 @@ Los comandos utilizan `!` por defecto y se procesan en el chat de TeamSpeak cuan
 
 ## Permisos y persistencia
 
-La mayoría de los comandos están disponibles para todos. `RHAPSOD_ADMIN_UIDS` permite saltar o eliminar pistas ajenas y usar comandos administrativos. `!jump` verifica permisos sobre cada pista descartada. `!stop` y `!clear` exigen que todas las pistas afectadas sean propias o automáticas, salvo para administradores. Cualquier usuario puede saltar una pista automática. Las pistas de usuarios que ya no están conectados al servidor también son comunes: cualquiera puede saltarlas, quitarlas o vaciarlas.
+La mayoría de los comandos están disponibles para todos. `RHAPSOD_ADMIN_UIDS` lista a los administradores; en una instalación nueva, `!claim <código>` agrega al primero (ver [instalación](install.es.md)). Esa lista permite saltar o eliminar pistas ajenas y usar comandos administrativos. `!jump` verifica permisos sobre cada pista descartada. `!stop` y `!clear` exigen que todas las pistas afectadas sean propias o automáticas, salvo para administradores. Cualquier usuario puede saltar una pista automática. Las pistas de usuarios que ya no están conectados al servidor también son comunes: cualquiera puede saltarlas, quitarlas o vaciarlas.
 
 Con `RHAPSOD_VOTE_SKIP=true` (por defecto `false`), `!skip` sobre una pista ajena cuenta como voto en lugar de rechazarse. La pista se salta cuando votó más de la mitad de las personas del canal del bot: 2 de 2, 2 de 3, 3 de 4. Solo votan los oyentes de ese canal, el voto de quien se va deja de contar y los votos se reinician al cambiar la pista. Si no se puede leer la lista de clientes del canal, se aplica la regla de propiedad.
 

@@ -47,4 +47,28 @@ describe("ExitCoordinator", () => {
     expect(flush).toHaveBeenCalledTimes(1);
     expect(exit).toHaveBeenCalledTimes(2);
   });
+
+  it("flushes the logs after the state and before exiting", async () => {
+    const order: string[] = [];
+    const exits = new ExitCoordinator({
+      exit: (code) => order.push(`exit ${code}`),
+    });
+    exits.setFlush(async () => {
+      await Promise.resolve();
+      order.push("state");
+    });
+    exits.setLogFlush(() => order.push("logs"));
+    await exits.exit(1);
+    expect(order).toEqual(["state", "logs", "exit 1"]);
+  });
+
+  it("still exits when the log flush throws", async () => {
+    const exit = vi.fn();
+    const exits = new ExitCoordinator({ exit });
+    exits.setLogFlush(() => {
+      throw new Error("fd out of range");
+    });
+    await exits.exit(1);
+    expect(exit).toHaveBeenCalledWith(1);
+  });
 });

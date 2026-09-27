@@ -124,14 +124,14 @@ describe("renderDashboard console", () => {
     ]) {
       expect(html).toContain(`id="${id}"`);
     }
-    expect(html).toContain("PLAYING");
+    expect(html).toContain("SONANDO");
     expect(html).toContain("1:00");
     expect(html).toContain("3:20");
   });
 
   it("renders standby state without position", () => {
     const html = render();
-    expect(html).toContain("STANDBY");
+    expect(html).toContain("EN ESPERA");
     expect(html).toContain("--:--");
   });
 
@@ -321,7 +321,7 @@ describe("renderDashboard console", () => {
     expect(getEl("nt").textContent).toBe("Test Song");
     expect(getEl("tcur").textContent).toBe("0:30");
     expect(getEl("tdur").textContent).toBe("3:20");
-    expect(getEl("nsState").textContent).toBe("PLAYING");
+    expect(getEl("nsState").textContent).toBe("SONANDO");
     expect(getEl("lamp").className).toContain("on");
     expect(getEl("ppBtn").innerHTML).toContain("9208");
     expect(getEl("vol").value).toBe(25);
@@ -559,6 +559,66 @@ describe("renderDashboard console", () => {
     api.render(view);
     return getEl("tree").innerHTML;
   }
+
+  it("server page leaves an unchanged tree in place between polls", () => {
+    // Rewriting identical markup every 2.5s replaced the nodes under the
+    // pointer and cut hover transitions mid-way.
+    let treeWrites = 0;
+    let treeHtml = "";
+    const tree = {
+      get innerHTML(): string {
+        return treeHtml;
+      },
+      set innerHTML(value: string) {
+        treeWrites++;
+        treeHtml = value;
+      },
+    };
+    const els = new Map<string, unknown>([["tree", tree]]);
+    const getEl = (id: string): unknown => {
+      if (!els.has(id)) els.set(id, { textContent: "", value: "" });
+      return els.get(id);
+    };
+    const code = scriptBlocks(renderServerPage()).join("\n");
+    // Intentional: executes generated template JS against fake DOM globals.
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval
+    const factory = new Function(
+      "document",
+      "window",
+      "fetch",
+      "setInterval",
+      "setTimeout",
+      `${code};return {render:render,toggleCh:toggleCh};`,
+    ) as (...args: unknown[]) => {
+      render: (view: unknown) => void;
+      toggleCh: (event: unknown, cid: number) => void;
+    };
+    const api = factory(
+      { getElementById: getEl, readyState: "loading" },
+      { matchMedia: () => ({ matches: true }), addEventListener: () => {} },
+      () => Promise.resolve({ json: () => Promise.resolve({}) }),
+      () => 0,
+      () => 0,
+    );
+    const view = {
+      version: 1,
+      botChannelId: 1,
+      mode: "full",
+      channels: [
+        { cid: 1, name: "Lobby" },
+        { cid: 2, name: "Music", parentCid: 1 },
+      ],
+      clients: [{ clid: 7, name: "Ana", cid: 2 }],
+    };
+    api.render(view);
+    api.render(structuredClone(view));
+    api.render(structuredClone(view));
+    expect(treeWrites).toBe(1);
+    expect(treeHtml).toContain("Music");
+
+    api.toggleCh(null, 1);
+    expect(treeWrites).toBe(2);
+  });
 
   it("shows spacer labels as headers, never as channels", () => {
     // Spacers are server-side decoration ([spacer]/[cspacer]/[rspacer]/
@@ -894,6 +954,8 @@ describe("dashboard motion", () => {
     setSongHue(title: string): number;
     restoreSongHue(): void;
     fx(el: unknown, frames: unknown, opts: unknown): unknown;
+    fxPress(el: unknown): void;
+    setHtml(el: unknown, html: string): boolean;
     fxCount(el: unknown, to: number, suffix?: string): void;
     setLive(on: boolean): void;
   }
@@ -927,7 +989,7 @@ describe("dashboard motion", () => {
     const factory = new Function(
       "window",
       "document",
-      `${AMBIENCE_JS};return {hashHue,setSongHue,restoreSongHue,fx,fxCount,setLive};`,
+      `${AMBIENCE_JS};return {hashHue,setSongHue,restoreSongHue,fx,fxPress,setHtml,fxCount,setLive};`,
     ) as (window: unknown, document: unknown) => MotionApi;
     return { api: factory(window, document), attrs, styles, stored };
   }
@@ -978,6 +1040,32 @@ describe("dashboard motion", () => {
     const paused = motionHarness({ paused: true });
     expect(paused.api.fx(el, [{ opacity: 0 }], {})).toBeNull();
     expect(calls).toHaveLength(1);
+  });
+
+  it("keeps click feedback while background motion is paused", () => {
+    const calls: unknown[] = [];
+    const el = {
+      animate: (frames: unknown) => {
+        calls.push(frames);
+        return {};
+      },
+    };
+    motionHarness({ paused: true }).api.fxPress(el);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("writes markup only when it changed", () => {
+    const { api } = motionHarness({});
+    let writes = 0;
+    const el = {
+      set innerHTML(_value: string) {
+        writes++;
+      },
+    };
+    expect(api.setHtml(el, "<li>a</li>")).toBe(true);
+    expect(api.setHtml(el, "<li>a</li>")).toBe(false);
+    expect(api.setHtml(el, "<li>b</li>")).toBe(true);
+    expect(writes).toBe(2);
   });
 
   it("sets counters directly when animation is unavailable", () => {
