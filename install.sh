@@ -166,8 +166,11 @@ install_base_debian() {
 }
 
 install_base_rhel() {
-  dnf install -y curl git python3 python3-pip tar xz ca-certificates \
-    gnupg2 openssl
+  # RHEL 9 images ship curl-minimal, which conflicts with the curl package
+  # and already does everything this script needs.
+  local packages=(git python3 python3-pip tar xz ca-certificates gnupg2 openssl)
+  command -v curl >/dev/null 2>&1 || packages+=(curl)
+  dnf install -y "${packages[@]}"
   # EPEL is required by the WARP package (tray/captive-portal deps).
   if [[ "$SKIP_WARP" != "1" ]]; then
     dnf install -y oracle-epel-release-el9 2>/dev/null \

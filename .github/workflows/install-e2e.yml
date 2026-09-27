@@ -249,7 +249,14 @@ jobs:
           docker run -d --name os --privileged --network host \
             --tmpfs /run --tmpfs /run/lock \
             -v /opt/rhapsod-src:/opt/rhapsod-src:ro e2e-os
-          docker exec os systemctl is-system-running --wait || true
+          # Installing before boot ends loses the installer's temp dir to
+          # the tmpfs that boot mounts on /tmp.
+          for _ in $(seq 1 60); do
+            state="$(docker exec os systemctl is-system-running 2>/dev/null || true)"
+            [[ "$state" == running || "$state" == degraded ]] && break
+            sleep 1
+          done
+          echo "systemd: $state"
           cat > "$RUNNER_TEMP/wait-connected" <<'SH'
           for _ in $(seq 1 100); do
             docker exec os rhapsod status 2>/dev/null | grep -q 'TeamSpeak:  connected' && exit 0
