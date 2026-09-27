@@ -1,0 +1,9 @@
+# Builds the image from this checkout instead of pulling it:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+services:
+  rhapsod:
+    build: .
+    image: rhapsod:dev
+  ytdlp:
+    build: .
+    image: rhapsod:dev

@@ -5,6 +5,7 @@ import type { Logger } from "pino";
 
 import { validateConfig, type AppConfig } from "../config.js";
 import type { ChatEntry } from "../application/chat-log.js";
+import type { Notice, NoticeSeverity } from "../application/notices/notice.js";
 import type {
   DisconnectSummary,
   ErrorSummary,
@@ -55,6 +56,29 @@ export interface ServerView {
   readonly clients: readonly ServerViewClient[];
 }
 
+/** What the dashboard shows of a notice; detector data stays server-side. */
+export interface PanelNotice {
+  readonly key: string;
+  readonly severity: NoticeSeverity;
+  readonly title: string;
+  readonly detail: string;
+  readonly ignored: boolean;
+  readonly since: number;
+  readonly count: number;
+}
+
+export function toPanelNotice(notice: Notice): PanelNotice {
+  return {
+    key: notice.key,
+    severity: notice.severity,
+    title: notice.titleEs,
+    detail: notice.detailEs,
+    ignored: notice.state === "ignored",
+    since: notice.firstSeen,
+    count: notice.occurrences,
+  };
+}
+
 export interface PanelStatus {
   readonly connected: boolean;
   readonly currentChannelId?: number;
@@ -87,6 +111,11 @@ export interface PanelOptions {
   readonly serverView?: () => ServerView;
   readonly moveBot?: (cid: number) => Promise<void>;
   readonly errors?: () => ErrorSummary;
+  /** Open notices from the registry; ignoring one hides it until it worsens. */
+  readonly notices?: {
+    list(): readonly Notice[];
+    ignore(key: string): boolean;
+  };
   /** Prometheus text for GET /api/metrics; the route 404s without it. */
   readonly metricsText?: () => string;
   readonly youtubeHealth?: () => Promise<{
@@ -395,7 +424,29 @@ export function createPanelServer(options: PanelOptions): {
       options.serverView === undefined
         ? { version: 0, botChannelId: 0, channels: [], clients: [] }
         : options.serverView();
-    return c.json({ ...status, queue, errors, chat, server });
+    const notices =
+      options.notices === undefined
+        ? []
+        : options.notices.list().map(toPanelNotice);
+    return c.json({ ...status, queue, errors, chat, server, notices });
+  });
+
+  app.post("/api/notices/ignore", async (c) => {
+    if (options.notices === undefined) {
+      return c.json({ ok: false, error: "Avisos no disponibles" }, 501);
+    }
+    const body: unknown = await c.req.json().catch(() => undefined);
+    const key =
+      typeof body === "object" && body !== null
+        ? (body as Record<string, unknown>).key
+        : undefined;
+    if (typeof key !== "string" || key.length === 0 || key.length > 200) {
+      return c.json({ ok: false, error: "Aviso inválido" }, 400);
+    }
+    if (!options.notices.ignore(key)) {
+      return c.json({ ok: false, error: "El aviso ya no está abierto" }, 404);
+    }
+    return c.json({ ok: true });
   });
 
   app.post("/api/chat", async (c) => {

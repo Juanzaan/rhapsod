@@ -24,6 +24,7 @@ Los comandos utilizan `!` por defecto y se procesan en el chat de TeamSpeak cuan
 | `!diag`                               | -                     | Diagnóstico interno; solo administradores.                                                                                                       |
 | `!debug-server`                       | `!ds`                 | Información del servidor; solo administradores.                                                                                                  |
 | `!chart`                              | -                     | Gráfico de actividad; solo administradores.                                                                                                      |
+| `!avisos [ignorar <n>]`               | `!notices`            | Listar los avisos abiertos del bot; `ignorar <n>` oculta uno hasta que empeore; solo administradores.                                            |
 | `!claim <código>`                     | -                     | Quedar como primer administrador con el código que mostró el instalador; solo mientras no haya administradores.                                  |
 | `!remove <n\|inicio-fin>`             | `!rm`                 | Eliminar pistas propias o, con permisos, ajenas.                                                                                                 |
 | `!clear`                              | `!c`                  | Vaciar pendientes; con pistas ajenas, solo administradores.                                                                                      |

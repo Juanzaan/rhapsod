@@ -9,6 +9,7 @@ var PP = "idle",
   lastQLen = 0,
   lastC = "",
   lastS = "",
+  lastN = "",
   fails = 0;
 var anchorPos = 0,
   anchorAt = 0,
@@ -581,6 +582,7 @@ function refresh() {
         }
       }
       renderErrors(d.errors || { totalErrors: 0, byCategory: {}, recent: [] });
+      renderNotices(d.notices || []);
       var cj = JSON.stringify(d.chat || []);
       if (cj !== lastC) {
         lastC = cj;
@@ -603,6 +605,102 @@ function refresh() {
         var dotEl = document.getElementById("dot");
         if (dotEl) dotEl.className = "dot off";
       }
+    });
+}
+
+var SEVERITY_LABEL = {
+  critical: "Crítico",
+  error: "Error",
+  warning: "Atención",
+  info: "Info",
+};
+
+function sinceLabel(ts) {
+  var mins = Math.max(0, Math.round((Date.now() - ts) / 60000));
+  if (mins < 1) return "recién";
+  if (mins < 60) return "hace " + mins + " min";
+  var hours = Math.round(mins / 60);
+  if (hours < 48) return "hace " + hours + " h";
+  return "hace " + Math.round(hours / 24) + " días";
+}
+
+// Open notices come worst first from the registry; ignored ones stay listed,
+// dimmed, so the owner still sees them until they resolve or worsen.
+function renderNotices(list) {
+  var nj = JSON.stringify(list);
+  if (nj === lastN) return;
+  lastN = nj;
+  var card = document.getElementById("noticesCard");
+  if (!list.length) {
+    card.hidden = true;
+    return;
+  }
+  var active = list.filter(function (n) {
+    return !n.ignored;
+  });
+  card.hidden = false;
+  card.setAttribute("data-worst", active.length ? active[0].severity : "none");
+  var ignored = list.length - active.length;
+  document.getElementById("noticesCount").textContent =
+    active.length +
+    (active.length === 1 ? " abierto" : " abiertos") +
+    (ignored
+      ? " · " + ignored + (ignored === 1 ? " ignorado" : " ignorados")
+      : "");
+  var h = "";
+  for (var i = 0; i < list.length; i++) {
+    var n = list[i];
+    var sev = SEVERITY_LABEL[n.severity] ? n.severity : "info";
+    h +=
+      '<li class="notice' +
+      (n.ignored ? " ignored" : "") +
+      '"><span class="sev sev-' +
+      sev +
+      '">' +
+      SEVERITY_LABEL[sev] +
+      '</span><div><div class="notice-title">' +
+      esc(n.title) +
+      '</div><div class="notice-detail">' +
+      esc(n.detail) +
+      '</div><div class="notice-meta">' +
+      esc(sinceLabel(n.since)) +
+      (n.count > 1 ? " · " + n.count + " veces" : "") +
+      (n.ignored ? " · ignorado hasta que empeore" : "") +
+      "</div></div>" +
+      (n.ignored
+        ? "<span></span>"
+        : '<button class="ch" data-key="' +
+          esc(n.key) +
+          '" onclick="ignoreNotice(this)" title="Ocultar hasta que empeore">Ignorar</button>') +
+      "</li>";
+  }
+  setHtml(document.getElementById("noticeList"), h);
+}
+
+function ignoreNotice(button) {
+  var key = button.getAttribute("data-key");
+  button.disabled = true;
+  fetch("/api/notices/ignore", {
+    method: "POST",
+    headers: H,
+    body: JSON.stringify({ key: key }),
+  })
+    .then(function (r) {
+      return r.json();
+    })
+    .then(function (d) {
+      if (!d.ok) {
+        button.disabled = false;
+        toast("Error: " + (d.error || "desconocido"));
+        return;
+      }
+      toast("Aviso ignorado hasta que empeore");
+      lastN = "";
+      refresh();
+    })
+    .catch(function () {
+      button.disabled = false;
+      toast("Error de conexion");
     });
 }
 

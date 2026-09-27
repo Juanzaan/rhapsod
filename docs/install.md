@@ -47,7 +47,7 @@ Cloudflare WARP is not installed by default. It only helps when YouTube blocks t
 sudo env RHAPSOD_WITH_WARP=1 bash "$HOME/rhapsod-install.sh"
 ```
 
-Then restart the daemon and the bot while nothing is playing. A rerun keeps WARP when it is already installed; `RHAPSOD_SKIP_WARP=1` leaves it out. Other installer overrides are `RHAPSOD_REF`, `RHAPSOD_APP_DIR` and `RHAPSOD_USER`.
+Then restart the daemon and the bot while nothing is playing. A rerun keeps WARP when it is already installed; `RHAPSOD_SKIP_WARP=1` leaves it out. Other installer overrides are `RHAPSOD_REF`, `RHAPSOD_REPOSITORY` (a git URL or local path, for forks and CI), `RHAPSOD_APP_DIR` and `RHAPSOD_USER`.
 
 The installer configures a weekly yt-dlp updater. Rhapsod itself is updated separately using the [deployment procedure](deployment.md).
 
@@ -91,7 +91,22 @@ ffmpeg -version
 ffprobe -version
 ```
 
-Confirm the bot joins its channel, request a track with `!play` and inspect `!stats`. For installer deployments, inspect `systemctl status rhapsod rhapsod-ytdlp-daemon` and `journalctl -u rhapsod -n 100 --no-pager`.
+Confirm the bot joins its channel, request a track with `!play` and inspect `!stats`. For installer deployments, run `rhapsod doctor`: it prints one `ok`, `WARN` or `FAIL` line per check (services, Node.js, FFmpeg, yt-dlp, daemon and POT ports, panel bound to loopback, TeamSpeak, YouTube, disk, clock) and exits non-zero when a check fails.
+
+## The rhapsod command
+
+The installer adds `/usr/local/bin/rhapsod` and records the install in `/etc/rhapsod/install.conf` (`APP_DIR`, `APP_USER`, `NODE_BIN`). It asks for sudo once, since the env file belongs to the service user.
+
+| Command            | Effect                                                                                                                                      |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rhapsod status`   | Service states, player state, TeamSpeak connection, a pending `!claim` code and the SSH tunnel command for the panel. `--json` for scripts. |
+| `rhapsod doctor`   | The checks above, with the fix for each failure. Prints no secrets.                                                                         |
+| `rhapsod password` | Writes a new random `RHAPSOD_PANEL_PASSWORD` and prints it.                                                                                 |
+| `rhapsod restart`  | Restarts the bot when the player is idle; `--force` restarts during playback.                                                               |
+| `rhapsod logs [N]` | Follows the bot and daemon journal from N lines back (default 100).                                                                         |
+| `rhapsod version`  | Installed version.                                                                                                                          |
+
+Without the installer (Docker, manual installs), run the same checks from the checkout: `node dist/cli.js status`, `doctor`, `password` or `version`, with `RHAPSOD_ENV_FILE` pointing at the env file when it is not `./.env`.
 
 ## Troubleshooting
 

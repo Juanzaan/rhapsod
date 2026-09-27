@@ -9,14 +9,18 @@ COPY src ./src
 RUN npm run build
 
 FROM node:22-bookworm-slim AS runtime
+LABEL org.opencontainers.image.source="https://github.com/Juanzaan/rhapsod"
 RUN apt-get update \
   && apt-get install -y --no-install-recommends python3 python3-venv ffmpeg \
   && rm -rf /var/lib/apt/lists/*
 # yt-dlp for the daemon's PYTHONPATH (the pip extra pulls requests/certifi).
+# Pinned so a build is reproducible; the weekly image workflow rebuilds the
+# latest release with the newest yt-dlp, since YouTube breaks old versions.
 # The POT plugin is pinned to the provider image in docker-compose.yml: the
 # plugin and the server must speak the same protocol version.
+ARG YTDLP_VERSION=2026.8.19
 RUN python3 -m venv /opt/ytdlp \
-  && /opt/ytdlp/bin/pip install --no-cache-dir "yt-dlp[default]" \
+  && /opt/ytdlp/bin/pip install --no-cache-dir "yt-dlp[default]==${YTDLP_VERSION}" \
     "bgutil-ytdlp-pot-provider==2.0.0"
 ENV PATH="/opt/ytdlp/bin:${PATH}"
 
@@ -27,11 +31,21 @@ COPY package.json package-lock.json ./
 COPY scripts ./scripts
 RUN npm prune --omit=dev \
   && install -d -o node -g node /app/data
-ENV NODE_ENV=production
+ENV NODE_ENV=production \
+  RHAPSOD_DATA_DIR=/app/data \
+  RHAPSOD_ENV_FILE=/app/data/.env
 
-# Run as the image's unprivileged `node` user (uid 1000). Bind-mounted
-# data/ and .env must be writable by that uid on the host.
+# Run as the image's unprivileged `node` user (uid 1000). A named volume on
+# /app/data takes that owner from the image; a bind mount needs it chowned.
 USER node
+VOLUME ["/app/data"]
+
+# The panel starts after the TeamSpeak connection, which can take up to
+# RHAPSOD_TS3_CONNECT_TIMEOUT_SECONDS (180 by default). The check reads the
+# panel with the password from the env file, so it needs the panel enabled.
+HEALTHCHECK --interval=60s --timeout=15s --start-period=240s --start-interval=5s --retries=3 \
+  CMD ["node", "dist/cli.js", "status", "--json"]
 
 EXPOSE 8080
+ENTRYPOINT ["/app/scripts/docker-entrypoint.sh"]
 CMD ["node", "dist/main.js"]

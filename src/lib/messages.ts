@@ -138,6 +138,7 @@ export const messages = {
     statsOutput: string | number,
     authLine: string | number,
   ): string => `${statsOutput}${authLine}`,
+  parseChatCommandUsaAvisos: "Uso: !avisos o !avisos ignorar <n>.",
   parseChatCommandUsaClaimCodigo:
     "Usá !claim <código>. El código lo muestra la instalación y está en data/admin-claim-code en el servidor.",
   claimListo: "Listo, ahora sos admin de Rhapsod.",
@@ -156,6 +157,13 @@ export const messages = {
     "Solo los administradores pueden usar este comando.",
   chartSoloLosAdministradoresPueden:
     "Solo los administradores pueden usar este comando.",
+  avisosSoloLosAdministradoresPueden:
+    "Solo los administradores pueden usar este comando.",
+  avisosNoDisponibles: "Los avisos no están disponibles en este modo.",
+  avisosNoExiste: (position: number): string =>
+    `No hay un aviso abierto con el número ${String(position)}.`,
+  avisosIgnorado: (title: string): string =>
+    `Aviso ignorado hasta que empeore: ${title}.`,
   chartTodaviaNoHayDatos: "Todavía no hay datos de telemetría de usuarios.",
   stopHayPistasDeOtros:
     "Hay pistas de otros usuarios en reproducción o en cola: solo un admin puede detener todo.",

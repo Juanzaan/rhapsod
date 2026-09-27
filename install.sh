@@ -5,13 +5,15 @@
 #
 # Supported: Ubuntu 20.04+, Debian 11+, RHEL / Oracle Linux / Rocky / Alma 9+
 # on x86_64 or aarch64 (arm64). Installs: Node 22, yt-dlp (binary + daemon package), static
-# FFmpeg, the bgutil POT provider, the bot itself, systemd units, and a weekly
-# yt-dlp updater. On a new install it asks for the TeamSpeak server, so the
+# FFmpeg, the bgutil POT provider, the bot itself, systemd units, a weekly
+# yt-dlp updater and the `rhapsod` command (status, doctor, logs). On a new install it asks for the TeamSpeak server, so the
 # bot joins it as soon as the install ends, and prints the !claim code that
 # makes the owner admin.
 #
 # Optional environment overrides:
 #   RHAPSOD_REF           git ref to install (default: latest stable tag)
+#   RHAPSOD_REPOSITORY    git URL or local path to install from (CI installs
+#                         the checkout under test this way)
 #   RHAPSOD_APP_DIR       install dir (default: /home/rhapsod/rhapsod)
 #   RHAPSOD_USER          service user (default: rhapsod)
 #   RHAPSOD_TS3_HOST      TeamSpeak server (host or host:port); skips the question
@@ -80,7 +82,7 @@ if [[ "${RHAPSOD_INSTALL_FUNCTIONS_ONLY:-0}" == "1" ]]; then
   return 0 2>/dev/null || exit 0
 fi
 
-REPOSITORY="https://github.com/Juanzaan/rhapsod.git"
+REPOSITORY="${RHAPSOD_REPOSITORY:-https://github.com/Juanzaan/rhapsod.git}"
 POT_REPOSITORY="https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git"
 # Server checkout and pip plugin must match: they share a protocol version.
 POT_VERSION="2.0.0"
@@ -200,6 +202,21 @@ node -e 'const [major, minor] = process.versions.node.split(".").map(Number); pr
 npm --version
 NODE_BIN="$(command -v node)"
 
+# --- Service user ---------------------------------------------------------------
+# Before anything is written under /home/$APP_USER: the daemon packages below
+# used to create that directory as root first, so on a new server useradd
+# left the home root-owned and the POT provider clone failed.
+log "Creating $APP_USER user"
+if ! id "$APP_USER" >/dev/null 2>&1; then
+  # A service account needs no login shell; the installer runs its commands
+  # through sudo -u, which does not use it. Existing users are left as is.
+  useradd --create-home --shell "$(command -v nologin || echo /usr/sbin/nologin)" "$APP_USER"
+fi
+# A run that failed with that bug left the home owned by root.
+if [[ -d "/home/$APP_USER" && "$(stat -c %U "/home/$APP_USER")" == "root" ]]; then
+  chown "$APP_USER:" "/home/$APP_USER"
+fi
+
 # --- yt-dlp standalone binary -------------------------------------------------
 log "Installing yt-dlp binary"
 YTDLP_RELEASE="https://github.com/yt-dlp/yt-dlp/releases/latest/download"
@@ -233,14 +250,6 @@ tar -xJf "$WORK_DIR/$FFMPEG_NAME" -C "$WORK_DIR/ffmpeg" --strip-components=1
 install -m 0755 "$WORK_DIR/ffmpeg/ffmpeg" /usr/local/bin/ffmpeg
 install -m 0755 "$WORK_DIR/ffmpeg/ffprobe" /usr/local/bin/ffprobe
 /usr/local/bin/ffmpeg -version 2>&1 | head -1
-
-# --- Service user ---------------------------------------------------------------
-log "Creating $APP_USER user"
-if ! id "$APP_USER" >/dev/null 2>&1; then
-  # A service account needs no login shell; the installer runs its commands
-  # through sudo -u, which does not use it. Existing users are left as is.
-  useradd --create-home --shell "$(command -v nologin || echo /usr/sbin/nologin)" "$APP_USER"
-fi
 
 # --- Cloudflare WARP (proxy mode: never touches routing/SSH) -------------------
 install_warp_debian() {
@@ -538,6 +547,14 @@ CRON
 } > /etc/cron.weekly/rhapsod-ytdlp-update
 chmod 0755 /etc/cron.weekly/rhapsod-ytdlp-update
 
+# --- rhapsod command -----------------------------------------------------------------
+# Plain KEY=value lines: the wrapper reads them without sourcing the file.
+install -d -m 0755 /etc/rhapsod
+printf 'APP_DIR=%s\nAPP_USER=%s\nNODE_BIN=%s\n' "$APP_DIR" "$APP_USER" "$NODE_BIN" \
+  > /etc/rhapsod/install.conf
+chmod 0644 /etc/rhapsod/install.conf
+install -m 0755 "$APP_DIR/scripts/rhapsod.sh" /usr/local/bin/rhapsod
+
 systemctl daemon-reload
 systemctl enable bgutil-pot-provider rhapsod-ytdlp-daemon rhapsod
 # rhapsod starts too: with the placeholder host it boots panel-only, which
@@ -593,6 +610,8 @@ if [[ "$WARP_ADDED" == "1" ]]; then
   echo "  sudo systemctl restart rhapsod-ytdlp-daemon rhapsod"
 fi
 printf '%s\n' \
+  "" \
+  "Check on it any time:  rhapsod status   (problems: rhapsod doctor)" \
   "" \
   "Web panel (optional; settings, queue and diagnostics):" \
   "  1. On your own computer, open a tunnel:  ssh -N -L 8080:127.0.0.1:8080 <user>@<this-host>" \

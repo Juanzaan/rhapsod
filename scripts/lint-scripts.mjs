@@ -47,10 +47,31 @@ function checkPython(file) {
   console.log(`skip ${file} (Python not available)`);
 }
 
+function checkBash(file) {
+  // On Windows "bash" may be WSL, which cannot read a Windows path.
+  if (process.platform === "win32") {
+    console.log(`skip ${file} (Windows)`);
+    return;
+  }
+  try {
+    execFileSync("bash", ["-n", file], { stdio: "pipe" });
+    console.log(`ok   ${file}`);
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      console.log(`skip ${file} (bash not available)`);
+      return;
+    }
+    failures.push(file);
+    console.error(`FAIL ${file}`);
+    if (error.stderr) process.stderr.write(String(error.stderr));
+  }
+}
+
 for (const entry of readdirSync(scriptDir)) {
   const file = join(scriptDir, entry);
   if (entry.endsWith(".mjs")) checkMjs(file);
   if (entry.endsWith(".py")) checkPython(file);
+  if (entry.endsWith(".sh")) checkBash(file);
 }
 
 for (const unit of [
