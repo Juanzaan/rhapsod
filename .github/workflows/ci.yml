@@ -34,7 +34,7 @@ jobs:
       - run: npm run lint:scripts
       - run: npm run lint:docs
       - name: Validate shell script syntax
-        run: bash -n install.sh scripts/deploy.sh
+        run: bash -n install.sh scripts/*.sh
       - run: npm run typecheck
       - name: Test with coverage
         run: npm run test:coverage
@@ -70,8 +70,8 @@ jobs:
       - uses: actions/checkout@v7
       - name: Validate Compose
         run: |
-          cp .env.example .env
           docker compose config --quiet
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml config --quiet
       - run: docker build -t rhapsod:ci .
       - name: Check runtime tools
         run: |
@@ -79,6 +79,22 @@ jobs:
           docker run --rm rhapsod:ci yt-dlp --version
           docker run --rm rhapsod:ci python3 -c 'import yt_dlp'
           docker run --rm rhapsod:ci ffmpeg -version
+      # No env file and no settings: the image has to reach a healthy
+      # panel-only start by itself, the way `docker compose up` would.
+      - name: First start without an env file
+        run: |
+          docker run -d --name first-start --network host rhapsod:ci
+          status=starting
+          for _ in $(seq 1 45); do
+            status="$(docker inspect -f '{{.State.Health.Status}}' first-start)"
+            [ "$status" = starting ] || break
+            sleep 2
+          done
+          docker logs first-start
+          docker exec first-start node dist/cli.js status
+          docker exec first-start node dist/cli.js doctor || true
+          test "$status" = healthy
+          docker logs first-start | grep -q 'panel login admin / '
 
   desktop:
     runs-on: windows-latest
