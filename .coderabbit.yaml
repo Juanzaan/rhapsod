@@ -1,0 +1,36 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# CodeRabbit is free on public repositories. It only runs once the app is
+# installed on this repository; without it this file does nothing.
+language: "es-ES"
+early_access: false
+tone_instructions: "Critica solo lo que importa: bugs, errores silenciados, regresiones, seguridad y tests que faltan. Sin elogios ni resumenes. Cada hallazgo con el archivo y la linea, y el caso concreto que falla."
+reviews:
+  profile: "chill"
+  # A bot must never block a merge or rewrite the PR description: the
+  # description stays as the author wrote it (no generated summaries).
+  request_changes_workflow: false
+  high_level_summary: false
+  poem: false
+  review_status: false
+  collapse_walkthrough: true
+  sequence_diagrams: false
+  auto_review:
+    enabled: true
+    drafts: false
+  path_filters:
+    - "!package-lock.json"
+    - "!docs/releases/**"
+    - "!CHANGELOG.md"
+  path_instructions:
+    - path: "src/adapters/ts3/**"
+      instructions: "Least tested area and home of the recurring production bugs (reconnect, talk power). Flag any behavior change without a test."
+    - path: "src/panel/**"
+      instructions: "The panel must stay bound to 127.0.0.1 behind basic auth, with the env-write whitelist. Flag anything that weakens the bind, the auth or the whitelist."
+    - path: "src/config.ts"
+      instructions: "Config changes must also update .env.example, ENV_DESCRIPTIONS in src/panel/panel-server.ts and usually docs/install.md. Flag a key added in one place only."
+    - path: "{install.sh,scripts/deploy.sh}"
+      instructions: "Runs on the production server with real users. Check rollback paths, set -e pitfalls and anything that restarts the bot while it plays."
+    - path: "docs/**"
+      instructions: "Every doc ships in English and neutral Spanish (*.es.md). Flag a change to one language without the other, em dashes, curly quotes and the words banned in AGENTS.md."
+chat:
+  auto_reply: true
