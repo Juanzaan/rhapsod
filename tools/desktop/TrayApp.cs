@@ -1,8 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading;
 using System.Windows.Forms;
 
@@ -149,6 +151,13 @@ namespace RhapsodDashboard
             {
                 error = ownTunnel.Start();
                 result = error == null ? LinkState.Connected : LinkState.Retrying;
+                if (ownTunnel.HostKeyUnknown)
+                {
+                    string fetchError;
+                    var keys = HostKeys.Fetch(target, out fetchError);
+                    OnUi(delegate { AskHostKey(ownTunnel, target, keys, fetchError); });
+                    return;
+                }
             }
             // The tunnel being up does not mean the panel answers (the bot
             // may be restarting): opening the window then shows a blank
@@ -201,6 +210,54 @@ namespace RhapsodDashboard
                 openWhenReady = false;
                 OpenPanel();
             }
+        }
+
+        // Runs with connecting still set, so the supervisor does not start a
+        // second attempt while the question is open.
+        private void AskHostKey(Tunnel attempted, Settings target, List<string> keys, string fetchError)
+        {
+            if (attempted != tunnel)
+            {
+                connecting = false;
+                attempted.Stop();
+                Connect();
+                return;
+            }
+            if (fetchError != null)
+            {
+                connecting = false;
+                ScheduleRetry(fetchError);
+                return;
+            }
+            var fingerprints = new StringBuilder();
+            foreach (var line in keys) fingerprints.AppendLine(HostKeys.Fingerprint(line));
+            var answer = MessageBox.Show(
+                "Primera conexión con " + target.Host + ". Su huella es:" + Environment.NewLine + Environment.NewLine +
+                fingerprints + Environment.NewLine +
+                "Comparar con la salida de este comando en el servidor:" + Environment.NewLine +
+                "for f in /etc/ssh/ssh_host_*_key.pub; do ssh-keygen -lf \"$f\"; done" + Environment.NewLine + Environment.NewLine +
+                "¿Coincide?",
+                "Rhapsod: confirmar el servidor", MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2);
+            connecting = false;
+            if (answer != DialogResult.Yes)
+            {
+                state = LinkState.Retrying;
+                nextAttemptAt = DateTime.MaxValue;
+                lastError = "";
+                ShowStatus("Servidor sin confirmar; usar Reconectar", iconDown);
+                return;
+            }
+            try
+            {
+                HostKeys.Trust(keys);
+            }
+            catch (Exception failure)
+            {
+                Program.Log(failure);
+                ScheduleRetry("No se pudo guardar la huella del servidor: " + failure.Message);
+                return;
+            }
+            Connect();
         }
 
         private void ScheduleRetry(string error)
@@ -286,6 +343,11 @@ namespace RhapsodDashboard
             if (!panel.Reachable)
             {
                 ShowStatus("Túnel abierto; el panel no responde", iconBusy);
+                return;
+            }
+            if (panel.ErrorStatus != 0)
+            {
+                ShowStatus("El panel respondió con error " + panel.ErrorStatus, iconDown);
                 return;
             }
             if (panel.Unauthorized)

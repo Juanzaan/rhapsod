@@ -11,6 +11,8 @@ namespace RhapsodDashboard
     {
         public bool Reachable;
         public bool Unauthorized;
+        // HTTP status of any other error answer (a 500 from the panel), or 0.
+        public int ErrorStatus;
         public bool Connected;
         public string PlayerState = "";
         public string Title = "";
@@ -72,6 +74,7 @@ namespace RhapsodDashboard
                     {
                         state.Reachable = true;
                         state.Unauthorized = response.StatusCode == HttpStatusCode.Unauthorized;
+                        if (!state.Unauthorized) state.ErrorStatus = (int)response.StatusCode;
                     }
                 }
             }

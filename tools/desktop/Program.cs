@@ -207,6 +207,16 @@ namespace RhapsodDashboard
                 check("foreign service is not the panel", !PanelClient.LooksLikePanel(free));
                 listener.Stop();
                 check("closed port is not open", !PortProbe.IsOpen(FreePort()));
+                check("host key fingerprint matches ssh-keygen",
+                    HostKeys.Fingerprint("[203.0.113.10]:2222 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAABAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4f") ==
+                        "ssh-ed25519 SHA256:ZkAslGjFiUHdGf/WUL8rQvkib4PTvQatUV0OUQSncCA" &&
+                    HostKeys.Fingerprint("# comment") == null);
+                check("unknown host key is told apart from a changed one",
+                    HostKeys.IsUnknownHostError("No ED25519 host key is known for 203.0.113.10 and you have requested strict checking.\r\nHost key verification failed.") &&
+                    !HostKeys.IsUnknownHostError("@ WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED! @\r\nHost key verification failed.") &&
+                    !HostKeys.IsUnknownHostError("Permission denied (publickey)."));
+                check("known_hosts option quotes the path", HostKeys.KnownHostsOption().Contains("known_hosts\\\" ~/.ssh/known_hosts\"") &&
+                    !HostKeys.KnownHostsOption().Contains("\\Rhapsod"));
                 check("menu text keeps ampersands", TrayApp.MenuText("Simon & Garfunkel") == "Simon && Garfunkel");
                 var secret = TrayApp.SecretClipboardData("s3cret");
                 check("password stays out of clipboard history",

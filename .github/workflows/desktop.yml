@@ -1,0 +1,75 @@
+name: Desktop
+
+# Attaches RhapsodDashboard.exe and its SHA-256 to a GitHub release. Called
+# by the release workflow for each new tag. A manual run without a tag
+# checks the upload path end to end: it uploads to a throwaway draft
+# release (drafts create no git tag) and deletes it afterwards.
+# The executable is not code-signed, so Windows SmartScreen warns on first
+# run; signing needs a paid certificate and is left out on purpose.
+on:
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to attach the app to (empty for a draft dry run)
+        type: string
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  attach:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.sha }}
+      - name: Build
+        shell: pwsh
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File tools\desktop\build.ps1
+      - name: Self-test
+        shell: pwsh
+        run: |
+          $report = Join-Path $env:RUNNER_TEMP 'dashboard-self-test.txt'
+          $process = Start-Process -FilePath tools/desktop/bin/RhapsodDashboard.exe `
+            -ArgumentList '--self-test', "`"$report`"" -Wait -PassThru
+          Get-Content $report
+          if ($process.ExitCode -ne 0) { throw "self-test failed with exit code $($process.ExitCode)" }
+      - name: Checksum
+        shell: pwsh
+        working-directory: tools/desktop/bin
+        run: |
+          $hash = (Get-FileHash RhapsodDashboard.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  RhapsodDashboard.exe" | Out-File -Encoding ascii -NoNewline RhapsodDashboard.exe.sha256
+          Get-Content RhapsodDashboard.exe.sha256
+      - name: Attach to the release
+        shell: pwsh
+        working-directory: tools/desktop/bin
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          $dryRun = [string]::IsNullOrEmpty($env:RELEASE_TAG)
+          $tag = if ($dryRun) { "desktop-dry-run-$env:GITHUB_RUN_ID" } else { $env:RELEASE_TAG }
+          if ($dryRun) {
+            gh release create $tag --draft --target $env:GITHUB_SHA --title $tag --notes 'Desktop upload dry run; deleted by the same job.'
+          }
+          try {
+            gh release upload $tag RhapsodDashboard.exe RhapsodDashboard.exe.sha256 --clobber
+            $assets = gh release view $tag --json assets --jq '.assets[].name'
+            Write-Host "Assets on ${tag}:"; $assets
+            foreach ($name in 'RhapsodDashboard.exe', 'RhapsodDashboard.exe.sha256') {
+              if ($assets -notcontains $name) { throw "$name is missing from $tag" }
+            }
+          } finally {
+            if ($dryRun) { gh release delete $tag --yes }
+          }
