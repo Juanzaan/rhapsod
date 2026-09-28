@@ -454,6 +454,45 @@ describe("log-stats playback KPIs", () => {
     expect(report).toContain("Cambios precargados: 1 de 2 (50%)");
   });
 
+  it("splits the audio URL wait from the SponsorBlock wait and autoplay picks", () => {
+    const stats = analyzeLogs([
+      session({
+        audioUrlMs: 2_100,
+        segmentsWaitMs: 2_100,
+        urlWaitMs: 300,
+      }),
+      session({ autoplayPickMs: 1_800, audioUrlMs: 40, urlWaitMs: 40 }),
+      session({ audioUrlMs: 500 }),
+    ]);
+
+    expect(stats.urlWaitMs).toMatchObject({ count: 2, max: 300 });
+    expect(stats.segmentsWaitMs).toMatchObject({ count: 1, p50: 2_100 });
+    expect(stats.autoplayPickMs).toMatchObject({ count: 1, p50: 1_800 });
+    const report = formatStats(stats);
+    expect(report).toContain("espera de la URL: n=2");
+    expect(report).toContain("espera de SponsorBlock: n=1");
+    expect(report).toContain("Elección de autoplay: n=1");
+  });
+
+  it("summarizes the audio URL time per resolver", () => {
+    const resolved = (winner: string, durationMs: number): string =>
+      JSON.stringify({ durationMs, msg: "Audio URL resolved", winner });
+    const stats = analyzeLogs([
+      resolved("innertube-android-vr", 300),
+      resolved("yt-dlp-daemon", 5_400),
+      resolved("yt-dlp-daemon", 5_200),
+    ]);
+
+    expect(stats.winners).toEqual({
+      "innertube-android-vr": 1,
+      "yt-dlp-daemon": 2,
+    });
+    expect(stats.winnerMs).toMatchObject({
+      "yt-dlp-daemon": { count: 2, max: 5_400 },
+    });
+    expect(formatStats(stats)).toContain("yt-dlp-daemon: n=2");
+  });
+
   it("reports n/a when no play carried the indicators", () => {
     const stats = analyzeLogs([]);
     expect(stats.kpis.handoffGapMs).toEqual({ count: 0 });

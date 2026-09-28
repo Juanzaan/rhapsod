@@ -108,8 +108,10 @@ describe("createPlaybackEvents", () => {
       cacheHit: true,
       durationMs: 90,
       prefetchStatus: "hit",
+      segmentsWaitMs: 90,
       stage: "audio-url",
       trackId: "abc",
+      urlWaitMs: 30,
     });
     events.onPlaybackFinished(track(), PLAYER, "completed");
     events.onPlaybackFinished(track(), PLAYER, "skipped");
@@ -121,7 +123,10 @@ describe("createPlaybackEvents", () => {
       audioUrlMs: 90,
       cacheHit: true,
       metadataMs: 40,
+      prefetchStatus: "hit",
       reason: "completed",
+      segmentsWaitMs: 90,
+      urlWaitMs: 30,
     });
     expect(sessions[1]?.[0]).not.toHaveProperty("metadataMs");
     expect(playbackMetrics.record).toHaveBeenCalledTimes(2);

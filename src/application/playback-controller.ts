@@ -63,8 +63,11 @@ type SessionEndReason = PlaybackEndReason | "restart";
  *   track's first, without the end-of-session bookkeeping in handoffGapMs.
  * - commandToFirstAudioMs: from the request that queued this track to its
  *   first frame; only for a cold start, where nothing else was playing.
+ * - autoplayPickMs: how long autoplay took to choose this track once the
+ *   queue ran dry; it precedes startDelayMs and only handoffGapMs includes it.
  */
 export interface PlaybackKpis {
+  readonly autoplayPickMs?: number;
   readonly coldStart: boolean;
   readonly commandToFirstAudioMs?: number;
   readonly handoffGapMs?: number;
@@ -89,6 +92,10 @@ export interface PlaybackTiming {
   readonly prefetchStatus?: PrefetchStatus;
   readonly stage: "metadata" | "audio-url";
   readonly trackId: string;
+  // durationMs waits on both lookups at once; these split it so the logs
+  // show whether the stream URL or the SponsorBlock lookup held the start.
+  readonly urlWaitMs?: number;
+  readonly segmentsWaitMs?: number;
 }
 
 // The slice of URL resolution the driver needs. The full intake resolver
@@ -207,6 +214,7 @@ export class PlaybackController {
   readonly #onTiming: (timing: PlaybackTiming) => void;
   readonly #playStarts = new WeakMap<Track, PlayStart>();
   readonly #requestedAt = new WeakMap<Track, number>();
+  readonly #autoplayPickMs = new WeakMap<Track, number>();
   // When the last session ended while more was queued; cleared when the
   // driver goes idle so a start after silence counts as cold, not a gap.
   #lastSessionEndedAt: number | undefined;
@@ -369,7 +377,10 @@ export class PlaybackController {
     const coldStart = start.previousEndedAt === undefined;
     const requestedAt = this.#requestedAt.get(track);
     this.#requestedAt.delete(track);
+    const autoplayPickMs = this.#autoplayPickMs.get(track);
+    this.#autoplayPickMs.delete(track);
     return {
+      ...(autoplayPickMs === undefined ? {} : { autoplayPickMs }),
       coldStart,
       ...(firstFrameAt === undefined || !coldStart || requestedAt === undefined
         ? {}
@@ -608,6 +619,7 @@ export class PlaybackController {
     const stopEpoch = this.#epochs.captureStopEpoch();
     this.#driverState = "resolving";
     this.#onStateChanged();
+    const pickStartedAt = Date.now();
     const picked = await Promise.race([
       this.#autoplayProvider().catch(() => undefined),
       new Promise<undefined>((resolve) => {
@@ -630,6 +642,7 @@ export class PlaybackController {
     } catch {
       return this.#queue.length > 0;
     }
+    this.#autoplayPickMs.set(picked, Date.now() - pickStartedAt);
     return true;
   }
 
@@ -711,8 +724,12 @@ export class PlaybackController {
             cacheHit: resolved.cacheHit,
             durationMs: Date.now() - audioResolutionStartedAt,
             prefetchStatus: resolved.prefetchStatus,
+            ...(resolved.segmentsWaitMs === undefined
+              ? {}
+              : { segmentsWaitMs: resolved.segmentsWaitMs }),
             stage: "audio-url",
             trackId: track.id,
+            urlWaitMs: resolved.urlWaitMs,
           });
         });
         const pendingResume = this.#pendingResume;
@@ -949,7 +966,9 @@ export class PlaybackController {
         bounds?: MusicBounds;
         cacheHit: boolean;
         prefetchStatus: PrefetchStatus;
+        segmentsWaitMs?: number;
         url: string;
+        urlWaitMs: number;
       }
     | undefined
   > {
@@ -963,11 +982,24 @@ export class PlaybackController {
     try {
       // In parallel with the URL, so the lookup costs no start time unless
       // it is slower than the resolution.
+      const startedAt = Date.now();
+      let urlWaitMs = 0;
+      let segmentsWaitMs: number | undefined;
       const [resolved, bounds] = await Promise.all([
-        this.#preparedStore.getOrResolve(track, "inline-resolve", (t, signal) =>
-          this.#resolvePlayableAudio(t, signal),
-        ),
-        this.#musicBounds(track),
+        this.#preparedStore
+          .getOrResolve(track, "inline-resolve", (t, signal) =>
+            this.#resolvePlayableAudio(t, signal),
+          )
+          .then((result) => {
+            urlWaitMs = Date.now() - startedAt;
+            return result;
+          }),
+        this.#nonMusicSegments === undefined
+          ? Promise.resolve(undefined)
+          : this.#musicBounds(track).then((result) => {
+              segmentsWaitMs = Date.now() - startedAt;
+              return result;
+            }),
       ]);
       if (
         !this.#epochs.isGenerationCurrent(generation) ||
@@ -975,7 +1007,12 @@ export class PlaybackController {
       ) {
         return discardInFlight();
       }
-      return bounds === undefined ? resolved : { ...resolved, bounds };
+      return {
+        ...resolved,
+        ...(bounds === undefined ? {} : { bounds }),
+        ...(segmentsWaitMs === undefined ? {} : { segmentsWaitMs }),
+        urlWaitMs,
+      };
     } catch (error) {
       if (
         !this.#epochs.isGenerationCurrent(generation) ||

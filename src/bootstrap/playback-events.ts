@@ -18,6 +18,9 @@ interface TrackTiming {
   readonly audioUrlMs?: number;
   readonly cacheHit?: boolean;
   readonly metadataMs?: number;
+  readonly prefetchStatus?: PlaybackTiming["prefetchStatus"];
+  readonly segmentsWaitMs?: number;
+  readonly urlWaitMs?: number;
 }
 
 const MAX_TRACKED_TIMINGS = 200;
@@ -147,6 +150,15 @@ export function createPlaybackEvents(
               ...(timing.cacheHit === undefined
                 ? {}
                 : { cacheHit: timing.cacheHit }),
+              ...(timing.prefetchStatus === undefined
+                ? {}
+                : { prefetchStatus: timing.prefetchStatus }),
+              ...(timing.urlWaitMs === undefined
+                ? {}
+                : { urlWaitMs: timing.urlWaitMs }),
+              ...(timing.segmentsWaitMs === undefined
+                ? {}
+                : { segmentsWaitMs: timing.segmentsWaitMs }),
             }
           : {}),
       });
