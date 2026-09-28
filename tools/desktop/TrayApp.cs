@@ -1,6 +1,7 @@
 using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
@@ -327,7 +328,7 @@ namespace RhapsodDashboard
 
         private void ShowStatus(string text, Icon icon)
         {
-            statusItem.Text = text;
+            statusItem.Text = MenuText(text);
             tray.Icon = icon;
             // NotifyIcon.Text throws above 63 characters.
             var tip = "Rhapsod: " + text;
@@ -361,7 +362,7 @@ namespace RhapsodDashboard
             if (string.IsNullOrEmpty(password)) return;
             try
             {
-                Clipboard.SetText(password);
+                Clipboard.SetDataObject(SecretClipboardData(password), true);
                 clipboardClearAt = DateTime.UtcNow.AddSeconds(ClipboardSeconds);
                 tray.ShowBalloonTip(4000, "Rhapsod", "Usuario " + settings.PanelUser + ". Contraseña copiada; se borra en " + ClipboardSeconds + " s.", ToolTipIcon.Info);
             }
@@ -371,12 +372,31 @@ namespace RhapsodDashboard
             }
         }
 
+        // Menu items read "&" as a mnemonic prefix: "Simon & Garfunkel"
+        // would show as "Simon  Garfunkel" with an underlined G.
+        internal static string MenuText(string text)
+        {
+            return text.Replace("&", "&&");
+        }
+
+        // Clearing the clipboard later does not reach Win+V history or cloud
+        // sync, which keep their own copy. These formats ask Windows (and
+        // clipboard managers) to skip the password in the first place.
+        internal static DataObject SecretClipboardData(string secret)
+        {
+            var data = new DataObject();
+            data.SetData(DataFormats.UnicodeText, secret);
+            data.SetData("ExcludeClipboardContentFromMonitorProcessing", new MemoryStream(BitConverter.GetBytes(0)));
+            data.SetData("CanIncludeInClipboardHistory", new MemoryStream(BitConverter.GetBytes(0)));
+            data.SetData("CanUploadToCloudClipboard", new MemoryStream(BitConverter.GetBytes(0)));
+            return data;
+        }
+
         private void ClearClipboardIfHolding()
         {
             if (string.IsNullOrEmpty(password)) return;
             try
             {
-                // Clipboard history and cloud sync keep whatever sits there.
                 if (Clipboard.ContainsText() && Clipboard.GetText() == password) Clipboard.Clear();
             }
             catch (ExternalException)
