@@ -42,3 +42,12 @@ jobs:
     uses: ./.github/workflows/image.yml
     with:
       tag: ${{ needs.release-please.outputs.tag_name }}
+
+  desktop:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/desktop.yml
+    with:
+      tag: ${{ needs.release-please.outputs.tag_name }}

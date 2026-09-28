@@ -4,6 +4,16 @@
 
 `tools/desktop` contiene Rhapsod Dashboard, una aplicación pequeña para la bandeja de Windows. Mantiene abierto el túnel SSH hacia el servidor del bot, lo reconecta si se corta, muestra qué está reproduciendo el bot y abre el panel en una ventana propia. El servidor, la ruta de la clave y los puertos se guardan en `%APPDATA%\Rhapsod\dashboard.conf`; la contraseña del panel se guarda en el Administrador de credenciales de Windows, cifrada para el usuario actual. El ejecutable no incluye ningún dato.
 
+## Descargar
+
+Cada versión desde la 4.1.0 incluye `RhapsodDashboard.exe` y `RhapsodDashboard.exe.sha256` en su página de GitHub Releases. Para verificar la descarga, ejecutar en PowerShell y comparar el resultado con el archivo `.sha256`:
+
+```powershell
+(Get-FileHash RhapsodDashboard.exe -Algorithm SHA256).Hash.ToLower()
+```
+
+El ejecutable no está firmado, por lo que Windows SmartScreen muestra "Windows protegió su PC" la primera vez: **Más información** y después **Ejecutar de todas formas**. Compilarlo desde el código, como se indica abajo, produce el mismo archivo.
+
 ## Compilar
 
 La aplicación usa .NET Framework 4, incluido en todas las versiones de Windows admitidas, por lo que no hace falta un SDK:
@@ -25,9 +35,17 @@ Ejecutar `RhapsodDashboard.exe`. Una ventana de configuración solicita:
 
 Después de guardar, la aplicación queda en el área de notificación y abre el panel cuando el túnel está listo. Los usos siguientes arrancan directamente.
 
+En la primera conexión con un servidor, la aplicación muestra la huella de la clave del servidor y pregunta si coincide. Compararla con la salida de este comando en el servidor:
+
+```bash
+for f in /etc/ssh/ssh_host_*_key.pub; do ssh-keygen -lf "$f"; done
+```
+
+Una clave confirmada se guarda en `%APPDATA%\Rhapsod\known_hosts`; las claves que ya están en `%USERPROFILE%\.ssh\known_hosts` se aceptan sin preguntar. Responder que no deja la aplicación sin conexión hasta usar **Reconectar**. Una clave que cambió nunca se acepta: la aplicación muestra el error de ssh y queda sin conexión.
+
 ## Icono de la bandeja
 
-El color del icono indica el estado: verde mientras suena una pista, gris conectado y sin reproducir, ámbar mientras conecta o cuando el bot no está conectado a TeamSpeak, rojo con el túnel caído. Al pasar el cursor se ve la pista actual.
+El color del icono indica el estado: verde mientras suena una pista, gris conectado y sin reproducir, ámbar mientras conecta o cuando el bot no está conectado a TeamSpeak, rojo con el túnel caído o cuando el panel responde con un error (el menú muestra el código HTTP). Al pasar el cursor se ve la pista actual.
 
 - Doble clic o **Abrir panel** abre el panel en una ventana de aplicación de Edge, Chrome o Brave (el primero instalado), con un perfil separado para que el acceso al panel no se mezcle con el navegador habitual. Sin un navegador Chromium, se abre en el navegador predeterminado.
 - Abrir el panel copia la contraseña al portapapeles y la quita a los 30 segundos si sigue ahí. La copia va marcada para que Windows no la guarde en el historial del portapapeles (Win+V) ni la sincronice en la nube. **Copiar contraseña** la vuelve a copiar.
