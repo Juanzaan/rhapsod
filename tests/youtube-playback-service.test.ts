@@ -33,7 +33,10 @@ import type { NonMusicSegmentSource } from "../src/media/youtube/non-music-segme
 interface TimingCall {
   readonly stage: string;
   readonly cacheHit?: boolean;
+  readonly durationMs?: number;
   readonly prefetchStatus?: string;
+  readonly segmentsWaitMs?: number;
+  readonly urlWaitMs?: number;
 }
 
 function setup(
@@ -578,6 +581,38 @@ describe("YoutubePlaybackService", () => {
     expect(audioUrlTimings.at(-1)?.prefetchStatus).toBe("hit");
   });
 
+  it("reports the audio URL wait apart from the SponsorBlock wait", async () => {
+    const { onTiming, service } = setup({
+      nonMusicSegments: {
+        boundsFor: () =>
+          new Promise((resolve) => setTimeout(() => resolve(undefined), 60)),
+      },
+    });
+
+    await service.enqueue("https://youtu.be/abc123", "user-1");
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    const timing = onTiming.mock.calls
+      .map((call) => call[0])
+      .find((call) => call.stage === "audio-url");
+    expect(timing?.segmentsWaitMs).toBeGreaterThanOrEqual(50);
+    expect(timing?.urlWaitMs).toBeLessThan(50);
+    expect(timing?.durationMs).toBeGreaterThanOrEqual(50);
+  });
+
+  it("leaves the SponsorBlock wait out when no lookup is configured", async () => {
+    const { onTiming, service } = setup();
+
+    await service.enqueue("https://youtu.be/abc123", "user-1");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const timing = onTiming.mock.calls
+      .map((call) => call[0])
+      .find((call) => call.stage === "audio-url");
+    expect(timing?.urlWaitMs).toBeGreaterThanOrEqual(0);
+    expect(timing).not.toHaveProperty("segmentsWaitMs");
+  });
+
   it("reports prefetchStatus not-applicable for inline-cached audio URLs", async () => {
     const { onTiming, service } = setup();
 
@@ -1025,6 +1060,68 @@ describe("YoutubePlaybackService", () => {
 
       expect(service.current?.requestedBy).toBe("Autoplay");
       expect(service.current?.id).toBe("mix11111111");
+    } finally {
+      random.mockRestore();
+    }
+  });
+
+  it("reports how long autoplay took to pick the next track", async () => {
+    const random = vi.spyOn(Math, "random").mockReturnValue(0.99);
+    try {
+      const { onPlaybackFinished, playbackResolvers, resolver, service } =
+        setup({
+          autoplayProfile: {
+            artistScores: () => new Map(),
+            tasteProfile: () => ({
+              artistScores: new Map<string, number>(),
+              tokenScores: new Map<string, number>(),
+            }),
+            recentArtists: () => [],
+          },
+          metrics: {
+            bufferedBytes: 0,
+            firstFrameDelayMs: 40,
+            framesSent: 1,
+            maxBufferedBytes: 3_840,
+            rebufferEvents: 0,
+            underruns: 0,
+          },
+        });
+      service.setAutoplay(true);
+      await service.enqueue("https://youtu.be/seedvideo11", "user-1", "uid-1");
+      await new Promise((resolve) => setImmediate(resolve));
+      resolver.expandPlaylist.mockImplementation(
+        () =>
+          new Promise((resolve) =>
+            setTimeout(
+              () =>
+                resolve({
+                  tracks: [
+                    {
+                      id: "mix11111111",
+                      title: "Mix One",
+                      webpageUrl: "https://www.youtube.com/watch?v=mix11111111",
+                    },
+                  ],
+                }),
+              40,
+            ),
+          ),
+      );
+      playbackResolvers[0]?.();
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(service.current?.id).toBe("mix11111111");
+      playbackResolvers[1]?.();
+      await new Promise((resolve) => setImmediate(resolve));
+
+      const kpisFor = (id: string): Record<string, unknown> | undefined =>
+        (
+          onPlaybackFinished.mock.calls.find(
+            (call) => (call[0] as { id: string }).id === id,
+          ) as unknown[] | undefined
+        )?.[3] as Record<string, unknown> | undefined;
+      expect(kpisFor("seedvideo11")).not.toHaveProperty("autoplayPickMs");
+      expect(kpisFor("mix11111111")?.autoplayPickMs).toBeGreaterThanOrEqual(30);
     } finally {
       random.mockRestore();
     }

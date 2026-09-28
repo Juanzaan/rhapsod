@@ -151,6 +151,9 @@ function sanitizeErrorKey(message) {
 export function analyzeLogs(lines) {
   const audioUrlMs = [];
   const metadataMs = [];
+  const urlWaitMs = [];
+  const segmentsWaitMs = [];
+  const autoplayPickMs = [];
   const firstFrameDelayMs = [];
   const commandToAudioMs = [];
   const startDelayMs = [];
@@ -163,6 +166,7 @@ export function analyzeLogs(lines) {
   const handoffs = { prewarmed: 0, cold: 0 };
   const cacheHits = { hit: 0, miss: 0 };
   const winners = new Map();
+  const winnerMs = new Map();
   const providerFails = new Map();
   const errorLevel50 = new Map();
   const prefetchGroups = new Map();
@@ -194,6 +198,12 @@ export function analyzeLogs(lines) {
         audioUrlMs.push(record.audioUrlMs);
       if (typeof record.metadataMs === "number")
         metadataMs.push(record.metadataMs);
+      if (typeof record.urlWaitMs === "number")
+        urlWaitMs.push(record.urlWaitMs);
+      if (typeof record.segmentsWaitMs === "number")
+        segmentsWaitMs.push(record.segmentsWaitMs);
+      if (typeof record.autoplayPickMs === "number")
+        autoplayPickMs.push(record.autoplayPickMs);
       if (typeof record.firstFrameDelayMs === "number")
         firstFrameDelayMs.push(record.firstFrameDelayMs);
       if (record.cacheHit === true) cacheHits.hit++;
@@ -244,6 +254,10 @@ export function analyzeLogs(lines) {
     } else if (record.msg === "Audio URL resolved") {
       if (typeof record.winner === "string") {
         winners.set(record.winner, (winners.get(record.winner) ?? 0) + 1);
+        if (typeof record.durationMs === "number") {
+          if (!winnerMs.has(record.winner)) winnerMs.set(record.winner, []);
+          winnerMs.get(record.winner).push(record.durationMs);
+        }
       }
       if (typeof record.attemptCount === "number" && record.attemptCount > 1) {
         retries += record.attemptCount - 1;
@@ -295,6 +309,9 @@ export function analyzeLogs(lines) {
     playbackTimings,
     audioUrlMs: summarize(audioUrlMs),
     metadataMs: summarize(metadataMs),
+    urlWaitMs: summarize(urlWaitMs),
+    segmentsWaitMs: summarize(segmentsWaitMs),
+    autoplayPickMs: summarize(autoplayPickMs),
     firstFrameDelayMs: summarize(firstFrameDelayMs),
     kpis: {
       commandToAudioMs: summarize(commandToAudioMs),
@@ -326,6 +343,11 @@ export function analyzeLogs(lines) {
         : 0,
     cacheHits,
     winners: Object.fromEntries(winners),
+    winnerMs: Object.fromEntries(
+      [...winnerMs.entries()]
+        .map(([key, values]) => [key, summarize(values)])
+        .sort(([a], [b]) => a.localeCompare(b)),
+    ),
     providerFails: Object.fromEntries(providerFails),
     errorLevel50: Object.fromEntries(errorLevel50),
     retries,
@@ -361,12 +383,18 @@ export function formatStats(stats, options = {}) {
   lines.push(`Sesiones de playback: ${stats.playbackSessions}`);
   lines.push(`Timings de playback: ${stats.playbackTimings}`);
   lines.push(`audioUrlMs (sesión): ${fmtSummary(stats.audioUrlMs)}`);
+  lines.push(`  espera de la URL: ${fmtSummary(stats.urlWaitMs)}`);
+  lines.push(`  espera de SponsorBlock: ${fmtSummary(stats.segmentsWaitMs)}`);
+  lines.push(`Elección de autoplay: ${fmtSummary(stats.autoplayPickMs)}`);
   lines.push(`firstFrameDelay: ${fmtSummary(stats.firstFrameDelayMs)}`);
   lines.push(`metadataMs: ${fmtSummary(stats.metadataMs)}`);
   lines.push(
     `Cache: ${stats.cacheHits.hit} hit / ${stats.cacheHits.miss} miss (${stats.cacheHitRate}%)`,
   );
   lines.push(`Winners: ${JSON.stringify(stats.winners)}`);
+  for (const [winner, summary] of Object.entries(stats.winnerMs)) {
+    lines.push(`  ${winner}: ${fmtSummary(summary)}`);
+  }
   lines.push(`Falls por provider: ${JSON.stringify(stats.providerFails)}`);
   lines.push(`Reintentos (yt-dlp client fallback): ${stats.retries}`);
   lines.push(`Errores level:50: ${JSON.stringify(stats.errorLevel50)}`);

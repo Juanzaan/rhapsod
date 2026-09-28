@@ -36,11 +36,15 @@ export interface LogStats {
   playbackTimings: number;
   audioUrlMs: Summary;
   metadataMs: Summary;
+  urlWaitMs: Summary;
+  segmentsWaitMs: Summary;
+  autoplayPickMs: Summary;
   firstFrameDelayMs: Summary;
   kpis: PlaybackKpiStats;
   cacheHitRate: number;
   cacheHits: { hit: number; miss: number };
   winners: Record<string, number>;
+  winnerMs: Record<string, Summary>;
   providerFails: Record<string, number>;
   errorLevel50: Record<string, number>;
   retries: number;
