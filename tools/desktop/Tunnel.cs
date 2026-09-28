@@ -21,6 +21,10 @@ namespace RhapsodDashboard
             this.settings = settings;
         }
 
+        // Set by Start when ssh refused a server whose host key is not in
+        // any known_hosts file yet; the caller asks the user about it.
+        public bool HostKeyUnknown { get; private set; }
+
         public bool IsRunning
         {
             get
@@ -43,8 +47,10 @@ namespace RhapsodDashboard
             {
                 return "No se encontró la clave SSH en " + key + ".";
             }
+            HostKeyUnknown = false;
             var arguments = "-N -o BatchMode=yes -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 " +
-                "-o ServerAliveCountMax=3 -o StrictHostKeyChecking=accept-new -i \"" + key + "\" " +
+                "-o ServerAliveCountMax=3 -o StrictHostKeyChecking=yes " + HostKeys.KnownHostsOption() +
+                " -i \"" + key + "\" " +
                 "-L 127.0.0.1:" + settings.LocalPort + ":127.0.0.1:" + settings.RemotePort + " " + settings.Host;
             var info = new ProcessStartInfo(ssh, arguments)
             {
@@ -82,6 +88,11 @@ namespace RhapsodDashboard
                     string said;
                     lock (stderr) said = stderr.ToString().Trim();
                     process = null;
+                    if (HostKeys.IsUnknownHostError(said))
+                    {
+                        HostKeyUnknown = true;
+                        return "El servidor todavía no es de confianza en esta PC.";
+                    }
                     return "El túnel no se abrió: el servidor no responde o rechazó la clave." +
                         (said.Length > 0 ? " ssh: " + said : "");
                 }
@@ -106,7 +117,7 @@ namespace RhapsodDashboard
             }
         }
 
-        private static string FindSsh()
+        internal static string FindSsh()
         {
             var windows = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
             var candidates = new List<string>

@@ -4,6 +4,16 @@
 
 `tools/desktop` holds Rhapsod Dashboard, a small Windows tray app for the panel. It keeps the SSH tunnel to the bot host open, reconnects it when it drops, shows what the bot is playing and opens the panel in its own window. The host, key path and ports live in `%APPDATA%\Rhapsod\dashboard.conf`; the panel password lives in the Windows Credential Manager, encrypted for the current Windows user. Nothing is compiled into the executable.
 
+## Download
+
+Each release from 4.1.0 on carries `RhapsodDashboard.exe` and `RhapsodDashboard.exe.sha256` on its GitHub release page. Check the download in PowerShell and compare the result with the `.sha256` file:
+
+```powershell
+(Get-FileHash RhapsodDashboard.exe -Algorithm SHA256).Hash.ToLower()
+```
+
+The executable is not code-signed, so Windows SmartScreen shows "Windows protected your PC" on the first run: **More info**, then **Run anyway**. Building it from source, below, gives the same file.
+
 ## Build
 
 The app targets .NET Framework 4, which every supported Windows includes, so no SDK is required:
@@ -25,9 +35,17 @@ Run `RhapsodDashboard.exe`. A settings window asks for:
 
 After saving, the app sits in the notification area and opens the panel once the tunnel is up. Later runs start directly.
 
+On the first connection to a server, the app shows the server's host key fingerprint and asks whether it matches. Compare it with the output of this command on the server:
+
+```bash
+for f in /etc/ssh/ssh_host_*_key.pub; do ssh-keygen -lf "$f"; done
+```
+
+A confirmed key is stored in `%APPDATA%\Rhapsod\known_hosts`; keys already in `%USERPROFILE%\.ssh\known_hosts` are accepted without asking. Answering no keeps the app offline until **Reconectar**. A changed key is never accepted: the app reports the ssh error and stays offline.
+
 ## Tray icon
 
-The icon color shows the state: green while a track plays, grey when connected and idle, amber while connecting or when the bot is not connected to TeamSpeak, red when the tunnel is down. Hovering shows the current track.
+The icon color shows the state: green while a track plays, grey when connected and idle, amber while connecting or when the bot is not connected to TeamSpeak, red when the tunnel is down or the panel answers with an error (the menu shows the HTTP status). Hovering shows the current track.
 
 - Double-click or **Abrir panel** opens the panel in an app window of Edge, Chrome or Brave (the first one installed), with a separate profile so the panel login never mixes with the everyday browser. Without a Chromium browser, it opens in the default browser.
 - Opening the panel copies the password to the clipboard and removes it after 30 seconds if it is still there. The copy is marked so Windows keeps it out of the clipboard history (Win+V) and cloud clipboard sync. **Copiar contraseña** copies it again.
