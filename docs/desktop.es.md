@@ -30,7 +30,7 @@ Después de guardar, la aplicación queda en el área de notificación y abre el
 El color del icono indica el estado: verde mientras suena una pista, gris conectado y sin reproducir, ámbar mientras conecta o cuando el bot no está conectado a TeamSpeak, rojo con el túnel caído. Al pasar el cursor se ve la pista actual.
 
 - Doble clic o **Abrir panel** abre el panel en una ventana de aplicación de Edge, Chrome o Brave (el primero instalado), con un perfil separado para que el acceso al panel no se mezcle con el navegador habitual. Sin un navegador Chromium, se abre en el navegador predeterminado.
-- Abrir el panel copia la contraseña al portapapeles y la quita a los 30 segundos si sigue ahí. **Copiar contraseña** la vuelve a copiar.
+- Abrir el panel copia la contraseña al portapapeles y la quita a los 30 segundos si sigue ahí. La copia va marcada para que Windows no la guarde en el historial del portapapeles (Win+V) ni la sincronice en la nube. **Copiar contraseña** la vuelve a copiar.
 - **Reconectar** reinicia el túnel; **Configuración…** edita los datos y reconecta; **Salir** cierra el túnel y la aplicación.
 
 Si el túnel se corta, la aplicación avisa y reintenta a los 5, 10, 20 y 40 segundos, y después cada 60. ssh se ejecuta en un trabajo de Windows que termina con la aplicación, así que salir siempre cierra el túnel. Abrir la aplicación de nuevo mientras está en marcha muestra el panel en lugar de una segunda copia.
@@ -43,7 +43,7 @@ Si el puerto local ya está abierto, la aplicación lo reutiliza solo cuando res
 - `--forget` borra la contraseña guardada para el servidor configurado.
 - `--self-test ARCHIVO` ejecuta las comprobaciones de la integración continua y escribe un informe en `ARCHIVO`.
 
-La aplicación usa el cliente OpenSSH de Windows si está instalado; si no, el `ssh.exe` de Git para Windows o el primero que encuentre en `PATH`.
+La aplicación usa el cliente OpenSSH de Windows si está instalado; si no, el `ssh.exe` de Git para Windows o el primero que encuentre en `PATH`. ssh corre sin preguntas, así que la clave no debe tener frase de contraseña o tiene que estar cargada en el agente OpenSSH de Windows (`ssh-add`); el `ssh.exe` de Git para Windows no lee ese agente. Para un puerto SSH distinto de 22, agregar una entrada `Host` con `Port` en `%USERPROFILE%\.ssh\config` y usar ese nombre como destino SSH.
 
 ## Reemplazar un lanzador anterior
 
