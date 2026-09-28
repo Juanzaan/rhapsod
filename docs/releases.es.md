@@ -9,6 +9,7 @@
 | Versión                                   | Contenido                                                                  |
 | ----------------------------------------- | -------------------------------------------------------------------------- |
 | [Sin publicar](releases/unreleased.es.md) | Cambios pendientes                                                         |
+| [v4.1.0](releases/v4.1.0.es.md)           | Avisos, sonoridad, comando `rhapsod`, Docker y aplicación de Windows       |
 | [v4.0.0](releases/v4.0.0.es.md)           | DJ automático, recuperación de la reproducción, métricas y panel reforzado |
 | [v3.0.0](releases/v3.0.0.es.md)           | Preferencias, reproducción automática, radio e instancias                  |
 | [v2.4.1](releases/v2.4.1.es.md)           | Automatización de versiones                                                |
