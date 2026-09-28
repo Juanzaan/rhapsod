@@ -155,8 +155,8 @@ namespace RhapsodDashboard
         }
 
         // Exercises the non-UI parts so CI can verify a build: settings round
-        // trip, port validation, and that a plain HTTP server on the local
-        // port is not mistaken for the panel.
+        // trip, port validation, that a plain HTTP server on the local port is
+        // not mistaken for the panel, and the clipboard and menu text helpers.
         private static int SelfTest(string reportPath)
         {
             var report = new List<string>();
@@ -207,6 +207,13 @@ namespace RhapsodDashboard
                 check("foreign service is not the panel", !PanelClient.LooksLikePanel(free));
                 listener.Stop();
                 check("closed port is not open", !PortProbe.IsOpen(FreePort()));
+                check("menu text keeps ampersands", TrayApp.MenuText("Simon & Garfunkel") == "Simon && Garfunkel");
+                var secret = TrayApp.SecretClipboardData("s3cret");
+                check("password stays out of clipboard history",
+                    (string)secret.GetData(DataFormats.UnicodeText) == "s3cret" &&
+                    IsZeroDword(secret, "ExcludeClipboardContentFromMonitorProcessing") &&
+                    IsZeroDword(secret, "CanIncludeInClipboardHistory") &&
+                    IsZeroDword(secret, "CanUploadToCloudClipboard"));
             }
             catch (Exception error)
             {
@@ -215,6 +222,12 @@ namespace RhapsodDashboard
             }
             File.WriteAllLines(reportPath, report);
             return ok ? 0 : 1;
+        }
+
+        private static bool IsZeroDword(IDataObject data, string format)
+        {
+            var stream = data.GetData(format) as MemoryStream;
+            return stream != null && stream.Length == 4 && BitConverter.ToInt32(stream.ToArray(), 0) == 0;
         }
 
         private static int FreePort()

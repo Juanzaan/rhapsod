@@ -30,7 +30,7 @@ After saving, the app sits in the notification area and opens the panel once the
 The icon color shows the state: green while a track plays, grey when connected and idle, amber while connecting or when the bot is not connected to TeamSpeak, red when the tunnel is down. Hovering shows the current track.
 
 - Double-click or **Abrir panel** opens the panel in an app window of Edge, Chrome or Brave (the first one installed), with a separate profile so the panel login never mixes with the everyday browser. Without a Chromium browser, it opens in the default browser.
-- Opening the panel copies the password to the clipboard and removes it after 30 seconds if it is still there. **Copiar contraseña** copies it again.
+- Opening the panel copies the password to the clipboard and removes it after 30 seconds if it is still there. The copy is marked so Windows keeps it out of the clipboard history (Win+V) and cloud clipboard sync. **Copiar contraseña** copies it again.
 - **Reconectar** restarts the tunnel; **Configuración…** edits the settings and reconnects; **Salir** closes the tunnel and the app.
 
 When the tunnel drops, the app notifies and retries after 5, 10, 20, 40 and then every 60 seconds. ssh runs in a Windows job that ends with the app, so quitting always closes the tunnel. Starting the app again while it runs brings up the panel instead of a second copy.
@@ -43,7 +43,7 @@ When the local port is already open, the app reuses it only if it answers like t
 - `--forget` deletes the saved password for the configured host.
 - `--self-test FILE` runs the checks CI uses and writes a report to `FILE`.
 
-The app uses the Windows OpenSSH client when installed, otherwise the `ssh.exe` from Git for Windows or the first one on `PATH`.
+The app uses the Windows OpenSSH client when installed, otherwise the `ssh.exe` from Git for Windows or the first one on `PATH`. ssh runs without prompts, so the key needs no passphrase or has to be loaded in the Windows OpenSSH agent (`ssh-add`); the Git for Windows `ssh.exe` does not read that agent. For an SSH port other than 22, add a `Host` entry with `Port` to `%USERPROFILE%\.ssh\config` and use that name as the SSH target.
 
 ## Replacing an older launcher
 
