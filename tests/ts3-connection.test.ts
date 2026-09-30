@@ -66,6 +66,9 @@ import {
   createTs3Connection,
   DUPLICATE_INSTANCE_EXIT_CODE,
   DuplicateBotInstanceError,
+  HANDSHAKE_ATTEMPT_MS,
+  HANDSHAKE_RETRY_DELAYS_MS,
+  parseLoginError,
   splitTextMessage,
 } from "../src/adapters/ts3/ts3-connection.js";
 
@@ -136,14 +139,151 @@ describe("createTs3Connection.connect", () => {
     expect(m.__client.waitConnected).toHaveBeenCalledTimes(1);
   });
 
-  it("disconnects cleanly when waitConnected throws", async () => {
+  it("disconnects and retries when waitConnected throws", async () => {
+    vi.useFakeTimers();
+    try {
+      const m = await ts3Mock();
+      m.__client.waitConnected.mockRejectedValueOnce(
+        new Error("handshake timeout"),
+      );
+      const connection = createTs3Connection(testConfig(), identity, logger);
+      const connected = connection.connect();
+      await vi.advanceTimersByTimeAsync(HANDSHAKE_RETRY_DELAYS_MS[0] ?? 0);
+      await expect(connected).resolves.toBeUndefined();
+      expect(m.__client.disconnect).toHaveBeenCalledTimes(1);
+      expect(m.__client.connect).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Production, 2026-09-30: the handshake stopped after "received
+  // initivexpand2" and waitConnected() never settled, so the bot sat for
+  // the whole 180 s connect timeout; a fresh process connected at once.
+  it("retries a login that never finishes instead of waiting it out", async () => {
+    vi.useFakeTimers();
+    try {
+      const m = await ts3Mock();
+      m.__client.waitConnected.mockReturnValueOnce(new Promise(() => {}));
+      const connection = createTs3Connection(testConfig(), identity, logger);
+      const connected = connection.connect();
+      await vi.advanceTimersByTimeAsync(
+        HANDSHAKE_ATTEMPT_MS + (HANDSHAKE_RETRY_DELAYS_MS[0] ?? 0),
+      );
+      await expect(connected).resolves.toBeUndefined();
+      expect(m.__client.connect).toHaveBeenCalledTimes(2);
+      expect(m.__client.disconnect).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("retries when the server closes the connection during login", async () => {
+    vi.useFakeTimers();
+    try {
+      const m = await ts3Mock();
+      m.__client.waitConnected.mockReturnValueOnce(new Promise(() => {}));
+      const connection = createTs3Connection(testConfig(), identity, logger);
+      const connected = connection.connect();
+      await vi.advanceTimersByTimeAsync(0);
+      // What the library does on a flood-prevention ban (error 3329).
+      m.__emit("disconnected", undefined);
+      await vi.advanceTimersByTimeAsync(HANDSHAKE_RETRY_DELAYS_MS[0] ?? 0);
+      await expect(connected).resolves.toBeUndefined();
+      expect(m.__client.connect).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Reproduced against a TeamSpeak 3.13 server: a login while our last
+  // connection still lingers gets "error id=521 msg=too\\smany\\sclones..."
+  // and the library dropped it, leaving the bot waiting until its timeout.
+  it("fails the attempt at once when the server refuses the login", async () => {
     const m = await ts3Mock();
-    m.__client.waitConnected.mockRejectedValueOnce(
-      new Error("handshake timeout"),
-    );
-    const connection = createTs3Connection(testConfig(), identity, logger);
-    await expect(connection.connect()).rejects.toThrow("handshake timeout");
-    expect(m.__client.disconnect).toHaveBeenCalledTimes(1);
+    const client = m.__client as Ts3ClientMock & {
+      handler?: { onPacket: (packet: unknown) => void };
+    };
+    const delivered: unknown[] = [];
+    client.handler = { onPacket: (packet) => delivered.push(packet) };
+    m.__client.waitConnected.mockReturnValueOnce(new Promise(() => {}));
+    const warn = vi.fn();
+    vi.useFakeTimers();
+    try {
+      const connection = createTs3Connection(testConfig(), identity, {
+        ...logger,
+        warn,
+      });
+      const connected = connection.connect();
+      await vi.advanceTimersByTimeAsync(0);
+      const packet = {
+        typeFlagged: 2,
+        data: Buffer.from(
+          "error id=521 msg=too\\smany\\sclones\\salready\\sconnected",
+        ),
+      };
+      client.handler?.onPacket(packet);
+      expect(delivered).toEqual([packet]);
+      expect(warn).toHaveBeenCalledWith(
+        { errorId: "521", errorMessage: "too many clones already connected" },
+        "TeamSpeak server refused the login",
+      );
+      await vi.advanceTimersByTimeAsync(HANDSHAKE_RETRY_DELAYS_MS[0] ?? 0);
+      await expect(connected).resolves.toBeUndefined();
+      expect(m.__client.connect).toHaveBeenCalledTimes(2);
+      expect(warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          errorMessage:
+            "TeamSpeak server refused the login: too many clones already connected (id=521)",
+        }),
+        "TeamSpeak login failed; retrying",
+      );
+    } finally {
+      delete client.handler;
+      vi.useRealTimers();
+    }
+  });
+
+  it("gives up once the connect timeout is spent", async () => {
+    const m = await ts3Mock();
+    vi.useFakeTimers();
+    try {
+      m.__client.waitConnected.mockReturnValue(new Promise(() => {}));
+      const connection = createTs3Connection(
+        testConfig({ RHAPSOD_TS3_CONNECT_TIMEOUT_SECONDS: 30 }),
+        identity,
+        logger,
+      );
+      const connected = connection.connect();
+      const settled = expect(connected).rejects.toThrow(
+        "TeamSpeak login did not finish",
+      );
+      await vi.advanceTimersByTimeAsync(30_000);
+      await settled;
+      // 10 s + 2 s pause + 10 s + 5 s pause, then the last 3 s of budget.
+      expect(m.__client.connect).toHaveBeenCalledTimes(3);
+    } finally {
+      m.__client.waitConnected.mockResolvedValue(undefined);
+      vi.useRealTimers();
+    }
+  });
+
+  it("stops retrying when disconnect() is called during the pause", async () => {
+    vi.useFakeTimers();
+    try {
+      const m = await ts3Mock();
+      m.__client.waitConnected.mockRejectedValueOnce(new Error("refused"));
+      const connection = createTs3Connection(testConfig(), identity, logger);
+      const connected = connection.connect();
+      const settled = expect(connected).rejects.toThrow("refused");
+      await vi.advanceTimersByTimeAsync(0);
+      await connection.disconnect();
+      await vi.advanceTimersByTimeAsync(HANDSHAKE_RETRY_DELAYS_MS[0] ?? 0);
+      await settled;
+      expect(m.__client.connect).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("moves to the configured channel id after connecting", async () => {
@@ -490,6 +630,27 @@ describe("duplicate instance guard", () => {
     // deploy/systemd/rhapsod.service lists this value in
     // RestartPreventExitStatus; changing one requires changing the other.
     expect(DUPLICATE_INSTANCE_EXIT_CODE).toBe(42);
+  });
+});
+
+describe("parseLoginError", () => {
+  it("reads the id and unescaped message of a login error", () => {
+    expect(
+      parseLoginError(
+        "error id=3329 msg=connection\\sfailed,\\syou\\sare\\sbanned extra_msg=flood\\sprevention",
+      ),
+    ).toEqual({
+      id: "3329",
+      message: "connection failed, you are banned: flood prevention",
+    });
+  });
+
+  it("ignores success and answers to our own commands", () => {
+    expect(parseLoginError("error id=0 msg=ok")).toBeUndefined();
+    expect(
+      parseLoginError("error id=2568 msg=insufficient return_code=7"),
+    ).toBeUndefined();
+    expect(parseLoginError("initserver virtualserver_name=x")).toBeUndefined();
   });
 });
 
