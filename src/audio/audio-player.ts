@@ -34,25 +34,6 @@ class FramePool {
   }
 }
 
-export function applyGain(
-  pcm: Uint8Array,
-  gain: number,
-  output?: Uint8Array,
-): Uint8Array {
-  if (gain === 1) return pcm;
-  const target = output ?? new Uint8Array(pcm.byteLength);
-  for (let i = 0; i < pcm.byteLength; i += 2) {
-    const low = pcm[i] ?? 0;
-    const high = pcm[i + 1] ?? 0;
-    let sample = low | (high << 8);
-    if (sample & 0x8000) sample -= 0x10000;
-    sample = Math.max(-32768, Math.min(32767, Math.round(sample * gain)));
-    target[i] = sample & 0xff;
-    target[i + 1] = (sample >> 8) & 0xff;
-  }
-  return target;
-}
-
 type AudioPlayerState = "idle" | "buffering" | "playing" | "paused";
 
 export interface VoiceFrameOutput {
@@ -261,17 +242,14 @@ export class AudioPlayer {
     const tail = this.#sourceEnded && this.#bufferedBytes > 0;
     if (this.#bufferedBytes >= PCM_FRAME_BYTES || tail) {
       const frame = this.#framePool.acquire();
-      const gained = this.#gain === 1 ? undefined : this.#framePool.acquire();
       try {
         const source = this.#readFrameInto(frame);
         // Metered before !volume: the loudness chain is what gets tuned,
         // the volume is each channel's choice.
         this.#meter.add(source);
-        const pcm = applyGain(source, this.#gain, gained);
-        this.#output.sendVoiceFrame(this.#encoder.encode(pcm));
+        this.#output.sendVoiceFrame(this.#encoder.encode(source, this.#gain));
       } finally {
         this.#framePool.release(frame);
-        if (gained !== undefined) this.#framePool.release(gained);
       }
       const sentAt = Date.now();
       this.#firstFrameDelayMs ??= sentAt - this.#playStartedAt;
