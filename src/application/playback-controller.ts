@@ -40,6 +40,10 @@ import { messages } from "../lib/messages.js";
 
 export type LoopMode = "off" | "queue" | "track";
 
+function youtubeVideoKey(source: string): string {
+  return /[?&]v=([\w-]{11})/.exec(source)?.[1] ?? source;
+}
+
 export function volumeToGain(percent: number): number {
   return 10 ** ((percent - 100) * 0.02);
 }
@@ -155,6 +159,12 @@ interface WarmStream {
 const AUDIO_URL_REFRESH_AHEAD_MS = 3 * 60_000;
 const AUTH_REQUIRED_RE =
   /sign in to confirm|cookies for the authentication|request you to sign in|login required/i;
+// yt-dlp says "Video unavailable" both for removed uploads and for uploads
+// blocked in the host's country (a US server misses many Latin American
+// releases). Another upload of the same song is usually playable.
+const VIDEO_UNAVAILABLE_RE =
+  /video unavailable|not (?:made )?available in your country|blocked it in your country/i;
+const MAX_OTHER_UPLOAD_ATTEMPTS = 3;
 const MAX_AUDIO_URL_403_RETRIES = 3;
 // A source that stops delivering mid-song (throttled CDN, dropped radio
 // connection) used to end the track as an error and skip it. One resume per
@@ -1159,6 +1169,17 @@ export class PlaybackController {
         return fallbackResult.url;
       }
     }
+    if (
+      lastError instanceof Error &&
+      VIDEO_UNAVAILABLE_RE.test(lastError.message)
+    ) {
+      const url = await this.#resolveOtherUpload(
+        track,
+        [track.source, ...fallbacks],
+        signal,
+      );
+      if (url !== undefined) return url;
+    }
     if (lastError instanceof Error) {
       if (AUTH_REQUIRED_RE.test(lastError.message)) {
         throw new Error(
@@ -1168,6 +1189,39 @@ export class PlaybackController {
       throw lastError;
     }
     throw new Error("No se encontró audio reproducible para esa pista.");
+  }
+
+  async #resolveOtherUpload(
+    track: Track,
+    triedSources: readonly string[],
+    signal?: AbortSignal,
+  ): Promise<string | undefined> {
+    let metadata: YoutubeTrackMetadata;
+    try {
+      metadata = await this.#resolver.search(
+        track.title,
+        track.durationSeconds,
+        track.title,
+      );
+    } catch {
+      return undefined;
+    }
+    const tried = new Set(triedSources.map(youtubeVideoKey));
+    const candidates = [
+      metadata.webpageUrl,
+      ...(metadata.fallbackSources ?? []),
+    ].filter((source) => !tried.has(youtubeVideoKey(source)));
+    for (const source of candidates.slice(0, MAX_OTHER_UPLOAD_ATTEMPTS)) {
+      if (signal?.aborted) return undefined;
+      try {
+        const url = await this.#resolver.getAudioUrlFromUrl(source, signal);
+        this.#preparedStore.persist(source, url);
+        return url;
+      } catch {
+        // Try the next upload; the caller reports the original error.
+      }
+    }
+    return undefined;
   }
 
   #recordMetadataTiming(
