@@ -10,9 +10,15 @@ export const CHANNELS = 2;
 export const FRAME_DURATION_MS = 20;
 export const SAMPLES_PER_CHANNEL = (SAMPLE_RATE * FRAME_DURATION_MS) / 1000;
 export const PCM_FRAME_BYTES = SAMPLES_PER_CHANNEL * CHANNELS * 2;
+// 500 bytes is the whole UDP payload, so the 8-byte MAC and 5-byte packet
+// header count too (the client library splits commands at 487 bytes for the
+// same reason). The old budget left them out and sent voice packets of up
+// to 513 bytes on loud passages, over the protocol's limit.
 const TS3_MAX_PACKET_BYTES = 500;
+const TS3_PACKET_HEADER_BYTES = 8 + 5;
 const TS3_VOICE_HEADER_BYTES = 3;
-export const TS3_MAX_OPUS_BYTES = TS3_MAX_PACKET_BYTES - TS3_VOICE_HEADER_BYTES;
+export const TS3_MAX_OPUS_BYTES =
+  TS3_MAX_PACKET_BYTES - TS3_PACKET_HEADER_BYTES - TS3_VOICE_HEADER_BYTES;
 
 interface OpusEncoderConfig {
   readonly bitrate?: number;
