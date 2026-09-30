@@ -26,6 +26,30 @@ describe("Rhapsod Opus encoder", () => {
     }
   });
 
+  it("keeps dense audio inside the 500-byte TeamSpeak packet", async () => {
+    const encoder = await createRhapsodOpusEncoder({ bitrate: 160_000 });
+    let seed = 1;
+    const noise = (): number => {
+      seed = (seed * 1_103_515_245 + 12_345) % 2 ** 31;
+      return seed / 2 ** 30 - 1;
+    };
+    let largest = 0;
+    try {
+      for (let frame = 0; frame < 50; frame++) {
+        const pcm = new Uint8Array(PCM_FRAME_BYTES);
+        const view = new DataView(pcm.buffer);
+        for (let i = 0; i < PCM_FRAME_BYTES / 2; i++) {
+          view.setInt16(i * 2, Math.round(noise() * 20_000), true);
+        }
+        largest = Math.max(largest, encoder.encode(pcm).byteLength);
+      }
+    } finally {
+      encoder.close();
+    }
+    // 8-byte MAC, 5-byte header and 3-byte voice header around the Opus.
+    expect(largest + 8 + 5 + 3).toBeLessThanOrEqual(500);
+  });
+
   it("uses the documented PCM geometry", () => {
     expect(SAMPLE_RATE).toBe(48_000);
     expect(CHANNELS).toBe(2);
