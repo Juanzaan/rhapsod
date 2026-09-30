@@ -2229,6 +2229,62 @@ describe("YoutubePlaybackService", () => {
     expect(onPlaybackError).not.toHaveBeenCalled();
   });
 
+  it("searches for another upload when YouTube reports the video unavailable", async () => {
+    const { createPlayback, onPlaybackError, resolver, service } = setup();
+    resolver.getTrack.mockResolvedValueOnce({
+      durationSeconds: 200,
+      id: "blocked",
+      title: "Bartender",
+      webpageUrl: "https://www.youtube.com/watch?v=blocked",
+    });
+    resolver.search.mockResolvedValueOnce({
+      fallbackSources: ["https://www.youtube.com/watch?v=other"],
+      id: "blocked",
+      title: "Bartender",
+      webpageUrl: "https://www.youtube.com/watch?v=blocked",
+    });
+    resolver.getAudioUrlFromUrl
+      .mockRejectedValueOnce(
+        new Error("ERROR: [youtube] blocked: Video unavailable"),
+      )
+      .mockResolvedValueOnce("https://media.example/other-audio");
+
+    await service.enqueue("https://youtu.be/blocked", "user-1");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(resolver.search).toHaveBeenCalledWith("Bartender", 200, "Bartender");
+    expect(resolver.getAudioUrlFromUrl).toHaveBeenCalledTimes(2);
+    expect(resolver.getAudioUrlFromUrl).toHaveBeenLastCalledWith(
+      "https://www.youtube.com/watch?v=other",
+      expect.any(AbortSignal),
+    );
+    expect(createPlayback).toHaveBeenCalledWith(
+      "https://media.example/other-audio",
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
+    expect(onPlaybackError).not.toHaveBeenCalled();
+  });
+
+  it("does not search for another upload on other resolution errors", async () => {
+    const { onPlaybackError, resolver, service } = setup();
+    resolver.getTrack.mockResolvedValueOnce({
+      id: "best",
+      title: "Track best",
+      webpageUrl: "https://www.youtube.com/watch?v=best",
+    });
+    resolver.getAudioUrlFromUrl.mockRejectedValueOnce(
+      new Error("Requested format is not available"),
+    );
+
+    await service.enqueue("https://youtu.be/best", "user-1");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(resolver.search).not.toHaveBeenCalled();
+    expect(onPlaybackError).toHaveBeenCalledTimes(1);
+  });
+
   it("resolves fallback candidates in parallel when the winner has no audio", async () => {
     const { createPlayback, onPlaybackError, resolver, service } = setup();
     resolver.getTrack.mockResolvedValueOnce({
