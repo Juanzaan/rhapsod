@@ -15,6 +15,15 @@ const MESSAGE_QUEUE_MAX = 50;
 // TeamSpeak rejects text messages longer than 1024 characters.
 export const MAX_TEXT_MESSAGE_LENGTH = 1024;
 const HEARTBEAT_PROBE_TIMEOUT_MS = 15_000;
+// A healthy handshake takes well under a second. The client library drops
+// login errors (see watchLoginErrors) and then waits forever; on
+// 2026-09-30 two deploys hung 180 s after "received initivexpand2" while a
+// fresh process connected in 0.3 s. So each handshake gets a short budget
+// and a clean retry within RHAPSOD_TS3_CONNECT_TIMEOUT_SECONDS.
+export const HANDSHAKE_ATTEMPT_MS = 10_000;
+// Spaced out because a flood-prevention ban (error 3329) is one of the
+// ways a handshake ends, and hammering the server keeps the ban alive.
+export const HANDSHAKE_RETRY_DELAYS_MS = [2_000, 5_000, 10_000, 20_000, 30_000];
 
 /**
  * Exit code for a refused duplicate start. The systemd unit lists it in
@@ -302,6 +311,86 @@ export function rejectDuplicateInstance(
   }
 }
 
+export interface LoginError {
+  readonly id: string;
+  readonly message: string;
+}
+
+/** Reads an `error` line with a non-zero id and no return code. */
+export function parseLoginError(line: string): LoginError | undefined {
+  if (!line.startsWith("error ")) return undefined;
+  const params = new Map<string, string>();
+  for (const part of line.slice("error ".length).split(" ")) {
+    const eq = part.indexOf("=");
+    if (eq > 0) params.set(part.slice(0, eq), part.slice(eq + 1));
+  }
+  const id = params.get("id");
+  if (id === undefined || id === "0" || params.has("return_code")) {
+    return undefined;
+  }
+  const message = [params.get("msg"), params.get("extra_msg")]
+    .filter((text): text is string => text !== undefined && text !== "")
+    .map(unescapeParam)
+    .join(": ");
+  return { id, message: message === "" ? "unknown error" : message };
+}
+
+function unescapeParam(value: string): string {
+  return value.replace(/\\(.)/g, (_match, code: string) => {
+    switch (code) {
+      case "s":
+        return " ";
+      case "p":
+        return "|";
+      case "n":
+        return "\n";
+      case "t":
+        return "\t";
+      default:
+        return code;
+    }
+  });
+}
+
+interface LoginPacketTap {
+  handler?: { onPacket?: ((packet: LoginPacket) => void) | null };
+}
+
+interface LoginPacket {
+  typeFlagged: number;
+  data: Uint8Array;
+}
+
+const COMMAND_PACKET = 2;
+
+/**
+ * The library answers an error without a return code (every login error:
+ * 521 "too many clones", a wrong server password, ...) by dropping it, so
+ * the handshake waits forever. This reads the commands its packet handler
+ * delivers, through fields the library marks internal: it must be called
+ * right after client.connect() starts, which builds a fresh handler, and
+ * it does nothing if that shape ever changes.
+ */
+export function watchLoginErrors(
+  client: unknown,
+  onError: (error: LoginError) => void,
+): void {
+  const handler = (client as LoginPacketTap).handler;
+  const deliver = handler?.onPacket;
+  if (handler === undefined || typeof deliver !== "function") return;
+  handler.onPacket = (packet) => {
+    if ((packet.typeFlagged & 15) === COMMAND_PACKET) {
+      for (const line of Buffer.from(packet.data)
+        .toString("utf8")
+        .split(/[\n\0]/)) {
+        const error = parseLoginError(line.trim());
+        if (error !== undefined) onError(error);
+      }
+    }
+    deliver(packet);
+  };
+}
+
 export function createTs3Connection(
   config: AppConfig,
   identity: Identity,
@@ -338,6 +427,89 @@ export function createTs3Connection(
     (reason: "kicked" | "disconnected") => void
   >();
   let connectionLostBound = false;
+  // Set only while a handshake waits. The library emits "disconnected"
+  // when the server bans the login (3329) and drops every other login
+  // error, and in neither case does waitConnected() settle; this ends the
+  // attempt instead.
+  let handshakeFailed: ((error: Error) => void) | undefined;
+  let handshakeBound = false;
+  const bindHandshakeClosed = (): void => {
+    if (handshakeBound) return;
+    handshakeBound = true;
+    client.on("disconnected", () =>
+      handshakeFailed?.(
+        new Error("TeamSpeak server closed the connection during login"),
+      ),
+    );
+  };
+  // disconnect() bumps it so a connect that a caller gave up on (the
+  // reconnect loop's attempt timeout) stops retrying behind its back.
+  let connectEpoch = 0;
+  const handshake = async (budgetMs: number): Promise<void> => {
+    bindHandshakeClosed();
+    const started = client.connect();
+    watchLoginErrors(client, (error) => {
+      if (handshakeFailed === undefined) return;
+      logger.warn(
+        { errorId: error.id, errorMessage: error.message },
+        "TeamSpeak server refused the login",
+      );
+      handshakeFailed?.(
+        new Error(
+          `TeamSpeak server refused the login: ${error.message} (id=${error.id})`,
+        ),
+      );
+    });
+    await started;
+    try {
+      await new Promise<void>((resolve, reject) => {
+        handshakeFailed = reject;
+        withTimeout(
+          client.waitConnected(),
+          budgetMs,
+          `TeamSpeak login did not finish in ${Math.round(budgetMs / 1_000)} s`,
+        ).then(resolve, reject);
+      });
+    } finally {
+      handshakeFailed = undefined;
+    }
+  };
+  const connectWithRetry = async (): Promise<void> => {
+    const epoch = connectEpoch;
+    const deadline =
+      Date.now() + config.RHAPSOD_TS3_CONNECT_TIMEOUT_SECONDS * 1_000;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        await handshake(
+          Math.min(HANDSHAKE_ATTEMPT_MS, Math.max(deadline - Date.now(), 1)),
+        );
+        return;
+      } catch (error) {
+        await client.disconnect().catch(() => undefined);
+        const delayMs =
+          HANDSHAKE_RETRY_DELAYS_MS[
+            Math.min(attempt, HANDSHAKE_RETRY_DELAYS_MS.length) - 1
+          ] ?? 0;
+        if (
+          epoch !== connectEpoch ||
+          Date.now() + delayMs + 1_000 >= deadline
+        ) {
+          throw error;
+        }
+        logger.warn(
+          {
+            attempt,
+            retryInSeconds: delayMs / 1_000,
+            errorMessage:
+              error instanceof Error ? error.message : String(error),
+          },
+          "TeamSpeak login failed; retrying",
+        );
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        if (epoch !== connectEpoch) throw error;
+      }
+    }
+  };
   const bindConnectionLost = (): void => {
     if (connectionLostBound) return;
     connectionLostBound = true;
@@ -350,17 +522,7 @@ export function createTs3Connection(
 
   return {
     connect: async (options?: { skipDuplicateCheck?: boolean }) => {
-      try {
-        await client.connect();
-        await client.waitConnected(
-          AbortSignal.timeout(
-            config.RHAPSOD_TS3_CONNECT_TIMEOUT_SECONDS * 1_000,
-          ),
-        );
-      } catch (error) {
-        await client.disconnect().catch(() => undefined);
-        throw error;
-      }
+      await connectWithRetry();
       if (!options?.skipDuplicateCheck) {
         let entries;
         try {
@@ -420,7 +582,10 @@ export function createTs3Connection(
         }
       }
     },
-    disconnect: () => client.disconnect(),
+    disconnect: () => {
+      connectEpoch++;
+      return client.disconnect();
+    },
     listChannels: async () => {
       const parentOf = (pid: bigint | undefined): number | undefined => {
         if (pid === undefined) return undefined;
