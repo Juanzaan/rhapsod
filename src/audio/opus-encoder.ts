@@ -22,7 +22,8 @@ interface OpusEncoderConfig {
 
 export interface RhapsodOpusEncoder {
   readonly pcmFrameBytes: number;
-  encode(pcm: Uint8Array): Uint8Array;
+  /** Encodes one s16le frame, scaled by `gain` (the !volume) when given. */
+  encode(pcm: Uint8Array, gain?: number): Uint8Array;
   close(): void;
 }
 
@@ -44,19 +45,36 @@ export async function createRhapsodOpusEncoder(
     encoder.setPacketLossPercent(config.packetLossPercent ?? 0);
   }
 
+  const scaled = new Float32Array(SAMPLES_PER_CHANNEL * CHANNELS);
+  const options = {
+    frameSize: SAMPLES_PER_CHANNEL,
+    maxPacketBytes: TS3_MAX_OPUS_BYTES,
+  };
+
   return {
     pcmFrameBytes: PCM_FRAME_BYTES,
-    encode(pcm: Uint8Array): Uint8Array {
+    encode(pcm: Uint8Array, gain = 1): Uint8Array {
       if (pcm.byteLength !== PCM_FRAME_BYTES) {
         throw new RangeError(
           `Expected ${PCM_FRAME_BYTES} PCM bytes, received ${pcm.byteLength}`,
         );
       }
 
-      const packet = encoder.encode(pcm, {
-        frameSize: SAMPLES_PER_CHANNEL,
-        maxPacketBytes: TS3_MAX_OPUS_BYTES,
-      });
+      // The volume is applied in float, not back into int16: at 10% the
+      // curve is -36 dB, and rounding to 16 bits after that left quiet
+      // passages a few bits deep. Listeners raised their client volume to
+      // compensate and heard the rounding as robotic grit (2026-09-30).
+      let packet: Uint8Array;
+      if (gain === 1) {
+        packet = encoder.encode(pcm, options);
+      } else {
+        const view = new DataView(pcm.buffer, pcm.byteOffset, pcm.byteLength);
+        const scale = gain / 32_768;
+        for (let i = 0; i < scaled.length; i++) {
+          scaled[i] = view.getInt16(i * 2, true) * scale;
+        }
+        packet = encoder.encodeFloat(scaled, options);
+      }
       if (packet.byteLength > TS3_MAX_OPUS_BYTES) {
         throw new RangeError(
           `Opus packet exceeds TS3 voice limit: ${packet.byteLength} bytes`,
