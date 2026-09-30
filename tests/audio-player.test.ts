@@ -1,16 +1,18 @@
 import { PassThrough } from "node:stream";
 
+import { createDecoder } from "libopus-wasm";
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  applyGain,
   AudioPlayer,
   type AudioPlayerClock,
   isMidPlayStall,
 } from "../src/audio/audio-player.js";
 import {
+  createRhapsodOpusEncoder,
   PCM_FRAME_BYTES,
   type RhapsodOpusEncoder,
+  SAMPLES_PER_CHANNEL,
 } from "../src/audio/opus-encoder.js";
 
 class ManualClock implements AudioPlayerClock {
@@ -28,8 +30,8 @@ class ManualClock implements AudioPlayerClock {
 
 function setup() {
   const clock = new ManualClock();
-  const encodeMock = vi.fn<(pcm: Uint8Array) => Uint8Array>((pcm) =>
-    pcm.subarray(0, 10),
+  const encodeMock = vi.fn<(pcm: Uint8Array, gain?: number) => Uint8Array>(
+    (pcm) => pcm.subarray(0, 10),
   );
   const encoder: RhapsodOpusEncoder = {
     close: vi.fn(),
@@ -167,6 +169,7 @@ describe("AudioPlayer", () => {
 
     expect(encodeMock).toHaveBeenCalledWith(
       expect.objectContaining({ byteLength: PCM_FRAME_BYTES }),
+      1,
     );
     expect(output.sendVoiceFrame).toHaveBeenCalledTimes(1);
     expect(player.metrics.framesSent).toBe(1);
@@ -364,7 +367,7 @@ describe("AudioPlayer", () => {
     expect(second).toBe(first);
   });
 
-  it("applies the configured gain to encoded frames", () => {
+  it("hands the volume to the encoder instead of rounding it into the PCM", () => {
     const { clock, encodeMock, player } = setup();
     const source = new PassThrough();
     void player.play(source);
@@ -375,51 +378,73 @@ describe("AudioPlayer", () => {
     source.write(frame);
     clock.tick();
 
-    const pcm = encodeMock.mock.calls[0]?.[0];
-    expect(pcm?.[0]).toBe(0x08);
-    expect(pcm?.[1]).toBe(0x08);
+    const [pcm, gain] = encodeMock.mock.calls[0] ?? [];
+    expect(pcm?.[0]).toBe(0x10);
+    expect(pcm?.[1]).toBe(0x10);
+    expect(gain).toBe(0.5);
   });
 });
 
-describe("applyGain", () => {
-  it("returns the same buffer at full gain", () => {
-    const pcm = new Uint8Array([0x34, 0x12, 0x00, 0x80]);
-    expect(applyGain(pcm, 1)).toBe(pcm);
-  });
-
-  it("scales sample amplitudes", () => {
-    const pcm = new Uint8Array(PCM_FRAME_BYTES);
-    pcm[0] = 0xfe;
-    pcm[1] = 0x7f;
-    pcm[2] = 0x00;
-    pcm[3] = 0x80;
-
-    const output = applyGain(pcm, 0.5);
-
-    expect(output[0]).toBe(0xff);
-    expect(output[1]).toBe(0x3f);
-    expect(output[2]).toBe(0x00);
-    expect(output[3]).toBe(0xc0);
-  });
-
-  it("clamps samples to the int16 range", () => {
-    const pcm = new Uint8Array(PCM_FRAME_BYTES);
-    pcm[0] = 0xff;
-    pcm[1] = 0x7f;
-
-    const output = applyGain(pcm, 2);
-
-    expect(output[0]).toBe(0xff);
-    expect(output[1]).toBe(0x7f);
-  });
-
-  it("zeroes the frame at zero gain", () => {
-    const pcm = new Uint8Array(PCM_FRAME_BYTES);
-    pcm.fill(7);
-
-    expect(Array.from(applyGain(pcm, 0))).toEqual(
-      new Array(PCM_FRAME_BYTES).fill(0),
+describe("AudioPlayer at a low volume", () => {
+  it("keeps quiet passages clean", async () => {
+    // A -45 dBFS passage at !volume 10% (-36 dB). Rounding the gained
+    // samples back to int16 before encoding dropped it to about 15 dB SNR,
+    // heard as robotic grit once listeners turned their client up.
+    const gain = 10 ** (-36 / 20);
+    const frames = 100;
+    const amplitude = 10 ** (-45 / 20) * 32_767;
+    const pcm = Buffer.alloc(PCM_FRAME_BYTES * frames);
+    const input: number[] = [];
+    for (let t = 0; t < SAMPLES_PER_CHANNEL * frames; t++) {
+      const value = Math.round(
+        amplitude *
+          (0.6 * Math.sin((2 * Math.PI * 440 * t) / 48_000) +
+            0.4 * Math.sin((2 * Math.PI * 1_320 * t) / 48_000)),
+      );
+      pcm.writeInt16LE(value, t * 4);
+      pcm.writeInt16LE(value, t * 4 + 2);
+      input.push(value);
+    }
+    const encoder = await createRhapsodOpusEncoder({ bitrate: 160_000 });
+    const decoder = await createDecoder({ channels: 2, sampleRate: 48_000 });
+    const output: number[] = [];
+    const clock = new ManualClock();
+    const player = new AudioPlayer(
+      encoder,
+      {
+        sendVoiceFrame: (packet) => {
+          const decoded = decoder.decodeFloat(packet, {
+            frameSize: SAMPLES_PER_CHANNEL,
+          });
+          for (let i = 0; i < decoded.length; i += 2) {
+            output.push(((decoded[i] ?? 0) * 32_768) / gain);
+          }
+        },
+      },
+      clock,
     );
+    try {
+      player.setVolume(gain);
+      const source = new PassThrough();
+      void player.play(source);
+      source.end(pcm);
+      await new Promise((resolve) => setImmediate(resolve));
+      for (let frame = 0; frame < frames; frame++) clock.tick();
+    } finally {
+      encoder.close();
+      decoder.free();
+    }
+
+    const delay = 312;
+    let signal = 0;
+    let noise = 0;
+    for (let i = 20 * SAMPLES_PER_CHANNEL; i < input.length - delay; i++) {
+      const reference = input[i] ?? 0;
+      signal += reference ** 2;
+      noise += (reference - (output[i + delay] ?? 0)) ** 2;
+    }
+    expect(output.length).toBe(input.length);
+    expect(10 * Math.log10(signal / noise)).toBeGreaterThan(20);
   });
 });
 
