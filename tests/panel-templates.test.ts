@@ -1052,15 +1052,16 @@ describe("renderDashboard console", () => {
 describe("hidden-row counter", () => {
   function harness(scroll: { height: number; top: number; client: number }) {
     const rowBottoms = [100, 200, 320];
+    const rows = rowBottoms.map((bottom) => ({
+      style: { visibility: "" },
+      getBoundingClientRect: () => ({ bottom }),
+    }));
     const box = {
       scrollHeight: scroll.height,
       scrollTop: scroll.top,
       clientHeight: scroll.client,
       getBoundingClientRect: () => ({ bottom: 300 }),
-      querySelectorAll: () =>
-        rowBottoms.map((bottom) => ({
-          getBoundingClientRect: () => ({ bottom }),
-        })),
+      querySelectorAll: () => rows,
     };
     const btn = { hidden: true, textContent: "" };
     const code = scriptBlocks(
@@ -1100,19 +1101,23 @@ describe("hidden-row counter", () => {
       () => 0,
     );
     api.paintMore("box", "btn", [["li", "pista", "pistas"]]);
-    return btn;
+    return { ...btn, rows: rows.map((r) => r.style.visibility) };
   }
 
   it("counts rows below the edge while the list can still scroll", () => {
     const btn = harness({ height: 400, top: 0, client: 300 });
     expect(btn.hidden).toBe(false);
     expect(btn.textContent).toBe("1 pista más abajo");
+    // The counted row is blanked instead of showing a cut-off sliver.
+    expect(btn.rows).toEqual(["", "", "hidden"]);
   });
 
   it("stays hidden when the list does not scroll or is at its end", () => {
     // Round 6 found it claiming hidden rows on a list that fit.
     expect(harness({ height: 300, top: 0, client: 300 }).hidden).toBe(true);
-    expect(harness({ height: 400, top: 100, client: 300 }).hidden).toBe(true);
+    const end = harness({ height: 400, top: 100, client: 300 });
+    expect(end.hidden).toBe(true);
+    expect(end.rows).toEqual(["", "", ""]);
   });
 });
 

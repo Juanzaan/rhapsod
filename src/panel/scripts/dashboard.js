@@ -836,16 +836,16 @@ function paintMore(boxId, buttonId, units) {
   // Rows under the bottom fade count as hidden: they read as cut off.
   var limit = box.getBoundingClientRect().bottom - 24;
   // At the end of the list (or with nothing to scroll) nothing is hidden.
-  if (box.scrollHeight - box.scrollTop - box.clientHeight < 1) {
-    btn.hidden = true;
-    return;
-  }
+  var atEnd = box.scrollHeight - box.scrollTop - box.clientHeight < 1;
   var parts = [];
   for (var u = 0; u < units.length; u++) {
     var rows = box.querySelectorAll(units[u][0]);
     var hidden = 0;
     for (var i = 0; i < rows.length; i++) {
-      if (rows[i].getBoundingClientRect().bottom > limit) hidden++;
+      var cut = !atEnd && rows[i].getBoundingClientRect().bottom > limit;
+      // A counted row is blanked out, not left as an unreadable sliver.
+      if (rows[i].style) rows[i].style.visibility = cut ? "hidden" : "";
+      if (cut) hidden++;
     }
     if (hidden > 0)
       parts.push(hidden + " " + (hidden === 1 ? units[u][1] : units[u][2]));
@@ -856,7 +856,7 @@ function paintMore(boxId, buttonId, units) {
 function paintMores() {
   paintMore("ql", "qlMore", [[":scope > li", "pista", "pistas"]]);
   paintMore("srvTree", "srvMore", [
-    [".chrow", "canal", "canales"],
+    [".chhead", "canal", "canales"],
     [".users li", "usuario", "usuarios"],
   ]);
 }

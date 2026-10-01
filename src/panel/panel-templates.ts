@@ -211,9 +211,6 @@ export function renderDashboard(status: PanelStatus): string {
     .vg input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:14px;height:14px;border-radius:50%;background:var(--ac);border:2px solid #0b0b0d;box-shadow:0 0 0 1px var(--ac);cursor:pointer}
     .vg input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:var(--ac);border:2px solid #0b0b0d;box-shadow:0 0 0 1px var(--ac);cursor:pointer}
     .vg input[type=range]::-moz-range-track{height:4px;border-radius:4px;background:#2b2b30}
-    .ql::-webkit-scrollbar,.dw::-webkit-scrollbar{width:8px}
-    .ql::-webkit-scrollbar-thumb,.dw::-webkit-scrollbar-thumb{background:#2b2b30;border-radius:4px}
-    .ql::-webkit-scrollbar-track,.dw::-webkit-scrollbar-track{background:transparent}
     .sg{display:flex;border:1px solid #3a3a40;border-radius:8px;overflow:hidden}
     .sg button{flex:1;background:transparent;border:none;color:var(--dm);padding:.55rem .2rem;font-size:.75rem;letter-spacing:.12em;cursor:pointer}
     .sg button.on{background:var(--ac);color:#0b0b0d;font-weight:700}
@@ -299,7 +296,7 @@ export function renderDashboard(status: PanelStatus): string {
       <div class="cd request-card">
           <div class="ct"><label for="pi">¿Qué escuchamos?</label></div>
         <div class="ir">
-          <input id="pi" placeholder="Un artista, una canción o un enlace…" onkeydown="if(event.key==='Enter')play()">
+          <input id="pi" placeholder="Artista, canción o enlace…" onkeydown="if(event.key==='Enter')play()">
           <button class="go" id="addTrack" onclick="play()">Agregar a la cola</button>
         </div>
           <label class="nx"><input type="checkbox" id="nxChk"> Poner como próxima</label>
@@ -315,11 +312,11 @@ export function renderDashboard(status: PanelStatus): string {
         <div class="ct"><span>Tu sonido</span></div>
         <div class="mini-label">Repetir</div>
         <div class="sg" id="loopSeg">
-          <button data-l="off" onclick="cmd('loop off')">SIN REPETIR</button><button data-l="track" onclick="cmd('loop track')">PISTA</button><button data-l="queue" onclick="cmd('loop queue')">COLA</button>
+          <button data-l="off" onclick="cmd('loop off')">Sin repetir</button><button data-l="track" onclick="cmd('loop track')">Pista</button><button data-l="queue" onclick="cmd('loop queue')">Cola</button>
         </div>
         <div class="mini-label">Autoplay</div>
         <p class="helper">Que la música siga cuando termine la cola.</p>
-        <div class="sg" id="autoSeg"><button data-a="on" aria-pressed="${status.autoplay === true}" class="${status.autoplay === true ? "on" : ""}" onclick="cmd('autoplay on')">ENCENDIDO</button><button data-a="off" aria-pressed="${status.autoplay !== true}" class="${status.autoplay === true ? "" : "on"}" onclick="cmd('autoplay off')">APAGADO</button></div>
+        <div class="sg" id="autoSeg"><button data-a="on" aria-pressed="${status.autoplay === true}" class="${status.autoplay === true ? "on" : ""}" onclick="cmd('autoplay on')">Encendido</button><button data-a="off" aria-pressed="${status.autoplay !== true}" class="${status.autoplay === true ? "" : "on"}" onclick="cmd('autoplay off')">Apagado</button></div>
         <div class="mini-label"><label for="radioQuery">Radio en directo</label></div>
         <div class="ir"><input id="radioQuery" placeholder="Nombre o género…" onkeydown="if(event.key==='Enter')tuneRadio()"><button class="go" id="radioTune" onclick="tuneRadio()">Sintonizar</button></div>
         <div class="mini-label">Biblioteca del bot</div>
@@ -405,7 +402,7 @@ export function renderSettingsPage(): string {
     </div>
     <div class="nr">${statusPillHtml()}</div>
   </nav>
-  <main class="mn"><header class="page-heading"><div><h1>Configuración</h1><p>Conexión, sonido y servicios. Los secretos sin modificar se conservan al guardar.</p></div><div class="page-tools">${SCENE_TOOLS_HTML}<a href="/setup">Abrir asistente ↗</a></div></header><div class="settings-grid" id="ct"><div class="cd"><div class="em">Cargando...</div></div></div></main>
+  <main class="mn"><header class="page-heading"><div><h1>Configuración</h1><p>Conexión, sonido y servicios. Los secretos sin modificar se conservan al guardar. ¿Primera vez? <a href="/setup">Abrir el asistente</a>.</p></div><div class="page-tools">${SCENE_TOOLS_HTML}</div></header><div class="settings-grid" id="ct"><div class="cd"><div class="em">Cargando...</div></div></div></main>
   <div class="toast" id="toast"></div>
   <script>
 ${AMBIENCE_JS}
@@ -447,8 +444,8 @@ export function renderCommandsPage(): string {
     </div>
     <div class="nr">${statusPillHtml()}</div>
   </nav>
-  <main class="mn"><header class="page-heading"><div><h1>Comandos</h1><p>Se usan en el chat de TeamSpeak. Clic en uno para copiarlo.</p></div><div class="page-tools">${SCENE_TOOLS_HTML}<span class="command-count" id="commandCount"></span></div></header>
-    <label class="field-label" for="sr">Buscar por nombre, alias o descripción</label><input class="sr" id="sr" placeholder="Probá con play, radio o playlist…" oninput="filter()">
+  <main class="mn"><header class="page-heading"><div><h1>Comandos</h1><p>Se usan en el chat de TeamSpeak. Clic en uno para copiarlo.</p></div><div class="page-tools">${SCENE_TOOLS_HTML}</div></header>
+    <label class="field-label" for="sr">Buscar por nombre, alias o descripción <span class="command-count" id="commandCount"></span></label><input class="sr" id="sr" placeholder="Probá con play, radio o playlist…" oninput="filter()">
     <div class="command-grid" id="ls"><div class="cd"><div class="em">Cargando comandos…</div></div></div>
   </main>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
