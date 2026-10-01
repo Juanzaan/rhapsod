@@ -57,9 +57,11 @@ function load() {
           var e = entries[j];
           if (e.editable === false) {
             h +=
-              '<div class="f"><label>' +
+              '<div class="f"><div class="fl"><span>' +
+              esc(e.description || e.key) +
+              ' (solo lectura)</span><code class="fk">' +
               esc(e.key) +
-              ' (solo lectura)</label><div class="h">' +
+              '</code></div><div class="h">' +
               esc(e.value || "") +
               "</div></div>";
             continue;
@@ -217,6 +219,7 @@ function markSaved() {
 }
 
 initAmbience();
+watchStatus();
 var settingsRoot = document.getElementById("ct");
 if (settingsRoot && settingsRoot.addEventListener)
   settingsRoot.addEventListener("input", markDirty);

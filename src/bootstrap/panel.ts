@@ -68,6 +68,7 @@ export interface PanelStatusSources {
   readonly connection: Pick<Ts3Connection, "getCurrentChannelId">;
   readonly playback: Pick<
     YoutubePlaybackService,
+    | "autoplayEnabled"
     | "current"
     | "loopMode"
     | "playbackPositionMs"
@@ -120,6 +121,7 @@ export function panelStatus(sources: PanelStatusSources): PanelStatus {
     playerState: playback.playerState,
     volume: playback.volume,
     loopMode: playback.loopMode,
+    autoplay: playback.autoplayEnabled,
     // Songs confirmed on live radio count as plays too.
     tracksPlayed: playback.tracksPlayed + scrobbler.confirmedCount,
     uptimeMs: Math.round(uptimeSeconds * 1000),

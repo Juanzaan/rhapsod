@@ -57,6 +57,7 @@ describe("panelStatus", () => {
         disconnectSummary: () => ({ count: 0 }),
       },
       playback: {
+        autoplayEnabled: true,
         current,
         loopMode: "off",
         playbackPositionMs: 1_500,
@@ -82,6 +83,7 @@ describe("panelStatus", () => {
       }),
     );
     expect(status).toMatchObject({
+      autoplay: true,
       connected: true,
       currentChannelId: 5,
       currentTitle: "Artist - Song",

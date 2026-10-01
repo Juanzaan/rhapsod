@@ -6,6 +6,7 @@ import {
   AMBIENT_LAYER_HTML,
   BRAND_HTML,
   SCENE_TOOLS_HTML,
+  statusPillHtml,
 } from "./dashboard-design.js";
 import { PAGE_CSS } from "./page-design.js";
 import { FONT_FACE_CSS } from "./panel-fonts.js";
@@ -28,7 +29,7 @@ body{font-family:var(--sn);background:var(--bg);color:var(--tx);min-height:100vh
 .nk{padding:.4rem .75rem;border-radius:8px;color:var(--dm);text-decoration:none;font-size:.8125rem;transition:background .15s,color .15s}
 .nk:hover,.nk.a{background:#1e1e22;color:var(--tx)}
 .cd{background:var(--pn);border:1px solid var(--ln);border-radius:8px;padding:1.1rem 1.25rem}
-.ct{font-size:.6875rem;color:var(--dm);text-transform:uppercase;letter-spacing:.24em;margin-bottom:1rem}
+.ct{font-size:.75rem;color:var(--dm);text-transform:uppercase;letter-spacing:.24em;margin-bottom:1rem}
 .em{color:var(--ft);font-size:.8125rem;text-align:center;padding:1rem}
 .lk{color:var(--bl);text-decoration:none}
 .toast{position:fixed;bottom:1.5rem;right:1.5rem;background:#0b0b0d;border:1px solid var(--ln);border-left:3px solid var(--ac);color:var(--tx);padding:.75rem 1rem;border-radius:8px;font-size:.8125rem;opacity:0;transform:translateY(8px);transition:opacity .25s,transform .25s;pointer-events:none;z-index:99;max-width:min(420px,90vw)}
@@ -39,9 +40,9 @@ body{font-family:var(--sn);background:var(--bg);color:var(--tx);min-height:100vh
 .chrow.here{border-color:var(--ac);background:#141207}
 .chhead{display:flex;align-items:center;gap:.6rem}
 .chnm{font-weight:650;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.chct{font-family:var(--mn);font-size:.6875rem;color:var(--dm)}
-.botpill{font-family:var(--mn);font-size:.6875rem;letter-spacing:.18em;background:var(--ac);color:#0b0b0d;border-radius:4px;padding:.15rem .45rem;font-weight:700}
-.spacer{text-align:center;color:var(--ft);font-size:.6875rem;letter-spacing:.3em;text-transform:uppercase;padding:.9rem 0 .4rem}
+.chct{font-family:var(--mn);font-size:.75rem;color:var(--dm)}
+.botpill{font-family:var(--mn);font-size:.75rem;letter-spacing:.18em;background:var(--ac);color:#0b0b0d;border-radius:4px;padding:.15rem .45rem;font-weight:700}
+.spacer{text-align:center;color:var(--ft);font-size:.75rem;letter-spacing:.3em;text-transform:uppercase;padding:.9rem 0 .4rem}
 .users{margin:.5rem 0 0 1.2rem;padding:0;list-style:none}
 .users li{font-size:.8125rem;color:var(--dm);padding:.12rem 0;display:flex;gap:.45rem;align-items:center}
 .users li::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--bl);flex-shrink:0}
@@ -106,13 +107,13 @@ export function renderSetupWizard(): string {
     .tr.ok{display:block;background:#0b1f14;color:var(--ac);border:1px solid #14532d}
     .tr.fl{display:block;background:#220d0d;color:var(--rd);border:1px solid #7f1d1d}
     .tr.ld{display:block;background:#0b0b0d;color:var(--dm);border:1px solid var(--ln)}
-    .ob{display:inline-block;background:#0f0f12;color:var(--dm);border:1px solid var(--ln);font-size:.6875rem;padding:.1rem .4rem;border-radius:4px;margin-left:.3rem}
+    .ob{display:inline-block;background:#0f0f12;color:var(--dm);border:1px solid var(--ln);font-size:.75rem;padding:.1rem .4rem;border-radius:4px;margin-left:.3rem}
     .wt{text-align:center;margin-bottom:1.5rem}
     .wt h1{font-size:1.8rem;margin-bottom:.5rem}
     .wt p{color:var(--dm);font-size:.9375rem;line-height:1.5}
     .fe{display:flex;align-items:center;gap:.75rem;padding:.5rem 0}
     .fi{width:32px;height:32px;background:#0f0f12;border:1px solid var(--ln);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0}
-    .fi .fn{font-family:var(--mn);font-size:.6875rem;font-weight:700;color:var(--ac);letter-spacing:.05em}
+    .fi .fn{font-family:var(--mn);font-size:.75rem;font-weight:700;color:var(--ac);letter-spacing:.05em}
     .ft{font-size:.8125rem}
     .ft strong{color:var(--tx)}
     .ft span{color:var(--dm)}
@@ -185,7 +186,7 @@ export function renderDashboard(status: PanelStatus): string {
     .ct .rv{color:var(--ft);letter-spacing:.05em;text-transform:none}
     .deck{background:#0b0b0d;border:1px solid var(--ln);border-radius:8px;padding:1rem 1.1rem;margin-bottom:1rem;box-shadow:inset 0 2px 10px rgba(0,0,0,.65)}
     .nt{font-size:1.5rem;font-weight:650;letter-spacing:-.01em;margin-bottom:.25rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .ns{font-family:var(--mn);font-size:.6875rem;letter-spacing:.25em;color:var(--ac);margin-bottom:.75rem;min-height:1rem}
+    .ns{font-family:var(--mn);font-size:.75rem;letter-spacing:.25em;color:var(--ac);margin-bottom:.75rem;min-height:1rem}
     .tm{display:flex;justify-content:space-between;font-family:var(--mn);font-size:.8125rem;color:var(--ac);margin:.45rem 0 1rem;font-variant-numeric:tabular-nums}
     .tm .tt{color:var(--ft)}
     .sk{height:14px;background:#0a0a0c;border:1px solid var(--ln);border-radius:8px;cursor:pointer;position:relative;overflow:hidden}
@@ -207,14 +208,14 @@ export function renderDashboard(status: PanelStatus): string {
     .ql::-webkit-scrollbar-thumb,.dw::-webkit-scrollbar-thumb{background:#2b2b30;border-radius:4px}
     .ql::-webkit-scrollbar-track,.dw::-webkit-scrollbar-track{background:transparent}
     .sg{display:flex;border:1px solid #3a3a40;border-radius:8px;overflow:hidden}
-    .sg button{flex:1;background:transparent;border:none;color:var(--dm);padding:.55rem .2rem;font-size:.6875rem;letter-spacing:.12em;cursor:pointer}
+    .sg button{flex:1;background:transparent;border:none;color:var(--dm);padding:.55rem .2rem;font-size:.75rem;letter-spacing:.12em;cursor:pointer}
     .sg button.on{background:var(--ac);color:#0b0b0d;font-weight:700}
     .ql{list-style:none;max-height:230px;overflow-y:auto}
     .qi{padding:.45rem 0;border-bottom:1px solid #232327;font-size:.8125rem;display:flex;gap:.6rem;align-items:center}
     .qi:last-child{border-bottom:none}
     .qn{font-family:var(--mn);color:var(--ft);min-width:24px;font-size:.75rem}
     .qt{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-    .qr{color:var(--bl);font-size:.6875rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px;flex-shrink:0}
+    .qr{color:var(--bl);font-size:.75rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px;flex-shrink:0}
     .qx{background:none;border:1px solid #3a3a40;color:var(--dm);border-radius:8px;width:26px;height:26px;cursor:pointer;font-size:.8125rem;line-height:1;flex-shrink:0}
     .qx:hover{color:var(--rd);border-color:var(--rd)}
     .cnm{color:var(--bl);font-weight:600;white-space:nowrap;flex-shrink:0}
@@ -231,7 +232,7 @@ export function renderDashboard(status: PanelStatus): string {
     .stt{background:#0b0b0d;border:1px solid var(--ln);border-radius:8px;padding:.7rem .4rem;text-align:center}
     .sv{font-family:var(--mn);font-size:1.25rem;color:var(--tx);font-variant-numeric:tabular-nums}
     .sv.am{color:var(--ac)}
-    .sl{font-size:.6875rem;color:var(--dm);text-transform:uppercase;letter-spacing:.15em;margin-top:.25rem}
+    .sl{font-size:.75rem;color:var(--dm);text-transform:uppercase;letter-spacing:.15em;margin-top:.25rem}
     .dw{background:#0a0a0c;border:1px solid var(--ln);border-radius:8px;padding:1rem;font-family:var(--mn);font-size:.75rem;line-height:1.5;white-space:pre-wrap;word-break:break-word;max-height:280px;overflow-y:auto;display:none;color:#c9c9ce}
     .dw.open{display:block}
     .dwb{display:flex;justify-content:flex-end;margin-bottom:.5rem}
@@ -253,7 +254,7 @@ export function renderDashboard(status: PanelStatus): string {
       <a class="nk" href="/commands" id="nc">Comandos</a>
     </div>
     <div class="nr">
-      <div class="status ${connected ? "on" : ""}" id="lamp"><span class="dot ${connected ? "on" : "off"}" id="dot"></span><span class="st" id="stxt">${connected ? "Conectado" : "Desconectado"}</span></div>
+      ${statusPillHtml(connected)}
     </div>
   </nav>
   <main class="mn">
@@ -267,12 +268,11 @@ export function renderDashboard(status: PanelStatus): string {
         <ul class="notice-list" id="noticeList"></ul>
       </section>
       <div class="cd player-card" id="playerCard" data-playing="${playerState === "playing"}">
-        <div class="ct"><span>En reproducción</span></div>
         <div class="deck">
           <div class="record-stage" aria-hidden="true"><div class="record" id="record"><div class="record-label"><b>r.</b>rhapsod</div></div><i class="shine"></i><div class="tonearm"><i class="arm"></i><i class="head"></i><i class="pivot"></i></div></div>
           <div class="ns-row"><div class="ns" id="nsState">${stateLabel}</div><span class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span></div>
           <div class="nt" id="nt">${title}</div>
-          <div class="track-detail" id="trackDetail">${esc(status.currentArtist || "Elegí un tema y compartí el momento.")}</div>
+          <div class="track-detail" id="trackDetail">${esc(status.currentArtist || (status.currentTitle ? "" : "Elegí un tema y compartí el momento."))}</div>
           <div class="progress-block"><div class="sk" id="seek" role="slider" tabindex="0" aria-label="Posición de reproducción" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" title="Cambiar posición"><div class="skf" id="seekf"></div><span class="sk-tip" id="skTip" aria-hidden="true"></span></div>
           <div class="tm"><span id="tcur">${timeCur}</span><span class="tt" id="tdur">${timeDur}</span></div></div>
         </div>
@@ -311,7 +311,7 @@ export function renderDashboard(status: PanelStatus): string {
         </div>
         <div class="mini-label">Autoplay</div>
         <p class="helper">Que la música siga cuando termine la cola.</p>
-        <div class="sg"><button onclick="cmd('autoplay on')">ACTIVAR</button><button onclick="cmd('autoplay off')">DESACTIVAR</button></div>
+        <div class="sg" id="autoSeg"><button data-a="on" aria-pressed="${status.autoplay === true}" class="${status.autoplay === true ? "on" : ""}" onclick="cmd('autoplay on')">ACTIVAR</button><button data-a="off" aria-pressed="${status.autoplay !== true}" class="${status.autoplay === true ? "" : "on"}" onclick="cmd('autoplay off')">DESACTIVAR</button></div>
         <div class="mini-label"><label for="radioQuery">Radio en directo</label></div>
         <div class="ir"><input id="radioQuery" placeholder="Nombre o género…" onkeydown="if(event.key==='Enter')tuneRadio()"><button class="go" id="radioTune" onclick="tuneRadio()">Sintonizar</button></div>
         <div class="mini-label">Biblioteca del bot</div>
@@ -393,6 +393,7 @@ export function renderSettingsPage(): string {
       <a class="nk a" href="/settings">Config</a>
       <a class="nk" href="/commands">Comandos</a>
     </div>
+    <div class="nr">${statusPillHtml()}</div>
   </nav>
   <main class="mn"><header class="page-heading"><div><h1>Configuración</h1><p>Conexión, sonido y servicios. Los secretos sin modificar se conservan al guardar.</p></div><div class="page-tools">${SCENE_TOOLS_HTML}<a href="/setup">Abrir asistente ↗</a></div></header><div class="settings-grid" id="ct"><div class="cd"><div class="em">Cargando...</div></div></div></main>
   <div class="toast" id="toast"></div>
@@ -420,7 +421,7 @@ export function renderCommandsPage(): string {
     .cn{color:var(--ac);font-family:var(--mn);font-size:.9375rem;font-weight:600}
     .ca{color:var(--ft);font-size:.8125rem;font-family:var(--mn)}
     .cd2{color:var(--dm);font-size:.8125rem;margin-top:.15rem}
-    .cg{font-size:.6875rem;background:#0f0f12;color:var(--dm);border:1px solid var(--ln);padding:.1rem .4rem;border-radius:4px;margin-left:.5rem;letter-spacing:.1em}
+    .cg{font-size:.75rem;background:#0f0f12;color:var(--dm);border:1px solid var(--ln);padding:.1rem .4rem;border-radius:4px;margin-left:.5rem;letter-spacing:.1em}
     ${PAGE_CSS}
   </style>
 </head>
@@ -434,6 +435,7 @@ export function renderCommandsPage(): string {
       <a class="nk" href="/settings">Config</a>
       <a class="nk a" href="/commands">Comandos</a>
     </div>
+    <div class="nr">${statusPillHtml()}</div>
   </nav>
   <main class="mn"><header class="page-heading"><div><h1>Comandos</h1><p>Se usan en el chat de TeamSpeak. Clic en uno para copiarlo.</p></div><div class="page-tools">${SCENE_TOOLS_HTML}<span class="command-count" id="commandCount"></span></div></header>
     <label class="field-label" for="sr">Buscar por nombre, alias o descripción</label><input class="sr" id="sr" placeholder="Probá con play, radio o playlist…" oninput="filter()">
@@ -456,9 +458,6 @@ export function renderServerPage(): string {
   <title>Rhapsod - Servidor</title>
   <style>${CHROME_CSS}
     .mn{max-width:720px;margin:0 auto;padding:1.5rem}
-    .liveb{font-family:var(--mn);font-size:.6875rem;letter-spacing:.22em;padding:.32rem .6rem;border:1px solid #3a3a40;border-radius:4px;color:var(--ft);white-space:nowrap}
-    .liveb.on{color:var(--ac);border-color:var(--ac)}
-    .liveb.fb{color:var(--ac);border-color:var(--ac)}
     ${PAGE_CSS}
   </style>
 </head>
@@ -473,16 +472,16 @@ export function renderServerPage(): string {
       <a class="nk" href="/commands">Comandos</a>
     </div>
     <div class="nr">
-      <div class="liveb" id="live">···</div>
+      ${statusPillHtml()}
     </div>
   </nav>
   <main class="mn"><header class="page-heading"><div><h1>Servidor</h1><p>Explorá el servidor, encontrá a tus amigos y elegí dónde suena Rhapsod.</p></div><div class="page-tools">${SCENE_TOOLS_HTML}</div></header>
-    <div class="server-metrics"><div class="metric"><strong id="channelCount">0</strong><span>Canales conocidos</span></div><div class="metric"><strong id="peopleCount">0</strong><span>Usuarios visibles</span></div><div class="metric"><strong id="emptyCount">0</strong><span>Sin usuarios visibles</span></div></div>
+    <div class="server-metrics"><div class="metric"><strong id="channelCount">0</strong><span>Canales conocidos</span></div><div class="metric"><strong id="peopleCount">0</strong><span>Usuarios visibles</span></div><div class="metric"><strong id="emptyCount">0</strong><span>Canales vacíos</span></div></div>
     <div class="server-layout"><div class="cd">
       <label class="field-label" for="channelSearch">Buscar un canal o usuario</label><div class="toolbar"><input class="sr" id="channelSearch" placeholder="Nombre del canal o usuario…" oninput="filterChannels()"><button class="btn secondary" onclick="expandChannels(true)">Expandir</button><button class="btn secondary" onclick="expandChannels(false)">Contraer</button></div>
       <div class="ct"><span>Canales</span></div>
       <div id="tree"><div class="em">Conectando…</div></div>
-      <div class="em" id="treeHint" style="font-size:.75rem">Click en un canal para mover el bot ahí</div>
+      <div class="em" id="treeHint" style="font-size:.75rem">Hacé clic en un canal para mover el bot ahí</div>
     </div><aside class="cd server-side"><div class="ct">Visibilidad del servidor</div><p class="visibility-note" id="visibilityNote">Consultando los canales disponibles para la identidad del bot.</p><p>Los canales vacíos también aparecen cuando TeamSpeak entrega la lista completa. La visibilidad de usuarios puede depender de las suscripciones del bot.</p><p>El árbol completo se descubre en segundo plano al iniciar y cada diez minutos; una vista limitada significa que el análisis aún no termina o falló. No requiere permisos especiales.</p><button class="btn secondary" onclick="poll()">Actualizar vista</button></aside></div>
   </main>
   <div class="toast" id="toast"></div>

@@ -448,8 +448,10 @@ function syncSeg(id, attr, val) {
   var btns = document.getElementById(id).querySelectorAll("button");
   for (var i = 0; i < btns.length; i++) {
     var b = btns[i];
-    if (b.getAttribute(attr) === val) b.classList.add("on");
+    var on = b.getAttribute(attr) === val;
+    if (on) b.classList.add("on");
     else b.classList.remove("on");
+    b.setAttribute("aria-pressed", String(on));
   }
 }
 
@@ -506,9 +508,7 @@ function refresh() {
         d.currentTitle || "Tu próxima canción empieza acá.";
       document.getElementById("trackDetail").textContent =
         d.currentArtist ||
-        (d.currentTitle
-          ? "Una sesión para compartir."
-          : "Elegí un tema y compartí el momento.");
+        (d.currentTitle ? "" : "Elegí un tema y compartí el momento.");
       document.getElementById("nt").title = d.currentTitle || "";
       fxCount(
         document.getElementById("qc"),
@@ -521,6 +521,7 @@ function refresh() {
         paintVolume(d.volume);
       }
       syncSeg("loopSeg", "data-l", d.loopMode || "off");
+      syncSeg("autoSeg", "data-a", d.autoplay ? "on" : "off");
       if (typeof d.tracksPlayed === "number" && d.tracksPlayed !== lastTracks) {
         lastTracks = d.tracksPlayed;
         fxCount(document.getElementById("stTracks"), d.tracksPlayed);
@@ -538,13 +539,7 @@ function refresh() {
       }
       // Connection only: playback state lives in the player card, and the
       // nav repeating it was the redundancy the old lamp had.
-      document.getElementById("lamp").className =
-        "status" + (d.connected ? " on" : "");
-      document.getElementById("dot").className =
-        "dot " + (d.connected ? "on" : "off");
-      document.getElementById("stxt").textContent = d.connected
-        ? "Conectado"
-        : "Desconectado";
+      paintStatus(d.connected ? "on" : "off");
       var qj = JSON.stringify(d.queue || []);
       if (qj !== lastQ) {
         lastQ = qj;
@@ -607,10 +602,7 @@ function refresh() {
       fails++;
       if (fails > 1) {
         setOffline(true);
-        var txt = document.getElementById("stxt");
-        if (txt) txt.textContent = "Reconectando…";
-        var dotEl = document.getElementById("dot");
-        if (dotEl) dotEl.className = "dot off";
+        paintStatus("retry");
       }
     });
 }

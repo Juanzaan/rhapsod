@@ -61,6 +61,26 @@ function initAmbience() {
     document.addEventListener("visibilitychange", applyMotion);
   restoreSongHue();
   initMotion();
+  initScrollFade();
+}
+// Firefox and Safari lack scroll-driven animations, and with the bars
+// hidden a clipped list gave no hint there was more. Same fade, set by hand.
+function initScrollFade() {
+  if (!window.CSS || !CSS.supports || !document.querySelectorAll) return;
+  if (CSS.supports("animation-timeline", "scroll()")) return;
+  var paint = function () {
+    var els = document.querySelectorAll("#srvTree,.ql,.dw");
+    for (var i = 0; i < els.length; i++) {
+      var el = /** @type {HTMLElement} */ (els[i]);
+      var rest = el.scrollHeight - el.clientHeight - el.scrollTop;
+      el.style.setProperty("--sf-top", el.scrollTop > 2 ? "32px" : "0px");
+      el.style.setProperty("--sf-bot", rest > 2 ? "32px" : "0px");
+    }
+  };
+  document.addEventListener("scroll", paint, true);
+  window.addEventListener("resize", paint);
+  setInterval(paint, 1000);
+  paint();
 }
 function motionOn() {
   var root = document.documentElement;
@@ -327,4 +347,39 @@ function setHtml(el, html) {
   el.innerHTML = html;
   if (lastHtml) lastHtml.set(el, html);
   return true;
+}
+
+// One connection pill in the nav of every page, same words everywhere.
+function paintStatus(state) {
+  var lamp = document.getElementById("lamp");
+  if (!lamp) return;
+  lamp.className = "status" + (state === "on" ? " on" : "");
+  var dot = document.getElementById("dot");
+  if (dot) dot.className = "dot " + (state === "on" ? "on" : "off");
+  var txt = document.getElementById("stxt");
+  if (txt)
+    txt.textContent =
+      state === "on"
+        ? "Conectado"
+        : state === "retry"
+          ? "Reconectando…"
+          : "Desconectado";
+}
+function watchStatus() {
+  var check = function () {
+    fetch("/api/health", { headers: { "content-type": "application/json" } })
+      .then(function (r) {
+        return r.json();
+      })
+      .then(function (d) {
+        paintStatus(d.connected ? "on" : d.reconnecting ? "retry" : "off");
+      })
+      .catch(function () {
+        paintStatus("retry");
+      });
+  };
+  check();
+  setInterval(function () {
+    if (!document.hidden) check();
+  }, 5000);
 }

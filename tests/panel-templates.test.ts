@@ -238,6 +238,10 @@ describe("renderDashboard console", () => {
     const loopSeg = makeEl();
     loopSeg.querySelectorAll = () => loopButtons;
     byId.set("loopSeg", loopSeg);
+    const autoButtons = ["on", "off"].map((v) => makeEl({ "data-a": v }));
+    const autoSeg = makeEl();
+    autoSeg.querySelectorAll = () => autoButtons;
+    byId.set("autoSeg", autoSeg);
     const getEl = (id: string): FakeEl => {
       let el = byId.get(id);
       if (!el) {
@@ -264,6 +268,7 @@ describe("renderDashboard console", () => {
       playerState: "playing",
       volume: 25,
       loopMode: "track",
+      autoplay: true,
       tracksPlayed: 7,
       uptimeMs: 3_600_000,
       disconnects: { count: 2 },
@@ -347,6 +352,16 @@ describe("renderDashboard console", () => {
     expect(getEl("nsState").textContent).toBe("SONANDO");
     expect(getEl("lamp").className).toBe("status on");
     expect(getEl("stxt").textContent).toBe("Conectado");
+    // Autoplay used to show neither button as active.
+    expect(autoButtons.map((b) => b.attrs["aria-pressed"])).toEqual([
+      "true",
+      "false",
+    ]);
+    expect(loopButtons.map((b) => b.attrs["aria-pressed"])).toEqual([
+      "false",
+      "true",
+      "false",
+    ]);
     expect(getEl("ppBtn").innerHTML).toContain("9208");
     expect(getEl("vol").value).toBe(25);
     expect(getEl("volv").textContent).toBe("25%");
@@ -411,6 +426,16 @@ describe("renderDashboard console", () => {
     for (const html of pages.slice(0, 3)) {
       expect(html).toContain('rhapsod<b aria-hidden="true"></b>');
     }
+    // One connection pill with the same words on every page; the server
+    // page used to say "EN VIVO" in its own style.
+    for (const html of [...pages.slice(0, 3), renderServerPage()]) {
+      expect(html).toContain('<div class="status');
+      expect(html).toContain('id="stxt"');
+      expect(html).not.toContain("EN VIVO");
+    }
+    for (const html of [pages[1], pages[2], renderServerPage()]) {
+      expect(html).toContain("watchStatus();");
+    }
     // Every page hides scrollbars and loads the self-hosted faces.
     for (const html of pages) {
       expect(html).toContain('<div class="intro" id="intro"');
@@ -446,7 +471,7 @@ describe("renderDashboard console", () => {
 
   it("server page has live tree markers", () => {
     const html = renderServerPage();
-    for (const id of ["tree", "live"]) {
+    for (const id of ["tree", "lamp"]) {
       expect(html).toContain(`id="${id}"`);
     }
     expect(html).toContain("/api/server");
@@ -559,7 +584,7 @@ describe("renderDashboard console", () => {
       clients: [],
     });
     expect(getEl("treeHint").textContent).toBe(
-      "Click en un canal para mover el bot ahí",
+      "Hacé clic en un canal para mover el bot ahí",
     );
 
     api.poll();

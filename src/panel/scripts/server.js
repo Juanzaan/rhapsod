@@ -45,8 +45,8 @@ function render(view) {
       : "Vista limitada: el análisis de canales aún no termina o falló. Se muestran canales con usuarios visibles.";
   document.getElementById("treeHint").textContent =
     view && view.mode === "full"
-      ? "Click en un canal para mover el bot ahí"
-      : "Vista parcial: revisá permisos limitados o la conexión · click para mover el bot";
+      ? "Hacé clic en un canal para mover el bot ahí"
+      : "Vista parcial: revisá permisos limitados o la conexión · clic para mover el bot";
   if (chs.length === 0) {
     setHtml(
       box,
@@ -155,14 +155,9 @@ function poll() {
     })
     .then(function (d) {
       render(d);
-      var badge = document.getElementById("live");
-      badge.textContent = "EN VIVO";
-      badge.className = "liveb on";
     })
     .catch(function () {
-      var badge = document.getElementById("live");
-      badge.textContent = "SIN CONEXIÓN";
-      badge.className = "liveb";
+      paintStatus("retry");
     });
 }
 
@@ -178,6 +173,7 @@ function live() {
 
 (function init() {
   initAmbience();
+  watchStatus();
   if (document.readyState === "complete") live();
   else window.addEventListener("load", live);
 })();

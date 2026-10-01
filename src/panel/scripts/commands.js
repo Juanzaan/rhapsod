@@ -130,6 +130,7 @@ function filter() {
 }
 
 initAmbience();
+watchStatus();
 var commandList = document.getElementById("ls");
 if (commandList && commandList.addEventListener)
   commandList.addEventListener("click", function (event) {
