@@ -14,7 +14,18 @@ var PP = "idle",
 var anchorPos = 0,
   anchorAt = 0,
   lastTitle = null,
-  lastChatLen = -1;
+  lastChatLen = -1,
+  lastBotCid = null,
+  hereDue = false;
+
+function clock(ts) {
+  return new Date(ts).toLocaleTimeString("es", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+}
 
 function fmtT(ms) {
   if (ms == null || !isFinite(ms) || ms < 0) return "--:--";
@@ -44,7 +55,7 @@ function cmd(c) {
       if (d.ok) setTimeout(refresh, 500);
     })
     .catch(function () {
-      toast("Error de conexion");
+      toast("Error de conexión");
     });
 }
 
@@ -167,7 +178,7 @@ function moveBot(cid) {
       if (d.ok) setTimeout(refresh, 800);
     })
     .catch(function () {
-      toast("Error de conexion");
+      toast("Error de conexión");
     });
 }
 
@@ -187,6 +198,29 @@ function renderServerCard(view) {
   document.getElementById("srvCount").textContent =
     n + (n === 1 ? " usuario" : " usuarios");
   box.innerHTML = built.html;
+  // On a big server the bot's channel sat below the fold, blanked out by
+  // the counter. Bring it into view when it first shows or the bot moves,
+  // never on other refreshes, so a user's own scroll is left alone.
+  if (view.botChannelId !== lastBotCid) {
+    lastBotCid = view.botChannelId;
+    hereDue = true;
+  }
+  showHere();
+}
+
+function showHere() {
+  if (!hereDue) return;
+  // Row heights change when the web fonts arrive; measuring before that
+  // left the channel below the edge on some loads. paintMores retries.
+  if (document.fonts && document.fonts.status !== "loaded") return;
+  hereDue = false;
+  var box = document.getElementById("srvTree");
+  var here = box.querySelector ? box.querySelector(".chrow.here") : null;
+  if (!here) return;
+  var top = box.getBoundingClientRect().top;
+  var r = here.getBoundingClientRect();
+  if (r.bottom > box.getBoundingClientRect().bottom - 24)
+    box.scrollTop += r.top - top - 8;
 }
 
 function sendChat() {
@@ -207,7 +241,7 @@ function sendChat() {
       else setTimeout(refresh, 500);
     })
     .catch(function () {
-      toast("Error de conexion");
+      toast("Error de conexión");
     });
 }
 
@@ -224,13 +258,13 @@ function renderChat(msgs) {
   var h = "";
   for (var i = 0; i < msgs.length; i++) {
     var m = msgs[i];
-    var who = m.outgoing ? "BOT" : m.from || "?";
+    var who = m.from || (m.outgoing ? "Rhapsod" : "?");
     var tint = m.outgoing
       ? ""
       : ' style="color:hsl(' + nameHue(who) + ' 62% 76%)"';
     h +=
       '<li class="qi"><span class="qn">' +
-      esc(new Date(m.ts).toLocaleTimeString()) +
+      esc(clock(m.ts)) +
       '</span><span class="' +
       (m.outgoing ? "cmB" : "cnm") +
       '"' +
@@ -403,7 +437,6 @@ function paintTime() {
 
 var lampState = null;
 function setLamp(state) {
-  var lamp = document.getElementById("lamp");
   if (lampState !== null && lampState !== state)
     fx(
       document.getElementById("ppBtn"),
@@ -422,19 +455,15 @@ function setLamp(state) {
     state === "playing" || state === "buffering" ? "Pausar" : "Reanudar",
   );
   if (state === "playing") {
-    lamp.className = "lamp on";
     lab.textContent = "SONANDO";
     pp.innerHTML = "&#9208;";
   } else if (state === "buffering") {
-    lamp.className = "lamp buf";
     lab.textContent = "CARGANDO";
     pp.innerHTML = "&#9208;";
   } else if (state === "paused") {
-    lamp.className = "lamp";
     lab.textContent = "EN PAUSA";
     pp.innerHTML = "&#9654;";
   } else {
-    lamp.className = "lamp";
     lab.textContent = "EN ESPERA";
     pp.innerHTML = "&#9654;";
   }
@@ -444,8 +473,10 @@ function syncSeg(id, attr, val) {
   var btns = document.getElementById(id).querySelectorAll("button");
   for (var i = 0; i < btns.length; i++) {
     var b = btns[i];
-    if (b.getAttribute(attr) === val) b.classList.add("on");
+    var on = b.getAttribute(attr) === val;
+    if (on) b.classList.add("on");
     else b.classList.remove("on");
+    b.setAttribute("aria-pressed", String(on));
   }
 }
 
@@ -499,15 +530,16 @@ function refresh() {
       }
       paintTime();
       document.getElementById("nt").textContent =
-        d.currentTitle || "Tu próxima canción empieza acá.";
-      document.getElementById("trackDetail").textContent =
-        d.currentArtist ||
-        (d.currentTitle
-          ? "Una sesión para compartir."
-          : "Elegí un tema y compartí el momento.");
+        d.currentTitle || "Tu próxima pista empieza acá.";
+      var detail = document.getElementById("trackDetail");
+      if (d.currentArtist) detail.textContent = d.currentArtist;
+      else if (d.currentRequester)
+        detail.innerHTML = "Pedido por <b>" + esc(d.currentRequester) + "</b>";
+      else
+        detail.textContent = d.currentTitle
+          ? ""
+          : "Elegí una pista y compartí el momento.";
       document.getElementById("nt").title = d.currentTitle || "";
-      document.getElementById("nc2").textContent =
-        "Canal " + (d.currentChannelId || "-");
       fxCount(
         document.getElementById("qc"),
         d.queueLength,
@@ -519,6 +551,7 @@ function refresh() {
         paintVolume(d.volume);
       }
       syncSeg("loopSeg", "data-l", d.loopMode || "off");
+      syncSeg("autoSeg", "data-a", d.autoplay ? "on" : "off");
       if (typeof d.tracksPlayed === "number" && d.tracksPlayed !== lastTracks) {
         lastTracks = d.tracksPlayed;
         fxCount(document.getElementById("stTracks"), d.tracksPlayed);
@@ -526,7 +559,9 @@ function refresh() {
       if (typeof d.uptimeMs === "number") {
         var m = Math.floor(d.uptimeMs / 60000);
         var up =
-          m < 60 ? "up " + m + " min" : "up " + Math.floor(m / 60) + " h";
+          m < 60
+            ? "activo " + m + " min"
+            : "activo " + Math.floor(m / 60) + " h";
         var dc =
           d.disconnects && typeof d.disconnects.count === "number"
             ? d.disconnects.count
@@ -534,16 +569,19 @@ function refresh() {
         document.getElementById("uptime").textContent =
           dc > 0 ? up + " · " + dc + (dc === 1 ? " corte" : " cortes") : up;
       }
-      var dot = document.getElementById("dot");
-      var txt = document.getElementById("stxt");
-      dot.className = "dot " + (d.connected ? "on" : "off");
-      txt.textContent = d.connected ? "Conectado" : "Desconectado";
+      // Connection only: playback state lives in the player card, and the
+      // nav repeating it was the redundancy the old lamp had.
+      paintStatus(d.connected ? "on" : "off");
       var qj = JSON.stringify(d.queue || []);
       if (qj !== lastQ) {
         lastQ = qj;
         var list = document.getElementById("ql");
         var empty = document.getElementById("qe");
-        if (!d.queue || d.queue.length === 0) {
+        var footer = document.getElementById("qf");
+        var none = !d.queue || d.queue.length === 0;
+        // Shuffle and clear do nothing on an empty queue.
+        if (footer) footer.hidden = none;
+        if (none) {
           list.innerHTML = "";
           empty.style.display = "block";
         } else {
@@ -593,6 +631,7 @@ function refresh() {
         lastS = sj;
         renderServerCard(d.server);
       }
+      paintMores();
     })
     .catch(function () {
       // Never fail silently: a stalled tunnel or a waking VPS looks like a
@@ -600,10 +639,7 @@ function refresh() {
       fails++;
       if (fails > 1) {
         setOffline(true);
-        var txt = document.getElementById("stxt");
-        if (txt) txt.textContent = "Reconectando…";
-        var dotEl = document.getElementById("dot");
-        if (dotEl) dotEl.className = "dot off";
+        paintStatus("retry");
       }
     });
 }
@@ -700,7 +736,7 @@ function ignoreNotice(button) {
     })
     .catch(function () {
       button.disabled = false;
-      toast("Error de conexion");
+      toast("Error de conexión");
     });
 }
 
@@ -709,13 +745,15 @@ function renderErrors(e) {
   if (ej === lastE) return;
   lastE = ej;
   var ec = document.getElementById("ec");
-  ec.textContent = (e.totalErrors || 0) + " total";
+  // At zero the empty state already says so.
+  ec.textContent = e.totalErrors > 0 ? e.totalErrors + " total" : "";
   ec.style.color = e.totalErrors > 0 ? "var(--rd)" : "";
   var k = document.getElementById("ek");
   var cats = e.byCategory || {};
   var names = Object.keys(cats);
   var kh = "";
-  for (var i = 0; i < names.length; i++) {
+  // With one category the chip only repeats the total.
+  for (var i = 0; names.length > 1 && i < names.length; i++) {
     var n = names[i];
     kh += '<span class="ch">' + esc(n) + " " + cats[n] + "</span>";
   }
@@ -732,7 +770,7 @@ function renderErrors(e) {
   var h = "";
   for (var j = rec.length - 1; j >= 0; j--) {
     var r2 = rec[j];
-    var t = new Date(r2.ts).toLocaleTimeString();
+    var t = clock(r2.ts);
     var ti = r2.trackTitle || r2.trackId || "";
     h +=
       '<li class="qi"><span class="qn">' +
@@ -752,6 +790,7 @@ function renderErrors(e) {
 
 (function init() {
   initAmbience();
+  initMore();
   var seek = document.getElementById("seek");
   seek.addEventListener("click", seekEv);
   seek.addEventListener("keydown", function (event) {
@@ -820,3 +859,67 @@ function renderErrors(e) {
     requestAnimationFrame(glide);
   }
 })();
+
+// Hidden scrollbars left a half row as the only hint that a list went on.
+function paintMore(boxId, buttonId, units, frameSelector) {
+  var box = document.getElementById(boxId);
+  var btn = document.getElementById(buttonId);
+  if (!box || !btn || !box.querySelectorAll || !box.getBoundingClientRect)
+    return;
+  // Rows under the bottom fade count as hidden: they read as cut off.
+  var limit = box.getBoundingClientRect().bottom - 24;
+  // At the end of the list (or with nothing to scroll) nothing is hidden.
+  var atEnd = box.scrollHeight - box.scrollTop - box.clientHeight < 1;
+  var parts = [];
+  // A channel box that runs past the edge hides as a whole; the lines that
+  // still fit stay visible on their own, so no half box is drawn.
+  var frames = frameSelector ? box.querySelectorAll(frameSelector) : [];
+  for (var f = 0; f < frames.length; f++) {
+    var past = !atEnd && frames[f].getBoundingClientRect().bottom > limit;
+    if (frames[f].style) frames[f].style.visibility = past ? "hidden" : "";
+  }
+  var shown = frames.length > 0 ? "visible" : "";
+  for (var u = 0; u < units.length; u++) {
+    var rows = box.querySelectorAll(units[u][0]);
+    var hidden = 0;
+    for (var i = 0; i < rows.length; i++) {
+      var cut = !atEnd && rows[i].getBoundingClientRect().bottom > limit;
+      // A counted row is blanked out, not left as an unreadable sliver.
+      if (rows[i].style) rows[i].style.visibility = cut ? "hidden" : shown;
+      if (cut) hidden++;
+    }
+    if (hidden > 0)
+      parts.push(hidden + " " + (hidden === 1 ? units[u][1] : units[u][2]));
+  }
+  btn.hidden = parts.length === 0;
+  btn.textContent = parts.join(" y ") + " más abajo";
+}
+function paintMores() {
+  showHere();
+  paintMore("ql", "qlMore", [[":scope > li", "pista", "pistas"]]);
+  paintMore(
+    "srvTree",
+    "srvMore",
+    [
+      [".chhead", "canal", "canales"],
+      [".users li", "usuario", "usuarios"],
+    ],
+    ".chrow",
+  );
+}
+function initMore() {
+  ["ql", "srvTree"].forEach(function (id, i) {
+    var btn = document.getElementById(i === 0 ? "qlMore" : "srvMore");
+    var box = document.getElementById(id);
+    if (!btn || !box || !btn.addEventListener) return;
+    btn.addEventListener("click", function () {
+      box.scrollBy({ top: box.clientHeight * 0.8, behavior: "smooth" });
+    });
+  });
+  if (document.addEventListener)
+    document.addEventListener("scroll", paintMores, true);
+  setInterval(paintMores, 1000);
+  // Web fonts change row heights after the first paint.
+  if (document.fonts && document.fonts.ready)
+    document.fonts.ready.then(paintMores);
+}

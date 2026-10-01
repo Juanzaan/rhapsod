@@ -39,16 +39,14 @@ function render(view) {
       });
     }).length,
   );
-  document.getElementById("ucount").textContent =
-    total + (total === 1 ? " usuario" : " usuarios");
   document.getElementById("visibilityNote").textContent =
     view && view.mode === "full"
       ? "Lista completa, incluidos canales vacíos."
-      : "Vista limitada: el análisis de canales aún no termina o falló. Se muestran canales con usuarios visibles.";
+      : "Vista limitada: todavía se están revisando los canales. Por ahora se ven solo los que tienen gente.";
   document.getElementById("treeHint").textContent =
     view && view.mode === "full"
-      ? "Click en un canal para mover el bot ahí"
-      : "Vista parcial: revisá permisos limitados o la conexión · click para mover el bot";
+      ? "Hacé clic en un canal para mover el bot ahí."
+      : "Vista parcial. Hacé clic en un canal para mover el bot ahí.";
   if (chs.length === 0) {
     setHtml(
       box,
@@ -145,7 +143,7 @@ function moveBot(cid) {
       if (d.ok) setTimeout(poll, 800);
     })
     .catch(function () {
-      toast("Error de conexion");
+      toast("Error de conexión");
     });
 }
 
@@ -157,14 +155,9 @@ function poll() {
     })
     .then(function (d) {
       render(d);
-      var badge = document.getElementById("live");
-      badge.textContent = "EN VIVO";
-      badge.className = "liveb on";
     })
     .catch(function () {
-      var badge = document.getElementById("live");
-      badge.textContent = "SIN CONEXIÓN";
-      badge.className = "liveb";
+      paintStatus("retry");
     });
 }
 
@@ -180,6 +173,7 @@ function live() {
 
 (function init() {
   initAmbience();
+  watchStatus();
   if (document.readyState === "complete") live();
   else window.addEventListener("load", live);
 })();

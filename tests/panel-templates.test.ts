@@ -35,7 +35,7 @@ function render(status: Partial<PanelStatus> = {}): string {
 }
 
 describe("renderDashboard console", () => {
-  it("persists scene choices and pauses animation for reduced motion or hidden tabs", () => {
+  it("persists scene choices, ignores the OS reduced-motion setting, pauses hidden tabs", () => {
     const values = new Map<string, string>();
     const attrs = new Map<string, string>();
     let reduced = false;
@@ -87,14 +87,17 @@ describe("renderDashboard console", () => {
     api.initAmbience();
     api.setScene("ocean");
     expect(values.get("rhapsod.scene")).toBe("ocean");
-    api.toggleMotion();
-    expect(attrs.get("data-motion")).toBe("paused");
-    api.toggleMotion();
-    expect(attrs.get("data-motion")).toBe("running");
+    // The OS reduced-motion setting is ignored (owner's call: Windows sets
+    // it with animation effects off); only the button stops motion.
     reduced = true;
     api.applyMotion();
-    expect(button.disabled).toBe(true);
+    expect(attrs.get("data-motion")).toBe("running");
+    expect(button.textContent).toBe("Pausar movimiento");
+    api.toggleMotion();
     expect(attrs.get("data-motion")).toBe("paused");
+    expect(values.get("rhapsod.motion")).toBe("paused");
+    api.toggleMotion();
+    expect(attrs.get("data-motion")).toBe("running");
     reduced = false;
     document.hidden = true;
     api.applyMotion();
@@ -125,6 +128,13 @@ describe("renderDashboard console", () => {
       expect(html).toContain(`id="${id}"`);
     }
     expect(html).toContain("SONANDO");
+    expect(
+      render({ currentTitle: "Song", currentRequester: "<Ana>" }),
+    ).toContain("Pedido por <b>&lt;Ana&gt;</b>");
+    // Lists without scrollbars announce rows that do not fit.
+    expect(html).toContain('id="qlMore"');
+    expect(html).toContain('id="srvMore"');
+    expect(html).toContain("más abajo");
     expect(html).toContain("1:00");
     expect(html).toContain("3:20");
   });
@@ -133,6 +143,10 @@ describe("renderDashboard console", () => {
     const html = render();
     expect(html).toContain("EN ESPERA");
     expect(html).toContain("--:--");
+    // Shuffle and clear on an empty queue were dead buttons, and the
+    // footer overflowed the card's padding at 1440px.
+    expect(html).toContain('<div class="queue-footer" id="qf" hidden>');
+    expect(html).toContain("Hay lugar para otra pista.");
   });
 
   it("renders loop, filters, queue actions and drawers", () => {
@@ -235,6 +249,10 @@ describe("renderDashboard console", () => {
     const loopSeg = makeEl();
     loopSeg.querySelectorAll = () => loopButtons;
     byId.set("loopSeg", loopSeg);
+    const autoButtons = ["on", "off"].map((v) => makeEl({ "data-a": v }));
+    const autoSeg = makeEl();
+    autoSeg.querySelectorAll = () => autoButtons;
+    byId.set("autoSeg", autoSeg);
     const getEl = (id: string): FakeEl => {
       let el = byId.get(id);
       if (!el) {
@@ -261,6 +279,7 @@ describe("renderDashboard console", () => {
       playerState: "playing",
       volume: 25,
       loopMode: "track",
+      autoplay: true,
       tracksPlayed: 7,
       uptimeMs: 3_600_000,
       disconnects: { count: 2 },
@@ -342,7 +361,18 @@ describe("renderDashboard console", () => {
     expect(getEl("tcur").textContent).toBe("0:30");
     expect(getEl("tdur").textContent).toBe("3:20");
     expect(getEl("nsState").textContent).toBe("SONANDO");
-    expect(getEl("lamp").className).toContain("on");
+    expect(getEl("lamp").className).toBe("status on");
+    expect(getEl("stxt").textContent).toBe("Conectado");
+    // Autoplay used to show neither button as active.
+    expect(autoButtons.map((b) => b.attrs["aria-pressed"])).toEqual([
+      "true",
+      "false",
+    ]);
+    expect(loopButtons.map((b) => b.attrs["aria-pressed"])).toEqual([
+      "false",
+      "true",
+      "false",
+    ]);
     expect(getEl("ppBtn").innerHTML).toContain("9208");
     expect(getEl("vol").value).toBe(25);
     expect(getEl("volv").textContent).toBe("25%");
@@ -352,13 +382,18 @@ describe("renderDashboard console", () => {
         ?.classList.set.has("on"),
     ).toBe(true);
     expect(getEl("stTracks").textContent).toBe("7");
-    expect(getEl("uptime").textContent).toBe("up 1 h · 2 cortes");
+    const footer = getEl("qf") as FakeEl & { hidden?: boolean };
+    expect(footer.hidden).toBe(false);
+    // "0 total" next to "Sin errores registrados" said the same thing twice.
+    expect(getEl("ec").textContent).toBe("");
+    expect(getEl("uptime").textContent).toBe("activo 1 h · 2 cortes");
     expect(getEl("ql").innerHTML).toContain("rmQ(1,this)");
     expect(getEl("ql").innerHTML).toContain("rmQ(2,this)");
     expect(getEl("ql").innerHTML).toContain('class="qr"');
     expect(getEl("ql").innerHTML).toContain("Dj");
     expect(getEl("chat").innerHTML).toContain("hola!");
-    expect(getEl("chat").innerHTML).toContain("BOT");
+    // The bot's own lines carry its name, not a generic BOT tag.
+    expect(getEl("chat").innerHTML).toContain(">Bot<");
     expect(getEl("chat").innerHTML).toContain("Ana");
     const srv = getEl("srvTree").innerHTML;
     expect(srv).toContain("Lobby");
@@ -390,7 +425,7 @@ describe("renderDashboard console", () => {
     ];
     for (const html of pages) {
       // Same tokens everywhere: no leftover amber or slate-blue theme.
-      expect(html).toContain("--ac:#1ED760");
+      expect(html).toContain("--ac:#5BD38A");
       expect(html).toContain("--bl:#60A5FA");
       expect(html).toContain("--wn:#FBBF24");
       expect(html).toContain("--rd:#F87171");
@@ -405,13 +440,54 @@ describe("renderDashboard console", () => {
     }
     // Same brand on every nav.
     for (const html of pages.slice(0, 3)) {
-      expect(html).toContain("RHAPSOD<b>.</b>");
+      expect(html).toContain('rhapsod<b aria-hidden="true"></b>');
+    }
+    // One connection pill with the same words on every page; the server
+    // page used to say "EN VIVO" in its own style.
+    for (const html of [...pages.slice(0, 3), renderServerPage()]) {
+      expect(html).toContain('<div class="status');
+      expect(html).toContain('id="stxt"');
+      expect(html).not.toContain("EN VIVO");
+    }
+    for (const html of [pages[1], pages[2], renderServerPage()]) {
+      expect(html).toContain("watchStatus();");
+    }
+    // Every page hides scrollbars and loads the self-hosted faces.
+    for (const html of pages) {
+      expect(html).toContain('<div class="intro" id="intro"');
+      expect(html).toContain('sessionStorage.getItem("rhapsod.intro")');
+      expect(html).not.toContain("@media(prefers-reduced-motion");
+      expect(html).toContain("scrollbar-width:none");
+      expect(html).toContain("url(/fonts/instrument-sans.woff2)");
+    }
+  });
+
+  it("puts loop, autoplay, radio and library in one card without repeats", () => {
+    const html = renderDashboard({
+      connected: true,
+      queueLength: 0,
+      version: "4.0.0",
+    });
+    expect(html).not.toContain("discovery-card");
+    expect(html).not.toContain('class="section-no"');
+    // Mezclar/Vaciar live in the queue footer, Letra/Historial in the player.
+    expect(html.match(/cmd\('shuffle'\)/g)).toHaveLength(1);
+    expect(html.match(/showOut\('history'\)/g)).toHaveLength(1);
+    // Said elsewhere on the same screen: the player shows playback state,
+    // the nav links to Comandos, the placeholder explains the search box.
+    for (const repeated of [
+      "ON AIR",
+      "Búsqueda o enlace",
+      "Explorá todos los comandos",
+      'id="nc2"',
+    ]) {
+      expect(html).not.toContain(repeated);
     }
   });
 
   it("server page has live tree markers", () => {
     const html = renderServerPage();
-    for (const id of ["tree", "live", "ucount"]) {
+    for (const id of ["tree", "lamp"]) {
       expect(html).toContain(`id="${id}"`);
     }
     expect(html).toContain("/api/server");
@@ -505,7 +581,6 @@ describe("renderDashboard console", () => {
     expect(tree).toContain("Empty orphan");
     expect(tree).toContain("Vacío");
     expect(tree.indexOf("Music")).toBeLessThan(tree.indexOf("Sub"));
-    expect(getEl("ucount").textContent).toBe("3 usuarios");
     expect(tree.match(/onclick="moveBot\(2\)"/)).not.toBeNull();
     // Nested kids container + chevron toggle for channels with children.
     expect(tree).toContain('data-kids="2"');
@@ -525,7 +600,7 @@ describe("renderDashboard console", () => {
       clients: [],
     });
     expect(getEl("treeHint").textContent).toBe(
-      "Click en un canal para mover el bot ahí",
+      "Hacé clic en un canal para mover el bot ahí.",
     );
 
     api.poll();
@@ -949,9 +1024,21 @@ describe("renderDashboard console", () => {
                 editable: false,
               },
               {
+                key: "RHAPSOD_FFMPEG_PATH",
+                value: "ffmpeg",
+                description: "Ruta del binario ffmpeg (solo lectura)",
+                editable: false,
+              },
+              {
                 key: "RHAPSOD_TS3_HOST",
                 value: "voice.example.com",
                 description: "Server <name>",
+                editable: true,
+              },
+              {
+                key: "RHAPSOD_VERBOSE",
+                value: "false",
+                description: "Modo detallado (true/false)",
                 editable: true,
               },
             ],
@@ -959,8 +1046,172 @@ describe("renderDashboard console", () => {
       }),
     );
     expect(loaded).toContain("&lt;private&gt;");
+    expect(loaded).toContain("RHAPSOD_PANEL_HOST (solo lectura)");
+    expect(loaded).toContain("Ruta del binario ffmpeg (solo lectura)<");
+    expect(loaded).not.toContain("(solo lectura) (solo lectura)");
+    // Booleans pick from Sí/No instead of typing true or false.
+    expect(loaded).toContain('<select id="setting-RHAPSOD_VERBOSE"');
+    expect(loaded).toContain('<option value="false" selected>No</option>');
+    expect(loaded).toContain("Modo detallado<");
     expect(loaded).toContain("Server &lt;name&gt;");
     expect(loaded).toContain('id="saveSettings"');
+  });
+});
+
+describe("hidden-row counter", () => {
+  function harness(scroll: { height: number; top: number; client: number }) {
+    const rowBottoms = [100, 200, 320];
+    const rows = rowBottoms.map((bottom) => ({
+      style: { visibility: "" },
+      getBoundingClientRect: () => ({ bottom }),
+    }));
+    const box = {
+      scrollHeight: scroll.height,
+      scrollTop: scroll.top,
+      clientHeight: scroll.client,
+      getBoundingClientRect: () => ({ bottom: 300 }),
+      querySelectorAll: () => rows,
+    };
+    const btn = { hidden: true, textContent: "" };
+    const code = scriptBlocks(
+      render({ connected: true, queueLength: 3, version: "1" }),
+    ).join("\n");
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval
+    const factory = new Function(
+      "document",
+      "window",
+      "fetch",
+      "setInterval",
+      "setTimeout",
+      `${code};return {paintMore:paintMore};`,
+    ) as (...args: unknown[]) => {
+      paintMore(box: string, btn: string, units: string[][]): void;
+    };
+    const api = factory(
+      {
+        getElementById: (id: string) =>
+          id === "box"
+            ? box
+            : id === "btn"
+              ? btn
+              : {
+                  addEventListener: () => {},
+                  setAttribute: () => {},
+                  getAttribute: () => null,
+                  querySelectorAll: () => [],
+                  classList: { add() {}, remove() {}, toggle() {} },
+                  style: {},
+                },
+        addEventListener: () => {},
+      },
+      { addEventListener: () => {}, matchMedia: () => ({ matches: false }) },
+      () => new Promise(() => {}),
+      () => 0,
+      () => 0,
+    );
+    api.paintMore("box", "btn", [["li", "pista", "pistas"]]);
+    return { ...btn, rows: rows.map((r) => r.style.visibility) };
+  }
+
+  it("counts rows below the edge while the list can still scroll", () => {
+    const btn = harness({ height: 400, top: 0, client: 300 });
+    expect(btn.hidden).toBe(false);
+    expect(btn.textContent).toBe("1 pista más abajo");
+    // The counted row is blanked instead of showing a cut-off sliver.
+    expect(btn.rows).toEqual(["", "", "hidden"]);
+  });
+
+  it("stays hidden when the list does not scroll or is at its end", () => {
+    // Round 6 found it claiming hidden rows on a list that fit.
+    expect(harness({ height: 300, top: 0, client: 300 }).hidden).toBe(true);
+    const end = harness({ height: 400, top: 100, client: 300 });
+    expect(end.hidden).toBe(true);
+    expect(end.rows).toEqual(["", "", ""]);
+  });
+});
+
+describe("bot channel on the server card", () => {
+  function harness(hereTop: number) {
+    const box = {
+      innerHTML: "",
+      scrollTop: 0,
+      getBoundingClientRect: () => ({ top: 100, bottom: 400 }),
+      querySelector: (sel: string) =>
+        sel === ".chrow.here"
+          ? {
+              getBoundingClientRect: () => ({
+                top: hereTop,
+                bottom: hereTop + 60,
+              }),
+            }
+          : null,
+    };
+    const code = scriptBlocks(
+      render({ connected: true, queueLength: 0, version: "1" }),
+    ).join("\n");
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval
+    const factory = new Function(
+      "document",
+      "window",
+      "fetch",
+      "setInterval",
+      "setTimeout",
+      `${code};return {renderServerCard:renderServerCard};`,
+    ) as (...args: unknown[]) => {
+      renderServerCard(view: unknown): void;
+    };
+    const api = factory(
+      {
+        getElementById: (id: string) =>
+          id === "srvTree"
+            ? box
+            : {
+                addEventListener: () => {},
+                setAttribute: () => {},
+                getAttribute: () => null,
+                querySelectorAll: () => [],
+                classList: { add() {}, remove() {}, toggle() {} },
+                style: {},
+                textContent: "",
+              },
+        addEventListener: () => {},
+      },
+      { addEventListener: () => {}, matchMedia: () => ({ matches: false }) },
+      () => new Promise(() => {}),
+      () => 0,
+      () => 0,
+    );
+    const view = (botChannelId: number) => ({
+      version: 1,
+      botChannelId,
+      channels: [
+        { cid: 1, name: "Lobby", order: 1 },
+        { cid: 6, name: "Música", order: 6 },
+      ],
+      clients: [],
+    });
+    return { box, render: (cid: number) => api.renderServerCard(view(cid)) };
+  }
+
+  it("scrolls the bot's channel into view when it starts below the edge", () => {
+    // Round 9: on a 12-channel server the only highlighted box was blanked
+    // out under "5 canales más abajo" on load.
+    const t = harness(500);
+    t.render(6);
+    expect(t.box.scrollTop).toBe(392);
+    // Later refreshes in the same channel leave the user's scroll alone.
+    t.box.scrollTop = 0;
+    t.render(6);
+    expect(t.box.scrollTop).toBe(0);
+    // The bot moving brings its new channel into view again.
+    t.render(1);
+    expect(t.box.scrollTop).toBe(392);
+  });
+
+  it("does not scroll when the bot's channel already fits", () => {
+    const t = harness(150);
+    t.render(6);
+    expect(t.box.scrollTop).toBe(0);
   });
 });
 
@@ -1187,14 +1438,23 @@ describe("panel pages motion and feedback", () => {
 
   it("counts unsaved settings and clears them after saving", () => {
     const fieldClasses = new Map<unknown, boolean>();
-    const makeInput = (value: string, defaultValue: string) => {
+    const makeInput = (value: string, initial: string) => {
       const parentNode = {
         classList: {
           toggle: (_name: string, on: boolean) =>
             fieldClasses.set(parentNode, on),
         },
       };
-      return { value, defaultValue, parentNode };
+      const attrs: Record<string, string> = { "data-initial": initial };
+      return {
+        value,
+        parentNode,
+        attrs,
+        getAttribute: (name: string) => attrs[name] ?? null,
+        setAttribute: (name: string, v: string) => {
+          attrs[name] = v;
+        },
+      };
     };
     const inputs = [
       makeInput("Rhapsod DJ", "Rhapsod"),
@@ -1238,7 +1498,7 @@ describe("panel pages motion and feedback", () => {
     api.markSaved();
     expect(barClasses.has("dirty")).toBe(false);
     expect(barClasses.has("saved")).toBe(true);
-    expect(inputs[0]?.defaultValue).toBe("Rhapsod DJ");
+    expect(inputs[0]?.attrs["data-initial"]).toBe("Rhapsod DJ");
     expect(note.textContent).toContain("Guardado");
   });
 

@@ -24,6 +24,7 @@ import {
   saveEnvFile,
 } from "./env-file.js";
 import { FAVICON_SVG } from "./dashboard-design.js";
+import { isPanelFont, panelFont } from "./panel-fonts.js";
 import {
   renderDashboard,
   renderSetupWizard,
@@ -90,11 +91,14 @@ export interface PanelStatus {
   readonly queueLength: number;
   readonly currentTitle?: string;
   readonly currentArtist?: string;
+  /** Who queued the track playing now. */
+  readonly currentRequester?: string;
   readonly durationMs?: number;
   readonly positionMs?: number;
   readonly playerState?: "idle" | "buffering" | "playing" | "paused";
   readonly volume?: number;
   readonly loopMode?: string;
+  readonly autoplay?: boolean;
   readonly tracksPlayed?: number;
   readonly uptimeMs?: number;
   readonly disconnects?: DisconnectSummary;
@@ -164,15 +168,15 @@ const MASKED_KEYS = new Set([
 
 const ENV_DESCRIPTIONS: Record<string, string> = {
   RHAPSOD_TS3_HOST: "Dirección del servidor TeamSpeak",
-  RHAPSOD_TS3_PORT: "Puerto de voz (default 9987)",
+  RHAPSOD_TS3_PORT: "Puerto de voz (por defecto 9987)",
   RHAPSOD_TS3_NICKNAME: "Nombre del bot",
   RHAPSOD_TS3_PASSWORD: "Contraseña del servidor (si tiene)",
-  RHAPSOD_TS3_CHANNEL_NAME: "Canal al que entrar (vacío = default)",
-  RHAPSOD_TS3_CHANNEL_ID: "ID del canal (override de CHANNEL_NAME)",
+  RHAPSOD_TS3_CHANNEL_NAME: "Canal al que entrar (vacío = el predeterminado)",
+  RHAPSOD_TS3_CHANNEL_ID: "ID del canal (tiene prioridad sobre el nombre)",
   RHAPSOD_TS3_CHANNEL_PASSWORD: "Contraseña del canal",
   RHAPSOD_TS3_AUTO_CONNECT: "Conectar automáticamente (true/false)",
-  RHAPSOD_TS3_HEARTBEAT_SECONDS: "Heartbeat en segundos (0 = off)",
-  RHAPSOD_TS3_CONNECT_TIMEOUT_SECONDS: "Timeout de conexión (15-300s)",
+  RHAPSOD_TS3_HEARTBEAT_SECONDS: "Latido en segundos (0 = apagado)",
+  RHAPSOD_TS3_CONNECT_TIMEOUT_SECONDS: "Espera de conexión (15-300 s)",
   RHAPSOD_TS3_CLIENT_DESCRIPTION: "Descripción del bot en el servidor",
   RHAPSOD_ADMIN_UIDS: "UIDs de admin separados por coma",
   RHAPSOD_DATA_DIR: "Directorio de datos (identidad TS3, estado)",
@@ -183,55 +187,57 @@ const ENV_DESCRIPTIONS: Record<string, string> = {
   RHAPSOD_YTDLP_PATH: "Ruta del binario yt-dlp (solo lectura)",
   RHAPSOD_YTDLP_COOKIES_PATH: "Ruta a cookies.txt de YouTube",
   RHAPSOD_YTDLP_DAEMON_URL: "URL del daemon yt-dlp (http://127.0.0.1:8765)",
-  RHAPSOD_YTDLP_EXTRACTOR_ARGS: "Args extra para yt-dlp",
-  RHAPSOD_YTDLP_SEARCH_TIMEOUT_MS: "Timeout de búsqueda yt-dlp (4000-20000 ms)",
+  RHAPSOD_YTDLP_EXTRACTOR_ARGS: "Argumentos extra para yt-dlp",
+  RHAPSOD_YTDLP_SEARCH_TIMEOUT_MS:
+    "Espera de búsqueda de yt-dlp (4000-20000 ms)",
   RHAPSOD_YTDLP_AUDIO_URL_TIMEOUT_MS:
-    "Timeout de URL de audio yt-dlp (5000-30000 ms)",
+    "Espera de URL de audio de yt-dlp (5000-30000 ms)",
   RHAPSOD_YTDLP_DOWNLOAD_TIMEOUT_MS:
-    "Timeout de descarga yt-dlp (30000-300000 ms)",
+    "Espera de descarga de yt-dlp (30000-300000 ms)",
   RHAPSOD_YTDLP_METADATA_TIMEOUT_MS:
-    "Timeout de metadatos yt-dlp (10000-60000 ms)",
+    "Espera de metadatos de yt-dlp (10000-60000 ms)",
   RHAPSOD_YTDLP_PLAYLIST_TIMEOUT_MS:
-    "Timeout de playlists yt-dlp (15000-120000 ms)",
-  RHAPSOD_WARP_PROXY: "Egress fallback para 403 (vacío = solo directo)",
+    "Espera de playlists de yt-dlp (15000-120000 ms)",
+  RHAPSOD_WARP_PROXY: "Salida alternativa ante un 403 (vacío = solo directa)",
   RHAPSOD_FFMPEG_PATH: "Ruta del binario ffmpeg (solo lectura)",
-  RHAPSOD_FFMPEG_USER_AGENT: "User-Agent para ffmpeg",
+  RHAPSOD_FFMPEG_USER_AGENT: "Agente de usuario de ffmpeg",
   RHAPSOD_FFPROBE_PATH: "Ruta del binario ffprobe (solo lectura)",
   RHAPSOD_LOUDNESS_TARGET_LUFS:
-    "Normalización de volumen (-30 a 0, default -14)",
-  RHAPSOD_OPUS_BITRATE: "Bitrate de Opus (64000-160000)",
+    "Normalización de volumen (-30 a 0, por defecto -14)",
+  RHAPSOD_OPUS_BITRATE: "Tasa de bits de Opus (64000-160000)",
   RHAPSOD_OPUS_COMPLEXITY: "Complejidad de Opus (0-10)",
   RHAPSOD_OPUS_PACKET_LOSS_PERCENT: "Pérdida de paquetes Opus (0-30)",
   RHAPSOD_SPOTIFY_CLIENT_ID: "Spotify Client ID (opcional)",
   RHAPSOD_SPOTIFY_CLIENT_SECRET: "Spotify Client Secret (opcional)",
   RHAPSOD_SPOTIFY_REFRESH_TOKEN: "Spotify Refresh Token (opcional)",
-  RHAPSOD_AUDIO_TEST_TONE_SECONDS: "Tono de prueba al iniciar (0 = off)",
-  RHAPSOD_LOG_LEVEL: "Nivel de log (trace/debug/info/warn/error/fatal)",
+  RHAPSOD_AUDIO_TEST_TONE_SECONDS: "Tono de prueba al iniciar (0 = apagado)",
+  RHAPSOD_LOG_LEVEL: "Nivel de registro (trace/debug/info/warn/error/fatal)",
   RHAPSOD_LOG_RETENTION_DAYS: "Días de retención de logs (1-90)",
-  RHAPSOD_METRICS_INTERVAL_MINUTES: "Intervalo de métricas (0 = off)",
+  RHAPSOD_METRICS_INTERVAL_MINUTES: "Intervalo de métricas (0 = apagado)",
   RHAPSOD_WATCHDOG_INTERVAL_SECONDS:
-    "Intervalo del watchdog en segundos (0 = off, default 15)",
+    "Intervalo del vigilante en segundos (0 = apagado, por defecto 15)",
   RHAPSOD_WATCHDOG_INTERVAL_MINUTES:
-    "Obsoleto: usar RHAPSOD_WATCHDOG_INTERVAL_SECONDS (solo 0 = off)",
+    "Obsoleto: usar RHAPSOD_WATCHDOG_INTERVAL_SECONDS (solo 0 = apagado)",
   RHAPSOD_MAX_CONCURRENT_COMMANDS: "Comandos concurrentes máx. (1-20)",
-  RHAPSOD_MAX_CONCURRENT_YTDLP_JOBS: "Jobs yt-dlp concurrentes (1-4)",
-  RHAPSOD_MAX_QUEUE_TRACKS: "Tracks máx. en cola (1-1000)",
-  RHAPSOD_MAX_TRACKS_PER_USER: "Tracks por usuario (1-200)",
+  RHAPSOD_MAX_CONCURRENT_YTDLP_JOBS: "Tareas de yt-dlp en paralelo (1-4)",
+  RHAPSOD_MAX_QUEUE_TRACKS: "Máximo de pistas en la cola (1-1000)",
+  RHAPSOD_MAX_TRACKS_PER_USER: "Máximo de pistas por usuario (1-200)",
   RHAPSOD_VOTE_SKIP:
-    "Votación para saltar: más de la mitad del canal (true/false, default false)",
+    "Votación para saltar: más de la mitad del canal (true/false, por defecto false)",
   RHAPSOD_SKIP_NON_MUSIC:
-    "Saltar intros y outros sin música de los videoclips vía SponsorBlock (true/false, default false)",
-  RHAPSOD_MOVE_GROUP_IDS: "Group IDs para !move",
-  RHAPSOD_MOVE_ADMIN_CHANNELS: "Channels para move admin",
-  RHAPSOD_MOVE_SENIOR_CHANNELS: "Channels para move senior",
-  RHAPSOD_MOVE_ADMIN_GROUP_IDS: "Group IDs admin move",
-  RHAPSOD_MOVE_SENIOR_GROUP_IDS: "Group IDs senior move",
-  RHAPSOD_VERBOSE: "Modo verbose (true/false)",
+    "Saltar intros y outros sin música de los videoclips vía SponsorBlock (true/false, por defecto false)",
+  RHAPSOD_MOVE_GROUP_IDS: "IDs de grupo que pueden usar !move",
+  RHAPSOD_MOVE_ADMIN_CHANNELS: "Canales de !move para admins",
+  RHAPSOD_MOVE_SENIOR_CHANNELS: "Canales de !move para seniors",
+  RHAPSOD_MOVE_ADMIN_GROUP_IDS: "IDs de grupo admin para !move",
+  RHAPSOD_MOVE_SENIOR_GROUP_IDS: "IDs de grupo senior para !move",
+  RHAPSOD_VERBOSE: "Modo detallado (true/false)",
   RHAPSOD_PANEL_ENABLED: "Panel habilitado (true/false)",
-  RHAPSOD_PANEL_PORT: "Puerto del panel (default 8080)",
+  RHAPSOD_PANEL_PORT: "Puerto del panel (por defecto 8080)",
   RHAPSOD_PANEL_USER: "Usuario del panel",
   RHAPSOD_PANEL_PASSWORD: "Contraseña del panel",
-  RHAPSOD_PANEL_HOST: "Bind del panel (solo lectura, default 127.0.0.1)",
+  RHAPSOD_PANEL_HOST:
+    "Dirección del panel (solo lectura, por defecto 127.0.0.1)",
 };
 
 function describeEnvKey(key: string): string {
@@ -368,13 +374,18 @@ export function createPanelServer(options: PanelOptions): {
     // HTML or API payloads. Stale pages after a deploy submit old shapes to
     // new endpoints (and old JS against new APIs), which surfaces as
     // breakage that only a hard refresh fixes.
-    c.header("Cache-Control", "no-store");
+    // Fonts are the exception: same bytes until a dependency bump, and
+    // refetching ~110 KB through the tunnel on every page change is waste.
+    c.header(
+      "Cache-Control",
+      c.req.path.startsWith("/fonts/") ? "private, max-age=604800" : "no-store",
+    );
     c.header("X-Frame-Options", "DENY");
     c.header("X-Content-Type-Options", "nosniff");
     c.header("Referrer-Policy", "no-referrer");
     c.header(
       "Content-Security-Policy",
-      "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+      "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
     );
   });
 
@@ -423,6 +434,14 @@ export function createPanelServer(options: PanelOptions): {
   app.get("/favicon.ico", (c) =>
     c.body(FAVICON_SVG, 200, { "Content-Type": "image/svg+xml" }),
   );
+
+  app.get("/fonts/:name", (c) => {
+    const name = c.req.param("name");
+    if (!isPanelFont(name)) return c.notFound();
+    return c.body(new Uint8Array(panelFont(name)), 200, {
+      "Content-Type": "font/woff2",
+    });
+  });
 
   // 503 only while reconnecting: deploy.sh rolls back on it. A failing
   // YouTube login or daemon still plays through fallbacks, so it is
@@ -735,7 +754,7 @@ export function createPanelServer(options: PanelOptions): {
       return c.json(await options.testConnection(host, port));
     } catch (error: unknown) {
       const message =
-        error instanceof Error ? error.message : "Error de conexion";
+        error instanceof Error ? error.message : "Error de conexión";
       return c.json({ ok: false, error: message });
     }
   });

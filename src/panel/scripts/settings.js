@@ -1,5 +1,20 @@
 var H = { "content-type": "application/json" };
 
+// Some descriptions already say it; appending it again read "(solo lectura)
+// (solo lectura)".
+// The control is a Sí/No select, so the "true/false" hint goes away.
+function boolLabel(text) {
+  return text
+    .replace(/ ?\(true\/false\)/, "")
+    .replace(/true\/false, /, "")
+    .replace(/por defecto false/, "por defecto: No")
+    .replace(/por defecto true/, "por defecto: Sí");
+}
+
+function readOnlyLabel(text) {
+  return /solo lectura/i.test(text) ? text : text + " (solo lectura)";
+}
+
 function toast(m) {
   var el = document.getElementById("toast");
   el.textContent = m;
@@ -57,14 +72,37 @@ function load() {
           var e = entries[j];
           if (e.editable === false) {
             h +=
-              '<div class="f"><label>' +
+              '<div class="f"><label class="fl"><span>' +
+              esc(readOnlyLabel(e.description || e.key)) +
+              '</span><code class="fk">' +
               esc(e.key) +
-              ' (solo lectura)</label><div class="h">' +
+              '</code></label><div class="h ro">' +
               esc(e.value || "") +
               "</div></div>";
             continue;
           }
           var val = e.masked ? "" : e.value || "";
+          if (!e.masked && (val === "true" || val === "false")) {
+            h +=
+              '<div class="f"><label class="fl" for="setting-' +
+              esc(e.key) +
+              '"><span>' +
+              esc(boolLabel(e.description || e.key)) +
+              '</span><code class="fk">' +
+              esc(e.key) +
+              '</code></label><select id="setting-' +
+              esc(e.key) +
+              '" data-key="' +
+              esc(e.key) +
+              '" data-initial="' +
+              val +
+              '"><option value="true"' +
+              (val === "true" ? " selected" : "") +
+              '>Sí</option><option value="false"' +
+              (val === "false" ? " selected" : "") +
+              ">No</option></select></div>";
+            continue;
+          }
           h +=
             '<div class="f"><label class="fl" for="setting-' +
             esc(e.key) +
@@ -76,6 +114,8 @@ function load() {
             esc(e.key) +
             '" data-key="' +
             esc(e.key) +
+            '" data-initial="' +
+            esc(val) +
             '" value="' +
             esc(val) +
             '"' +
@@ -117,7 +157,7 @@ function loadFailed(error) {
 
 function save() {
   var inputs = /** @type {NodeListOf<HTMLInputElement>} */ (
-    document.querySelectorAll("input[data-key]")
+    document.querySelectorAll("[data-key]")
   );
   var button = /** @type {HTMLButtonElement|null} */ (
     document.getElementById("saveSettings")
@@ -152,7 +192,7 @@ function save() {
       if (d.ok) markSaved();
     })
     .catch(function () {
-      toast("Error de conexion");
+      toast("Error de conexión");
     })
     .finally(function () {
       if (button) {
@@ -166,12 +206,12 @@ function save() {
 // a forgotten edit is visible before navigating away.
 function markDirty() {
   var inputs = document.querySelectorAll
-    ? document.querySelectorAll("input[data-key]")
+    ? document.querySelectorAll("[data-key]")
     : [];
   var changed = 0;
   for (var i = 0; i < inputs.length; i++) {
     var input = inputs[i],
-      dirty = input.value !== input.defaultValue;
+      dirty = input.value !== (input.getAttribute("data-initial") || "");
     if (dirty) changed++;
     if (input.parentNode && input.parentNode.classList)
       input.parentNode.classList.toggle("dirty", dirty);
@@ -194,10 +234,10 @@ function markDirty() {
 
 function markSaved() {
   var inputs = document.querySelectorAll
-    ? document.querySelectorAll("input[data-key]")
+    ? document.querySelectorAll("[data-key]")
     : [];
   for (var i = 0; i < inputs.length; i++)
-    inputs[i].defaultValue = inputs[i].value;
+    inputs[i].setAttribute("data-initial", inputs[i].value);
   markDirty();
   var bar = document.getElementById("saveBar"),
     note = document.getElementById("saveNote");
@@ -217,7 +257,10 @@ function markSaved() {
 }
 
 initAmbience();
+watchStatus();
 var settingsRoot = document.getElementById("ct");
 if (settingsRoot && settingsRoot.addEventListener)
   settingsRoot.addEventListener("input", markDirty);
+if (settingsRoot && settingsRoot.addEventListener)
+  settingsRoot.addEventListener("change", markDirty);
 load();

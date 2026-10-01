@@ -1,9 +1,9 @@
 var H = { "content-type": "application/json" };
 var cmds = [];
 var gn = {
-  music: "Reproduccion",
+  music: "Reproducción",
   queue: "Cola",
-  admin: "Administracion",
+  admin: "Administración",
   misc: "Otros",
 };
 function esc(s) {
@@ -83,13 +83,14 @@ function render(list, q) {
         esc(c.name) +
         '" title="Copiar !' +
         esc(c.name) +
-        '"><span class="copy-hint" aria-hidden="true">COPIAR</span><div><span class="cn">!' +
+        '"><span class="copy-hint" aria-hidden="true">COPIAR</span>' +
+        '<div><span class="cn">!' +
         hl(c.usage, q) +
         "</span>" +
+        (c.adminOnly ? '<span class="cg">admin</span>' : "") +
         (c.aliases.length
           ? ' <span class="ca">(!' + hl(c.aliases.join(", !"), q) + ")</span>"
           : "") +
-        (c.adminOnly ? ' <span class="cg">admin</span>' : "") +
         '</div><div class="cd2">' +
         hl(c.summary, q) +
         "</div></div>";
@@ -129,6 +130,7 @@ function filter() {
 }
 
 initAmbience();
+watchStatus();
 var commandList = document.getElementById("ls");
 if (commandList && commandList.addEventListener)
   commandList.addEventListener("click", function (event) {

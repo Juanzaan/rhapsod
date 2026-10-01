@@ -13,37 +13,37 @@ function setScene(value) {
       window.localStorage.setItem("rhapsod.scene", value);
   } catch (e) {}
 }
-var motionPaused = false;
+// The OS reduced-motion setting is ignored on purpose: Windows turns it on
+// with "Animation effects" off, which owners rarely know about, and the
+// owner asked for the turntable and meter to move regardless. This is an
+// owner console, not a public page; the button is the way to stop motion.
+var motionPref = null;
+function motionMode() {
+  return motionPref === "paused" ? "paused" : "running";
+}
 function applyMotion() {
-  var mq = window.matchMedia
-    ? window.matchMedia("(prefers-reduced-motion: reduce)")
-    : null;
-  var reduced = mq ? !!mq.matches : false;
-  var paused = motionPaused || reduced || document.hidden === true;
+  var mode = motionMode();
   var root = document.documentElement;
   if (root && root.setAttribute)
-    root.setAttribute("data-motion", paused ? "paused" : "running");
+    root.setAttribute(
+      "data-motion",
+      mode === "running" && document.hidden === true ? "paused" : mode,
+    );
   var button = /** @type {HTMLButtonElement|null} */ (
     document.getElementById ? document.getElementById("motionToggle") : null
   );
   if (!button) return;
-  button.textContent = reduced
-    ? "Movimiento reducido"
-    : motionPaused
-      ? "Activar movimiento"
-      : "Pausar movimiento";
+  button.textContent =
+    mode === "running" ? "Pausar movimiento" : "Activar movimiento";
   if (button.setAttribute)
-    button.setAttribute("aria-pressed", String(motionPaused || !!reduced));
-  button.disabled = !!reduced;
+    button.setAttribute("aria-pressed", String(mode !== "running"));
+  button.disabled = false;
 }
 function toggleMotion() {
-  motionPaused = !motionPaused;
+  motionPref = motionMode() === "running" ? "paused" : "running";
   try {
     if (window.localStorage)
-      window.localStorage.setItem(
-        "rhapsod.motion",
-        motionPaused ? "paused" : "running",
-      );
+      window.localStorage.setItem("rhapsod.motion", motionPref);
   } catch (e) {}
   applyMotion();
 }
@@ -52,28 +52,41 @@ function initAmbience() {
   try {
     if (window.localStorage) {
       scene = window.localStorage.getItem("rhapsod.scene") || scene;
-      motionPaused = window.localStorage.getItem("rhapsod.motion") === "paused";
+      motionPref = window.localStorage.getItem("rhapsod.motion");
     }
   } catch (e) {}
   setScene(scene);
   applyMotion();
   if (document.addEventListener)
     document.addEventListener("visibilitychange", applyMotion);
-  var media = window.matchMedia
-    ? window.matchMedia("(prefers-reduced-motion: reduce)")
-    : null;
-  if (media && media.addEventListener)
-    media.addEventListener("change", applyMotion);
   restoreSongHue();
   initMotion();
+  initScrollFade();
+}
+// Firefox and Safari lack scroll-driven animations, and with the bars
+// hidden a clipped list gave no hint there was more. Same fade, set by hand.
+function initScrollFade() {
+  if (!window.CSS || !CSS.supports || !document.querySelectorAll) return;
+  if (CSS.supports("animation-timeline", "scroll()")) return;
+  var paint = function () {
+    var els = document.querySelectorAll("#srvTree,.ql,.dw");
+    for (var i = 0; i < els.length; i++) {
+      var el = /** @type {HTMLElement} */ (els[i]);
+      var rest = el.scrollHeight - el.clientHeight - el.scrollTop;
+      el.style.setProperty("--sf-top", el.scrollTop > 2 ? "40px" : "0px");
+      el.style.setProperty("--sf-bot", rest > 2 ? "24px" : "0px");
+    }
+  };
+  document.addEventListener("scroll", paint, true);
+  window.addEventListener("resize", paint);
+  setInterval(paint, 1000);
+  paint();
 }
 function motionOn() {
   var root = document.documentElement;
-  return !(
-    root &&
-    root.getAttribute &&
-    root.getAttribute("data-motion") === "paused"
-  );
+  if (!root || !root.getAttribute) return true;
+  var mode = root.getAttribute("data-motion");
+  return mode !== "paused";
 }
 function fx(el, frames, opts) {
   if (!motionOn()) return null;
@@ -334,4 +347,39 @@ function setHtml(el, html) {
   el.innerHTML = html;
   if (lastHtml) lastHtml.set(el, html);
   return true;
+}
+
+// One connection pill in the nav of every page, same words everywhere.
+function paintStatus(state) {
+  var lamp = document.getElementById("lamp");
+  if (!lamp) return;
+  lamp.className = "status" + (state === "on" ? " on" : "");
+  var dot = document.getElementById("dot");
+  if (dot) dot.className = "dot " + (state === "on" ? "on" : "off");
+  var txt = document.getElementById("stxt");
+  if (txt)
+    txt.textContent =
+      state === "on"
+        ? "Conectado"
+        : state === "retry"
+          ? "Reconectando…"
+          : "Desconectado";
+}
+function watchStatus() {
+  var check = function () {
+    fetch("/api/health", { headers: { "content-type": "application/json" } })
+      .then(function (r) {
+        return r.json();
+      })
+      .then(function (d) {
+        paintStatus(d.connected ? "on" : d.reconnecting ? "retry" : "off");
+      })
+      .catch(function () {
+        paintStatus("retry");
+      });
+  };
+  check();
+  setInterval(function () {
+    if (!document.hidden) check();
+  }, 5000);
 }

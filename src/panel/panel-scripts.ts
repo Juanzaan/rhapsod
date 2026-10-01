@@ -5,6 +5,7 @@ export type PanelScriptName =
   | "ambience"
   | "commands"
   | "dashboard"
+  | "intro"
   | "server"
   | "server-tree"
   | "settings"
