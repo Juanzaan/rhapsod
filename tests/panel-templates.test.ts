@@ -35,7 +35,7 @@ function render(status: Partial<PanelStatus> = {}): string {
 }
 
 describe("renderDashboard console", () => {
-  it("persists scene choices and pauses animation for reduced motion or hidden tabs", () => {
+  it("persists scene choices, follows reduced motion until the owner overrides it, pauses hidden tabs", () => {
     const values = new Map<string, string>();
     const attrs = new Map<string, string>();
     let reduced = false;
@@ -87,14 +87,20 @@ describe("renderDashboard console", () => {
     api.initAmbience();
     api.setScene("ocean");
     expect(values.get("rhapsod.scene")).toBe("ocean");
-    api.toggleMotion();
-    expect(attrs.get("data-motion")).toBe("paused");
-    api.toggleMotion();
-    expect(attrs.get("data-motion")).toBe("running");
+    // The OS reduced-motion setting applies until the owner picks a mode;
+    // then the button wins, so Windows with animation effects off can
+    // still get the turntable and the meter moving.
     reduced = true;
     api.applyMotion();
-    expect(button.disabled).toBe(true);
+    expect(attrs.get("data-motion")).toBe("reduced");
+    expect(button.disabled).toBe(false);
+    expect(button.textContent).toBe("Activar movimiento");
+    api.toggleMotion();
+    expect(attrs.get("data-motion")).toBe("running");
+    expect(values.get("rhapsod.motion")).toBe("running");
+    api.toggleMotion();
     expect(attrs.get("data-motion")).toBe("paused");
+    api.toggleMotion();
     reduced = false;
     document.hidden = true;
     api.applyMotion();
@@ -409,6 +415,9 @@ describe("renderDashboard console", () => {
     }
     // Every page hides scrollbars and loads the self-hosted faces.
     for (const html of pages) {
+      expect(html).toContain('<div class="intro" id="intro"');
+      expect(html).toContain('sessionStorage.getItem("rhapsod.intro")');
+      expect(html).not.toContain("@media(prefers-reduced-motion");
       expect(html).toContain("scrollbar-width:none");
       expect(html).toContain("url(/fonts/instrument-sans.woff2)");
     }

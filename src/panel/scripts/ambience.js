@@ -13,37 +13,41 @@ function setScene(value) {
       window.localStorage.setItem("rhapsod.scene", value);
   } catch (e) {}
 }
-var motionPaused = false;
-function applyMotion() {
+// "running" or "paused" once the owner picks one with the button; until
+// then the OS reduced-motion setting decides. Windows turns that setting on
+// with "Animation effects" off, which owners rarely know about, so the
+// button has to be able to override it.
+var motionPref = null;
+function motionMode() {
+  if (motionPref === "running" || motionPref === "paused") return motionPref;
   var mq = window.matchMedia
     ? window.matchMedia("(prefers-reduced-motion: reduce)")
     : null;
-  var reduced = mq ? !!mq.matches : false;
-  var paused = motionPaused || reduced || document.hidden === true;
+  return mq && mq.matches ? "reduced" : "running";
+}
+function applyMotion() {
+  var mode = motionMode();
   var root = document.documentElement;
   if (root && root.setAttribute)
-    root.setAttribute("data-motion", paused ? "paused" : "running");
+    root.setAttribute(
+      "data-motion",
+      mode === "running" && document.hidden === true ? "paused" : mode,
+    );
   var button = /** @type {HTMLButtonElement|null} */ (
     document.getElementById ? document.getElementById("motionToggle") : null
   );
   if (!button) return;
-  button.textContent = reduced
-    ? "Movimiento reducido"
-    : motionPaused
-      ? "Activar movimiento"
-      : "Pausar movimiento";
+  button.textContent =
+    mode === "running" ? "Pausar movimiento" : "Activar movimiento";
   if (button.setAttribute)
-    button.setAttribute("aria-pressed", String(motionPaused || !!reduced));
-  button.disabled = !!reduced;
+    button.setAttribute("aria-pressed", String(mode !== "running"));
+  button.disabled = false;
 }
 function toggleMotion() {
-  motionPaused = !motionPaused;
+  motionPref = motionMode() === "running" ? "paused" : "running";
   try {
     if (window.localStorage)
-      window.localStorage.setItem(
-        "rhapsod.motion",
-        motionPaused ? "paused" : "running",
-      );
+      window.localStorage.setItem("rhapsod.motion", motionPref);
   } catch (e) {}
   applyMotion();
 }
@@ -52,7 +56,7 @@ function initAmbience() {
   try {
     if (window.localStorage) {
       scene = window.localStorage.getItem("rhapsod.scene") || scene;
-      motionPaused = window.localStorage.getItem("rhapsod.motion") === "paused";
+      motionPref = window.localStorage.getItem("rhapsod.motion");
     }
   } catch (e) {}
   setScene(scene);
@@ -69,11 +73,9 @@ function initAmbience() {
 }
 function motionOn() {
   var root = document.documentElement;
-  return !(
-    root &&
-    root.getAttribute &&
-    root.getAttribute("data-motion") === "paused"
-  );
+  if (!root || !root.getAttribute) return true;
+  var mode = root.getAttribute("data-motion");
+  return mode !== "paused" && mode !== "reduced";
 }
 function fx(el, frames, opts) {
   if (!motionOn()) return null;
