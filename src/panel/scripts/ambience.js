@@ -13,17 +13,13 @@ function setScene(value) {
       window.localStorage.setItem("rhapsod.scene", value);
   } catch (e) {}
 }
-// "running" or "paused" once the owner picks one with the button; until
-// then the OS reduced-motion setting decides. Windows turns that setting on
-// with "Animation effects" off, which owners rarely know about, so the
-// button has to be able to override it.
+// The OS reduced-motion setting is ignored on purpose: Windows turns it on
+// with "Animation effects" off, which owners rarely know about, and the
+// owner asked for the turntable and meter to move regardless. This is an
+// owner console, not a public page; the button is the way to stop motion.
 var motionPref = null;
 function motionMode() {
-  if (motionPref === "running" || motionPref === "paused") return motionPref;
-  var mq = window.matchMedia
-    ? window.matchMedia("(prefers-reduced-motion: reduce)")
-    : null;
-  return mq && mq.matches ? "reduced" : "running";
+  return motionPref === "paused" ? "paused" : "running";
 }
 function applyMotion() {
   var mode = motionMode();
@@ -63,11 +59,6 @@ function initAmbience() {
   applyMotion();
   if (document.addEventListener)
     document.addEventListener("visibilitychange", applyMotion);
-  var media = window.matchMedia
-    ? window.matchMedia("(prefers-reduced-motion: reduce)")
-    : null;
-  if (media && media.addEventListener)
-    media.addEventListener("change", applyMotion);
   restoreSongHue();
   initMotion();
 }
@@ -75,7 +66,7 @@ function motionOn() {
   var root = document.documentElement;
   if (!root || !root.getAttribute) return true;
   var mode = root.getAttribute("data-motion");
-  return mode !== "paused" && mode !== "reduced";
+  return mode !== "paused";
 }
 function fx(el, frames, opts) {
   if (!motionOn()) return null;

@@ -35,7 +35,7 @@ function render(status: Partial<PanelStatus> = {}): string {
 }
 
 describe("renderDashboard console", () => {
-  it("persists scene choices, follows reduced motion until the owner overrides it, pauses hidden tabs", () => {
+  it("persists scene choices, ignores the OS reduced-motion setting, pauses hidden tabs", () => {
     const values = new Map<string, string>();
     const attrs = new Map<string, string>();
     let reduced = false;
@@ -87,20 +87,17 @@ describe("renderDashboard console", () => {
     api.initAmbience();
     api.setScene("ocean");
     expect(values.get("rhapsod.scene")).toBe("ocean");
-    // The OS reduced-motion setting applies until the owner picks a mode;
-    // then the button wins, so Windows with animation effects off can
-    // still get the turntable and the meter moving.
+    // The OS reduced-motion setting is ignored (owner's call: Windows sets
+    // it with animation effects off); only the button stops motion.
     reduced = true;
     api.applyMotion();
-    expect(attrs.get("data-motion")).toBe("reduced");
-    expect(button.disabled).toBe(false);
-    expect(button.textContent).toBe("Activar movimiento");
-    api.toggleMotion();
     expect(attrs.get("data-motion")).toBe("running");
-    expect(values.get("rhapsod.motion")).toBe("running");
+    expect(button.textContent).toBe("Pausar movimiento");
     api.toggleMotion();
     expect(attrs.get("data-motion")).toBe("paused");
+    expect(values.get("rhapsod.motion")).toBe("paused");
     api.toggleMotion();
+    expect(attrs.get("data-motion")).toBe("running");
     reduced = false;
     document.hidden = true;
     api.applyMotion();

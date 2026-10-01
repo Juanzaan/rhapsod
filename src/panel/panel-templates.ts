@@ -19,7 +19,7 @@ const CHROME_CSS = `${FONT_FACE_CSS}
 *{margin:0;padding:0;box-sizing:border-box}
 ::selection{background:var(--ac);color:#05240F}
 body{font-family:var(--sn);background:var(--bg);color:var(--tx);min-height:100vh}
-html[data-motion=reduced] *,html[data-motion=reduced] *::before,html[data-motion=reduced] *::after{animation:none!important;transition-duration:.15s!important}
+
 :focus-visible{outline:2px solid var(--bl);outline-offset:2px}
 .nv{background:#0b0b0d;border-bottom:1px solid var(--ln);padding:0 1.5rem;display:flex;align-items:center;height:52px;gap:1.5rem;position:sticky;top:0;z-index:10}
 .nb{font-weight:800;font-size:.9375rem;letter-spacing:.35em;color:var(--tx);text-decoration:none}

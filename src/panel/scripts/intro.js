@@ -15,25 +15,30 @@
     seen = window.sessionStorage.getItem("rhapsod.intro") === "1";
     window.sessionStorage.setItem("rhapsod.intro", "1");
   } catch (e) {}
-  var reduced =
-    pref === "paused" ||
-    (pref !== "running" &&
-      !!window.matchMedia &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches);
-  if (seen || reduced || !root || !root.classList || !intro.classList) {
+  var paused = pref === "paused";
+  if (seen || paused || !root || !root.classList || !intro.classList) {
     drop();
     return;
   }
   root.classList.add("intro-on");
+  var done = false;
   function finish() {
+    if (done) return;
+    done = true;
     root.classList.remove("intro-on");
     drop();
+    document.removeEventListener("keydown", finish);
   }
+  // A click or any key skips the intro: it is the largest motion on the
+  // panel and the OS reduced-motion setting no longer stops it.
+  intro.addEventListener("pointerdown", finish);
+  document.addEventListener("keydown", finish);
   function fly() {
     var mark = /** @type {HTMLElement|null} */ (
       intro.querySelector(".intro-mark")
     );
     var target = document.querySelector(".nv .nb");
+    if (done) return;
     if (!mark || !target) return finish();
     var from = mark.getBoundingClientRect();
     var to = target.getBoundingClientRect();
@@ -53,6 +58,7 @@
     // "r." alone first, then the rest of the name opens between the
     // letter and the dot, then the whole word lands on the nav.
     setTimeout(function () {
+      if (done) return;
       intro.classList.add("open");
       setTimeout(fly, 750);
     }, 380);

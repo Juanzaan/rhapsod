@@ -44,7 +44,7 @@ const PAGE_LIVE_CSS = `
 .setup-shell .fi{background:hsl(var(--song-h) 30% 14%);border-color:hsl(var(--song-h) 35% 30%);transition:transform .3s ease}.setup-shell .fe:hover .fi{transform:rotate(-6deg) scale(1.08)}
 .setup-shell .fn{color:var(--song)}
 @media(max-width:640px){.fl{flex-direction:column;align-items:flex-start!important;gap:3px}.fl .fk{text-align:left}}
-html[data-motion=reduced] .page-heading h1,html[data-motion=reduced] .liveb.on::before,html[data-motion=reduced] .setup-art,html[data-motion=reduced] .settings-grid .save-bar.dirty .btn{animation:none!important}
+
 `;
 
 export const PAGE_CSS = `${AMBIENT_CSS}
