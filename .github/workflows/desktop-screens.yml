@@ -53,8 +53,9 @@ jobs:
           Shot '1-configuracion'
           Stop-Process $p -Force
 
+          & ssh.exe -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=10 git@gitlab.com 2>&1 | Select-Object -First 3
           # 2. Real SSH server (github.com) never seen before: fingerprint question.
-          Conf 'git@github.com'
+          Conf 'git@gitlab.com'
           $p = Start-Process $exe -PassThru
           Start-Sleep 6
           $shell.AppActivate('Rhapsod: configuración') | Out-Null
@@ -71,7 +72,7 @@ jobs:
           Start-Sleep 1
           [System.Windows.Forms.SendKeys]::SendWait('y')
           # 3. github.com accepts the host key but not this demo key.
-          Start-Sleep 7
+          Start-Sleep 4
           Shot '3-sin-conexion'
           Start-Sleep 20
           Shot '4-reintento'
