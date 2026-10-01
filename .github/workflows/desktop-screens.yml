@@ -37,6 +37,8 @@ jobs:
             Set-Content -Encoding ascii "$conf\dashboard.conf" @("host=$h", 'key=%USERPROFILE%\.ssh\id_ed25519', 'local_port=8080', 'remote_port=8080', 'panel_user=admin')
           }
           $shell = New-Object -ComObject WScript.Shell
+          (New-Object -ComObject Shell.Application).MinimizeAll()
+          Start-Sleep 2
 
           # 1. First run: settings window with dummy data.
           Conf 'rhapsod@203.0.113.10'
@@ -51,8 +53,11 @@ jobs:
 
           # 2. Real SSH server (github.com) never seen before: fingerprint question.
           Conf 'git@github.com'
-          cmdkey /generic:"Rhapsod Dashboard/git@github.com" /user:admin /pass:demo-password | Out-Null
           $p = Start-Process $exe -PassThru
+          Start-Sleep 6
+          $shell.AppActivate('Rhapsod: configuración') | Out-Null
+          Start-Sleep 1
+          [System.Windows.Forms.SendKeys]::SendWait('{TAB}{TAB}{TAB}{TAB}demo-password{ENTER}')
           Start-Sleep 25
           Shot '2-huella'
           $shell.AppActivate('Rhapsod: confirmar el servidor') | Out-Null
