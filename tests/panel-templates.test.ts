@@ -591,7 +591,7 @@ describe("renderDashboard console", () => {
       clients: [],
     });
     expect(getEl("treeHint").textContent).toBe(
-      "Hacé clic en un canal para mover el bot ahí",
+      "Hacé clic en un canal para mover el bot ahí.",
     );
 
     api.poll();
@@ -1046,6 +1046,73 @@ describe("renderDashboard console", () => {
     expect(loaded).toContain("Modo detallado<");
     expect(loaded).toContain("Server &lt;name&gt;");
     expect(loaded).toContain('id="saveSettings"');
+  });
+});
+
+describe("hidden-row counter", () => {
+  function harness(scroll: { height: number; top: number; client: number }) {
+    const rowBottoms = [100, 200, 320];
+    const box = {
+      scrollHeight: scroll.height,
+      scrollTop: scroll.top,
+      clientHeight: scroll.client,
+      getBoundingClientRect: () => ({ bottom: 300 }),
+      querySelectorAll: () =>
+        rowBottoms.map((bottom) => ({
+          getBoundingClientRect: () => ({ bottom }),
+        })),
+    };
+    const btn = { hidden: true, textContent: "" };
+    const code = scriptBlocks(
+      render({ connected: true, queueLength: 3, version: "1" }),
+    ).join("\n");
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval
+    const factory = new Function(
+      "document",
+      "window",
+      "fetch",
+      "setInterval",
+      "setTimeout",
+      `${code};return {paintMore:paintMore};`,
+    ) as (...args: unknown[]) => {
+      paintMore(box: string, btn: string, units: string[][]): void;
+    };
+    const api = factory(
+      {
+        getElementById: (id: string) =>
+          id === "box"
+            ? box
+            : id === "btn"
+              ? btn
+              : {
+                  addEventListener: () => {},
+                  setAttribute: () => {},
+                  getAttribute: () => null,
+                  querySelectorAll: () => [],
+                  classList: { add() {}, remove() {}, toggle() {} },
+                  style: {},
+                },
+        addEventListener: () => {},
+      },
+      { addEventListener: () => {}, matchMedia: () => ({ matches: false }) },
+      () => new Promise(() => {}),
+      () => 0,
+      () => 0,
+    );
+    api.paintMore("box", "btn", [["li", "pista", "pistas"]]);
+    return btn;
+  }
+
+  it("counts rows below the edge while the list can still scroll", () => {
+    const btn = harness({ height: 400, top: 0, client: 300 });
+    expect(btn.hidden).toBe(false);
+    expect(btn.textContent).toBe("1 pista más abajo");
+  });
+
+  it("stays hidden when the list does not scroll or is at its end", () => {
+    // Round 6 found it claiming hidden rows on a list that fit.
+    expect(harness({ height: 300, top: 0, client: 300 }).hidden).toBe(true);
+    expect(harness({ height: 400, top: 100, client: 300 }).hidden).toBe(true);
   });
 });
 

@@ -27,7 +27,7 @@ html[data-live=true] .ambient .orb{opacity:1}html[data-live=true] .ambient .orb:
 .nk{position:relative;transition:background .25s ease,color .25s ease}
 .nk::after{content:'';position:absolute;left:50%;bottom:3px;width:4px;height:4px;margin-left:-2px;border-radius:50%;background:var(--song);box-shadow:0 0 8px var(--song);transform:scale(0);transition:transform .4s cubic-bezier(.2,1.4,.4,1)}
 .nk.a::after{transform:scale(1)}.nk:hover::after{transform:scale(.7)}
-.rv-wait{opacity:0}
+.rv-wait{opacity:0;animation:rv-show 0s 2.5s forwards}@keyframes rv-show{to{opacity:1}}@media print{.rv-wait{opacity:1}}
 
 .rp{position:absolute;border-radius:50%;pointer-events:none;background:currentColor;opacity:0;transform:scale(0)}
 .ambient{position:fixed;inset:0;z-index:-1;overflow:hidden;pointer-events:none;background:radial-gradient(ellipse at 80% 0%,#17342855,transparent 65%),#090d0c}
@@ -77,6 +77,7 @@ export const BRAND_CSS = `
 .status{display:inline-flex;align-items:center;gap:8px;padding:6px 12px 6px 10px;border-radius:999px;border:1px solid #ffffff14;background:#ffffff06;color:#b8c7bc;font-size:12px;font-weight:500;white-space:nowrap;transition:border-color .4s ease,color .4s ease}
 .status .st{font-size:12px;color:inherit}
 .status.on{color:#eef2ec}
+:focus-visible{outline-color:hsl(var(--song-h) 60% 72%)}.tree-hint{font-size:12px;line-height:1.7;color:#91a497;margin:-10px 0 12px}
 .channel-move{min-height:28px;cursor:pointer}.chrow:hover{border-color:#ffffff10}.chrow:has(>.chhead:hover){border-color:hsl(var(--song-h) 55% 62% / .55)}.queue-card .ql{padding:0 10px;margin:0 -10px}
 .more{align-self:center;flex:none;margin-top:10px;font:500 12px var(--sn);color:#d6e2da;background:#ffffff0a;border:1px solid #ffffff18;border-radius:999px;padding:5px 14px;cursor:pointer}.more:hover{background:#ffffff14}.more[hidden]{display:none}
 .status .dot{width:7px;height:7px;border-radius:50%;background:#7f8c84;flex:none}.status .dot.on{background:var(--ac)}.status .dot.off{background:var(--rd)}

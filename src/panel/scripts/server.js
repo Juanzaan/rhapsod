@@ -42,11 +42,11 @@ function render(view) {
   document.getElementById("visibilityNote").textContent =
     view && view.mode === "full"
       ? "Lista completa, incluidos canales vacíos."
-      : "Vista limitada: el análisis de canales aún no termina o falló. Se muestran canales con usuarios visibles.";
+      : "Vista limitada: todavía se están revisando los canales. Por ahora se ven solo los que tienen gente.";
   document.getElementById("treeHint").textContent =
     view && view.mode === "full"
-      ? "Hacé clic en un canal para mover el bot ahí"
-      : "Vista parcial: revisá permisos limitados o la conexión · clic para mover el bot";
+      ? "Hacé clic en un canal para mover el bot ahí."
+      : "Vista parcial. Hacé clic en un canal para mover el bot ahí.";
   if (chs.length === 0) {
     setHtml(
       box,

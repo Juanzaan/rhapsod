@@ -490,9 +490,9 @@ export function renderServerPage(): string {
     <div class="server-layout"><div class="cd">
       <label class="field-label" for="channelSearch">Buscar un canal o usuario</label><div class="toolbar"><input class="sr" id="channelSearch" placeholder="Nombre del canal o usuario…" oninput="filterChannels()"><button class="btn secondary" onclick="expandChannels(true)">Expandir</button><button class="btn secondary" onclick="expandChannels(false)">Contraer</button></div>
       <div class="ct"><span>Canales</span></div>
+      <p class="helper tree-hint" id="treeHint">Hacé clic en un canal para mover el bot ahí.</p>
       <div id="tree"><div class="em">Conectando…</div></div>
-      <div class="em" id="treeHint" style="font-size:.75rem">Hacé clic en un canal para mover el bot ahí</div>
-    </div><aside class="cd server-side"><div class="ct">Visibilidad del servidor</div><p class="visibility-note" id="visibilityNote">Consultando los canales disponibles para la identidad del bot.</p><p>La visibilidad de usuarios puede depender de las suscripciones del bot.</p><p>El árbol completo se descubre en segundo plano al iniciar y cada diez minutos; una vista limitada significa que el análisis aún no termina o falló. No requiere permisos especiales.</p><button class="btn secondary" onclick="poll()">Actualizar vista</button></aside></div>
+    </div><aside class="cd server-side"><div class="ct">Qué se ve</div><p class="visibility-note" id="visibilityNote">Buscando los canales del servidor…</p><p>Si falta alguien, puede que el bot no tenga permiso para ver ese canal.</p><p>El bot revisa los canales al iniciar y cada diez minutos. Si la lista parece incompleta, usá Actualizar vista.</p><button class="btn secondary" onclick="poll()">Actualizar vista</button></aside></div>
   </main>
   <div class="toast" id="toast"></div>
   <script>

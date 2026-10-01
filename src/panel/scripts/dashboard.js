@@ -835,6 +835,11 @@ function paintMore(boxId, buttonId, units) {
     return;
   // Rows under the bottom fade count as hidden: they read as cut off.
   var limit = box.getBoundingClientRect().bottom - 24;
+  // At the end of the list (or with nothing to scroll) nothing is hidden.
+  if (box.scrollHeight - box.scrollTop - box.clientHeight < 1) {
+    btn.hidden = true;
+    return;
+  }
   var parts = [];
   for (var u = 0; u < units.length; u++) {
     var rows = box.querySelectorAll(units[u][0]);
