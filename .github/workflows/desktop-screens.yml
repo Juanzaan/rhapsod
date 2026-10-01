@@ -1,0 +1,75 @@
+name: Desktop screenshots
+on:
+  push:
+    branches: [claude/desktop-screens]
+permissions:
+  contents: write
+jobs:
+  shots:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build
+        shell: pwsh
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File tools\desktop\build.ps1
+      - name: Screenshots
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Continue'
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          New-Item -ItemType Directory -Force shots | Out-Null
+          function Shot($name) {
+            $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+            $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+            $g = [System.Drawing.Graphics]::FromImage($bmp)
+            $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+            $bmp.Save("shots\$name.png", [System.Drawing.Imaging.ImageFormat]::Png)
+            Write-Host "shot $name $($b.Width)x$($b.Height)"
+          }
+          $exe = Resolve-Path tools\desktop\bin\RhapsodDashboard.exe
+          $ssh = Join-Path $env:USERPROFILE '.ssh'
+          New-Item -ItemType Directory -Force $ssh | Out-Null
+          & ssh-keygen.exe -q -t ed25519 -N '""' -f "$ssh\id_ed25519"
+          $conf = Join-Path $env:APPDATA 'Rhapsod'
+          New-Item -ItemType Directory -Force $conf | Out-Null
+          function Conf($h) {
+            Set-Content -Encoding ascii "$conf\dashboard.conf" @("host=$h", 'key=%USERPROFILE%\.ssh\id_ed25519', 'local_port=8080', 'remote_port=8080', 'panel_user=admin')
+          }
+          $shell = New-Object -ComObject WScript.Shell
+
+          # 1. First run: settings window with dummy data.
+          Conf 'rhapsod@203.0.113.10'
+          $p = Start-Process $exe -PassThru
+          Start-Sleep 6
+          $shell.AppActivate('Rhapsod: configuración') | Out-Null
+          Start-Sleep 1
+          [System.Windows.Forms.SendKeys]::SendWait('{TAB}{TAB}{TAB}{TAB}demo-password')
+          Start-Sleep 1
+          Shot '1-configuracion'
+          Stop-Process $p -Force
+
+          # 2. Real SSH server (github.com) never seen before: fingerprint question.
+          Conf 'git@github.com'
+          cmdkey /generic:"Rhapsod Dashboard/git@github.com" /user:admin /pass:demo-password | Out-Null
+          $p = Start-Process $exe -PassThru
+          Start-Sleep 25
+          Shot '2-huella'
+          $shell.AppActivate('Rhapsod: confirmar el servidor') | Out-Null
+          Start-Sleep 1
+          [System.Windows.Forms.SendKeys]::SendWait('y')
+          # 3. github.com accepts the host key but not this demo key.
+          Start-Sleep 7
+          Shot '3-sin-conexion'
+          Start-Sleep 20
+          Shot '4-reintento'
+          Get-Content "$conf\known_hosts" -ErrorAction SilentlyContinue
+          Stop-Process $p -Force -ErrorAction SilentlyContinue
+      - name: Commit screenshots
+        shell: bash
+        run: |
+          git config user.name github-actions
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add shots
+          git commit -m "chore: desktop screenshots"
+          git push origin HEAD:claude/desktop-screens
