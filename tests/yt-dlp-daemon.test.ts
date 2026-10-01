@@ -19,6 +19,8 @@ function findPython(): string | undefined {
 const python = findPython();
 
 describe.skipIf(python === undefined)("yt-dlp daemon", () => {
+  // The child gets 60 s; vitest's default 5 s cut it short on a slow
+  // Windows runner (PR #210) while the Python suite was still passing.
   it("passes its Python unit tests", () => {
     const result = spawnSync(
       python!,
@@ -26,5 +28,5 @@ describe.skipIf(python === undefined)("yt-dlp daemon", () => {
       { encoding: "utf8", timeout: 60_000 },
     );
     expect(result.status, result.stderr).toBe(0);
-  });
+  }, 70_000);
 });
