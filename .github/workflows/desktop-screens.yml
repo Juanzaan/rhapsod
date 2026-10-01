@@ -38,6 +38,8 @@ jobs:
           }
           $shell = New-Object -ComObject WScript.Shell
           (New-Object -ComObject Shell.Application).MinimizeAll()
+          Start-Sleep 3
+          if ($shell.AppActivate('System Properties')) { Start-Sleep 1; [System.Windows.Forms.SendKeys]::SendWait('{ENTER}') }
           Start-Sleep 2
 
           # 1. First run: settings window with dummy data.
@@ -59,6 +61,11 @@ jobs:
           Start-Sleep 1
           [System.Windows.Forms.SendKeys]::SendWait('{TAB}{TAB}{TAB}{TAB}demo-password{ENTER}')
           Start-Sleep 25
+          if ($shell.AppActivate('System Properties')) { Start-Sleep 1; [System.Windows.Forms.SendKeys]::SendWait('{ENTER}'); Start-Sleep 1 }
+          $shell.AppActivate('Rhapsod: confirmar el servidor') | Out-Null
+          Start-Sleep 1
+          Write-Host "alive: $(-not $p.HasExited)"; Get-Process ssh -ErrorAction SilentlyContinue | Format-Table Id, StartTime
+          cmdkey /list | Select-String Rhapsod
           Shot '2-huella'
           $shell.AppActivate('Rhapsod: confirmar el servidor') | Out-Null
           Start-Sleep 1
@@ -69,6 +76,7 @@ jobs:
           Start-Sleep 20
           Shot '4-reintento'
           Get-Content "$conf\known_hosts" -ErrorAction SilentlyContinue
+          Get-Content "$env:LOCALAPPDATA\Rhapsod\dashboard.log" -ErrorAction SilentlyContinue
           Stop-Process $p -Force -ErrorAction SilentlyContinue
       - name: Commit screenshots
         shell: bash
