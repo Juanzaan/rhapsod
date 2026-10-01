@@ -305,8 +305,8 @@ export function renderDashboard(status: PanelStatus): string {
         <div class="ct"><span>A continuación</span><span class="rv" id="qc">${queueLen} pistas</span></div>
         <ul class="ql" id="ql"></ul>
         <button class="more" id="qlMore" type="button" hidden></button>
-        <div class="em" id="qe" style="display:${queueLen === 0 ? "block" : "none"}"><span class="empty-mark" aria-hidden="true">＋</span>Hay lugar para otro tema.<br>Agregá música para seguir la sesión.</div>
-        <div class="queue-footer"><button class="ch" onclick="cmd('shuffle')">Mezclar cola</button><button class="ch" onclick="cmd('clear')">Vaciar cola</button></div>
+        <div class="em" id="qe" style="display:${queueLen === 0 ? "block" : "none"}"><span class="empty-mark" aria-hidden="true">＋</span>Hay lugar para otra pista.<br>Agregá música para seguir la sesión.</div>
+        <div class="queue-footer" id="qf"${queueLen === 0 ? " hidden" : ""}><button class="ch" onclick="cmd('shuffle')">Mezclar cola</button><button class="ch" onclick="cmd('clear')">Vaciar cola</button></div>
       </div>
       <div class="cd sound-card">
         <div class="ct"><span>Tu sonido</span></div>
@@ -344,7 +344,7 @@ export function renderDashboard(status: PanelStatus): string {
           <div class="stt"><div class="sv" id="stVer">${version}</div><div class="sl">Versión</div></div>
           <div class="stt"><div class="sv${status.youtubeAuthHealthy === true ? " am" : ""}" id="ytRes">${status.youtubeAuthHealthy === true ? "OK" : status.youtubeAuthHealthy === false ? "FALLA" : "Sin probar"}</div><div class="sl">YouTube</div></div>
         </div>
-        <div class="fc" style="margin-top:1rem;margin-bottom:0">
+        <div class="fc">
           <button class="ch" onclick="checkYt(true)">Probar YouTube</button>
         </div>
       </div>
@@ -353,7 +353,7 @@ export function renderDashboard(status: PanelStatus): string {
         <pre class="dw open" id="dw"></pre>
       </div>
       <div class="cd errors-card">
-        <div class="ct"><span>Errores</span><span class="rv" id="ec">0 total</span></div>
+        <div class="ct"><span>Errores</span><span class="rv" id="ec"></span></div>
         <div class="fc" id="ek"></div>
         <ul class="ql" id="el"></ul>
         <div class="em" id="ee">Sin errores registrados</div>

@@ -74,7 +74,7 @@ function initScrollFade() {
       var el = /** @type {HTMLElement} */ (els[i]);
       var rest = el.scrollHeight - el.clientHeight - el.scrollTop;
       el.style.setProperty("--sf-top", el.scrollTop > 2 ? "40px" : "0px");
-      el.style.setProperty("--sf-bot", rest > 2 ? "56px" : "0px");
+      el.style.setProperty("--sf-bot", rest > 2 ? "24px" : "0px");
     }
   };
   document.addEventListener("scroll", paint, true);

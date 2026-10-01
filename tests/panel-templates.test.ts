@@ -143,6 +143,10 @@ describe("renderDashboard console", () => {
     const html = render();
     expect(html).toContain("EN ESPERA");
     expect(html).toContain("--:--");
+    // Shuffle and clear on an empty queue were dead buttons, and the
+    // footer overflowed the card's padding at 1440px.
+    expect(html).toContain('<div class="queue-footer" id="qf" hidden>');
+    expect(html).toContain("Hay lugar para otra pista.");
   });
 
   it("renders loop, filters, queue actions and drawers", () => {
@@ -378,6 +382,10 @@ describe("renderDashboard console", () => {
         ?.classList.set.has("on"),
     ).toBe(true);
     expect(getEl("stTracks").textContent).toBe("7");
+    const footer = getEl("qf") as FakeEl & { hidden?: boolean };
+    expect(footer.hidden).toBe(false);
+    // "0 total" next to "Sin errores registrados" said the same thing twice.
+    expect(getEl("ec").textContent).toBe("");
     expect(getEl("uptime").textContent).toBe("activo 1 h · 2 cortes");
     expect(getEl("ql").innerHTML).toContain("rmQ(1,this)");
     expect(getEl("ql").innerHTML).toContain("rmQ(2,this)");
@@ -1119,6 +1127,91 @@ describe("hidden-row counter", () => {
     const end = harness({ height: 400, top: 100, client: 300 });
     expect(end.hidden).toBe(true);
     expect(end.rows).toEqual(["", "", ""]);
+  });
+});
+
+describe("bot channel on the server card", () => {
+  function harness(hereTop: number) {
+    const box = {
+      innerHTML: "",
+      scrollTop: 0,
+      getBoundingClientRect: () => ({ top: 100, bottom: 400 }),
+      querySelector: (sel: string) =>
+        sel === ".chrow.here"
+          ? {
+              getBoundingClientRect: () => ({
+                top: hereTop,
+                bottom: hereTop + 60,
+              }),
+            }
+          : null,
+    };
+    const code = scriptBlocks(
+      render({ connected: true, queueLength: 0, version: "1" }),
+    ).join("\n");
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval
+    const factory = new Function(
+      "document",
+      "window",
+      "fetch",
+      "setInterval",
+      "setTimeout",
+      `${code};return {renderServerCard:renderServerCard};`,
+    ) as (...args: unknown[]) => {
+      renderServerCard(view: unknown): void;
+    };
+    const api = factory(
+      {
+        getElementById: (id: string) =>
+          id === "srvTree"
+            ? box
+            : {
+                addEventListener: () => {},
+                setAttribute: () => {},
+                getAttribute: () => null,
+                querySelectorAll: () => [],
+                classList: { add() {}, remove() {}, toggle() {} },
+                style: {},
+                textContent: "",
+              },
+        addEventListener: () => {},
+      },
+      { addEventListener: () => {}, matchMedia: () => ({ matches: false }) },
+      () => new Promise(() => {}),
+      () => 0,
+      () => 0,
+    );
+    const view = (botChannelId: number) => ({
+      version: 1,
+      botChannelId,
+      channels: [
+        { cid: 1, name: "Lobby", order: 1 },
+        { cid: 6, name: "Música", order: 6 },
+      ],
+      clients: [],
+    });
+    return { box, render: (cid: number) => api.renderServerCard(view(cid)) };
+  }
+
+  it("scrolls the bot's channel into view when it starts below the edge", () => {
+    // Round 9: on a 12-channel server the only highlighted box was blanked
+    // out under "5 canales más abajo" on load.
+    const t = harness(500);
+    t.render(6);
+    expect(t.box.scrollTop).toBe(392);
+    // Later refreshes in the same channel leave the user's scroll alone.
+    t.box.scrollTop = 0;
+    t.render(6);
+    expect(t.box.scrollTop).toBe(0);
+    // The bot moving brings its new channel into view again.
+    t.render(1);
+    expect(t.box.scrollTop).toBe(392);
+  });
+
+  it("does not scroll when the bot's channel already fits", () => {
+    const t = harness(150);
+    t.render(6);
+    expect(t.box.scrollTop).toBe(0);
   });
 });
 

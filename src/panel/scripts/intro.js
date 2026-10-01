@@ -61,7 +61,18 @@
     setTimeout(function () {
       if (done) return;
       intro.classList.add("open");
-      setTimeout(fly, 750);
+      // fly() measures the word, so it waits for the expansion to end: on
+      // a fixed timer a slow machine measured it half open and the mark
+      // landed off the nav, then jumped into place.
+      var rest = intro.querySelector(".intro-rest");
+      var flown = false;
+      var once = function () {
+        if (flown) return;
+        flown = true;
+        fly();
+      };
+      if (rest) rest.addEventListener("transitionend", once);
+      setTimeout(once, 1200);
     }, 380);
   }
   function start() {

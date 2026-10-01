@@ -14,7 +14,9 @@ var PP = "idle",
 var anchorPos = 0,
   anchorAt = 0,
   lastTitle = null,
-  lastChatLen = -1;
+  lastChatLen = -1,
+  lastBotCid = null,
+  hereDue = false;
 
 function clock(ts) {
   return new Date(ts).toLocaleTimeString("es", {
@@ -196,6 +198,29 @@ function renderServerCard(view) {
   document.getElementById("srvCount").textContent =
     n + (n === 1 ? " usuario" : " usuarios");
   box.innerHTML = built.html;
+  // On a big server the bot's channel sat below the fold, blanked out by
+  // the counter. Bring it into view when it first shows or the bot moves,
+  // never on other refreshes, so a user's own scroll is left alone.
+  if (view.botChannelId !== lastBotCid) {
+    lastBotCid = view.botChannelId;
+    hereDue = true;
+  }
+  showHere();
+}
+
+function showHere() {
+  if (!hereDue) return;
+  // Row heights change when the web fonts arrive; measuring before that
+  // left the channel below the edge on some loads. paintMores retries.
+  if (document.fonts && document.fonts.status !== "loaded") return;
+  hereDue = false;
+  var box = document.getElementById("srvTree");
+  var here = box.querySelector ? box.querySelector(".chrow.here") : null;
+  if (!here) return;
+  var top = box.getBoundingClientRect().top;
+  var r = here.getBoundingClientRect();
+  if (r.bottom > box.getBoundingClientRect().bottom - 24)
+    box.scrollTop += r.top - top - 8;
 }
 
 function sendChat() {
@@ -552,7 +577,11 @@ function refresh() {
         lastQ = qj;
         var list = document.getElementById("ql");
         var empty = document.getElementById("qe");
-        if (!d.queue || d.queue.length === 0) {
+        var footer = document.getElementById("qf");
+        var none = !d.queue || d.queue.length === 0;
+        // Shuffle and clear do nothing on an empty queue.
+        if (footer) footer.hidden = none;
+        if (none) {
           list.innerHTML = "";
           empty.style.display = "block";
         } else {
@@ -716,7 +745,8 @@ function renderErrors(e) {
   if (ej === lastE) return;
   lastE = ej;
   var ec = document.getElementById("ec");
-  ec.textContent = (e.totalErrors || 0) + " total";
+  // At zero the empty state already says so.
+  ec.textContent = e.totalErrors > 0 ? e.totalErrors + " total" : "";
   ec.style.color = e.totalErrors > 0 ? "var(--rd)" : "";
   var k = document.getElementById("ek");
   var cats = e.byCategory || {};
@@ -865,6 +895,7 @@ function paintMore(boxId, buttonId, units, frameSelector) {
   btn.textContent = parts.join(" y ") + " más abajo";
 }
 function paintMores() {
+  showHere();
   paintMore("ql", "qlMore", [[":scope > li", "pista", "pistas"]]);
   paintMore(
     "srvTree",

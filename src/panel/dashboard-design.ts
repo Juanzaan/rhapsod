@@ -41,7 +41,7 @@ html[data-motion=paused] *,html[data-motion=paused] *::before,html[data-motion=p
 .scene-tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--dm)}
 .scene-tools select{background:#121b16;border:1px solid #ffffff16;color:#d2ded5;padding:9px 26px 9px 10px;border-radius:8px;max-width:150px}
 .scene-tools button{background:#121b16;border:1px solid #ffffff16;color:#d2ded5;padding:9px 12px;border-radius:8px;cursor:pointer}
-@media(max-width:640px){.scene-tools{gap:6px}.scene-tools label{display:none}.scene-tools select,.scene-tools button{min-height:36px}}
+@media(max-width:640px){.scene-tools{gap:6px}.scene-tools select,.scene-tools button{min-height:36px}}
 `;
 
 // Served at /favicon.ico so browsers stop logging a 404 on every page load.
@@ -71,13 +71,13 @@ export const BRAND_CSS = `
 #srvTree,#tree,.ql{overflow-x:hidden}
 @property --sf-top{syntax:'<length>';inherits:false;initial-value:0px}
 @property --sf-bot{syntax:'<length>';inherits:false;initial-value:0px}
-@keyframes scroll-fade{0%{--sf-top:0px;--sf-bot:56px}6%{--sf-top:40px}94%{--sf-bot:56px}100%{--sf-top:40px;--sf-bot:0px}}
+@keyframes scroll-fade{0%{--sf-top:0px;--sf-bot:24px}6%{--sf-top:40px}94%{--sf-bot:24px}100%{--sf-top:40px;--sf-bot:0px}}
 @supports (animation-timeline:scroll()){html #srvTree,html .ql,html .dw{-webkit-mask-image:linear-gradient(to bottom,transparent,#000 var(--sf-top),#000 calc(100% - var(--sf-bot)),transparent);mask-image:linear-gradient(to bottom,transparent,#000 var(--sf-top),#000 calc(100% - var(--sf-bot)),transparent);animation:scroll-fade linear both!important;animation-timeline:scroll(self)!important;animation-play-state:running!important}}
 @supports not (animation-timeline:scroll()){html #srvTree,html .ql,html .dw{-webkit-mask-image:linear-gradient(to bottom,transparent,#000 var(--sf-top),#000 calc(100% - var(--sf-bot)),transparent);mask-image:linear-gradient(to bottom,transparent,#000 var(--sf-top),#000 calc(100% - var(--sf-bot)),transparent)}}
 .status{display:inline-flex;align-items:center;gap:8px;padding:6px 12px 6px 10px;border-radius:999px;border:1px solid #ffffff14;background:#ffffff06;color:#b8c7bc;font-size:12px;font-weight:500;white-space:nowrap;transition:border-color .4s ease,color .4s ease}
 .status .st{font-size:12px;color:inherit}
 .status.on{color:#eef2ec}
-:focus-visible{outline-color:hsl(var(--song-h) 60% 72%)}.tree-hint{font-size:12px;line-height:1.7;color:#91a497;margin:-10px 0 12px}.sg button{letter-spacing:.02em!important}.system-card .sg3{flex:none}.system-card{justify-content:space-between}.command-count{margin-left:8px;color:#7d9284}
+:focus-visible{outline-color:hsl(var(--song-h) 60% 72%)}.tree-hint{font-size:12px;line-height:1.7;color:#91a497;margin:-10px 0 12px}.sg button{letter-spacing:.02em!important}.system-card .sg3{flex:none}.system-card{justify-content:flex-start}.system-card .fc{margin:auto 0 0;padding-top:16px}.system-card .sl{letter-spacing:.06em}.queue-footer[hidden]{display:none}.queue-card .ql:empty,.chat-card .ql:empty{display:none}.queue-card .em,.chat-card .em{margin:auto 0}.chat-card{display:flex;flex-direction:column}.command-count{margin-left:8px;color:#7d9284}
 .ct{font:600 15px/1.3 var(--dp)!important;letter-spacing:-.01em!important;text-transform:none!important;color:#e9efe9!important}.ct .rv,.ct label{font:500 12px var(--sn)!important;letter-spacing:0!important;color:#9fb0a5}.ct label{font:600 15px/1.3 var(--dp)!important;color:#e9efe9!important}
 .queue-card .qt,#chat li,.chnm,.cd2,.helper,.track-detail,.users li,.server-side p,.page-heading p,.intro-note{font-size:13px!important}
 .nt{text-wrap:balance}.page-heading p a{text-decoration:underline;text-underline-offset:2px}
