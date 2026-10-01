@@ -506,9 +506,14 @@ function refresh() {
       paintTime();
       document.getElementById("nt").textContent =
         d.currentTitle || "Tu próxima canción empieza acá.";
-      document.getElementById("trackDetail").textContent =
-        d.currentArtist ||
-        (d.currentTitle ? "" : "Elegí un tema y compartí el momento.");
+      var detail = document.getElementById("trackDetail");
+      if (d.currentArtist) detail.textContent = d.currentArtist;
+      else if (d.currentRequester)
+        detail.innerHTML = "Pedido por <b>" + esc(d.currentRequester) + "</b>";
+      else
+        detail.textContent = d.currentTitle
+          ? ""
+          : "Elegí un tema y compartí el momento.";
       document.getElementById("nt").title = d.currentTitle || "";
       fxCount(
         document.getElementById("qc"),

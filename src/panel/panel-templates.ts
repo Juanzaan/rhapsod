@@ -132,6 +132,13 @@ ${panelScript("setup")}  </script>
 </html>`;
 }
 
+function trackDetail(status: PanelStatus): string {
+  if (status.currentArtist) return esc(status.currentArtist);
+  if (status.currentRequester)
+    return `Pedido por <b>${esc(status.currentRequester)}</b>`;
+  return status.currentTitle ? "" : "Elegí un tema y compartí el momento.";
+}
+
 export function renderDashboard(status: PanelStatus): string {
   const connected = status.connected;
   const title = esc(status.currentTitle || "Tu próxima canción empieza acá.");
@@ -272,7 +279,7 @@ export function renderDashboard(status: PanelStatus): string {
           <div class="record-stage" aria-hidden="true"><div class="record" id="record"><div class="record-label"><b>r.</b>rhapsod</div></div><i class="shine"></i><div class="tonearm"><i class="arm"></i><i class="head"></i><i class="pivot"></i></div></div>
           <div class="ns-row"><div class="ns" id="nsState">${stateLabel}</div><span class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span></div>
           <div class="nt" id="nt">${title}</div>
-          <div class="track-detail" id="trackDetail">${esc(status.currentArtist || (status.currentTitle ? "" : "Elegí un tema y compartí el momento."))}</div>
+          <div class="track-detail" id="trackDetail">${trackDetail(status)}</div>
           <div class="progress-block"><div class="sk" id="seek" role="slider" tabindex="0" aria-label="Posición de reproducción" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" title="Cambiar posición"><div class="skf" id="seekf"></div><span class="sk-tip" id="skTip" aria-hidden="true"></span></div>
           <div class="tm"><span id="tcur">${timeCur}</span><span class="tt" id="tdur">${timeDur}</span></div></div>
         </div>

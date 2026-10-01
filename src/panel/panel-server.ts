@@ -91,6 +91,8 @@ export interface PanelStatus {
   readonly queueLength: number;
   readonly currentTitle?: string;
   readonly currentArtist?: string;
+  /** Who queued the track playing now. */
+  readonly currentRequester?: string;
   readonly durationMs?: number;
   readonly positionMs?: number;
   readonly playerState?: "idle" | "buffering" | "playing" | "paused";

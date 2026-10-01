@@ -87,6 +87,7 @@ describe("panelStatus", () => {
       connected: true,
       currentChannelId: 5,
       currentTitle: "Artist - Song",
+      currentRequester: "Ana",
       durationMs: 200_000,
       queueLength: 1,
       tracksPlayed: 5,

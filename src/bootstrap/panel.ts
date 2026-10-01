@@ -113,7 +113,10 @@ export function panelStatus(sources: PanelStatusSources): PanelStatus {
     queueLength: playback.queue().length,
     ...(current === undefined
       ? {}
-      : { currentTitle: displayTitle(current, radioTitles) }),
+      : {
+          currentTitle: displayTitle(current, radioTitles),
+          currentRequester: current.requestedBy,
+        }),
     ...(current?.durationSeconds === undefined
       ? {}
       : { durationMs: current.durationSeconds * 1000 }),
