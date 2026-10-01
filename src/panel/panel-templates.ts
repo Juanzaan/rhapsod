@@ -319,7 +319,7 @@ export function renderDashboard(status: PanelStatus): string {
         </div>
         <div class="mini-label">Autoplay</div>
         <p class="helper">Que la música siga cuando termine la cola.</p>
-        <div class="sg" id="autoSeg"><button data-a="on" aria-pressed="${status.autoplay === true}" class="${status.autoplay === true ? "on" : ""}" onclick="cmd('autoplay on')">ACTIVAR</button><button data-a="off" aria-pressed="${status.autoplay !== true}" class="${status.autoplay === true ? "" : "on"}" onclick="cmd('autoplay off')">DESACTIVAR</button></div>
+        <div class="sg" id="autoSeg"><button data-a="on" aria-pressed="${status.autoplay === true}" class="${status.autoplay === true ? "on" : ""}" onclick="cmd('autoplay on')">ENCENDIDO</button><button data-a="off" aria-pressed="${status.autoplay !== true}" class="${status.autoplay === true ? "" : "on"}" onclick="cmd('autoplay off')">APAGADO</button></div>
         <div class="mini-label"><label for="radioQuery">Radio en directo</label></div>
         <div class="ir"><input id="radioQuery" placeholder="Nombre o género…" onkeydown="if(event.key==='Enter')tuneRadio()"><button class="go" id="radioTune" onclick="tuneRadio()">Sintonizar</button></div>
         <div class="mini-label">Biblioteca del bot</div>

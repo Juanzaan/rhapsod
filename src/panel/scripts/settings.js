@@ -73,6 +73,27 @@ function load() {
             continue;
           }
           var val = e.masked ? "" : e.value || "";
+          if (!e.masked && (val === "true" || val === "false")) {
+            h +=
+              '<div class="f"><label class="fl" for="setting-' +
+              esc(e.key) +
+              '"><span>' +
+              esc((e.description || e.key).replace(/ ?\(true\/false\)/, "")) +
+              '</span><code class="fk">' +
+              esc(e.key) +
+              '</code></label><select id="setting-' +
+              esc(e.key) +
+              '" data-key="' +
+              esc(e.key) +
+              '" data-initial="' +
+              val +
+              '"><option value="true"' +
+              (val === "true" ? " selected" : "") +
+              '>Sí</option><option value="false"' +
+              (val === "false" ? " selected" : "") +
+              ">No</option></select></div>";
+            continue;
+          }
           h +=
             '<div class="f"><label class="fl" for="setting-' +
             esc(e.key) +
@@ -84,6 +105,8 @@ function load() {
             esc(e.key) +
             '" data-key="' +
             esc(e.key) +
+            '" data-initial="' +
+            esc(val) +
             '" value="' +
             esc(val) +
             '"' +
@@ -125,7 +148,7 @@ function loadFailed(error) {
 
 function save() {
   var inputs = /** @type {NodeListOf<HTMLInputElement>} */ (
-    document.querySelectorAll("input[data-key]")
+    document.querySelectorAll("[data-key]")
   );
   var button = /** @type {HTMLButtonElement|null} */ (
     document.getElementById("saveSettings")
@@ -174,12 +197,12 @@ function save() {
 // a forgotten edit is visible before navigating away.
 function markDirty() {
   var inputs = document.querySelectorAll
-    ? document.querySelectorAll("input[data-key]")
+    ? document.querySelectorAll("[data-key]")
     : [];
   var changed = 0;
   for (var i = 0; i < inputs.length; i++) {
     var input = inputs[i],
-      dirty = input.value !== input.defaultValue;
+      dirty = input.value !== (input.getAttribute("data-initial") || "");
     if (dirty) changed++;
     if (input.parentNode && input.parentNode.classList)
       input.parentNode.classList.toggle("dirty", dirty);
@@ -202,10 +225,10 @@ function markDirty() {
 
 function markSaved() {
   var inputs = document.querySelectorAll
-    ? document.querySelectorAll("input[data-key]")
+    ? document.querySelectorAll("[data-key]")
     : [];
   for (var i = 0; i < inputs.length; i++)
-    inputs[i].defaultValue = inputs[i].value;
+    inputs[i].setAttribute("data-initial", inputs[i].value);
   markDirty();
   var bar = document.getElementById("saveBar"),
     note = document.getElementById("saveNote");
@@ -229,4 +252,6 @@ watchStatus();
 var settingsRoot = document.getElementById("ct");
 if (settingsRoot && settingsRoot.addEventListener)
   settingsRoot.addEventListener("input", markDirty);
+if (settingsRoot && settingsRoot.addEventListener)
+  settingsRoot.addEventListener("change", markDirty);
 load();

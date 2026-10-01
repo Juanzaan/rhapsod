@@ -719,7 +719,8 @@ function renderErrors(e) {
   var cats = e.byCategory || {};
   var names = Object.keys(cats);
   var kh = "";
-  for (var i = 0; i < names.length; i++) {
+  // With one category the chip only repeats the total.
+  for (var i = 0; names.length > 1 && i < names.length; i++) {
     var n = names[i];
     kh += '<span class="ch">' + esc(n) + " " + cats[n] + "</span>";
   }
@@ -827,23 +828,31 @@ function renderErrors(e) {
 })();
 
 // Hidden scrollbars left a half row as the only hint that a list went on.
-function paintMore(boxId, buttonId, rowSelector) {
+function paintMore(boxId, buttonId, units) {
   var box = document.getElementById(boxId);
   var btn = document.getElementById(buttonId);
   if (!box || !btn || !box.querySelectorAll || !box.getBoundingClientRect)
     return;
   var limit = box.getBoundingClientRect().bottom + 1;
-  var rows = box.querySelectorAll(rowSelector);
-  var hidden = 0;
-  for (var i = 0; i < rows.length; i++) {
-    if (rows[i].getBoundingClientRect().bottom > limit) hidden++;
+  var parts = [];
+  for (var u = 0; u < units.length; u++) {
+    var rows = box.querySelectorAll(units[u][0]);
+    var hidden = 0;
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i].getBoundingClientRect().bottom > limit) hidden++;
+    }
+    if (hidden > 0)
+      parts.push(hidden + " " + (hidden === 1 ? units[u][1] : units[u][2]));
   }
-  btn.hidden = hidden === 0;
-  btn.textContent = hidden === 1 ? "1 más abajo" : hidden + " más abajo";
+  btn.hidden = parts.length === 0;
+  btn.textContent = parts.join(" y ") + " más abajo";
 }
 function paintMores() {
-  paintMore("ql", "qlMore", ":scope > li");
-  paintMore("srvTree", "srvMore", ".chrow");
+  paintMore("ql", "qlMore", [[":scope > li", "pista", "pistas"]]);
+  paintMore("srvTree", "srvMore", [
+    [".chrow", "canal", "canales"],
+    [".users li", "usuario", "usuarios"],
+  ]);
 }
 function initMore() {
   ["ql", "srvTree"].forEach(function (id, i) {

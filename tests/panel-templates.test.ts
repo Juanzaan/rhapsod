@@ -1026,6 +1026,12 @@ describe("renderDashboard console", () => {
                 description: "Server <name>",
                 editable: true,
               },
+              {
+                key: "RHAPSOD_VERBOSE",
+                value: "false",
+                description: "Modo detallado (true/false)",
+                editable: true,
+              },
             ],
           }),
       }),
@@ -1034,6 +1040,10 @@ describe("renderDashboard console", () => {
     expect(loaded).toContain("RHAPSOD_PANEL_HOST (solo lectura)");
     expect(loaded).toContain("Ruta del binario ffmpeg (solo lectura)<");
     expect(loaded).not.toContain("(solo lectura) (solo lectura)");
+    // Booleans pick from Sí/No instead of typing true or false.
+    expect(loaded).toContain('<select id="setting-RHAPSOD_VERBOSE"');
+    expect(loaded).toContain('<option value="false" selected>No</option>');
+    expect(loaded).toContain("Modo detallado<");
     expect(loaded).toContain("Server &lt;name&gt;");
     expect(loaded).toContain('id="saveSettings"');
   });
@@ -1262,14 +1272,23 @@ describe("panel pages motion and feedback", () => {
 
   it("counts unsaved settings and clears them after saving", () => {
     const fieldClasses = new Map<unknown, boolean>();
-    const makeInput = (value: string, defaultValue: string) => {
+    const makeInput = (value: string, initial: string) => {
       const parentNode = {
         classList: {
           toggle: (_name: string, on: boolean) =>
             fieldClasses.set(parentNode, on),
         },
       };
-      return { value, defaultValue, parentNode };
+      const attrs: Record<string, string> = { "data-initial": initial };
+      return {
+        value,
+        parentNode,
+        attrs,
+        getAttribute: (name: string) => attrs[name] ?? null,
+        setAttribute: (name: string, v: string) => {
+          attrs[name] = v;
+        },
+      };
     };
     const inputs = [
       makeInput("Rhapsod DJ", "Rhapsod"),
@@ -1313,7 +1332,7 @@ describe("panel pages motion and feedback", () => {
     api.markSaved();
     expect(barClasses.has("dirty")).toBe(false);
     expect(barClasses.has("saved")).toBe(true);
-    expect(inputs[0]?.defaultValue).toBe("Rhapsod DJ");
+    expect(inputs[0]?.attrs["data-initial"]).toBe("Rhapsod DJ");
     expect(note.textContent).toContain("Guardado");
   });
 
