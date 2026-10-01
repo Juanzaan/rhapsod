@@ -24,6 +24,7 @@ import {
   saveEnvFile,
 } from "./env-file.js";
 import { FAVICON_SVG } from "./dashboard-design.js";
+import { isPanelFont, panelFont } from "./panel-fonts.js";
 import {
   renderDashboard,
   renderSetupWizard,
@@ -368,13 +369,18 @@ export function createPanelServer(options: PanelOptions): {
     // HTML or API payloads. Stale pages after a deploy submit old shapes to
     // new endpoints (and old JS against new APIs), which surfaces as
     // breakage that only a hard refresh fixes.
-    c.header("Cache-Control", "no-store");
+    // Fonts are the exception: same bytes until a dependency bump, and
+    // refetching ~110 KB through the tunnel on every page change is waste.
+    c.header(
+      "Cache-Control",
+      c.req.path.startsWith("/fonts/") ? "private, max-age=604800" : "no-store",
+    );
     c.header("X-Frame-Options", "DENY");
     c.header("X-Content-Type-Options", "nosniff");
     c.header("Referrer-Policy", "no-referrer");
     c.header(
       "Content-Security-Policy",
-      "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+      "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
     );
   });
 
@@ -423,6 +429,14 @@ export function createPanelServer(options: PanelOptions): {
   app.get("/favicon.ico", (c) =>
     c.body(FAVICON_SVG, 200, { "Content-Type": "image/svg+xml" }),
   );
+
+  app.get("/fonts/:name", (c) => {
+    const name = c.req.param("name");
+    if (!isPanelFont(name)) return c.notFound();
+    return c.body(new Uint8Array(panelFont(name)), 200, {
+      "Content-Type": "font/woff2",
+    });
+  });
 
   // 503 only while reconnecting: deploy.sh rolls back on it. A failing
   // YouTube login or daemon still plays through fallbacks, so it is
@@ -735,7 +749,7 @@ export function createPanelServer(options: PanelOptions): {
       return c.json(await options.testConnection(host, port));
     } catch (error: unknown) {
       const message =
-        error instanceof Error ? error.message : "Error de conexion";
+        error instanceof Error ? error.message : "Error de conexión";
       return c.json({ ok: false, error: message });
     }
   });

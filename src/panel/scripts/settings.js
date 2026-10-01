@@ -152,7 +152,7 @@ function save() {
       if (d.ok) markSaved();
     })
     .catch(function () {
-      toast("Error de conexion");
+      toast("Error de conexión");
     })
     .finally(function () {
       if (button) {

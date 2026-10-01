@@ -332,6 +332,40 @@ describe("panel-server", () => {
     }
   });
 
+  it("serves the self-hosted fonts with a cache window and nothing else", async () => {
+    const state = startTestPanel("", 23651);
+    try {
+      const res = await fetch(`${state.baseUrl}/fonts/instrument-sans.woff2`, {
+        headers: { authorization: state.auth },
+      });
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type")).toBe("font/woff2");
+      expect(res.headers.get("cache-control")).toBe("private, max-age=604800");
+      expect(res.headers.get("content-security-policy")).toContain(
+        "font-src 'self'",
+      );
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      expect(new TextDecoder().decode(bytes.slice(0, 4))).toBe("wOF2");
+
+      const page = await fetch(`${state.baseUrl}/`, {
+        headers: { authorization: state.auth },
+      });
+      expect(page.headers.get("cache-control")).toBe("no-store");
+
+      for (const name of ["../package.json", "other.woff2", "%2e%2e%2fx"]) {
+        const miss = await fetch(`${state.baseUrl}/fonts/${name}`, {
+          headers: { authorization: state.auth },
+        });
+        expect(miss.status).toBe(404);
+      }
+      const anon = await fetch(`${state.baseUrl}/fonts/bricolage.woff2`);
+      expect(anon.status).toBe(401);
+    } finally {
+      await state.close();
+      rmSync(state.dir, { recursive: true, force: true });
+    }
+  });
+
   it("serves the dashboard with a content-length matching the body", async () => {
     // Regression: the dashboard used to be gzipped inline with content-length
     // taken from the gzip buffer, while the runtime wrote the uncompressed

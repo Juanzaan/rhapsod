@@ -145,7 +145,7 @@ function moveBot(cid) {
       if (d.ok) setTimeout(poll, 800);
     })
     .catch(function () {
-      toast("Error de conexion");
+      toast("Error de conexión");
     });
 }
 

@@ -390,7 +390,7 @@ describe("renderDashboard console", () => {
     ];
     for (const html of pages) {
       // Same tokens everywhere: no leftover amber or slate-blue theme.
-      expect(html).toContain("--ac:#1ED760");
+      expect(html).toContain("--ac:#5BD38A");
       expect(html).toContain("--bl:#60A5FA");
       expect(html).toContain("--wn:#FBBF24");
       expect(html).toContain("--rd:#F87171");
@@ -405,8 +405,26 @@ describe("renderDashboard console", () => {
     }
     // Same brand on every nav.
     for (const html of pages.slice(0, 3)) {
-      expect(html).toContain("RHAPSOD<b>.</b>");
+      expect(html).toContain('rhapsod<b aria-hidden="true"></b>');
     }
+    // Every page hides scrollbars and loads the self-hosted faces.
+    for (const html of pages) {
+      expect(html).toContain("scrollbar-width:none");
+      expect(html).toContain("url(/fonts/instrument-sans.woff2)");
+    }
+  });
+
+  it("puts loop, autoplay, radio and library in one card without repeats", () => {
+    const html = renderDashboard({
+      connected: true,
+      queueLength: 0,
+      version: "4.0.0",
+    });
+    expect(html).not.toContain("discovery-card");
+    expect(html).not.toContain('class="section-no"');
+    // Mezclar/Vaciar live in the queue footer, Letra/Historial in the player.
+    expect(html.match(/cmd\('shuffle'\)/g)).toHaveLength(1);
+    expect(html.match(/showOut\('history'\)/g)).toHaveLength(1);
   });
 
   it("server page has live tree markers", () => {

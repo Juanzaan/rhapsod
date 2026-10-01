@@ -16,6 +16,15 @@ var anchorPos = 0,
   lastTitle = null,
   lastChatLen = -1;
 
+function clock(ts) {
+  return new Date(ts).toLocaleTimeString("es", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+}
+
 function fmtT(ms) {
   if (ms == null || !isFinite(ms) || ms < 0) return "--:--";
   var s = Math.floor(ms / 1000);
@@ -44,7 +53,7 @@ function cmd(c) {
       if (d.ok) setTimeout(refresh, 500);
     })
     .catch(function () {
-      toast("Error de conexion");
+      toast("Error de conexión");
     });
 }
 
@@ -167,7 +176,7 @@ function moveBot(cid) {
       if (d.ok) setTimeout(refresh, 800);
     })
     .catch(function () {
-      toast("Error de conexion");
+      toast("Error de conexión");
     });
 }
 
@@ -207,7 +216,7 @@ function sendChat() {
       else setTimeout(refresh, 500);
     })
     .catch(function () {
-      toast("Error de conexion");
+      toast("Error de conexión");
     });
 }
 
@@ -230,7 +239,7 @@ function renderChat(msgs) {
       : ' style="color:hsl(' + nameHue(who) + ' 62% 76%)"';
     h +=
       '<li class="qi"><span class="qn">' +
-      esc(new Date(m.ts).toLocaleTimeString()) +
+      esc(clock(m.ts)) +
       '</span><span class="' +
       (m.outgoing ? "cmB" : "cnm") +
       '"' +
@@ -700,7 +709,7 @@ function ignoreNotice(button) {
     })
     .catch(function () {
       button.disabled = false;
-      toast("Error de conexion");
+      toast("Error de conexión");
     });
 }
 
@@ -732,7 +741,7 @@ function renderErrors(e) {
   var h = "";
   for (var j = rec.length - 1; j >= 0; j--) {
     var r2 = rec[j];
-    var t = new Date(r2.ts).toLocaleTimeString();
+    var t = clock(r2.ts);
     var ti = r2.trackTitle || r2.trackId || "";
     h +=
       '<li class="qi"><span class="qn">' +
