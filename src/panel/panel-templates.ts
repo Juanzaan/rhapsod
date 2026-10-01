@@ -335,7 +335,7 @@ export function renderDashboard(status: PanelStatus): string {
         <div class="sg3">
           <div class="stt"><div class="sv am" id="stTracks" data-v="0">${tracksInit}</div><div class="sl">Temas</div></div>
           <div class="stt"><div class="sv" id="stVer">${version}</div><div class="sl">Versión</div></div>
-          <div class="stt"><div class="sv" id="ytRes">—</div><div class="sl">YouTube</div></div>
+          <div class="stt"><div class="sv${status.youtubeAuthHealthy === true ? " am" : ""}" id="ytRes">${status.youtubeAuthHealthy === true ? "OK" : status.youtubeAuthHealthy === false ? "FALLA" : "Sin probar"}</div><div class="sl">YouTube</div></div>
         </div>
         <div class="fc" style="margin-top:1rem;margin-bottom:0">
           <button class="ch" onclick="checkYt(true)">Probar YouTube</button>

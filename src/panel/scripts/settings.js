@@ -1,5 +1,11 @@
 var H = { "content-type": "application/json" };
 
+// Some descriptions already say it; appending it again read "(solo lectura)
+// (solo lectura)".
+function readOnlyLabel(text) {
+  return /solo lectura/i.test(text) ? text : text + " (solo lectura)";
+}
+
 function toast(m) {
   var el = document.getElementById("toast");
   el.textContent = m;
@@ -57,11 +63,11 @@ function load() {
           var e = entries[j];
           if (e.editable === false) {
             h +=
-              '<div class="f"><div class="fl"><span>' +
-              esc(e.description || e.key) +
-              ' (solo lectura)</span><code class="fk">' +
+              '<div class="f"><label class="fl"><span>' +
+              esc(readOnlyLabel(e.description || e.key)) +
+              '</span><code class="fk">' +
               esc(e.key) +
-              '</code></div><div class="h">' +
+              '</code></label><div class="h">' +
               esc(e.value || "") +
               "</div></div>";
             continue;

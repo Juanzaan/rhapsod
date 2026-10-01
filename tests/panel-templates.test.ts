@@ -1008,6 +1008,12 @@ describe("renderDashboard console", () => {
                 editable: false,
               },
               {
+                key: "RHAPSOD_FFMPEG_PATH",
+                value: "ffmpeg",
+                description: "Ruta del binario ffmpeg (solo lectura)",
+                editable: false,
+              },
+              {
                 key: "RHAPSOD_TS3_HOST",
                 value: "voice.example.com",
                 description: "Server <name>",
@@ -1018,6 +1024,9 @@ describe("renderDashboard console", () => {
       }),
     );
     expect(loaded).toContain("&lt;private&gt;");
+    expect(loaded).toContain("RHAPSOD_PANEL_HOST (solo lectura)");
+    expect(loaded).toContain("Ruta del binario ffmpeg (solo lectura)<");
+    expect(loaded).not.toContain("(solo lectura) (solo lectura)");
     expect(loaded).toContain("Server &lt;name&gt;");
     expect(loaded).toContain('id="saveSettings"');
   });
