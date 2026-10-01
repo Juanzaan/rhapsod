@@ -7,7 +7,7 @@ permissions:
 jobs:
   shots:
     runs-on: windows-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Build
@@ -17,7 +17,16 @@ jobs:
         shell: powershell
         run: |
           $ErrorActionPreference = 'Continue'
-          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing, UIAutomationClient, UIAutomationTypes
+          Add-Type @'
+          using System; using System.Runtime.InteropServices;
+          public static class Mouse {
+            [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+            [DllImport("user32.dll")] public static extern void mouse_event(uint f, uint dx, uint dy, uint d, IntPtr e);
+            public static void Right(int x, int y) { SetCursorPos(x, y); mouse_event(8, 0, 0, 0, IntPtr.Zero); mouse_event(16, 0, 0, 0, IntPtr.Zero); }
+            public static void Left(int x, int y) { SetCursorPos(x, y); mouse_event(2, 0, 0, 0, IntPtr.Zero); mouse_event(4, 0, 0, 0, IntPtr.Zero); }
+          }
+          '@
           New-Item -ItemType Directory -Force shots | Out-Null
           function Shot($name) {
             $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
@@ -25,60 +34,106 @@ jobs:
             $g = [System.Drawing.Graphics]::FromImage($bmp)
             $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
             $bmp.Save("shots\$name.png", [System.Drawing.Imaging.ImageFormat]::Png)
-            Write-Host "shot $name $($b.Width)x$($b.Height)"
+            Write-Host "shot $name"
           }
-          $exe = Resolve-Path tools\desktop\bin\RhapsodDashboard.exe
-          $ssh = Join-Path $env:USERPROFILE '.ssh'
-          New-Item -ItemType Directory -Force $ssh | Out-Null
-          & ssh-keygen.exe -q -t ed25519 -N '""' -f "$ssh\id_ed25519"
-          $conf = Join-Path $env:APPDATA 'Rhapsod'
-          New-Item -ItemType Directory -Force $conf | Out-Null
-          function Conf($h) {
-            Set-Content -Encoding ascii "$conf\dashboard.conf" @("host=$h", 'key=%USERPROFILE%\.ssh\id_ed25519', 'local_port=8080', 'remote_port=8080', 'panel_user=admin')
+          function Report($label) {
+            $apps = @(Get-Process RhapsodDashboard -ErrorAction SilentlyContinue)
+            $ssh = @(Get-Process ssh -ErrorAction SilentlyContinue)
+            Write-Host "[$label] RhapsodDashboard procesos: $($apps.Count); ssh: $($ssh.Count)"
           }
           $shell = New-Object -ComObject WScript.Shell
           (New-Object -ComObject Shell.Application).MinimizeAll()
           Start-Sleep 3
           if ($shell.AppActivate('System Properties')) { Start-Sleep 1; [System.Windows.Forms.SendKeys]::SendWait('{ENTER}') }
+
+          # Local OpenSSH server standing in for the bot host.
+          $ssh = Join-Path $env:USERPROFILE '.ssh'
+          New-Item -ItemType Directory -Force $ssh | Out-Null
+          & ssh-keygen.exe -q -t ed25519 -N '""' -f "$ssh\id_ed25519"
+          $auth = 'C:\ProgramData\ssh\administrators_authorized_keys'
+          if (-not (Get-Service sshd -ErrorAction SilentlyContinue)) { Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0 | Out-Null }
+          Start-Service sshd
+          Copy-Item "$ssh\id_ed25519.pub" $auth -Force
+          icacls $auth /inheritance:r /grant 'Administrators:F' /grant 'SYSTEM:F' | Out-Null
+          Restart-Service sshd
+          Write-Host "sshd: $((Get-Service sshd).Status)"
+          Start-Process python -ArgumentList 'tools\screens\fake_panel.py' -WindowStyle Hidden
           Start-Sleep 2
 
-          # 1. First run: settings window with dummy data.
-          Conf 'rhapsod@203.0.113.10'
-          $p = Start-Process $exe -PassThru
-          Start-Sleep 6
-          $shell.AppActivate('Rhapsod: configuración') | Out-Null
-          Start-Sleep 1
-          [System.Windows.Forms.SendKeys]::SendWait('{TAB}{TAB}{TAB}{TAB}demo-password')
-          Start-Sleep 1
-          Shot '1-configuracion'
-          Stop-Process $p -Force
+          $exe = Resolve-Path tools\desktop\bin\RhapsodDashboard.exe
+          $conf = Join-Path $env:APPDATA 'Rhapsod'
+          New-Item -ItemType Directory -Force $conf | Out-Null
+          Set-Content -Encoding ascii "$conf\dashboard.conf" @("host=$env:USERNAME@localhost", 'key=%USERPROFILE%\.ssh\id_ed25519', 'local_port=8080', 'remote_port=8081', 'panel_user=admin')
 
-          & ssh.exe -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=10 git@gitlab.com 2>&1 | Select-Object -First 3
-          # 2. Real SSH server (github.com) never seen before: fingerprint question.
-          Conf 'git@gitlab.com'
-          $p = Start-Process $exe -PassThru
+          # First run: settings, fingerprint, panel.
+          Start-Process $exe
           Start-Sleep 6
           $shell.AppActivate('Rhapsod: configuración') | Out-Null
           Start-Sleep 1
           [System.Windows.Forms.SendKeys]::SendWait('{TAB}{TAB}{TAB}{TAB}demo-password{ENTER}')
-          Start-Sleep 25
-          if ($shell.AppActivate('System Properties')) { Start-Sleep 1; [System.Windows.Forms.SendKeys]::SendWait('{ENTER}'); Start-Sleep 1 }
-          $shell.AppActivate('Rhapsod: confirmar el servidor') | Out-Null
-          Start-Sleep 1
-          Write-Host "alive: $(-not $p.HasExited)"; Get-Process ssh -ErrorAction SilentlyContinue | Format-Table Id, StartTime
-          cmdkey /list | Select-String Rhapsod
-          Shot '2-huella'
+          Start-Sleep 15
           $shell.AppActivate('Rhapsod: confirmar el servidor') | Out-Null
           Start-Sleep 1
           [System.Windows.Forms.SendKeys]::SendWait('y')
-          # 3. github.com accepts the host key but not this demo key.
+          Start-Sleep 15
+          Shot '1-primera-vez-panel'
+          Report 'primera vez'
+          Get-Process RhapsodDashboard, msedge, ssh -ErrorAction SilentlyContinue | Stop-Process -Force
+          Start-Sleep 3
+
+          # Second run: nothing to fill in.
+          $t0 = Get-Date
+          Start-Process $exe
           Start-Sleep 4
-          Shot '3-sin-conexion'
-          Start-Sleep 20
-          Shot '4-reintento'
-          Get-Content "$conf\known_hosts" -ErrorAction SilentlyContinue
+          Shot '2-segunda-vez-4s'
+          Start-Sleep 8
+          Shot '3-segunda-vez-12s'
+          Report 'segunda vez'
+          $edgeTitles = Get-Process msedge -ErrorAction SilentlyContinue | Where-Object MainWindowTitle | ForEach-Object MainWindowTitle
+          Write-Host "ventanas de Edge: $($edgeTitles -join ' | ')"
+          # Log in the way a user would: user, then paste the copied password.
+          $shell.AppActivate('127.0.0.1') | Out-Null
+          Start-Sleep 1
+          [System.Windows.Forms.SendKeys]::SendWait('admin{TAB}^v{ENTER}')
+          Start-Sleep 4
+          Shot '4-panel-con-sesion'
+
+          # Third launch while running.
+          $third = Start-Process $exe -PassThru
+          Start-Sleep 3
+          Write-Host "tercera apertura terminó sola: $($third.HasExited) (código $($third.ExitCode))"
+          Report 'tercera apertura'
+
+          # Tray icon: promote it out of the overflow, then find it with UI Automation.
+          Get-ChildItem 'HKCU:\Control Panel\NotifyIconSettings' -ErrorAction SilentlyContinue | ForEach-Object {
+            $path = (Get-ItemProperty $_.PSPath).ExecutablePath
+            if ($path -like '*RhapsodDashboard*') { Set-ItemProperty $_.PSPath IsPromoted 1 -Type DWord; Write-Host "promovido $($_.PSChildName)" }
+          }
+          Start-Sleep 3
+          $root = [System.Windows.Automation.AutomationElement]::RootElement
+          $cond = New-Object System.Windows.Automation.PropertyCondition ([System.Windows.Automation.AutomationElement]::ControlTypeProperty), ([System.Windows.Automation.ControlType]::Button)
+          $icon = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $cond) | Where-Object { $_.Current.Name -like 'Rhapsod*' } | Select-Object -First 1
+          if (-not $icon) {
+            Write-Host 'icono no visible; abriendo la flecha de íconos ocultos'
+            $chevron = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $cond) | Where-Object { $_.Current.Name -match 'hidden|ocult' } | Select-Object -First 1
+            if ($chevron) { $r = $chevron.Current.BoundingRectangle; [Mouse]::Left([int]($r.X + $r.Width / 2), [int]($r.Y + $r.Height / 2)); Start-Sleep 2 }
+            $icon = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $cond) | Where-Object { $_.Current.Name -like 'Rhapsod*' } | Select-Object -First 1
+          }
+          if ($icon) {
+            $r = $icon.Current.BoundingRectangle
+            Write-Host "icono: '$($icon.Current.Name)' en $r"
+            $x = [int]($r.X + $r.Width / 2); $y = [int]($r.Y + $r.Height / 2)
+            [Mouse]::SetCursorPos($x, $y) | Out-Null
+            Start-Sleep 3
+            Shot '5-icono-tooltip'
+            [Mouse]::Right($x, $y)
+            Start-Sleep 2
+            Shot '6-icono-menu'
+          } else {
+            Write-Host 'no se encontró el ícono con UI Automation'
+            Shot '5-sin-icono'
+          }
           Get-Content "$env:LOCALAPPDATA\Rhapsod\dashboard.log" -ErrorAction SilentlyContinue
-          Stop-Process $p -Force -ErrorAction SilentlyContinue
       - name: Commit screenshots
         shell: bash
         run: |
