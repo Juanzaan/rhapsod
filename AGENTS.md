@@ -146,5 +146,7 @@ without checking nothing is playing (`/api/state` → `playerState`).
 
 - Never commit `.env`, cookies, identities, or anything from `data/`.
 - Never push `--force` to `main` (branch protection enforces linear history).
-- DRM/blocked content is reported, never bypassed.
+- DRM is never decrypted or stripped. Blocked or unavailable content is
+  reported so it gets fixed: prefer a legitimate alternative (another upload,
+  another provider) over failing the request.
 - Spotify is metadata only, never a playback source.
