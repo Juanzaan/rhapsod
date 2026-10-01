@@ -411,31 +411,6 @@ function paintTime() {
 }
 
 var lampState = null;
-var linkUp = null;
-// One pill for the link and the playback: "Sonando" already says the bot is
-// connected, so the old separate ON AIR lamp only repeated it.
-function paintStatus() {
-  var pill = document.getElementById("lamp");
-  var txt = document.getElementById("stxt");
-  if (!pill || !txt) return;
-  var down = linkUp === false;
-  pill.className =
-    "status" +
-    (down
-      ? ""
-      : lampState === "playing"
-        ? " on"
-        : lampState === "buffering"
-          ? " buf"
-          : "");
-  txt.textContent = down
-    ? "Desconectado"
-    : lampState === "playing"
-      ? "Sonando"
-      : lampState === "buffering"
-        ? "Cargando"
-        : "Conectado";
-}
 function setLamp(state) {
   if (lampState !== null && lampState !== state)
     fx(
@@ -454,7 +429,6 @@ function setLamp(state) {
     "aria-label",
     state === "playing" || state === "buffering" ? "Pausar" : "Reanudar",
   );
-  paintStatus();
   if (state === "playing") {
     lab.textContent = "SONANDO";
     pp.innerHTML = "&#9208;";
@@ -536,8 +510,6 @@ function refresh() {
           ? "Una sesión para compartir."
           : "Elegí un tema y compartí el momento.");
       document.getElementById("nt").title = d.currentTitle || "";
-      document.getElementById("nc2").textContent =
-        "Canal " + (d.currentChannelId || "-");
       fxCount(
         document.getElementById("qc"),
         d.queueLength,
@@ -564,10 +536,15 @@ function refresh() {
         document.getElementById("uptime").textContent =
           dc > 0 ? up + " · " + dc + (dc === 1 ? " corte" : " cortes") : up;
       }
-      linkUp = !!d.connected;
+      // Connection only: playback state lives in the player card, and the
+      // nav repeating it was the redundancy the old lamp had.
+      document.getElementById("lamp").className =
+        "status" + (d.connected ? " on" : "");
       document.getElementById("dot").className =
         "dot " + (d.connected ? "on" : "off");
-      paintStatus();
+      document.getElementById("stxt").textContent = d.connected
+        ? "Conectado"
+        : "Desconectado";
       var qj = JSON.stringify(d.queue || []);
       if (qj !== lastQ) {
         lastQ = qj;

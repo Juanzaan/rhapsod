@@ -11,7 +11,7 @@ import { PAGE_CSS } from "./page-design.js";
 import { FONT_FACE_CSS } from "./panel-fonts.js";
 import { panelScript } from "./panel-scripts.js";
 
-// Shared ON AIR console chrome: flat zinc backdrop, green signal accents,
+// Shared console chrome: flat zinc backdrop, green signal accents,
 // tabular mono readouts. Every page interpolates this so the whole
 // panel looks like one instrument instead of four themes.
 const CHROME_CSS = `${FONT_FACE_CSS}
@@ -134,11 +134,8 @@ ${panelScript("setup")}  </script>
 export function renderDashboard(status: PanelStatus): string {
   const connected = status.connected;
   const title = esc(status.currentTitle || "Tu próxima canción empieza acá.");
-  const channel = status.currentChannelId || "-";
   const queueLen = status.queueLength;
   const playerState = status.playerState || "idle";
-  const lampClass =
-    playerState === "playing" ? "on" : playerState === "idle" ? "" : "buf";
   const stateLabel =
     playerState === "playing"
       ? "SONANDO"
@@ -256,7 +253,7 @@ export function renderDashboard(status: PanelStatus): string {
       <a class="nk" href="/commands" id="nc">Comandos</a>
     </div>
     <div class="nr">
-      <div class="status ${connected ? lampClass : ""}" id="lamp"><span class="dot ${connected ? "on" : "off"}" id="dot"></span><span class="st" id="stxt">${!connected ? "Desconectado" : playerState === "playing" ? "Sonando" : playerState === "buffering" ? "Cargando" : "Conectado"}</span></div>
+      <div class="status ${connected ? "on" : ""}" id="lamp"><span class="dot ${connected ? "on" : "off"}" id="dot"></span><span class="st" id="stxt">${connected ? "Conectado" : "Desconectado"}</span></div>
     </div>
   </nav>
   <main class="mn">
@@ -270,7 +267,7 @@ export function renderDashboard(status: PanelStatus): string {
         <ul class="notice-list" id="noticeList"></ul>
       </section>
       <div class="cd player-card" id="playerCard" data-playing="${playerState === "playing"}">
-        <div class="ct"><span>En reproducción</span><span class="rv" id="nc2">Canal ${channel}</span></div>
+        <div class="ct"><span>En reproducción</span></div>
         <div class="deck">
           <div class="record-stage" aria-hidden="true"><div class="record" id="record"><div class="record-label"><b>r.</b>rhapsod</div></div><i class="shine"></i><div class="tonearm"><i class="arm"></i><i class="head"></i><i class="pivot"></i></div></div>
           <div class="ns-row"><div class="ns" id="nsState">${stateLabel}</div><span class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span></div>
@@ -293,7 +290,7 @@ export function renderDashboard(status: PanelStatus): string {
         </div>
       </div>
       <div class="cd request-card">
-          <div class="ct"><label for="pi">¿Qué escuchamos?</label><span class="rv">Búsqueda o enlace</span></div>
+          <div class="ct"><label for="pi">¿Qué escuchamos?</label></div>
         <div class="ir">
           <input id="pi" placeholder="Un artista, una canción o un enlace…" onkeydown="if(event.key==='Enter')play()">
           <button class="go" id="addTrack" onclick="play()">Agregar a la cola</button>
@@ -355,7 +352,7 @@ export function renderDashboard(status: PanelStatus): string {
         <div class="em" id="ee">Sin errores registrados</div>
       </div>
     </div>
-    <footer class="page-footer"><span>RHAPSOD / HECHO PARA ESCUCHAR JUNTOS</span><a href="/commands">Explorá todos los comandos ↗</a></footer>
+    
   </main>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <script>
@@ -483,7 +480,7 @@ export function renderServerPage(): string {
     <div class="server-metrics"><div class="metric"><strong id="channelCount">0</strong><span>Canales conocidos</span></div><div class="metric"><strong id="peopleCount">0</strong><span>Usuarios visibles</span></div><div class="metric"><strong id="emptyCount">0</strong><span>Sin usuarios visibles</span></div></div>
     <div class="server-layout"><div class="cd">
       <label class="field-label" for="channelSearch">Buscar un canal o usuario</label><div class="toolbar"><input class="sr" id="channelSearch" placeholder="Nombre del canal o usuario…" oninput="filterChannels()"><button class="btn secondary" onclick="expandChannels(true)">Expandir</button><button class="btn secondary" onclick="expandChannels(false)">Contraer</button></div>
-      <div class="ct"><span>Canales</span><span class="rv" id="ucount"></span></div>
+      <div class="ct"><span>Canales</span></div>
       <div id="tree"><div class="em">Conectando…</div></div>
       <div class="em" id="treeHint" style="font-size:.75rem">Click en un canal para mover el bot ahí</div>
     </div><aside class="cd server-side"><div class="ct">Visibilidad del servidor</div><p class="visibility-note" id="visibilityNote">Consultando los canales disponibles para la identidad del bot.</p><p>Los canales vacíos también aparecen cuando TeamSpeak entrega la lista completa. La visibilidad de usuarios puede depender de las suscripciones del bot.</p><p>El árbol completo se descubre en segundo plano al iniciar y cada diez minutos; una vista limitada significa que el análisis aún no termina o falló. No requiere permisos especiales.</p><button class="btn secondary" onclick="poll()">Actualizar vista</button></aside></div>

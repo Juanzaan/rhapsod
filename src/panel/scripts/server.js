@@ -39,8 +39,6 @@ function render(view) {
       });
     }).length,
   );
-  document.getElementById("ucount").textContent =
-    total + (total === 1 ? " usuario" : " usuarios");
   document.getElementById("visibilityNote").textContent =
     view && view.mode === "full"
       ? "Lista completa, incluidos canales vacíos."

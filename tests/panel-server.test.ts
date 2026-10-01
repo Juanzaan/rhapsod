@@ -412,7 +412,7 @@ describe("panel-server", () => {
       });
       expect(res.status).toBe(200);
       const html = await res.text();
-      expect(html).toContain("RHAPSOD");
+      expect(html).toContain("rhapsod<b");
     } finally {
       await state.close();
       rmSync(state.dir, { recursive: true, force: true });

@@ -346,7 +346,7 @@ describe("renderDashboard console", () => {
     expect(getEl("tdur").textContent).toBe("3:20");
     expect(getEl("nsState").textContent).toBe("SONANDO");
     expect(getEl("lamp").className).toBe("status on");
-    expect(getEl("stxt").textContent).toBe("Sonando");
+    expect(getEl("stxt").textContent).toBe("Conectado");
     expect(getEl("ppBtn").innerHTML).toContain("9208");
     expect(getEl("vol").value).toBe(25);
     expect(getEl("volv").textContent).toBe("25%");
@@ -432,11 +432,21 @@ describe("renderDashboard console", () => {
     // Mezclar/Vaciar live in the queue footer, Letra/Historial in the player.
     expect(html.match(/cmd\('shuffle'\)/g)).toHaveLength(1);
     expect(html.match(/showOut\('history'\)/g)).toHaveLength(1);
+    // Said elsewhere on the same screen: the player shows playback state,
+    // the nav links to Comandos, the placeholder explains the search box.
+    for (const repeated of [
+      "ON AIR",
+      "Búsqueda o enlace",
+      "Explorá todos los comandos",
+      'id="nc2"',
+    ]) {
+      expect(html).not.toContain(repeated);
+    }
   });
 
   it("server page has live tree markers", () => {
     const html = renderServerPage();
-    for (const id of ["tree", "live", "ucount"]) {
+    for (const id of ["tree", "live"]) {
       expect(html).toContain(`id="${id}"`);
     }
     expect(html).toContain("/api/server");
@@ -530,7 +540,6 @@ describe("renderDashboard console", () => {
     expect(tree).toContain("Empty orphan");
     expect(tree).toContain("Vacío");
     expect(tree.indexOf("Music")).toBeLessThan(tree.indexOf("Sub"));
-    expect(getEl("ucount").textContent).toBe("3 usuarios");
     expect(tree.match(/onclick="moveBot\(2\)"/)).not.toBeNull();
     // Nested kids container + chevron toggle for channels with children.
     expect(tree).toContain('data-kids="2"');

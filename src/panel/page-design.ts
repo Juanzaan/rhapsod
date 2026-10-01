@@ -26,7 +26,7 @@ const PAGE_LIVE_CSS = `
 .ci{margin:0 -12px;padding-left:12px!important;padding-right:12px!important;border-radius:8px;cursor:copy;transition:background .2s ease}
 .ci:hover{background:#ffffff07}.ci:hover .cn{color:var(--song)!important}
 .cn{transition:color .2s ease}.ci mark{background:hsl(var(--song-h) 60% 55% / .3);color:inherit;border-radius:4px;padding:0 2px}
-.ci>.cg{float:right;margin:0 10px 0 0}.copy-hint{float:right;font:11px var(--mn);letter-spacing:.12em;color:#7f9486;opacity:0;transition:opacity .2s ease}.ci:hover .copy-hint{opacity:1}
+.ci>.cg{float:right;margin:0 10px 0 0}.ci .copy-hint{opacity:0;transition:opacity .2s ease}.ci:hover .copy-hint,.ci:focus-visible .copy-hint{opacity:1}.copy-hint{float:right;font:11px var(--mn);letter-spacing:.12em;color:#7f9486;opacity:0;transition:opacity .2s ease}.ci:hover .copy-hint{opacity:1}
 .fl{display:flex!important;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:7px}
 .fl .fk{font:11px var(--mn);color:#7d9284;letter-spacing:.02em;text-align:right;overflow-wrap:anywhere}
 .f.dirty input{border-color:hsl(var(--song-h) 60% 62% / .9)!important;box-shadow:0 0 0 3px hsl(var(--song-h) 60% 55% / .13)}

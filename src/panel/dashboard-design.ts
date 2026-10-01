@@ -68,8 +68,7 @@ export const BRAND_CSS = `
 @supports (animation-timeline:scroll()){html #srvTree,html .ql,html .dw{-webkit-mask-image:linear-gradient(to bottom,transparent,#000 var(--sf-top),#000 calc(100% - var(--sf-bot)),transparent);mask-image:linear-gradient(to bottom,transparent,#000 var(--sf-top),#000 calc(100% - var(--sf-bot)),transparent);animation:scroll-fade linear both!important;animation-timeline:scroll(self)!important;animation-play-state:running!important}}
 .status{display:inline-flex;align-items:center;gap:8px;padding:6px 12px 6px 10px;border-radius:999px;border:1px solid #ffffff14;background:#ffffff06;color:#b8c7bc;font-size:12px;font-weight:500;white-space:nowrap;transition:border-color .4s ease,color .4s ease}
 .status .st{font-size:12px;color:inherit}
-.status.on{border-color:hsl(var(--song-h) 50% 60% / .4);color:#eef2ec}.status.on .dot{background:var(--song)}.status.on .dot::after{background:var(--song)}
-.status.buf .dot{background:var(--wn)}.status.buf .dot::after{background:var(--wn)}
+.status.on{color:#eef2ec}
 @media(max-width:640px){.nb{font-size:20px}}
 .intro{position:fixed;inset:0;z-index:100;display:grid;place-items:center;background:#090d0c;transition:background-color .5s ease;animation:intro-gone 0s 4s forwards}
 @keyframes intro-gone{to{visibility:hidden}}
