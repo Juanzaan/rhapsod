@@ -54,6 +54,7 @@ import { isDrmError } from "../lib/drm-error.js";
 import { PreparedAudioStore } from "./prepared-audio-store.js";
 import {
   PlaybackController,
+  type AutoplayPick,
   type LoopMode,
   type PlaybackDriverState,
   type PlaybackEndReason,
@@ -254,7 +255,7 @@ export class YoutubePlaybackService {
     });
     const restored = this.#stateStore?.load();
     this.#controller = new PlaybackController({
-      autoplayProvider: () => this.resolveAutoplayTrack(),
+      autoplayProvider: () => this.planAutoplayTrack(),
       ...(options.autoplayTimeoutMs === undefined
         ? {}
         : { autoplayTimeoutMs: options.autoplayTimeoutMs }),
@@ -1266,6 +1267,16 @@ export class YoutubePlaybackService {
   }
 
   async resolveAutoplayTrack(): Promise<Track | undefined> {
+    const pick = await this.planAutoplayTrack();
+    pick?.commit();
+    return pick?.track;
+  }
+
+  // Picks without touching the rotation: the controller plans the next
+  // autoplay track while the last queued one still plays, and a plan that
+  // goes unused (someone queued, the track was skipped) must leave the turn,
+  // cooldowns and remembered requester as they were.
+  async planAutoplayTrack(): Promise<AutoplayPick | undefined> {
     const history = this.#controller.history();
     // Seeds that survive restarts: past user choices from the persisted
     // listening store backfill the in-memory session history, so autoplay
@@ -1286,7 +1297,6 @@ export class YoutubePlaybackService {
     const seedUid =
       this.#resolveAutoplayUid(history) ??
       this.#autoplayProfile?.lastRequesterUid();
-    if (seedUid !== undefined) this.#autoplayUid = seedUid;
     const profile =
       seedUid === undefined
         ? {
@@ -1327,24 +1337,35 @@ export class YoutubePlaybackService {
       this.#autoplayTurn,
       this.#bucketCooldowns,
     );
-    for (const [bucket, turns] of this.#bucketCooldowns) {
-      if (turns <= 1) this.#bucketCooldowns.delete(bucket);
-      else this.#bucketCooldowns.set(bucket, turns - 1);
-    }
     for (const bucket of order) {
       const picked = await this.#pickFromBucket(bucket, context).catch(
         () => undefined,
       );
       if (picked === undefined) continue;
-      this.#autoplayTurn++;
-      this.#autoplayBuckets.set(picked.id, bucket);
-      if (this.#autoplayBuckets.size > 50) {
-        const oldest = this.#autoplayBuckets.keys().next().value;
-        if (oldest !== undefined) this.#autoplayBuckets.delete(oldest);
-      }
-      return picked;
+      return {
+        commit: () => this.#commitAutoplay(picked, bucket, seedUid),
+        track: picked,
+      };
     }
     return undefined;
+  }
+
+  #commitAutoplay(
+    picked: Track,
+    bucket: AutoplayBucket,
+    seedUid: string | undefined,
+  ): void {
+    if (seedUid !== undefined) this.#autoplayUid = seedUid;
+    for (const [cooling, turns] of this.#bucketCooldowns) {
+      if (turns <= 1) this.#bucketCooldowns.delete(cooling);
+      else this.#bucketCooldowns.set(cooling, turns - 1);
+    }
+    this.#autoplayTurn++;
+    this.#autoplayBuckets.set(picked.id, bucket);
+    if (this.#autoplayBuckets.size > 50) {
+      const oldest = this.#autoplayBuckets.keys().next().value;
+      if (oldest !== undefined) this.#autoplayBuckets.delete(oldest);
+    }
   }
 
   // A skipped autoplay pick is the channel saying "not this": its bucket sits

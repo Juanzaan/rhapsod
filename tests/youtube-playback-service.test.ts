@@ -354,9 +354,10 @@ function setup(
     ...(options.autoplayTimeoutMs === undefined
       ? {}
       : { autoplayTimeoutMs: options.autoplayTimeoutMs }),
-    ...(options.relatedVideoId
-      ? { relatedVideoId: options.relatedVideoId }
-      : {}),
+    // Autoplay now plans while the last queued track plays; without a stub
+    // that plan would reach the real innertube endpoint.
+    relatedVideoId:
+      options.relatedVideoId ?? (() => Promise.resolve(undefined)),
   });
   return {
     alternativeResolver,
@@ -1043,8 +1044,6 @@ describe("YoutubePlaybackService", () => {
         },
       });
       service.setAutoplay(true);
-      await service.enqueue("https://youtu.be/seedvideo11", "user-1", "uid-1");
-      await new Promise((resolve) => setImmediate(resolve));
       resolver.expandPlaylist.mockResolvedValue({
         tracks: [
           {
@@ -1054,12 +1053,188 @@ describe("YoutubePlaybackService", () => {
           },
         ],
       });
+      await service.enqueue("https://youtu.be/seedvideo11", "user-1", "uid-1");
+      await new Promise((resolve) => setImmediate(resolve));
       playbackResolvers[0]?.();
       await new Promise((resolve) => setImmediate(resolve));
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       expect(service.current?.requestedBy).toBe("Autoplay");
       expect(service.current?.id).toBe("mix11111111");
+    } finally {
+      random.mockRestore();
+    }
+  });
+
+  it("picks and prepares the autoplay track while the last queued one plays", async () => {
+    const random = vi.spyOn(Math, "random").mockReturnValue(0.99);
+    try {
+      const { onPlaybackFinished, playbackResolvers, resolver, service } =
+        setup({
+          autoplayProfile: {
+            artistScores: () => new Map(),
+            tasteProfile: () => ({
+              artistScores: new Map<string, number>(),
+              tokenScores: new Map<string, number>(),
+            }),
+            recentArtists: () => [],
+          },
+        });
+      resolver.expandPlaylist.mockResolvedValue({
+        tracks: [
+          {
+            id: "mix11111111",
+            title: "Mix One",
+            webpageUrl: "https://www.youtube.com/watch?v=mix11111111",
+          },
+        ],
+      });
+      service.setAutoplay(true);
+      await new Promise((resolve) => setImmediate(resolve));
+      const plan = vi.spyOn(service, "planAutoplayTrack");
+      await service.enqueue("https://youtu.be/seedvideo11", "user-1", "uid-1");
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      expect(service.current?.id).toBe("seedvideo11");
+      expect(plan).toHaveBeenCalledTimes(1);
+      expect(resolver.getAudioUrlFromUrl).toHaveBeenCalledWith(
+        "https://www.youtube.com/watch?v=mix11111111",
+        expect.anything(),
+      );
+
+      playbackResolvers[0]?.();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(service.current?.id).toBe("mix11111111");
+      // The mix track plans its own successor; the handoff used the plan.
+      expect(plan).toHaveBeenCalledTimes(2);
+
+      playbackResolvers[1]?.();
+      await new Promise((resolve) => setImmediate(resolve));
+      const kpis = (
+        onPlaybackFinished.mock.calls.find(
+          (call) => (call[0] as { id: string }).id === "mix11111111",
+        ) as unknown[] | undefined
+      )?.[3] as { autoplayPickMs?: number } | undefined;
+      expect(kpis?.autoplayPickMs).toBeLessThan(10);
+    } finally {
+      random.mockRestore();
+    }
+  });
+
+  it("prewarms the planned autoplay track like a queued one", async () => {
+    const random = vi.spyOn(Math, "random").mockReturnValue(0.99);
+    try {
+      const { createPcmStreamMock, resolver, service } = setup({
+        autoplayProfile: {
+          artistScores: () => new Map(),
+          tasteProfile: () => ({
+            artistScores: new Map<string, number>(),
+            tokenScores: new Map<string, number>(),
+          }),
+          recentArtists: () => [],
+        },
+        framesSent: 4000,
+        prewarmNext: true,
+      });
+      resolver.expandPlaylist.mockResolvedValue({
+        tracks: [
+          {
+            durationSeconds: 200,
+            id: "mix11111111",
+            title: "Mix One",
+            webpageUrl: "https://www.youtube.com/watch?v=mix11111111",
+          },
+        ],
+      });
+      service.setAutoplay(true);
+      await new Promise((resolve) => setImmediate(resolve));
+      await service.enqueue("https://youtu.be/seedvideo11", "user-1", "uid-1");
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      expect(createPcmStreamMock).toHaveBeenCalledTimes(1);
+    } finally {
+      random.mockRestore();
+    }
+  });
+
+  it("picks again when the track the plan was made during is skipped", async () => {
+    const random = vi.spyOn(Math, "random").mockReturnValue(0.99);
+    try {
+      const { playbackResolvers, resolver, service } = setup({
+        autoplayProfile: {
+          artistScores: () => new Map(),
+          tasteProfile: () => ({
+            artistScores: new Map<string, number>(),
+            tokenScores: new Map<string, number>(),
+          }),
+          recentArtists: () => [],
+        },
+      });
+      resolver.expandPlaylist.mockResolvedValue({
+        tracks: [
+          {
+            id: "mix11111111",
+            title: "Mix One",
+            webpageUrl: "https://www.youtube.com/watch?v=mix11111111",
+          },
+        ],
+      });
+      service.setAutoplay(true);
+      await new Promise((resolve) => setImmediate(resolve));
+      const plan = vi.spyOn(service, "planAutoplayTrack");
+      await service.enqueue("https://youtu.be/seedvideo11", "user-1", "uid-1");
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(plan).toHaveBeenCalledTimes(1);
+
+      service.skip();
+      playbackResolvers[0]?.();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      expect(service.current?.id).toBe("mix11111111");
+      // Seed plan, the fresh pick after the skip, and the mix's own plan.
+      expect(plan).toHaveBeenCalledTimes(3);
+    } finally {
+      random.mockRestore();
+    }
+  });
+
+  it("leaves the autoplay rotation alone until a plan is committed", async () => {
+    const random = vi.spyOn(Math, "random").mockReturnValue(0);
+    try {
+      const { resolver, service } = setup({
+        autoplayProfile: {
+          artistScores: () => new Map(),
+          tasteProfile: () => ({
+            artistScores: new Map(),
+            tokenScores: new Map<string, number>(),
+          }),
+          recentArtists: () => [],
+          recentSeeds: () => [{ id: "seedvideo11", title: "Seed - Song" }],
+          classicSeeds: () => [
+            { artist: "Soda", id: "classicAAAA", score: 9, title: "Soda - A" },
+          ],
+          channelArtistSeeds: () => [],
+          hasHeard: () => true,
+        },
+      });
+      resolver.expandPlaylist.mockResolvedValue({
+        tracks: [
+          {
+            id: "mix11111111",
+            title: "Mix - One",
+            webpageUrl: "https://www.youtube.com/watch?v=mix11111111",
+          },
+        ],
+      });
+
+      const first = await service.planAutoplayTrack();
+      const unused = await service.planAutoplayTrack();
+      expect(first?.track.id).toBe("mix11111111");
+      expect(unused?.track.id).toBe("mix11111111");
+
+      unused?.commit();
+      const next = await service.planAutoplayTrack();
+      expect(next?.track.id).toBe("classicAAAA");
     } finally {
       random.mockRestore();
     }
@@ -1078,10 +1253,12 @@ describe("YoutubePlaybackService", () => {
             }),
             recentArtists: () => [],
           },
+          // No first frame, so nothing is planned ahead: this measures the
+          // cold pick after the queue runs dry.
           metrics: {
             bufferedBytes: 0,
             firstFrameDelayMs: 40,
-            framesSent: 1,
+            framesSent: 0,
             maxBufferedBytes: 3_840,
             rebufferEvents: 0,
             underruns: 0,
@@ -1148,8 +1325,6 @@ describe("YoutubePlaybackService", () => {
         relatedVideoId: () => Promise.resolve(undefined),
       });
       service.setAutoplay(true);
-      await service.enqueue("https://youtu.be/seedvideo11", "user-7", "uid-7");
-      await new Promise((resolve) => setImmediate(resolve));
       resolver.expandPlaylist.mockResolvedValue({
         tracks: [
           {
@@ -1159,6 +1334,8 @@ describe("YoutubePlaybackService", () => {
           },
         ],
       });
+      await service.enqueue("https://youtu.be/seedvideo11", "user-7", "uid-7");
+      await new Promise((resolve) => setImmediate(resolve));
       playbackResolvers[0]?.();
       await new Promise((resolve) => setImmediate(resolve));
       await new Promise((resolve) => setTimeout(resolve, 50));

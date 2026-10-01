@@ -52,6 +52,22 @@ export type PlaybackDriverState = "idle" | "resolving" | "playing";
 
 export type PlaybackEndReason = "completed" | "error" | "skipped" | "stopped";
 
+/** An autoplay choice that changes the picker's rotation only on commit. */
+export interface AutoplayPick {
+  readonly commit: () => void;
+  readonly track: Track;
+}
+
+// The next autoplay track, chosen while the last queued one plays. It is
+// only used if that track (`during`) ends on its own: a skip or an error
+// changes what the channel wants, and the plan was seeded with it.
+interface AutoplayPlan {
+  readonly during: Track;
+  readonly pick: Promise<AutoplayPick | undefined>;
+  ready?: AutoplayPick;
+  readonly stopEpoch: number;
+}
+
 // Internal end reason for a session replaced by another session of the same
 // track (seek, 403 retry); never reported to observers.
 type SessionEndReason = PlaybackEndReason | "restart";
@@ -67,8 +83,9 @@ type SessionEndReason = PlaybackEndReason | "restart";
  *   track's first, without the end-of-session bookkeeping in handoffGapMs.
  * - commandToFirstAudioMs: from the request that queued this track to its
  *   first frame; only for a cold start, where nothing else was playing.
- * - autoplayPickMs: how long autoplay took to choose this track once the
- *   queue ran dry; it precedes startDelayMs and only handoffGapMs includes it.
+ * - autoplayPickMs: how long the driver waited for this autoplay track once
+ *   the queue ran dry, near 0 when it was planned during the previous track;
+ *   it precedes startDelayMs and only handoffGapMs includes it.
  */
 export interface PlaybackKpis {
   readonly autoplayPickMs?: number;
@@ -141,7 +158,7 @@ export interface PlaybackControllerOptions {
   ) => void;
   readonly onTiming?: (timing: PlaybackTiming) => void;
   readonly onStateChanged?: () => void;
-  readonly autoplayProvider?: () => Promise<Track | undefined>;
+  readonly autoplayProvider?: () => Promise<AutoplayPick | undefined>;
   readonly autoplayTimeoutMs?: number;
   readonly initialAutoplay?: boolean;
   readonly initialVolumePercent?: number;
@@ -230,10 +247,14 @@ export class PlaybackController {
   #lastSessionEndedAt: number | undefined;
   #lastAudioFrameAt: number | undefined;
   readonly #onStateChanged: () => void;
-  readonly #autoplayProvider: (() => Promise<Track | undefined>) | undefined;
+  readonly #autoplayProvider:
+    (() => Promise<AutoplayPick | undefined>) | undefined;
   readonly #autoplayTimeoutMs: number;
   #autoplay = false;
   #autoplayArmed = true;
+  #autoplayPlan: AutoplayPlan | undefined;
+  #lastEnded:
+    { readonly reason: PlaybackEndReason; readonly track: Track } | undefined;
   readonly #epochs = new PlaybackEpoch();
   #persistedQueue: readonly SerializedQueueTrack[];
   #current: Track | undefined;
@@ -541,13 +562,18 @@ export class PlaybackController {
   setAutoplayEnabled(enabled: boolean): void {
     this.#autoplay = enabled;
     if (enabled) this.#autoplayArmed = true;
+    else this.#autoplayPlan = undefined;
     this.#onStateChanged();
-    if (enabled) this.requestNext();
+    if (enabled) {
+      this.requestNext();
+      if (this.isSessionStable()) this.#planAutoplay();
+    }
   }
 
   stop(): void {
     this.#epochs.resetAll();
     this.#autoplayArmed = false;
+    this.#autoplayPlan = undefined;
     this.#pendingSkips = 0;
     this.#pendingResume = undefined;
     this.#reportUnfinished("stopped");
@@ -565,6 +591,7 @@ export class PlaybackController {
   resetQueueState(): void {
     this.#epochs.resetAll();
     this.#autoplayArmed = false;
+    this.#autoplayPlan = undefined;
     this.#pendingSkips = 0;
     this.#pendingResume = undefined;
     this.#reportUnfinished("stopped");
@@ -626,34 +653,114 @@ export class PlaybackController {
     ) {
       return false;
     }
+    const provider = this.#autoplayProvider;
     const stopEpoch = this.#epochs.captureStopEpoch();
     this.#driverState = "resolving";
     this.#onStateChanged();
     const pickStartedAt = Date.now();
-    const picked = await Promise.race([
-      this.#autoplayProvider().catch(() => undefined),
-      new Promise<undefined>((resolve) => {
-        const timer = setTimeout(
-          () => resolve(undefined),
-          this.#autoplayTimeoutMs,
-        );
-        timer.unref();
-      }),
-    ]);
+    const deadline = new Promise<"timeout">((resolve) => {
+      const timer = setTimeout(
+        () => resolve("timeout"),
+        this.#autoplayTimeoutMs,
+      );
+      timer.unref();
+    });
+    const plan = this.#takeAutoplayPlan(stopEpoch);
+    let picked: AutoplayPick | undefined | "timeout" =
+      plan === undefined
+        ? undefined
+        : await Promise.race([plan.pick, deadline]);
+    // A plan that found nothing (a mix lookup failed mid-track) gets one
+    // fresh try; a plan still running at the deadline already spent it.
+    if (picked === undefined) {
+      picked = await Promise.race([
+        provider().catch(() => undefined),
+        deadline,
+      ]);
+    }
     if (
       picked === undefined ||
+      picked === "timeout" ||
       !this.#autoplay ||
       !this.#epochs.isStopEpochCurrent(stopEpoch)
     ) {
       return false;
     }
     try {
-      this.#queue.requeue(picked);
+      this.#queue.requeue(picked.track);
     } catch {
       return this.#queue.length > 0;
     }
-    this.#autoplayPickMs.set(picked, Date.now() - pickStartedAt);
+    picked.commit();
+    this.#autoplayPickMs.set(picked.track, Date.now() - pickStartedAt);
     return true;
+  }
+
+  #takeAutoplayPlan(stopEpoch: number): AutoplayPlan | undefined {
+    const plan = this.#autoplayPlan;
+    this.#autoplayPlan = undefined;
+    if (
+      plan === undefined ||
+      plan.stopEpoch !== stopEpoch ||
+      this.#lastEnded?.track !== plan.during ||
+      this.#lastEnded.reason !== "completed"
+    ) {
+      return undefined;
+    }
+    return plan;
+  }
+
+  // Autoplay used to choose only once the queue ran dry, so every autoplay
+  // track started cold: mix lookup, then URL, then ffmpeg, all in the
+  // silence between songs. Choosing when the last queued track starts gives
+  // the pick the same prefetch and midpoint prewarm a queued track gets.
+  #planAutoplay(): void {
+    const current = this.#current;
+    const provider = this.#autoplayProvider;
+    if (
+      !this.#autoplay ||
+      !this.#autoplayArmed ||
+      provider === undefined ||
+      current === undefined ||
+      this.#loopMode !== "off" ||
+      this.#queue.length > 0 ||
+      this.#autoplayPlan?.during === current
+    ) {
+      return;
+    }
+    const plan: AutoplayPlan = {
+      during: current,
+      pick: provider().catch(() => undefined),
+      stopEpoch: this.#epochs.captureStopEpoch(),
+    };
+    this.#autoplayPlan = plan;
+    void plan.pick.then((pick) => {
+      if (pick === undefined || this.#autoplayPlan !== plan) return;
+      plan.ready = pick;
+      if (this.#queue.length > 0) return;
+      void this.#musicBounds(pick.track);
+      void this.#preparedStore
+        .resolve(pick.track, "prefetch", (t, signal) =>
+          this.#resolvePlayableAudio(t, signal),
+        )
+        .catch(() => {
+          this.#preparedStore.invalidate(pick.track.source);
+        });
+      // Past the midpoint already (a short track, a slow pick), the warm
+      // stream starts now instead of on the next periodic check.
+      this.#prewarmNext();
+    });
+  }
+
+  // What plays after the current track: the queue head, or the planned
+  // autoplay pick when the queue is empty.
+  #upNext(): Track | undefined {
+    const head = this.#queue.snapshot()[0];
+    if (head !== undefined) return head;
+    const plan = this.#autoplayPlan;
+    return plan !== undefined && plan.during === this.#current
+      ? plan.ready?.track
+      : undefined;
   }
 
   async #playNext(): Promise<void> {
@@ -929,6 +1036,7 @@ export class PlaybackController {
             }
           }
         }
+        this.#lastEnded = { reason: endReason, track };
         const kpis = this.#takeKpis(track);
         this.#safeObserver(() => {
           this.#onPlaybackFinished(
@@ -1357,6 +1465,7 @@ export class PlaybackController {
         Date.now() - startedAt >= PREFETCH_STABILITY_TIMEOUT_MS
       ) {
         this.prefetchNext();
+        this.#planAutoplay();
         // The first frame is the earliest moment #prewarmNext's
         // framesSent === 0 guard can pass; the midpoint check inside still
         // decides when the warm stream actually starts. Re-checking on a
@@ -1391,7 +1500,7 @@ export class PlaybackController {
     const session = this.#session;
     const current = this.#current;
     if (!session || !current) return;
-    const next = this.#queue.snapshot()[0];
+    const next = this.#upNext();
     if (!next || next.source === current.source) return;
     const framesSent = session.player.metrics.framesSent;
     if (framesSent === 0) return;
@@ -1434,7 +1543,7 @@ export class PlaybackController {
         }
         if (
           this.#current === undefined ||
-          this.#queue.snapshot()[0]?.source !== next.source
+          this.#upNext()?.source !== next.source
         ) {
           return undefined;
         }
