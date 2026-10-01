@@ -175,9 +175,6 @@ export function renderDashboard(status: PanelStatus): string {
   <title>Rhapsod</title>
   <style>${CHROME_CSS}
     .nr{margin-left:auto;display:flex;align-items:center;gap:.6rem}
-    .lamp{font-family:var(--mn);font-size:.6875rem;letter-spacing:.22em;padding:.32rem .6rem;border:1px solid #3a3a40;border-radius:4px;color:var(--ft);white-space:nowrap}
-    .lamp.on{color:#05240F;background:var(--ac);border-color:var(--ac);box-shadow:0 0 12px rgba(30,215,96,.35)}
-    .lamp.buf{color:var(--wn);border-color:var(--wn);animation:blk 1s steps(2) infinite}
     @keyframes blk{50%{opacity:.3}}
     .dot{width:8px;height:8px;border-radius:50%}
     .dot.on{background:var(--ac)}
@@ -259,9 +256,7 @@ export function renderDashboard(status: PanelStatus): string {
       <a class="nk" href="/commands" id="nc">Comandos</a>
     </div>
     <div class="nr">
-      <div class="lamp ${lampClass}" id="lamp">ON AIR</div>
-      <div class="dot ${connected ? "on" : "off"}" id="dot"></div>
-      <span class="st" id="stxt">${connected ? "Conectado" : "Desconectado"}</span>
+      <div class="status ${connected ? lampClass : ""}" id="lamp"><span class="dot ${connected ? "on" : "off"}" id="dot"></span><span class="st" id="stxt">${!connected ? "Desconectado" : playerState === "playing" ? "Sonando" : playerState === "buffering" ? "Cargando" : "Conectado"}</span></div>
     </div>
   </nav>
   <main class="mn">

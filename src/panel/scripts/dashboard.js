@@ -411,8 +411,32 @@ function paintTime() {
 }
 
 var lampState = null;
+var linkUp = null;
+// One pill for the link and the playback: "Sonando" already says the bot is
+// connected, so the old separate ON AIR lamp only repeated it.
+function paintStatus() {
+  var pill = document.getElementById("lamp");
+  var txt = document.getElementById("stxt");
+  if (!pill || !txt) return;
+  var down = linkUp === false;
+  pill.className =
+    "status" +
+    (down
+      ? ""
+      : lampState === "playing"
+        ? " on"
+        : lampState === "buffering"
+          ? " buf"
+          : "");
+  txt.textContent = down
+    ? "Desconectado"
+    : lampState === "playing"
+      ? "Sonando"
+      : lampState === "buffering"
+        ? "Cargando"
+        : "Conectado";
+}
 function setLamp(state) {
-  var lamp = document.getElementById("lamp");
   if (lampState !== null && lampState !== state)
     fx(
       document.getElementById("ppBtn"),
@@ -430,20 +454,17 @@ function setLamp(state) {
     "aria-label",
     state === "playing" || state === "buffering" ? "Pausar" : "Reanudar",
   );
+  paintStatus();
   if (state === "playing") {
-    lamp.className = "lamp on";
     lab.textContent = "SONANDO";
     pp.innerHTML = "&#9208;";
   } else if (state === "buffering") {
-    lamp.className = "lamp buf";
     lab.textContent = "CARGANDO";
     pp.innerHTML = "&#9208;";
   } else if (state === "paused") {
-    lamp.className = "lamp";
     lab.textContent = "EN PAUSA";
     pp.innerHTML = "&#9654;";
   } else {
-    lamp.className = "lamp";
     lab.textContent = "EN ESPERA";
     pp.innerHTML = "&#9654;";
   }
@@ -543,10 +564,10 @@ function refresh() {
         document.getElementById("uptime").textContent =
           dc > 0 ? up + " · " + dc + (dc === 1 ? " corte" : " cortes") : up;
       }
-      var dot = document.getElementById("dot");
-      var txt = document.getElementById("stxt");
-      dot.className = "dot " + (d.connected ? "on" : "off");
-      txt.textContent = d.connected ? "Conectado" : "Desconectado";
+      linkUp = !!d.connected;
+      document.getElementById("dot").className =
+        "dot " + (d.connected ? "on" : "off");
+      paintStatus();
       var qj = JSON.stringify(d.queue || []);
       if (qj !== lastQ) {
         lastQ = qj;

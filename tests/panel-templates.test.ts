@@ -345,7 +345,8 @@ describe("renderDashboard console", () => {
     expect(getEl("tcur").textContent).toBe("0:30");
     expect(getEl("tdur").textContent).toBe("3:20");
     expect(getEl("nsState").textContent).toBe("SONANDO");
-    expect(getEl("lamp").className).toContain("on");
+    expect(getEl("lamp").className).toBe("status on");
+    expect(getEl("stxt").textContent).toBe("Sonando");
     expect(getEl("ppBtn").innerHTML).toContain("9208");
     expect(getEl("vol").value).toBe(25);
     expect(getEl("volv").textContent).toBe("25%");
