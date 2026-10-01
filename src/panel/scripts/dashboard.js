@@ -751,6 +751,7 @@ function renderErrors(e) {
 
 (function init() {
   initAmbience();
+  initMore();
   var seek = document.getElementById("seek");
   seek.addEventListener("click", seekEv);
   seek.addEventListener("keydown", function (event) {
@@ -819,3 +820,36 @@ function renderErrors(e) {
     requestAnimationFrame(glide);
   }
 })();
+
+// Hidden scrollbars left a half row as the only hint that a list went on.
+function paintMore(boxId, buttonId, rowSelector) {
+  var box = document.getElementById(boxId);
+  var btn = document.getElementById(buttonId);
+  if (!box || !btn || !box.querySelectorAll || !box.getBoundingClientRect)
+    return;
+  var limit = box.getBoundingClientRect().bottom + 1;
+  var rows = box.querySelectorAll(rowSelector);
+  var hidden = 0;
+  for (var i = 0; i < rows.length; i++) {
+    if (rows[i].getBoundingClientRect().bottom > limit) hidden++;
+  }
+  btn.hidden = hidden === 0;
+  btn.textContent = hidden === 1 ? "1 más abajo" : hidden + " más abajo";
+}
+function paintMores() {
+  paintMore("ql", "qlMore", ":scope > li");
+  paintMore("srvTree", "srvMore", ".chrow");
+}
+function initMore() {
+  ["ql", "srvTree"].forEach(function (id, i) {
+    var btn = document.getElementById(i === 0 ? "qlMore" : "srvMore");
+    var box = document.getElementById(id);
+    if (!btn || !box || !btn.addEventListener) return;
+    btn.addEventListener("click", function () {
+      box.scrollBy({ top: box.clientHeight * 0.8, behavior: "smooth" });
+    });
+  });
+  if (document.addEventListener)
+    document.addEventListener("scroll", paintMores, true);
+  setInterval(paintMores, 1000);
+}

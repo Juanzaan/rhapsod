@@ -300,6 +300,7 @@ export function renderDashboard(status: PanelStatus): string {
       <div class="cd queue-card">
         <div class="ct"><span>A continuación</span><span class="rv" id="qc">${queueLen} pistas</span></div>
         <ul class="ql" id="ql"></ul>
+        <button class="more" id="qlMore" type="button" hidden></button>
         <div class="em" id="qe" style="display:${queueLen === 0 ? "block" : "none"}"><span class="empty-mark" aria-hidden="true">＋</span>Hay lugar para otro tema.<br>Agregá música para seguir la sesión.</div>
         <div class="queue-footer"><button class="ch" onclick="cmd('shuffle')">Mezclar cola</button><button class="ch" onclick="cmd('clear')">Vaciar cola</button></div>
       </div>
@@ -320,6 +321,7 @@ export function renderDashboard(status: PanelStatus): string {
       <div class="cd server-card">
         <div class="ct"><span>Tu servidor</span><span class="rv" id="srvCount"></span></div>
         <div id="srvTree"><div class="em">Conectando…</div></div>
+        <button class="more" id="srvMore" type="button" hidden></button>
       </div>
       <div class="cd chat-card">
           <div class="ct"><span>Chat del canal</span></div>
@@ -482,7 +484,7 @@ export function renderServerPage(): string {
       <div class="ct"><span>Canales</span></div>
       <div id="tree"><div class="em">Conectando…</div></div>
       <div class="em" id="treeHint" style="font-size:.75rem">Hacé clic en un canal para mover el bot ahí</div>
-    </div><aside class="cd server-side"><div class="ct">Visibilidad del servidor</div><p class="visibility-note" id="visibilityNote">Consultando los canales disponibles para la identidad del bot.</p><p>Los canales vacíos también aparecen cuando TeamSpeak entrega la lista completa. La visibilidad de usuarios puede depender de las suscripciones del bot.</p><p>El árbol completo se descubre en segundo plano al iniciar y cada diez minutos; una vista limitada significa que el análisis aún no termina o falló. No requiere permisos especiales.</p><button class="btn secondary" onclick="poll()">Actualizar vista</button></aside></div>
+    </div><aside class="cd server-side"><div class="ct">Visibilidad del servidor</div><p class="visibility-note" id="visibilityNote">Consultando los canales disponibles para la identidad del bot.</p><p>La visibilidad de usuarios puede depender de las suscripciones del bot.</p><p>El árbol completo se descubre en segundo plano al iniciar y cada diez minutos; una vista limitada significa que el análisis aún no termina o falló. No requiere permisos especiales.</p><button class="btn secondary" onclick="poll()">Actualizar vista</button></aside></div>
   </main>
   <div class="toast" id="toast"></div>
   <script>

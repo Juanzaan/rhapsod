@@ -128,6 +128,10 @@ describe("renderDashboard console", () => {
       expect(html).toContain(`id="${id}"`);
     }
     expect(html).toContain("SONANDO");
+    // Lists without scrollbars announce rows that do not fit.
+    expect(html).toContain('id="qlMore"');
+    expect(html).toContain('id="srvMore"');
+    expect(html).toContain("más abajo");
     expect(html).toContain("1:00");
     expect(html).toContain("3:20");
   });

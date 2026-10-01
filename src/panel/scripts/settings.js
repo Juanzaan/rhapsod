@@ -67,7 +67,7 @@ function load() {
               esc(readOnlyLabel(e.description || e.key)) +
               '</span><code class="fk">' +
               esc(e.key) +
-              '</code></label><div class="h">' +
+              '</code></label><div class="h ro">' +
               esc(e.value || "") +
               "</div></div>";
             continue;

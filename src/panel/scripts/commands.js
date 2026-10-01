@@ -84,10 +84,10 @@ function render(list, q) {
         '" title="Copiar !' +
         esc(c.name) +
         '"><span class="copy-hint" aria-hidden="true">COPIAR</span>' +
-        (c.adminOnly ? '<span class="cg">admin</span>' : "") +
         '<div><span class="cn">!' +
         hl(c.usage, q) +
         "</span>" +
+        (c.adminOnly ? '<span class="cg">admin</span>' : "") +
         (c.aliases.length
           ? ' <span class="ca">(!' + hl(c.aliases.join(", !"), q) + ")</span>"
           : "") +
