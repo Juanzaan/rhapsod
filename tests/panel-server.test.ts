@@ -351,15 +351,20 @@ describe("panel-server", () => {
         headers: { authorization: state.auth },
       });
       expect(page.headers.get("cache-control")).toBe("no-store");
+      // Read every body: Node 24's fetch asserts when the server closes a
+      // connection whose body was never consumed.
+      await page.text();
 
       for (const name of ["../package.json", "other.woff2", "%2e%2e%2fx"]) {
         const miss = await fetch(`${state.baseUrl}/fonts/${name}`, {
           headers: { authorization: state.auth },
         });
         expect(miss.status).toBe(404);
+        await miss.text();
       }
       const anon = await fetch(`${state.baseUrl}/fonts/bricolage.woff2`);
       expect(anon.status).toBe(401);
+      await anon.text();
     } finally {
       await state.close();
       rmSync(state.dir, { recursive: true, force: true });
