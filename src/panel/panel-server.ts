@@ -168,10 +168,10 @@ const MASKED_KEYS = new Set([
 
 const ENV_DESCRIPTIONS: Record<string, string> = {
   RHAPSOD_TS3_HOST: "Dirección del servidor TeamSpeak",
-  RHAPSOD_TS3_PORT: "Puerto de voz (default 9987)",
+  RHAPSOD_TS3_PORT: "Puerto de voz (por defecto 9987)",
   RHAPSOD_TS3_NICKNAME: "Nombre del bot",
   RHAPSOD_TS3_PASSWORD: "Contraseña del servidor (si tiene)",
-  RHAPSOD_TS3_CHANNEL_NAME: "Canal al que entrar (vacío = default)",
+  RHAPSOD_TS3_CHANNEL_NAME: "Canal al que entrar (vacío = el predeterminado)",
   RHAPSOD_TS3_CHANNEL_ID: "ID del canal (tiene prioridad sobre el nombre)",
   RHAPSOD_TS3_CHANNEL_PASSWORD: "Contraseña del canal",
   RHAPSOD_TS3_AUTO_CONNECT: "Conectar automáticamente (true/false)",
@@ -203,7 +203,7 @@ const ENV_DESCRIPTIONS: Record<string, string> = {
   RHAPSOD_FFMPEG_USER_AGENT: "Agente de usuario de ffmpeg",
   RHAPSOD_FFPROBE_PATH: "Ruta del binario ffprobe (solo lectura)",
   RHAPSOD_LOUDNESS_TARGET_LUFS:
-    "Normalización de volumen (-30 a 0, default -14)",
+    "Normalización de volumen (-30 a 0, por defecto -14)",
   RHAPSOD_OPUS_BITRATE: "Tasa de bits de Opus (64000-160000)",
   RHAPSOD_OPUS_COMPLEXITY: "Complejidad de Opus (0-10)",
   RHAPSOD_OPUS_PACKET_LOSS_PERCENT: "Pérdida de paquetes Opus (0-30)",
@@ -211,7 +211,7 @@ const ENV_DESCRIPTIONS: Record<string, string> = {
   RHAPSOD_SPOTIFY_CLIENT_SECRET: "Spotify Client Secret (opcional)",
   RHAPSOD_SPOTIFY_REFRESH_TOKEN: "Spotify Refresh Token (opcional)",
   RHAPSOD_AUDIO_TEST_TONE_SECONDS: "Tono de prueba al iniciar (0 = apagado)",
-  RHAPSOD_LOG_LEVEL: "Nivel de log (trace/debug/info/warn/error/fatal)",
+  RHAPSOD_LOG_LEVEL: "Nivel de registro (trace/debug/info/warn/error/fatal)",
   RHAPSOD_LOG_RETENTION_DAYS: "Días de retención de logs (1-90)",
   RHAPSOD_METRICS_INTERVAL_MINUTES: "Intervalo de métricas (0 = apagado)",
   RHAPSOD_WATCHDOG_INTERVAL_SECONDS:
@@ -220,20 +220,20 @@ const ENV_DESCRIPTIONS: Record<string, string> = {
     "Obsoleto: usar RHAPSOD_WATCHDOG_INTERVAL_SECONDS (solo 0 = apagado)",
   RHAPSOD_MAX_CONCURRENT_COMMANDS: "Comandos concurrentes máx. (1-20)",
   RHAPSOD_MAX_CONCURRENT_YTDLP_JOBS: "Tareas de yt-dlp en paralelo (1-4)",
-  RHAPSOD_MAX_QUEUE_TRACKS: "Máximo de temas en la cola (1-1000)",
-  RHAPSOD_MAX_TRACKS_PER_USER: "Máximo de temas por usuario (1-200)",
+  RHAPSOD_MAX_QUEUE_TRACKS: "Máximo de pistas en la cola (1-1000)",
+  RHAPSOD_MAX_TRACKS_PER_USER: "Máximo de pistas por usuario (1-200)",
   RHAPSOD_VOTE_SKIP:
-    "Votación para saltar: más de la mitad del canal (true/false, default false)",
+    "Votación para saltar: más de la mitad del canal (true/false, por defecto false)",
   RHAPSOD_SKIP_NON_MUSIC:
-    "Saltar intros y outros sin música de los videoclips vía SponsorBlock (true/false, default false)",
+    "Saltar intros y outros sin música de los videoclips vía SponsorBlock (true/false, por defecto false)",
   RHAPSOD_MOVE_GROUP_IDS: "IDs de grupo que pueden usar !move",
   RHAPSOD_MOVE_ADMIN_CHANNELS: "Canales de !move para admins",
   RHAPSOD_MOVE_SENIOR_CHANNELS: "Canales de !move para seniors",
   RHAPSOD_MOVE_ADMIN_GROUP_IDS: "IDs de grupo admin para !move",
   RHAPSOD_MOVE_SENIOR_GROUP_IDS: "IDs de grupo senior para !move",
-  RHAPSOD_VERBOSE: "Modo verbose (true/false)",
+  RHAPSOD_VERBOSE: "Modo detallado (true/false)",
   RHAPSOD_PANEL_ENABLED: "Panel habilitado (true/false)",
-  RHAPSOD_PANEL_PORT: "Puerto del panel (default 8080)",
+  RHAPSOD_PANEL_PORT: "Puerto del panel (por defecto 8080)",
   RHAPSOD_PANEL_USER: "Usuario del panel",
   RHAPSOD_PANEL_PASSWORD: "Contraseña del panel",
   RHAPSOD_PANEL_HOST:

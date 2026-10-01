@@ -2,6 +2,15 @@ var H = { "content-type": "application/json" };
 
 // Some descriptions already say it; appending it again read "(solo lectura)
 // (solo lectura)".
+// The control is a Sí/No select, so the "true/false" hint goes away.
+function boolLabel(text) {
+  return text
+    .replace(/ ?\(true\/false\)/, "")
+    .replace(/true\/false, /, "")
+    .replace(/por defecto false/, "por defecto: No")
+    .replace(/por defecto true/, "por defecto: Sí");
+}
+
 function readOnlyLabel(text) {
   return /solo lectura/i.test(text) ? text : text + " (solo lectura)";
 }
@@ -78,7 +87,7 @@ function load() {
               '<div class="f"><label class="fl" for="setting-' +
               esc(e.key) +
               '"><span>' +
-              esc((e.description || e.key).replace(/ ?\(true\/false\)/, "")) +
+              esc(boolLabel(e.description || e.key)) +
               '</span><code class="fk">' +
               esc(e.key) +
               '</code></label><select id="setting-' +

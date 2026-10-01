@@ -505,7 +505,7 @@ function refresh() {
       }
       paintTime();
       document.getElementById("nt").textContent =
-        d.currentTitle || "Tu próxima canción empieza acá.";
+        d.currentTitle || "Tu próxima pista empieza acá.";
       var detail = document.getElementById("trackDetail");
       if (d.currentArtist) detail.textContent = d.currentArtist;
       else if (d.currentRequester)
@@ -513,7 +513,7 @@ function refresh() {
       else
         detail.textContent = d.currentTitle
           ? ""
-          : "Elegí un tema y compartí el momento.";
+          : "Elegí una pista y compartí el momento.";
       document.getElementById("nt").title = d.currentTitle || "";
       fxCount(
         document.getElementById("qc"),
@@ -833,7 +833,8 @@ function paintMore(boxId, buttonId, units) {
   var btn = document.getElementById(buttonId);
   if (!box || !btn || !box.querySelectorAll || !box.getBoundingClientRect)
     return;
-  var limit = box.getBoundingClientRect().bottom + 1;
+  // Rows under the bottom fade count as hidden: they read as cut off.
+  var limit = box.getBoundingClientRect().bottom - 24;
   var parts = [];
   for (var u = 0; u < units.length; u++) {
     var rows = box.querySelectorAll(units[u][0]);

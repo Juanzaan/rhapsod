@@ -136,12 +136,12 @@ function trackDetail(status: PanelStatus): string {
   if (status.currentArtist) return esc(status.currentArtist);
   if (status.currentRequester)
     return `Pedido por <b>${esc(status.currentRequester)}</b>`;
-  return status.currentTitle ? "" : "Elegí un tema y compartí el momento.";
+  return status.currentTitle ? "" : "Elegí una pista y compartí el momento.";
 }
 
 export function renderDashboard(status: PanelStatus): string {
   const connected = status.connected;
-  const title = esc(status.currentTitle || "Tu próxima canción empieza acá.");
+  const title = esc(status.currentTitle || "Tu próxima pista empieza acá.");
   const queueLen = status.queueLength;
   const playerState = status.playerState || "idle";
   const stateLabel =
@@ -327,6 +327,7 @@ export function renderDashboard(status: PanelStatus): string {
       </div>
       <div class="cd server-card">
         <div class="ct"><span>Tu servidor</span><span class="rv" id="srvCount"></span></div>
+        <p class="helper tree-hint">Hacé clic en un canal para mover el bot ahí.</p>
         <div id="srvTree"><div class="em">Conectando…</div></div>
         <button class="more" id="srvMore" type="button" hidden></button>
       </div>
@@ -342,7 +343,7 @@ export function renderDashboard(status: PanelStatus): string {
       <div class="cd system-card">
         <div class="ct"><span>Sistema</span><span class="rv" id="uptime">${uptimeInit}</span></div>
         <div class="sg3">
-          <div class="stt"><div class="sv am" id="stTracks" data-v="0">${tracksInit}</div><div class="sl">Temas</div></div>
+          <div class="stt"><div class="sv am" id="stTracks" data-v="0">${tracksInit}</div><div class="sl">Pistas</div></div>
           <div class="stt"><div class="sv" id="stVer">${version}</div><div class="sl">Versión</div></div>
           <div class="stt"><div class="sv${status.youtubeAuthHealthy === true ? " am" : ""}" id="ytRes">${status.youtubeAuthHealthy === true ? "OK" : status.youtubeAuthHealthy === false ? "FALLA" : "Sin probar"}</div><div class="sl">YouTube</div></div>
         </div>
