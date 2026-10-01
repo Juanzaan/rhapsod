@@ -1,5 +1,5 @@
 import base64, json
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer as HTTPServer
 
 TOKEN = "Basic " + base64.b64encode(b"admin:demo-password").decode()
 PAGE = """<!doctype html><meta charset=utf-8><title>Rhapsod (panel de prueba)</title>

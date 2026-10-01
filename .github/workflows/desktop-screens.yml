@@ -109,7 +109,7 @@ jobs:
             $path = (Get-ItemProperty $_.PSPath).ExecutablePath
             if ($path -like '*RhapsodDashboard*') { Set-ItemProperty $_.PSPath IsPromoted 1 -Type DWord; Write-Host "promovido $($_.PSChildName)" }
           }
-          Start-Sleep 3
+          Start-Sleep 15
           $root = [System.Windows.Automation.AutomationElement]::RootElement
           $cond = New-Object System.Windows.Automation.PropertyCondition ([System.Windows.Automation.AutomationElement]::ControlTypeProperty), ([System.Windows.Automation.ControlType]::Button)
           $icon = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $cond) | Where-Object { $_.Current.Name -like 'Rhapsod*' } | Select-Object -First 1
