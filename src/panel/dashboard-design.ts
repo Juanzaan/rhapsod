@@ -78,6 +78,10 @@ export const BRAND_CSS = `
 .status .st{font-size:12px;color:inherit}
 .status.on{color:#eef2ec}
 :focus-visible{outline-color:hsl(var(--song-h) 60% 72%)}.tree-hint{font-size:12px;line-height:1.7;color:#91a497;margin:-10px 0 12px}.sg button{letter-spacing:.02em!important}.system-card .sg3{flex:none}.system-card{justify-content:space-between}.command-count{margin-left:8px;color:#7d9284}
+.ct{font:600 15px/1.3 var(--dp)!important;letter-spacing:-.01em!important;text-transform:none!important;color:#e9efe9!important}.ct .rv,.ct label{font:500 12px var(--sn)!important;letter-spacing:0!important;color:#9fb0a5}.ct label{font:600 15px/1.3 var(--dp)!important;color:#e9efe9!important}
+.queue-card .qt,#chat li,.chnm,.cd2,.helper,.track-detail,.users li,.server-side p,.page-heading p,.intro-note{font-size:13px!important}
+.nt{text-wrap:balance}.page-heading p a{text-decoration:underline;text-underline-offset:2px}
+@media(max-width:640px){.scene-tools{justify-content:flex-start!important}.scene-tools label{margin-right:0!important}.toolbar .sr{flex-basis:100%}.toolbar .btn{flex:1}}
 .channel-move{min-height:28px;cursor:pointer}.chrow:hover{border-color:#ffffff10}.chrow:has(>.chhead:hover){border-color:hsl(var(--song-h) 55% 62% / .55)}.queue-card .ql{padding:0 10px;margin:0 -10px}
 .more{align-self:center;flex:none;margin-top:10px;font:500 12px var(--sn);color:#d6e2da;background:#ffffff0a;border:1px solid #ffffff18;border-radius:999px;padding:5px 14px;cursor:pointer}.more:hover{background:#ffffff14}.more[hidden]{display:none}
 .status .dot{width:7px;height:7px;border-radius:50%;background:#7f8c84;flex:none}.status .dot.on{background:var(--ac)}.status .dot.off{background:var(--rd)}
@@ -90,7 +94,7 @@ html.intro-on .nv .nb{visibility:hidden;animation:intro-show 0s 4s forwards}
 .intro-rest{display:inline-block;overflow:hidden;max-width:0;transition:max-width .6s cubic-bezier(.6,0,.2,1)}
 .intro.open .intro-rest{max-width:4.2em}
 .intro-mark b{display:inline-block;width:.25em;height:.25em;margin-left:.07em;border-radius:50%;background:var(--song)}
-.intro.land{background-color:transparent}
+.intro.land{background-color:transparent}.intro.wait .intro-mark{opacity:0}
 @keyframes intro-in{from{opacity:0;transform:scale(.92)}}
 `;
 

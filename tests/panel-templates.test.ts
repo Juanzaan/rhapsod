@@ -378,13 +378,14 @@ describe("renderDashboard console", () => {
         ?.classList.set.has("on"),
     ).toBe(true);
     expect(getEl("stTracks").textContent).toBe("7");
-    expect(getEl("uptime").textContent).toBe("up 1 h · 2 cortes");
+    expect(getEl("uptime").textContent).toBe("activo 1 h · 2 cortes");
     expect(getEl("ql").innerHTML).toContain("rmQ(1,this)");
     expect(getEl("ql").innerHTML).toContain("rmQ(2,this)");
     expect(getEl("ql").innerHTML).toContain('class="qr"');
     expect(getEl("ql").innerHTML).toContain("Dj");
     expect(getEl("chat").innerHTML).toContain("hola!");
-    expect(getEl("chat").innerHTML).toContain("BOT");
+    // The bot's own lines carry its name, not a generic BOT tag.
+    expect(getEl("chat").innerHTML).toContain(">Bot<");
     expect(getEl("chat").innerHTML).toContain("Ana");
     const srv = getEl("srvTree").innerHTML;
     expect(srv).toContain("Lobby");

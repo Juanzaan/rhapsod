@@ -54,7 +54,8 @@
     intro.classList.add("land");
     setTimeout(finish, 700);
   }
-  function start() {
+  function sequence() {
+    intro.classList.remove("wait");
     // "r." alone first, then the rest of the name opens between the
     // letter and the dot, then the whole word lands on the nav.
     setTimeout(function () {
@@ -62,6 +63,21 @@
       intro.classList.add("open");
       setTimeout(fly, 750);
     }, 380);
+  }
+  function start() {
+    // On a cold cache the mark drew in a system font and swapped to the
+    // display face mid-animation; wait for the faces, but not for long.
+    var fonts = document.fonts;
+    if (!fonts || !fonts.ready) return sequence();
+    intro.classList.add("wait");
+    var go = false;
+    var once = function () {
+      if (go) return;
+      go = true;
+      sequence();
+    };
+    fonts.ready.then(once);
+    setTimeout(once, 600);
   }
   if (document.readyState === "loading")
     document.addEventListener("DOMContentLoaded", start);

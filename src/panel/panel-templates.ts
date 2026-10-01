@@ -16,7 +16,7 @@ import { panelScript } from "./panel-scripts.js";
 // tabular mono readouts. Every page interpolates this so the whole
 // panel looks like one instrument instead of four themes.
 const CHROME_CSS = `${FONT_FACE_CSS}
-:root{--bg:#09090B;--pn:#101014;--ln:#1F1F23;--tx:#F4F4F5;--dm:#A1A1AA;--ft:#71717A;--ac:#5BD38A;--wn:#FBBF24;--rd:#F87171;--bl:#60A5FA;--mn:'JetBrains Mono',ui-monospace,'Cascadia Mono',Menlo,Consolas,monospace;--sn:'Instrument Sans',system-ui,'Segoe UI',Roboto,sans-serif;--dp:'Bricolage Grotesque','Instrument Sans',system-ui,sans-serif}
+:root{--bg:#09090B;--pn:#101014;--ln:#1F1F23;--tx:#F4F4F5;--dm:#A1A1AA;--ft:#8E9A92;--ac:#5BD38A;--wn:#FBBF24;--rd:#F87171;--bl:#60A5FA;--mn:'JetBrains Mono',ui-monospace,'Cascadia Mono',Menlo,Consolas,monospace;--sn:'Instrument Sans',system-ui,'Segoe UI',Roboto,sans-serif;--dp:'Bricolage Grotesque','Instrument Sans',system-ui,sans-serif}
 *{margin:0;padding:0;box-sizing:border-box}
 ::selection{background:var(--ac);color:#05240F}
 body{font-family:var(--sn);background:var(--bg);color:var(--tx);min-height:100vh}
@@ -164,9 +164,9 @@ export function renderDashboard(status: PanelStatus): string {
   const fmtUp = (ms: number | undefined): string => {
     if (ms === undefined) return "";
     const m = Math.floor(ms / 60000);
-    if (m < 60) return m + " min";
+    if (m < 60) return "activo " + m + " min";
     const h = Math.floor(m / 60);
-    return h < 48 ? h + " h" : Math.floor(h / 24) + " d";
+    return "activo " + (h < 48 ? h + " h" : Math.floor(h / 24) + " d");
   };
   const uptimeInit = fmtUp(status.uptimeMs);
   const tracksInit = status.tracksPlayed ?? 0;
@@ -340,7 +340,7 @@ export function renderDashboard(status: PanelStatus): string {
       <div class="cd system-card">
         <div class="ct"><span>Sistema</span><span class="rv" id="uptime">${uptimeInit}</span></div>
         <div class="sg3">
-          <div class="stt"><div class="sv am" id="stTracks" data-v="0">${tracksInit}</div><div class="sl">Pistas</div></div>
+          <div class="stt"><div class="sv am" id="stTracks" data-v="0">${tracksInit}</div><div class="sl">Reproducidas</div></div>
           <div class="stt"><div class="sv" id="stVer">${version}</div><div class="sl">Versión</div></div>
           <div class="stt"><div class="sv${status.youtubeAuthHealthy === true ? " am" : ""}" id="ytRes">${status.youtubeAuthHealthy === true ? "OK" : status.youtubeAuthHealthy === false ? "FALLA" : "Sin probar"}</div><div class="sl">YouTube</div></div>
         </div>

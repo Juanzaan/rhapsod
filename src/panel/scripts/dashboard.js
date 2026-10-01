@@ -233,7 +233,7 @@ function renderChat(msgs) {
   var h = "";
   for (var i = 0; i < msgs.length; i++) {
     var m = msgs[i];
-    var who = m.outgoing ? "BOT" : m.from || "?";
+    var who = m.from || (m.outgoing ? "Rhapsod" : "?");
     var tint = m.outgoing
       ? ""
       : ' style="color:hsl(' + nameHue(who) + ' 62% 76%)"';
@@ -534,7 +534,9 @@ function refresh() {
       if (typeof d.uptimeMs === "number") {
         var m = Math.floor(d.uptimeMs / 60000);
         var up =
-          m < 60 ? "up " + m + " min" : "up " + Math.floor(m / 60) + " h";
+          m < 60
+            ? "activo " + m + " min"
+            : "activo " + Math.floor(m / 60) + " h";
         var dc =
           d.disconnects && typeof d.disconnects.count === "number"
             ? d.disconnects.count
@@ -600,6 +602,7 @@ function refresh() {
         lastS = sj;
         renderServerCard(d.server);
       }
+      paintMores();
     })
     .catch(function () {
       // Never fail silently: a stalled tunnel or a waking VPS looks like a
@@ -828,7 +831,7 @@ function renderErrors(e) {
 })();
 
 // Hidden scrollbars left a half row as the only hint that a list went on.
-function paintMore(boxId, buttonId, units) {
+function paintMore(boxId, buttonId, units, frameSelector) {
   var box = document.getElementById(boxId);
   var btn = document.getElementById(buttonId);
   if (!box || !btn || !box.querySelectorAll || !box.getBoundingClientRect)
@@ -838,13 +841,21 @@ function paintMore(boxId, buttonId, units) {
   // At the end of the list (or with nothing to scroll) nothing is hidden.
   var atEnd = box.scrollHeight - box.scrollTop - box.clientHeight < 1;
   var parts = [];
+  // A channel box that runs past the edge hides as a whole; the lines that
+  // still fit stay visible on their own, so no half box is drawn.
+  var frames = frameSelector ? box.querySelectorAll(frameSelector) : [];
+  for (var f = 0; f < frames.length; f++) {
+    var past = !atEnd && frames[f].getBoundingClientRect().bottom > limit;
+    if (frames[f].style) frames[f].style.visibility = past ? "hidden" : "";
+  }
+  var shown = frames.length > 0 ? "visible" : "";
   for (var u = 0; u < units.length; u++) {
     var rows = box.querySelectorAll(units[u][0]);
     var hidden = 0;
     for (var i = 0; i < rows.length; i++) {
       var cut = !atEnd && rows[i].getBoundingClientRect().bottom > limit;
       // A counted row is blanked out, not left as an unreadable sliver.
-      if (rows[i].style) rows[i].style.visibility = cut ? "hidden" : "";
+      if (rows[i].style) rows[i].style.visibility = cut ? "hidden" : shown;
       if (cut) hidden++;
     }
     if (hidden > 0)
@@ -855,10 +866,15 @@ function paintMore(boxId, buttonId, units) {
 }
 function paintMores() {
   paintMore("ql", "qlMore", [[":scope > li", "pista", "pistas"]]);
-  paintMore("srvTree", "srvMore", [
-    [".chhead", "canal", "canales"],
-    [".users li", "usuario", "usuarios"],
-  ]);
+  paintMore(
+    "srvTree",
+    "srvMore",
+    [
+      [".chhead", "canal", "canales"],
+      [".users li", "usuario", "usuarios"],
+    ],
+    ".chrow",
+  );
 }
 function initMore() {
   ["ql", "srvTree"].forEach(function (id, i) {
@@ -872,4 +888,7 @@ function initMore() {
   if (document.addEventListener)
     document.addEventListener("scroll", paintMores, true);
   setInterval(paintMores, 1000);
+  // Web fonts change row heights after the first paint.
+  if (document.fonts && document.fonts.ready)
+    document.fonts.ready.then(paintMores);
 }
