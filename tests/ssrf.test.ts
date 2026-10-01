@@ -83,7 +83,10 @@ describe("isPublicHostname", () => {
     expect(await isPublicHostname("localhost")).toBe(false);
   });
 
+  // A slow resolver makes the lookup hit its own 5 s DNS timeout, which
+  // also answers false. Vitest's default 5 s limit raced that path and
+  // failed CI on a runner whose DNS hung (PR #210).
   it("rejects a hostname that resolves to a private address", async () => {
     expect(await isPublicHostname("metadata.internal")).toBe(false);
-  });
+  }, 10_000);
 });
