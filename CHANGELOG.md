@@ -6,6 +6,79 @@ for [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [4.1.0] - 2026-10-03
+
+The release that makes the bot report what is wrong with it and makes
+measured loudness work: notices in TeamSpeak, the panel and
+`/api/health`, a fixed loudness gain with a true-peak limiter, the
+`rhapsod` command, an install that ends in TeamSpeak with `!claim`, a
+multi-arch Docker image and a Windows tray app.
+
+### Added
+
+- Notices in `data/notices.json` (#174), `!avisos` and private messages
+  to admins (#177), a console card with ignore (#179) and the verdict in
+  `/api/health` (#183).
+- The `rhapsod` command: `status`, `doctor` and `password` (#171), then
+  `backup`, `update`, `rollback` and `uninstall` (#181).
+- Installer setup of the TeamSpeak connection and `!claim` for the first
+  admin (#164).
+- `ghcr.io/juanzaan/rhapsod` for amd64 and arm64 that starts without a
+  `.env` (#176, #184).
+- Windows tray app for the panel (#134, #141), published with each
+  release, unsigned, with host key confirmation (#197, #198).
+- `RHAPSOD_SKIP_NON_MUSIC` to cut the non-music intro and outro of music
+  videos through SponsorBlock (#157, #188).
+- Metrics: audio tick lateness and clock slips (#170), silence between
+  tracks and command to first audio (#173), delivered loudness with
+  BS.1770 (#175, #191).
+- CI installs on Ubuntu, Debian, Rocky and Oracle Linux against TeamSpeak
+  3 and the TeamSpeak 6 beta (#178, #185, #186).
+
+### Changed
+
+- Measured tracks play through a fixed gain and `alimiter` instead of
+  `loudnorm` linear mode (#168), with the gain stopped at the measured true
+  peak (#180), measured over the whole track (#167) from the prefetch
+  (#161).
+- The installer adds WARP only with `RHAPSOD_WITH_WARP=1` (#164).
+- Autoplay chooses its next track while the last queued one plays, so it
+  starts with a prefetched URL and a warm stream (#208).
+- `ffmpeg-static` is optional and the image uses Debian's ffmpeg (#172).
+- Panel: one page frame, even rows and hover motion that survives polling
+  (#166); the dashboard script moved into a checked file (#158).
+- Panel: new type, the "r." mark and intro, one connection pill and
+  lists without scrollbars (#210).
+
+### Fixed
+
+- The loudness profiler read the wrong stream and never produced a
+  profile (#159).
+- A track ends on its last audio tick and keeps its final partial frame
+  (#182).
+- A song resumes when ffmpeg dies mid-play (#165), at the position where
+  its music stopped (#194).
+- Queued duplicates are skipped by error type (#163).
+- Health reports yt-dlp daemon fallbacks and TeamSpeak reconnects (#162).
+- Clean stops no longer count as a restart loop (#187); admin paging state
+  survives restarts (#193); ignores of unsaved notices expire (#195).
+- `rhapsod restart` and `backup` refuse to guess when the panel does not
+  answer (#189); `uninstall --purge` keeps a user that can log in (#192).
+- The service user is created first on install (#178); `runuser` replaces
+  `sudo -u` on RHEL (#186); deploy rollback restarts the yt-dlp daemon
+  (#196).
+- The release notes no longer tell existing installs to rerun the
+  installer (#190).
+- Small fixes for the panel login delay, the radio title cache and CI
+  pinning (#172).
+- A TeamSpeak login the server refuses is retried instead of hanging
+  (#203).
+- Low `!volume` settings stay clean: the gain is applied in float (#204).
+- Voice packets stay inside TeamSpeak's 500-byte limit (#205).
+- A track whose upload is unavailable or blocked in the host's country
+  plays from another upload (#206).
+- The bot nickname saved in the panel applies on the live server (#211).
+
 ## [4.0.0] - 2026-09-26
 
 The release that turns autoplay into a channel DJ, makes playback recover
