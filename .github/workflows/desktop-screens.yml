@@ -1,52 +1,20 @@
-name: Desktop screenshots
+name: Desktop tunnel repro
 on:
   push:
     branches: [claude/desktop-screens]
 permissions:
-  contents: write
+  contents: read
 jobs:
-  shots:
+  repro:
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Build
-        shell: pwsh
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File tools\desktop\build.ps1
-      - name: Screenshots
+      - name: Repro
         shell: powershell
         run: |
           $ErrorActionPreference = 'Continue'
-          Add-Type -AssemblyName System.Windows.Forms, System.Drawing, UIAutomationClient, UIAutomationTypes
-          Add-Type @'
-          using System; using System.Runtime.InteropServices;
-          public static class Mouse {
-            [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
-            [DllImport("user32.dll")] public static extern void mouse_event(uint f, uint dx, uint dy, uint d, IntPtr e);
-            public static void Right(int x, int y) { SetCursorPos(x, y); mouse_event(8, 0, 0, 0, IntPtr.Zero); mouse_event(16, 0, 0, 0, IntPtr.Zero); }
-            public static void Left(int x, int y) { SetCursorPos(x, y); mouse_event(2, 0, 0, 0, IntPtr.Zero); mouse_event(4, 0, 0, 0, IntPtr.Zero); }
-          }
-          '@
-          New-Item -ItemType Directory -Force shots | Out-Null
-          function Shot($name) {
-            $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-            $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
-            $g = [System.Drawing.Graphics]::FromImage($bmp)
-            $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
-            $bmp.Save("shots\$name.png", [System.Drawing.Imaging.ImageFormat]::Png)
-            Write-Host "shot $name"
-          }
-          function Report($label) {
-            $apps = @(Get-Process RhapsodDashboard -ErrorAction SilentlyContinue)
-            $ssh = @(Get-Process ssh -ErrorAction SilentlyContinue)
-            Write-Host "[$label] RhapsodDashboard procesos: $($apps.Count); ssh: $($ssh.Count)"
-          }
-          $shell = New-Object -ComObject WScript.Shell
-          (New-Object -ComObject Shell.Application).MinimizeAll()
-          Start-Sleep 3
-          if ($shell.AppActivate('System Properties')) { Start-Sleep 1; [System.Windows.Forms.SendKeys]::SendWait('{ENTER}') }
-
-          # Local OpenSSH server standing in for the bot host.
+          git --version
           $ssh = Join-Path $env:USERPROFILE '.ssh'
           New-Item -ItemType Directory -Force $ssh | Out-Null
           & ssh-keygen.exe -q -t ed25519 -N '""' -f "$ssh\id_ed25519"
@@ -56,89 +24,6 @@ jobs:
           Copy-Item "$ssh\id_ed25519.pub" $auth -Force
           icacls $auth /inheritance:r /grant 'Administrators:F' /grant 'SYSTEM:F' | Out-Null
           Restart-Service sshd
-          Write-Host "sshd: $((Get-Service sshd).Status)"
-          Start-Process python -ArgumentList 'tools\screens\fake_panel.py' -WindowStyle Hidden
-          Start-Sleep 2
-
-          $exe = Resolve-Path tools\desktop\bin\RhapsodDashboard.exe
-          $conf = Join-Path $env:APPDATA 'Rhapsod'
-          New-Item -ItemType Directory -Force $conf | Out-Null
-          Set-Content -Encoding ascii "$conf\dashboard.conf" @("host=$env:USERNAME@localhost", 'key=%USERPROFILE%\.ssh\id_ed25519', 'local_port=8080', 'remote_port=8081', 'panel_user=admin')
-
-          # First run: settings, fingerprint, panel.
-          Start-Process $exe
-          Start-Sleep 6
-          $shell.AppActivate('Rhapsod: configuración') | Out-Null
-          Start-Sleep 1
-          [System.Windows.Forms.SendKeys]::SendWait('{TAB}{TAB}{TAB}{TAB}demo-password{ENTER}')
-          Start-Sleep 15
-          $shell.AppActivate('Rhapsod: confirmar el servidor') | Out-Null
-          Start-Sleep 1
-          [System.Windows.Forms.SendKeys]::SendWait('y')
-          Start-Sleep 15
-          Shot '1-primera-vez-panel'
-          Report 'primera vez'
-          Get-Process RhapsodDashboard, msedge, ssh -ErrorAction SilentlyContinue | Stop-Process -Force
-          Start-Sleep 3
-
-          # Second run: nothing to fill in.
-          $t0 = Get-Date
-          Start-Process $exe
-          Start-Sleep 4
-          Shot '2-segunda-vez-4s'
-          Start-Sleep 8
-          Shot '3-segunda-vez-12s'
-          Report 'segunda vez'
-          $edgeTitles = Get-Process msedge -ErrorAction SilentlyContinue | Where-Object MainWindowTitle | ForEach-Object MainWindowTitle
-          Write-Host "ventanas de Edge: $($edgeTitles -join ' | ')"
-          # Log in the way a user would: user, then paste the copied password.
-          $shell.AppActivate('127.0.0.1') | Out-Null
-          Start-Sleep 1
-          [System.Windows.Forms.SendKeys]::SendWait('admin{TAB}^v{ENTER}')
-          Start-Sleep 4
-          Shot '4-panel-con-sesion'
-
-          # Third launch while running.
-          $third = Start-Process $exe -PassThru
-          Start-Sleep 3
-          Write-Host "tercera apertura terminó sola: $($third.HasExited) (código $($third.ExitCode))"
-          Report 'tercera apertura'
-
-          # Tray icon: promote it out of the overflow, then find it with UI Automation.
-          Get-ChildItem 'HKCU:\Control Panel\NotifyIconSettings' -ErrorAction SilentlyContinue | ForEach-Object {
-            $path = (Get-ItemProperty $_.PSPath).ExecutablePath
-            if ($path -like '*RhapsodDashboard*') { Set-ItemProperty $_.PSPath IsPromoted 1 -Type DWord; Write-Host "promovido $($_.PSChildName)" }
-          }
-          Start-Sleep 15
-          $root = [System.Windows.Automation.AutomationElement]::RootElement
-          $cond = New-Object System.Windows.Automation.PropertyCondition ([System.Windows.Automation.AutomationElement]::ControlTypeProperty), ([System.Windows.Automation.ControlType]::Button)
-          $icon = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $cond) | Where-Object { $_.Current.Name -like 'Rhapsod*' } | Select-Object -First 1
-          if (-not $icon) {
-            Write-Host 'icono no visible; abriendo la flecha de íconos ocultos'
-            $chevron = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $cond) | Where-Object { $_.Current.Name -match 'hidden|ocult' } | Select-Object -First 1
-            if ($chevron) { $r = $chevron.Current.BoundingRectangle; [Mouse]::Left([int]($r.X + $r.Width / 2), [int]($r.Y + $r.Height / 2)); Start-Sleep 2 }
-            $icon = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $cond) | Where-Object { $_.Current.Name -like 'Rhapsod*' } | Select-Object -First 1
-          }
-          if ($icon) {
-            $r = $icon.Current.BoundingRectangle
-            Write-Host "icono: '$($icon.Current.Name)' en $r"
-            $x = [int]($r.X + $r.Width / 2); $y = [int]($r.Y + $r.Height / 2)
-            [Mouse]::SetCursorPos($x, $y) | Out-Null
-            Start-Sleep 3
-            Shot '5-icono-tooltip'
-            [Mouse]::Right($x, $y)
-            Start-Sleep 2
-            Shot '6-icono-menu'
-          } else {
-            Write-Host 'no se encontró el ícono con UI Automation'
-            Shot '5-sin-icono'
-          }
-          Get-Content "$env:LOCALAPPDATA\Rhapsod\dashboard.log" -ErrorAction SilentlyContinue
-      - name: Commit screenshots
-        shell: bash
-        run: |
-          git config user.name github-actions
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add shots
-          git commit -m "chore: desktop screenshots"
-          git push origin HEAD:claude/desktop-screens
+          $pg = 'https://github.com/git-for-windows/git/releases/download/v2.55.0.windows.3/PortableGit-2.55.0.3-64-bit.7z.exe'
+          try { Invoke-WebRequest $pg -OutFile "$env:RUNNER_TEMP\pg.exe"; & "$env:RUNNER_TEMP\pg.exe" -o"C:\pg" -y | Out-Null; Start-Sleep 5 } catch { Write-Host "portable git download failed: $_" }
+          python tools\screens\tunnel_repro.py 'C:\Windows\System32\OpenSSH\ssh.exe' 'C:\Program Files\Git\usr\bin\ssh.exe' 'C:\pg\usr\bin\ssh.exe'
