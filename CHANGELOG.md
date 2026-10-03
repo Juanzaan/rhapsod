@@ -77,6 +77,7 @@ multi-arch Docker image and a Windows tray app.
 - Voice packets stay inside TeamSpeak's 500-byte limit (#205).
 - A track whose upload is unavailable or blocked in the host's country
   plays from another upload (#206).
+- The bot nickname saved in the panel applies on the live server (#211).
 
 ## [4.0.0] - 2026-09-26
 
