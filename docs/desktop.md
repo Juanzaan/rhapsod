@@ -63,6 +63,8 @@ When the local port is already open, the app reuses it only if it answers like t
 
 The app uses the Windows OpenSSH client when installed, otherwise the `ssh.exe` from Git for Windows or the first one on `PATH`. ssh runs without prompts, so the key needs no passphrase or has to be loaded in the Windows OpenSSH agent (`ssh-add`); the Git for Windows `ssh.exe` does not read that agent. For an SSH port other than 22, add a `Host` entry with `Port` to `%USERPROFILE%\.ssh\config` and use that name as the SSH target.
 
+The panel window opens once a full status answer comes back through the tunnel. On one PC, the Git for Windows `ssh.exe` (OpenSSH 10.3p1) passed only the headers of each panel answer through the tunnel and the window stayed blank. When two status answers in a row stop after the headers, the app warns and switches to a relay: it listens on the local port itself and runs `ssh -W` for each connection. The relay works with any `ssh.exe` but logs in to the server once per request, so pages load slower. To get the normal tunnel back, install the Windows OpenSSH client from **Settings > System > Optional features** (or `Add-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0` in an administrator PowerShell) and restart the app.
+
 ## Replacing an older launcher
 
 Launchers built before this app embedded the panel password in the executable. Delete them, set a new `RHAPSOD_PANEL_PASSWORD` on the host, restart the bot while idle, and enter the new password in **Configuración…**.

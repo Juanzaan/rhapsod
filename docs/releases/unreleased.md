@@ -2,11 +2,11 @@
 
 ## Summary
 
-No changes since v4.1.0 yet.
+The Windows tray app no longer leaves a blank panel window when the tunnel passes only the headers of each answer.
 
 ## Changes
 
-- None yet.
+- Windows app: the panel window opens after a full status answer. Two answers in a row cut after the headers switch the app to a relay over `ssh -W`, with a notice recommending the Windows OpenSSH client. Seen with the Git for Windows `ssh.exe`.
 
 ## Upgrade
 

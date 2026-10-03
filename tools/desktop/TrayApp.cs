@@ -53,6 +53,7 @@ namespace RhapsodDashboard
         private DateTime clipboardClearAt = DateTime.MaxValue;
         private bool openWhenReady = true;
         private bool warnedUnauthorized;
+        private int stalledPolls;
         private string lastError = "";
 
         public TrayApp(Settings settings, string password)
@@ -204,12 +205,9 @@ namespace RhapsodDashboard
                 ShowStatus("Túnel abierto; el panel no responde", iconBusy);
                 return;
             }
+            // The window opens after the first full status answer: a tunnel
+            // that passes headers but not bodies shows a blank page.
             ShowStatus("Conectado", iconIdle);
-            if (openWhenReady)
-            {
-                openWhenReady = false;
-                OpenPanel();
-            }
         }
 
         // Runs with connecting still set, so the supervisor does not start a
@@ -340,6 +338,22 @@ namespace RhapsodDashboard
         {
             polling = false;
             if (state != LinkState.Connected && state != LinkState.Shared) return;
+            stalledPolls = panel.BodyStalled ? stalledPolls + 1 : 0;
+            if (panel.BodyStalled)
+            {
+                // Two in a row, so one answer cut by a bot restart does not
+                // switch to the slower relay.
+                if (stalledPolls >= 2 && state == LinkState.Connected && !tunnel.UseRelay)
+                {
+                    SwitchToRelay();
+                    return;
+                }
+                if (stalledPolls == 1) nextPollAt = DateTime.UtcNow;
+                ShowStatus(state == LinkState.Shared
+                    ? "El túnel del puerto " + settings.LocalPort + " corta las respuestas; cerrarlo"
+                    : "El panel no termina de responder", iconBusy);
+                return;
+            }
             if (!panel.Reachable)
             {
                 ShowStatus("Túnel abierto; el panel no responde", iconBusy);
@@ -386,6 +400,21 @@ namespace RhapsodDashboard
                     ShowStatus("Sin reproducir", iconIdle);
                     break;
             }
+        }
+
+        private void SwitchToRelay()
+        {
+            stalledPolls = 0;
+            tunnel.Stop();
+            tunnel.UseRelay = true;
+            var advice = Tunnel.IsWindowsSsh(tunnel.SshPath)
+                ? ""
+                : " Para que cargue más rápido, instalar el cliente OpenSSH de Windows (Configuración > Sistema > Características opcionales).";
+            tray.ShowBalloonTip(15000, "Rhapsod",
+                "El ssh de esta PC (" + tunnel.SshPath + ") corta las respuestas del panel. Rhapsod sigue en un modo más lento." + advice,
+                ToolTipIcon.Warning);
+            failures = 0;
+            Connect();
         }
 
         private void ShowStatus(string text, Icon icon)
