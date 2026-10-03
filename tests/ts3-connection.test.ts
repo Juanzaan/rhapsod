@@ -440,6 +440,31 @@ describe("createTs3Connection messaging", () => {
     );
   });
 
+  it("renames the bot live and reconnects with the new name", async () => {
+    const m = await ts3Mock();
+    const connection = createTs3Connection(testConfig(), identity, logger);
+    await connection.setNickname("Música 24/7");
+    expect(m.__client.execCommand).toHaveBeenCalledWith(
+      "clientupdate client_nickname=Música\\s24\\/7",
+    );
+    expect((m.__client as unknown as { nickname: string }).nickname).toBe(
+      "Música 24/7",
+    );
+  });
+
+  it("keeps the old name when the server refuses the rename", async () => {
+    const m = await ts3Mock();
+    m.__client.execCommand.mockRejectedValueOnce(new Error("nickname in use"));
+    (m.__client as unknown as { nickname: string }).nickname = "Bot";
+    const connection = createTs3Connection(testConfig(), identity, logger);
+    await expect(connection.setNickname("Taken")).rejects.toThrow(
+      "nickname in use",
+    );
+    expect((m.__client as unknown as { nickname: string }).nickname).toBe(
+      "Bot",
+    );
+  });
+
   it("swallows send errors instead of throwing into playback", async () => {
     const m = await ts3Mock();
     m.__client.execCommand.mockRejectedValueOnce(new Error("flood ban"));

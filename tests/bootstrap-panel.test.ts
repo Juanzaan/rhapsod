@@ -1,8 +1,36 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { panelCommandRunner, panelStatus } from "../src/bootstrap/panel.js";
+import type { Logger } from "pino";
+
+import {
+  createBotRenamer,
+  panelCommandRunner,
+  panelStatus,
+} from "../src/bootstrap/panel.js";
+import type { AppConfig } from "../src/config.js";
 import type { CommandContext } from "../src/commands/command-handlers.js";
 import type { Track } from "../src/domain/track.js";
+
+describe("createBotRenamer", () => {
+  const logger = { info: vi.fn() } as unknown as Logger;
+
+  it("renames on the server, then updates the shared config", async () => {
+    const config = { RHAPSOD_TS3_NICKNAME: "Rhapsod" } as AppConfig;
+    const setNickname = vi.fn(() => Promise.resolve());
+    await createBotRenamer(config, { setNickname }, logger)("DJ");
+    expect(setNickname).toHaveBeenCalledWith("DJ");
+    expect(config.RHAPSOD_TS3_NICKNAME).toBe("DJ");
+  });
+
+  it("leaves the config alone when the server refuses", async () => {
+    const config = { RHAPSOD_TS3_NICKNAME: "Rhapsod" } as AppConfig;
+    const setNickname = vi.fn(() => Promise.reject(new Error("in use")));
+    await expect(
+      createBotRenamer(config, { setNickname }, logger)("DJ"),
+    ).rejects.toThrow("in use");
+    expect(config.RHAPSOD_TS3_NICKNAME).toBe("Rhapsod");
+  });
+});
 
 describe("panelCommandRunner", () => {
   const context = {

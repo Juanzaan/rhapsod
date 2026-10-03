@@ -127,7 +127,7 @@ function load() {
         h += "</div>";
       }
       h +=
-        '<div class="save-bar" id="saveBar"><span id="saveNote">Los cambios se aplican al reiniciar el bot.</span><button class="btn" id="saveSettings" onclick="save()">Guardar cambios</button></div>';
+        '<div class="save-bar" id="saveBar"><span id="saveNote">Los cambios se aplican al reiniciar el bot; el nombre, al guardar.</span><button class="btn" id="saveSettings" onclick="save()">Guardar cambios</button></div>';
       document.getElementById("ct").innerHTML = h;
       if (document.querySelectorAll)
         fxReveal(document.querySelectorAll("#ct .cd"));
@@ -185,9 +185,17 @@ function save() {
     })
     .then(function (d) {
       toast(
-        d.ok
-          ? "Config guardada"
-          : "Error al guardar: " + (d.error || "desconocido"),
+        !d.ok
+          ? "Error al guardar: " + (d.error || "desconocido")
+          : d.renamed
+            ? "Config guardada. El bot ya se llama " +
+              d.renamed +
+              " en TeamSpeak"
+            : d.renameError
+              ? "Config guardada. TeamSpeak rechazó el nombre nuevo (" +
+                d.renameError +
+                "); se aplica al reiniciar"
+              : "Config guardada",
       );
       if (d.ok) markSaved();
     })
@@ -228,8 +236,8 @@ function markDirty() {
         ? (changed === 1
             ? "1 cambio sin guardar"
             : changed + " cambios sin guardar") +
-          ". Se aplican al reiniciar el bot."
-        : "Los cambios se aplican al reiniciar el bot.";
+          ". Se aplican al reiniciar el bot; el nombre, al guardar."
+        : "Los cambios se aplican al reiniciar el bot; el nombre, al guardar.";
 }
 
 function markSaved() {

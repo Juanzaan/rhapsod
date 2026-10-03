@@ -151,6 +151,20 @@ export interface ConnectedPanelOptions extends PanelStatusSources {
   readonly restart: () => void;
 }
 
+export function createBotRenamer(
+  config: AppConfig,
+  connection: Pick<Ts3Connection, "setNickname">,
+  logger: Logger,
+): (nickname: string) => Promise<void> {
+  return async (nickname) => {
+    await connection.setNickname(nickname);
+    // Chat echo filtering, !debug and the duplicate-instance check read the
+    // nickname from this shared config object, so they follow the rename.
+    config.RHAPSOD_TS3_NICKNAME = nickname;
+    logger.info({ nickname }, "Bot renamed from the panel");
+  };
+}
+
 export function startConnectedPanel(
   options: ConnectedPanelOptions,
 ): { readonly close: () => Promise<void> } | undefined {
@@ -188,6 +202,7 @@ export function startConnectedPanel(
       mode: serverView.mode,
     }),
     moveBot: (cid: number) => connection.moveToChannel(cid),
+    renameBot: createBotRenamer(config, connection, logger),
     youtubeHealth: createYoutubeHealthCheck((url, signal) =>
       options.resolver.getAudioUrlFromUrl(url, signal),
     ),

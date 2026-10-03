@@ -168,6 +168,13 @@ export type AppConfig = z.infer<typeof configSchema>;
 
 export const CONFIG_KEYS: readonly string[] = Object.keys(configSchema.shape);
 
+/** The nickname startup would use for this raw env value (empty = default). */
+export function resolveTs3Nickname(raw: string | undefined): string {
+  return configSchema.shape.RHAPSOD_TS3_NICKNAME.parse(
+    raw === "" ? undefined : raw,
+  );
+}
+
 export function loadConfig(
   environment: NodeJS.ProcessEnv = process.env,
 ): AppConfig {
