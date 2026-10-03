@@ -5,8 +5,7 @@
       "changelog-path": "CHANGELOG.md",
       "skip-changelog": true,
       "draft": false,
-      "include-component-in-tag": false,
-      "release-as": "4.1.0"
+      "include-component-in-tag": false
     }
   }
 }
