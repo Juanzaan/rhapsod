@@ -4,7 +4,11 @@ import { timingSafeEqual } from "hono/utils/buffer";
 import { serve } from "@hono/node-server";
 import type { Logger } from "pino";
 
-import { validateConfig, type AppConfig } from "../config.js";
+import {
+  resolveTs3Nickname,
+  validateConfig,
+  type AppConfig,
+} from "../config.js";
 import type { ChatEntry } from "../application/chat-log.js";
 import type {
   HealthVerdict,
@@ -126,6 +130,8 @@ export interface PanelOptions {
   readonly sendChat?: (text: string) => Promise<void>;
   readonly serverView?: () => ServerView;
   readonly moveBot?: (cid: number) => Promise<void>;
+  /** Applies a saved nickname on the live server, without a restart. */
+  readonly renameBot?: (nickname: string) => Promise<void>;
   readonly errors?: () => ErrorSummary;
   /** Open notices from the registry; ignoring one hides it until it worsens. */
   readonly notices?: {
@@ -729,7 +735,28 @@ export function createPanelServer(options: PanelOptions): {
         500,
       );
     }
-    return c.json({ ok: true });
+    if (
+      options.renameBot === undefined ||
+      !Object.hasOwn(incoming, "RHAPSOD_TS3_NICKNAME")
+    ) {
+      return c.json({ ok: true });
+    }
+    const nickname = resolveTs3Nickname(env.values.RHAPSOD_TS3_NICKNAME);
+    if (nickname === options.config.RHAPSOD_TS3_NICKNAME) {
+      return c.json({ ok: true });
+    }
+    try {
+      await options.renameBot(nickname);
+      return c.json({ ok: true, renamed: nickname });
+    } catch (error: unknown) {
+      // The file is already saved, so the name still applies on restart.
+      const message = error instanceof Error ? error.message : String(error);
+      options.logger.warn(
+        { nickname, errorMessage: message },
+        "Could not rename the bot on the live server",
+      );
+      return c.json({ ok: true, renameError: message });
+    }
   });
 
   app.post("/api/test-connection", async (c) => {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -815,6 +815,100 @@ describe("panel-server", () => {
       await state.close();
       rmSync(state.dir, { recursive: true, force: true });
     }
+  });
+
+  describe("renaming the bot from settings", () => {
+    async function putEnv(
+      state: ReturnType<typeof startTestPanel>,
+      body: Record<string, string>,
+    ): Promise<Record<string, unknown>> {
+      const res = await fetch(`${state.baseUrl}/api/env`, {
+        method: "PUT",
+        headers: {
+          authorization: state.auth,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+      expect(res.status).toBe(200);
+      return (await res.json()) as Record<string, unknown>;
+    }
+
+    it("applies a new nickname on the live server after saving", async () => {
+      const renameBot = vi.fn(() => Promise.resolve());
+      const state = startTestPanel("RHAPSOD_TS3_NICKNAME=Rhapsod\n", 23621, {
+        renameBot,
+      });
+      try {
+        const payload = await putEnv(state, { RHAPSOD_TS3_NICKNAME: "DJ" });
+        expect(payload).toEqual({ ok: true, renamed: "DJ" });
+        expect(renameBot).toHaveBeenCalledWith("DJ");
+        expect(readFileSync(state.envPath, "utf8")).toContain(
+          "RHAPSOD_TS3_NICKNAME=DJ",
+        );
+      } finally {
+        await state.close();
+        rmSync(state.dir, { recursive: true, force: true });
+      }
+    });
+
+    it("falls back to the default nickname when the field is cleared", async () => {
+      const renameBot = vi.fn(() => Promise.resolve());
+      const state = startTestPanel("RHAPSOD_TS3_NICKNAME=DJ\n", 23622, {
+        config: baseConfig({
+          RHAPSOD_PANEL_PORT: 23622,
+          RHAPSOD_TS3_NICKNAME: "DJ",
+        }),
+        renameBot,
+      });
+      try {
+        await putEnv(state, { RHAPSOD_TS3_NICKNAME: "" });
+        expect(renameBot).toHaveBeenCalledWith("Rhapsod");
+      } finally {
+        await state.close();
+        rmSync(state.dir, { recursive: true, force: true });
+      }
+    });
+
+    it("skips the rename when the nickname did not change", async () => {
+      const renameBot = vi.fn(() => Promise.resolve());
+      const state = startTestPanel("RHAPSOD_TS3_NICKNAME=Rhapsod\n", 23623, {
+        renameBot,
+      });
+      try {
+        const payload = await putEnv(state, {
+          RHAPSOD_TS3_NICKNAME: "Rhapsod",
+          RHAPSOD_TS3_HOST: "ts.example.com",
+        });
+        expect(payload).toEqual({ ok: true });
+        expect(renameBot).not.toHaveBeenCalled();
+      } finally {
+        await state.close();
+        rmSync(state.dir, { recursive: true, force: true });
+      }
+    });
+
+    it("keeps the save when the server refuses the new name", async () => {
+      const renameBot = vi.fn(() =>
+        Promise.reject(new Error("nickname is already in use")),
+      );
+      const state = startTestPanel("RHAPSOD_TS3_NICKNAME=Rhapsod\n", 23624, {
+        renameBot,
+      });
+      try {
+        const payload = await putEnv(state, { RHAPSOD_TS3_NICKNAME: "Taken" });
+        expect(payload).toEqual({
+          ok: true,
+          renameError: "nickname is already in use",
+        });
+        expect(readFileSync(state.envPath, "utf8")).toContain(
+          "RHAPSOD_TS3_NICKNAME=Taken",
+        );
+      } finally {
+        await state.close();
+        rmSync(state.dir, { recursive: true, force: true });
+      }
+    });
   });
 
   it("rejects writes to read-only env keys", async () => {

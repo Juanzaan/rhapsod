@@ -168,6 +168,11 @@ export interface Ts3Connection {
   listChannelListenerUids(): Promise<readonly string[] | undefined>;
   canTalkInCurrentChannel(): Promise<boolean>;
   moveToChannel(cid: number): Promise<void>;
+  /**
+   * Renames the bot on the live server and keeps the new name for later
+   * reconnects. Rejects when the server refuses it (name taken, too long).
+   */
+  setNickname(nickname: string): Promise<void>;
   getServerInfo(): Promise<Record<string, string>>;
   getClientInfo(clid: number): Promise<Record<string, string>>;
   getChannelInfo(cid: number): Promise<Record<string, string>>;
@@ -704,6 +709,14 @@ export function createTs3Connection(
       await client.execCommand(
         `clientmove clid=${client.clientID()} cid=${cid}`,
       );
+    },
+    setNickname: async (nickname: string) => {
+      await client.execCommand(
+        `clientupdate client_nickname=${escapeClientParam(nickname)}`,
+      );
+      // The library sends this name in clientinit and matches it to find its
+      // own clid, so a reconnect would otherwise come back with the old name.
+      client.nickname = nickname;
     },
     getServerInfo: async () => {
       try {
