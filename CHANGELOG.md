@@ -6,7 +6,7 @@ for [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-## [4.1.0] - [DATE OF THE RELEASE MERGE]
+## [4.1.0] - 2026-10-03
 
 The release that makes the bot report what is wrong with it and makes
 measured loudness work: notices in TeamSpeak, the panel and
@@ -47,6 +47,8 @@ multi-arch Docker image and a Windows tray app.
 - `ffmpeg-static` is optional and the image uses Debian's ffmpeg (#172).
 - Panel: one page frame, even rows and hover motion that survives polling
   (#166); the dashboard script moved into a checked file (#158).
+- Panel: new type, the "r." mark and intro, one connection pill and
+  lists without scrollbars (#210).
 
 ### Fixed
 
@@ -69,6 +71,12 @@ multi-arch Docker image and a Windows tray app.
   installer (#190).
 - Small fixes for the panel login delay, the radio title cache and CI
   pinning (#172).
+- A TeamSpeak login the server refuses is retried instead of hanging
+  (#203).
+- Low `!volume` settings stay clean: the gain is applied in float (#204).
+- Voice packets stay inside TeamSpeak's 500-byte limit (#205).
+- A track whose upload is unavailable or blocked in the host's country
+  plays from another upload (#206).
 
 ## [4.0.0] - 2026-09-26
 
