@@ -63,6 +63,8 @@ Si el puerto local ya está abierto, la aplicación lo reutiliza solo cuando res
 
 La aplicación usa el cliente OpenSSH de Windows si está instalado; si no, el `ssh.exe` de Git para Windows o el primero que encuentre en `PATH`. ssh corre sin preguntas, así que la clave no debe tener frase de contraseña o tiene que estar cargada en el agente OpenSSH de Windows (`ssh-add`); el `ssh.exe` de Git para Windows no lee ese agente. Para un puerto SSH distinto de 22, agregar una entrada `Host` con `Port` en `%USERPROFILE%\.ssh\config` y usar ese nombre como destino SSH.
 
+La ventana del panel se abre cuando una respuesta de estado completa llega por el túnel. En una PC, el `ssh.exe` de Git para Windows (OpenSSH 10.3p1) dejaba pasar solo los encabezados de cada respuesta del panel y la ventana quedaba en blanco. Cuando dos respuestas de estado seguidas se cortan después de los encabezados, la aplicación avisa y pasa a un relevo: escucha ella misma en el puerto local y ejecuta `ssh -W` por cada conexión. El relevo funciona con cualquier `ssh.exe`, pero inicia sesión en el servidor una vez por solicitud, así que las páginas cargan más lento. Para volver al túnel normal, instalar el cliente OpenSSH de Windows desde **Configuración > Sistema > Características opcionales** (o `Add-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0` en un PowerShell de administrador) y reiniciar la aplicación.
+
 ## Reemplazar un lanzador anterior
 
 Los lanzadores anteriores a esta aplicación incluían la contraseña del panel dentro del ejecutable. Borrarlos, definir una nueva `RHAPSOD_PANEL_PASSWORD` en el servidor, reiniciar el bot en reposo y escribir la nueva contraseña en **Configuración…**.
