@@ -13,6 +13,8 @@ namespace RhapsodDashboard
         public bool Unauthorized;
         // HTTP status of any other error answer (a 500 from the panel), or 0.
         public int ErrorStatus;
+        // The headers came back but the body did not (see Tunnel relay mode).
+        public bool BodyStalled;
         public bool Connected;
         public string PlayerState = "";
         public string Title = "";
@@ -55,9 +57,26 @@ namespace RhapsodDashboard
             {
                 var request = Request(settings.LocalPort, "/api/state", settings.PanelUser, password);
                 using (var response = (HttpWebResponse)request.GetResponse())
-                using (var reader = new StreamReader(response.GetResponseStream(), Encoding.UTF8))
                 {
-                    var body = new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(reader.ReadToEnd());
+                    string text;
+                    try
+                    {
+                        using (var reader = new StreamReader(response.GetResponseStream(), Encoding.UTF8))
+                        {
+                            text = reader.ReadToEnd();
+                        }
+                    }
+                    catch (IOException)
+                    {
+                        state.BodyStalled = true;
+                        return state;
+                    }
+                    catch (WebException)
+                    {
+                        state.BodyStalled = true;
+                        return state;
+                    }
+                    var body = new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(text);
                     state.Reachable = true;
                     object value;
                     if (body.TryGetValue("connected", out value) && value is bool) state.Connected = (bool)value;
@@ -92,7 +111,8 @@ namespace RhapsodDashboard
         private static HttpWebRequest Request(int port, string path, string user, string password)
         {
             var request = (HttpWebRequest)WebRequest.Create("http://127.0.0.1:" + port + path);
-            request.Timeout = 3000;
+            // Relay mode adds an SSH login to every request.
+            request.Timeout = 8000;
             request.ReadWriteTimeout = 3000;
             request.Proxy = null;
             request.KeepAlive = false;

@@ -18,6 +18,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
+using System.Text;
 using System.Threading;
 using System.Windows.Forms;
 
@@ -217,6 +218,11 @@ namespace RhapsodDashboard
                     !HostKeys.IsUnknownHostError("Permission denied (publickey)."));
                 check("known_hosts option quotes the path", HostKeys.KnownHostsOption().Contains("known_hosts\\\" ~/.ssh/known_hosts\"") &&
                     !HostKeys.KnownHostsOption().Contains("\\Rhapsod"));
+                check("headers without a body count as a stalled answer", StalledAnswerIsDetected());
+                check("relay pipes a connection through a child process", RelayPipesBothWays());
+                check("only ssh under the Windows folder counts as the Windows client",
+                    Tunnel.IsWindowsSsh(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "OpenSSH", "ssh.exe")) &&
+                    !Tunnel.IsWindowsSsh("C:\\Program Files\\Git\\usr\\bin\\ssh.exe") && !Tunnel.IsWindowsSsh(null));
                 check("menu text keeps ampersands", TrayApp.MenuText("Simon & Garfunkel") == "Simon && Garfunkel");
                 var secret = TrayApp.SecretClipboardData("s3cret");
                 check("password stays out of clipboard history",
@@ -232,6 +238,64 @@ namespace RhapsodDashboard
             }
             File.WriteAllLines(reportPath, report);
             return ok ? 0 : 1;
+        }
+
+        // What the owner saw through Git for Windows' ssh -L: the headers
+        // arrive, the body never does, the connection stays open.
+        private static bool StalledAnswerIsDetected()
+        {
+            var server = new TcpListener(IPAddress.Loopback, 0);
+            server.Start();
+            var port = ((IPEndPoint)server.LocalEndpoint).Port;
+            TcpClient held = null;
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                try
+                {
+                    held = server.AcceptTcpClient();
+                    var head = Encoding.ASCII.GetBytes("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 100\r\n\r\n");
+                    held.GetStream().Write(head, 0, head.Length);
+                }
+                catch (SocketException)
+                {
+                    // Listener stopped.
+                }
+            });
+            try
+            {
+                var settings = new Settings { LocalPort = port, PanelUser = "owner" };
+                var state = PanelClient.GetState(settings, "s3cret");
+                return state.BodyStalled && !state.Reachable;
+            }
+            finally
+            {
+                if (held != null) held.Close();
+                server.Stop();
+            }
+        }
+
+        // findstr echoes stdin to stdout, standing in for ssh -W.
+        private static bool RelayPipesBothWays()
+        {
+            var port = FreePort();
+            var relay = new Relay(port, "findstr.exe", "\"^\"");
+            try
+            {
+                using (var client = new TcpClient("127.0.0.1", port))
+                {
+                    var stream = client.GetStream();
+                    stream.ReadTimeout = 10000;
+                    var sent = Encoding.ASCII.GetBytes("ping\r\n");
+                    stream.Write(sent, 0, sent.Length);
+                    client.Client.Shutdown(SocketShutdown.Send);
+                    var reader = new StreamReader(stream, Encoding.ASCII);
+                    return reader.ReadToEnd().Trim() == "ping";
+                }
+            }
+            finally
+            {
+                relay.Stop();
+            }
         }
 
         private static bool IsZeroDword(IDataObject data, string format)

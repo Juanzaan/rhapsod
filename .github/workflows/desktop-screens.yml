@@ -1,20 +1,47 @@
-name: Desktop tunnel repro
+name: Desktop relay e2e
 on:
   push:
     branches: [claude/desktop-screens]
 permissions:
-  contents: read
+  contents: write
 jobs:
-  repro:
+  e2e:
     runs-on: windows-latest
-    timeout-minutes: 25
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Repro
+      - name: Build
+        shell: pwsh
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File tools\desktop\build.ps1
+      - name: Self-test
+        shell: pwsh
+        run: |
+          $report = Join-Path $env:RUNNER_TEMP 'st.txt'
+          $p = Start-Process tools/desktop/bin/RhapsodDashboard.exe -ArgumentList '--self-test', "`"$report`"" -Wait -PassThru
+          Get-Content $report
+          if ($p.ExitCode -ne 0) { throw "self-test failed" }
+      - name: Relay end to end
         shell: powershell
         run: |
           $ErrorActionPreference = 'Continue'
-          git --version
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          New-Item -ItemType Directory -Force shots | Out-Null
+          function Shot($name) {
+            $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+            $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+            $g = [System.Drawing.Graphics]::FromImage($bmp)
+            $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+            $bmp.Save("shots\$name.png", [System.Drawing.Imaging.ImageFormat]::Png)
+          }
+          function Ssh($label) {
+            $list = @(Get-CimInstance Win32_Process -Filter "Name='ssh.exe'")
+            Write-Host "[$label] ssh: $($list.Count)"
+            foreach ($s in $list) { Write-Host "   $($s.CommandLine -replace '.*(-[LW] \S+).*','$1')" }
+          }
+          $shell = New-Object -ComObject WScript.Shell
+          (New-Object -ComObject Shell.Application).MinimizeAll()
+          Start-Sleep 3
+          if ($shell.AppActivate('System Properties')) { Start-Sleep 1; [System.Windows.Forms.SendKeys]::SendWait('{ENTER}') }
           $ssh = Join-Path $env:USERPROFILE '.ssh'
           New-Item -ItemType Directory -Force $ssh | Out-Null
           & ssh-keygen.exe -q -t ed25519 -N '""' -f "$ssh\id_ed25519"
@@ -24,6 +51,34 @@ jobs:
           Copy-Item "$ssh\id_ed25519.pub" $auth -Force
           icacls $auth /inheritance:r /grant 'Administrators:F' /grant 'SYSTEM:F' | Out-Null
           Restart-Service sshd
-          $pg = 'https://github.com/git-for-windows/git/releases/download/v2.55.0.windows.3/PortableGit-2.55.0.3-64-bit.7z.exe'
-          try { Invoke-WebRequest $pg -OutFile "$env:RUNNER_TEMP\pg.exe"; & "$env:RUNNER_TEMP\pg.exe" -o"C:\pg" -y | Out-Null; Start-Sleep 5 } catch { Write-Host "portable git download failed: $_" }
-          python tools\screens\tunnel_repro.py 'C:\Windows\System32\OpenSSH\ssh.exe' 'C:\Program Files\Git\usr\bin\ssh.exe' 'C:\pg\usr\bin\ssh.exe'
+          & ssh-keyscan.exe -t ed25519 localhost 2>$null | Out-File -Encoding ascii "$ssh\known_hosts"
+          Start-Process python -ArgumentList 'tools\screens\stall_panel.py' -WindowStyle Hidden
+          Start-Sleep 2
+          $exe = Resolve-Path tools\desktop\bin\RhapsodDashboard.exe
+          $conf = Join-Path $env:APPDATA 'Rhapsod'
+          New-Item -ItemType Directory -Force $conf | Out-Null
+          Set-Content -Encoding ascii "$conf\dashboard.conf" @("host=$env:USERNAME@localhost", 'key=%USERPROFILE%\.ssh\id_ed25519', 'local_port=8080', 'remote_port=8081', 'panel_user=admin')
+          Start-Process $exe
+          Start-Sleep 6
+          $shell.AppActivate('Rhapsod: configuración') | Out-Null
+          Start-Sleep 1
+          [System.Windows.Forms.SendKeys]::SendWait('{TAB}{TAB}{TAB}{TAB}demo-password{ENTER}')
+          for ($i = 0; $i -lt 8; $i++) { Start-Sleep 5; Ssh "t+$(5*($i+1))s" }
+          Shot '1-tras-el-cambio'
+          $tok = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes('admin:demo-password'))
+          for ($i = 0; $i -lt 3; $i++) {
+            $sw = [Diagnostics.Stopwatch]::StartNew()
+            try { $r = Invoke-WebRequest -UseBasicParsing -TimeoutSec 15 -Headers @{Authorization = "Basic $tok"} http://127.0.0.1:8080/; Write-Host "page via 8080: $($r.StatusCode) $($r.RawContentLength) bytes in $($sw.ElapsedMilliseconds) ms" } catch { Write-Host "page via 8080 failed: $_" }
+          }
+          Get-Content panel.log
+          if (Test-Path "$env:LOCALAPPDATA\Rhapsod\dashboard.log") { Get-Content "$env:LOCALAPPDATA\Rhapsod\dashboard.log" }
+          Get-ChildItem $conf, "$env:LOCALAPPDATA\Rhapsod" -ErrorAction SilentlyContinue | Select-Object FullName
+          Get-Process | Where-Object { $_.MainWindowTitle } | Select-Object ProcessName, MainWindowTitle | Format-Table -AutoSize
+          Stop-Process -Name RhapsodDashboard -Force
+          Start-Sleep 2
+          Ssh 'after quit'
+          git config user.name github-actions
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add shots
+          git commit -m "chore: relay screenshots"
+          git push origin HEAD:claude/desktop-screens

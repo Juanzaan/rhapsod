@@ -36,10 +36,10 @@ namespace RhapsodDashboard
         private readonly NotifyIcon tray = new NotifyIcon();
         private readonly ToolStripMenuItem statusItem = new ToolStripMenuItem { Enabled = false };
         private readonly System.Windows.Forms.Timer supervisor = new System.Windows.Forms.Timer { Interval = 1000 };
-        private readonly Icon iconPlaying = MakeIcon(Color.FromArgb(34, 160, 90));
-        private readonly Icon iconIdle = MakeIcon(Color.FromArgb(90, 100, 115));
+        private readonly Icon iconPlaying = MakeIcon(Color.FromArgb(91, 211, 138));
+        private readonly Icon iconIdle = MakeIcon(Color.FromArgb(150, 160, 170));
         private readonly Icon iconBusy = MakeIcon(Color.FromArgb(214, 150, 30));
-        private readonly Icon iconDown = MakeIcon(Color.FromArgb(200, 60, 60));
+        private readonly Icon iconDown = MakeIcon(Color.FromArgb(235, 95, 85));
 
         private Settings settings;
         private string password;
@@ -53,6 +53,7 @@ namespace RhapsodDashboard
         private DateTime clipboardClearAt = DateTime.MaxValue;
         private bool openWhenReady = true;
         private bool warnedUnauthorized;
+        private int stalledPolls;
         private string lastError = "";
 
         public TrayApp(Settings settings, string password)
@@ -204,12 +205,9 @@ namespace RhapsodDashboard
                 ShowStatus("Túnel abierto; el panel no responde", iconBusy);
                 return;
             }
+            // The window opens after the first full status answer: a tunnel
+            // that passes headers but not bodies shows a blank page.
             ShowStatus("Conectado", iconIdle);
-            if (openWhenReady)
-            {
-                openWhenReady = false;
-                OpenPanel();
-            }
         }
 
         // Runs with connecting still set, so the supervisor does not start a
@@ -340,6 +338,22 @@ namespace RhapsodDashboard
         {
             polling = false;
             if (state != LinkState.Connected && state != LinkState.Shared) return;
+            stalledPolls = panel.BodyStalled ? stalledPolls + 1 : 0;
+            if (panel.BodyStalled)
+            {
+                // Two in a row, so one answer cut by a bot restart does not
+                // switch to the slower relay.
+                if (stalledPolls >= 2 && state == LinkState.Connected && !tunnel.UseRelay)
+                {
+                    SwitchToRelay();
+                    return;
+                }
+                if (stalledPolls == 1) nextPollAt = DateTime.UtcNow;
+                ShowStatus(state == LinkState.Shared
+                    ? "El túnel del puerto " + settings.LocalPort + " corta las respuestas; cerrarlo"
+                    : "El panel no termina de responder", iconBusy);
+                return;
+            }
             if (!panel.Reachable)
             {
                 ShowStatus("Túnel abierto; el panel no responde", iconBusy);
@@ -386,6 +400,21 @@ namespace RhapsodDashboard
                     ShowStatus("Sin reproducir", iconIdle);
                     break;
             }
+        }
+
+        private void SwitchToRelay()
+        {
+            stalledPolls = 0;
+            tunnel.Stop();
+            tunnel.UseRelay = true;
+            var advice = Tunnel.IsWindowsSsh(tunnel.SshPath)
+                ? ""
+                : " Para que cargue más rápido, instalar el cliente OpenSSH de Windows (Configuración > Sistema > Características opcionales).";
+            tray.ShowBalloonTip(15000, "Rhapsod",
+                "El ssh de esta PC (" + tunnel.SshPath + ") corta las respuestas del panel. Rhapsod sigue en un modo más lento." + advice,
+                ToolTipIcon.Warning);
+            failures = 0;
+            Connect();
         }
 
         private void ShowStatus(string text, Icon icon)
@@ -514,22 +543,37 @@ namespace RhapsodDashboard
         [DllImport("user32.dll")]
         private static extern bool DestroyIcon(IntPtr handle);
 
+        // The "r." mark from the panel favicon (src/panel/dashboard-design.ts),
+        // drawn at 32 px. The dot carries the state color, so the shape stays
+        // the same and only the dot changes.
         private static Icon MakeIcon(Color color)
         {
             using (var bitmap = new Bitmap(32, 32))
             using (var graphics = Graphics.FromImage(bitmap))
             {
                 graphics.SmoothingMode = SmoothingMode.AntiAlias;
-                graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
                 graphics.Clear(Color.Transparent);
+                using (var tile = new GraphicsPath())
+                using (var background = new SolidBrush(Color.FromArgb(13, 20, 17)))
+                {
+                    tile.AddArc(0, 0, 14, 14, 180, 90);
+                    tile.AddArc(17, 0, 14, 14, 270, 90);
+                    tile.AddArc(17, 17, 14, 14, 0, 90);
+                    tile.AddArc(0, 17, 14, 14, 90, 90);
+                    tile.CloseFigure();
+                    graphics.FillPath(background, tile);
+                }
+                using (var letter = new GraphicsPath())
+                using (var pen = new Pen(Color.FromArgb(238, 242, 236), 4.5f))
+                {
+                    letter.AddLine(10.5f, 25f, 10.5f, 15f);
+                    letter.AddArc(10.5f, 8f, 14f, 14f, 180, 90);
+                    letter.AddLine(17.5f, 8f, 20.5f, 8f);
+                    graphics.DrawPath(pen, letter);
+                }
                 using (var fill = new SolidBrush(color))
                 {
-                    graphics.FillEllipse(fill, 1, 1, 30, 30);
-                }
-                using (var font = new Font("Segoe UI", 18, FontStyle.Bold, GraphicsUnit.Pixel))
-                using (var format = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
-                {
-                    graphics.DrawString("R", font, Brushes.White, new RectangleF(0, 1, 32, 32), format);
+                    graphics.FillEllipse(fill, 18.5f, 18.5f, 8f, 8f);
                 }
                 var handle = bitmap.GetHicon();
                 try
