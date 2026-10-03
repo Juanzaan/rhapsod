@@ -55,7 +55,7 @@ namespace RhapsodDashboard
             SshPath = ssh;
             if (ssh == null)
             {
-                return "No se encontró ssh.exe. Instalar el cliente OpenSSH de Windows o Git para Windows.";
+                return "No se encontró ssh.exe. Instalar el cliente OpenSSH de Windows: Configuración > Sistema > Características opcionales > Cliente OpenSSH, y volver a abrir Rhapsod.";
             }
             var key = settings.ExpandedKeyPath;
             if (!File.Exists(key))
