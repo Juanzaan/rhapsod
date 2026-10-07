@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { fetchInnertubePlayerAudioUrl } from "../src/media/youtube/innertube-player.js";
+import {
+  fetchInnertubePlayerAudioUrl,
+  fetchInnertubePlayerTrack,
+} from "../src/media/youtube/innertube-player.js";
 
 function jsonResponse(status: number, body: unknown): Response {
   return {
@@ -162,5 +165,79 @@ describe("fetchInnertubePlayerAudioUrl", () => {
     expect(
       await fetchInnertubePlayerAudioUrl("abc", { fetchImpl }),
     ).toBeUndefined();
+  });
+});
+
+describe("fetchInnertubePlayerTrack", () => {
+  const audioFormats = {
+    adaptiveFormats: [
+      {
+        bitrate: 160_000,
+        itag: 251,
+        mimeType: 'audio/webm; codecs="opus"',
+        url: "https://googlevideo.example/251",
+      },
+    ],
+  };
+  const fetchWith = (videoDetails: unknown) =>
+    (() =>
+      jsonResponse(200, {
+        playabilityStatus: { status: "OK" },
+        streamingData: audioFormats,
+        videoDetails,
+      })) as unknown as typeof fetch;
+
+  it("returns title, duration and audio URL from one request", async () => {
+    const fetchImpl = fetchWith({
+      lengthSeconds: "215",
+      title: " Song title ",
+      videoId: "abc",
+    });
+    expect(await fetchInnertubePlayerTrack("abc", { fetchImpl })).toEqual({
+      audioUrl: "https://googlevideo.example/251",
+      durationSeconds: 215,
+      title: "Song title",
+    });
+  });
+
+  it("leaves live streams to yt-dlp", async () => {
+    const fetchImpl = fetchWith({
+      isLive: true,
+      isLiveContent: true,
+      lengthSeconds: "0",
+      title: "Radio 24/7",
+      videoId: "abc",
+    });
+    expect(await fetchInnertubePlayerTrack("abc", { fetchImpl })).toBe(
+      undefined,
+    );
+  });
+
+  it("rejects a response for another video or without a duration", async () => {
+    expect(
+      await fetchInnertubePlayerTrack("abc", {
+        fetchImpl: fetchWith({
+          lengthSeconds: "215",
+          title: "X",
+          videoId: "zzz",
+        }),
+      }),
+    ).toBe(undefined);
+    expect(
+      await fetchInnertubePlayerTrack("abc", {
+        fetchImpl: fetchWith({ title: "X", videoId: "abc" }),
+      }),
+    ).toBe(undefined);
+  });
+
+  it("returns undefined when the video is not playable", async () => {
+    const fetchImpl = (() =>
+      jsonResponse(200, {
+        playabilityStatus: { status: "LOGIN_REQUIRED" },
+        videoDetails: { lengthSeconds: "215", title: "X", videoId: "abc" },
+      })) as unknown as typeof fetch;
+    expect(await fetchInnertubePlayerTrack("abc", { fetchImpl })).toBe(
+      undefined,
+    );
   });
 });
