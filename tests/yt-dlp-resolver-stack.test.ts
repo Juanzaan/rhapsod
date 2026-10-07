@@ -8,6 +8,7 @@ import {
 
 vi.mock("../src/media/youtube/innertube-player.js", () => ({
   fetchInnertubePlayerAudioUrl: vi.fn(() => Promise.resolve(undefined)),
+  fetchInnertubePlayerTrack: vi.fn(() => Promise.resolve(undefined)),
 }));
 
 describe("createYtDlpResolverStack", () => {

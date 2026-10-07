@@ -4,7 +4,10 @@ import { join } from "node:path";
 
 import { describe, expect, it, vi, type Mock } from "vitest";
 
-import { fetchInnertubePlayerAudioUrl } from "../src/media/youtube/innertube-player.js";
+import {
+  fetchInnertubePlayerAudioUrl,
+  fetchInnertubePlayerTrack,
+} from "../src/media/youtube/innertube-player.js";
 import {
   searchInnertubeMusicVideos,
   searchInnertubeVideos,
@@ -25,6 +28,7 @@ import type * as InnertubeSearch from "../src/media/youtube/innertube-search.js"
 
 vi.mock("../src/media/youtube/innertube-player.js", () => ({
   fetchInnertubePlayerAudioUrl: vi.fn(() => Promise.resolve(undefined)),
+  fetchInnertubePlayerTrack: vi.fn(() => Promise.resolve(undefined)),
 }));
 
 vi.mock("../src/media/youtube/innertube-search.js", async (importOriginal) => ({
@@ -168,6 +172,25 @@ describe("YoutubeResolver", () => {
     expect(executor.calls[0]).toContain("--no-playlist");
     expect(executor.calls[0]).toContain("--ignore-no-formats");
     expect(executor.calls[0]).not.toContain("--format");
+  });
+
+  it("reads link metadata from Innertube without starting yt-dlp", async () => {
+    (fetchInnertubePlayerTrack as Mock).mockResolvedValueOnce({
+      audioUrl: "https://fast.example/audio",
+      durationSeconds: 215,
+      title: "Fast title",
+    });
+    const executor = new FakeExecutor("{}");
+    await expect(
+      new YoutubeResolver(executor).getTrack({ id: "abc_123", type: "video" }),
+    ).resolves.toEqual({
+      audioUrl: "https://fast.example/audio",
+      durationSeconds: 215,
+      id: "abc_123",
+      title: "Fast title",
+      webpageUrl: "https://www.youtube.com/watch?v=abc_123",
+    });
+    expect(executor.calls).toHaveLength(0);
   });
 
   it("selects a relevant result from multiple YouTube candidates", async () => {

@@ -13,7 +13,10 @@ import {
   type DaemonHealthSnapshot,
 } from "./daemon-health.js";
 import type { TimeoutConfig } from "../../lib/timeout-config.js";
-import { fetchInnertubePlayerAudioUrl } from "./innertube-player.js";
+import {
+  fetchInnertubePlayerAudioUrl,
+  fetchInnertubePlayerTrack,
+} from "./innertube-player.js";
 import {
   pickInnertubeCandidates,
   searchInnertubeMusicVideos,
@@ -403,6 +406,21 @@ export class YoutubeResolver {
   async getTrack(resource: YoutubeResource): Promise<YoutubeTrackMetadata> {
     if (resource.type !== "video")
       throw new Error("A playlist cannot be resolved as one track");
+    const startedAt = Date.now();
+    const fast = await fetchInnertubePlayerTrack(resource.id);
+    if (fast !== undefined) {
+      this.#logger.info(
+        { winner: "innertube-android-vr", durationMs: Date.now() - startedAt },
+        "Track metadata resolved",
+      );
+      return {
+        audioUrl: fast.audioUrl,
+        durationSeconds: fast.durationSeconds,
+        id: resource.id,
+        title: fast.title,
+        webpageUrl: youtubeUrl(resource.id),
+      };
+    }
     const raw = await this.executor.run(
       [
         "--dump-single-json",
