@@ -177,6 +177,7 @@ describe("YoutubeResolver", () => {
   it("reads link metadata from Innertube without starting yt-dlp", async () => {
     (fetchInnertubePlayerTrack as Mock).mockResolvedValueOnce({
       audioUrl: "https://fast.example/audio",
+      client: "android-vr",
       durationSeconds: 215,
       title: "Fast title",
     });
@@ -421,9 +422,10 @@ describe("YoutubeResolver", () => {
   });
 
   it("prefers the Innertube fast path and skips yt-dlp for YouTube URLs", async () => {
-    (fetchInnertubePlayerAudioUrl as Mock).mockResolvedValueOnce(
-      "https://fast.example/audio",
-    );
+    (fetchInnertubePlayerAudioUrl as Mock).mockResolvedValueOnce({
+      audioUrl: "https://fast.example/audio",
+      client: "visionos",
+    });
     const executor = new FakeExecutor("https://media.example/audio");
     await expect(
       new YoutubeResolver(executor).getAudioUrlFromUrl(

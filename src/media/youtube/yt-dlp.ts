@@ -16,6 +16,7 @@ import type { TimeoutConfig } from "../../lib/timeout-config.js";
 import {
   fetchInnertubePlayerAudioUrl,
   fetchInnertubePlayerTrack,
+  type InnertubePlayerAudio,
 } from "./innertube-player.js";
 import {
   pickInnertubeCandidates,
@@ -410,7 +411,10 @@ export class YoutubeResolver {
     const fast = await fetchInnertubePlayerTrack(resource.id);
     if (fast !== undefined) {
       this.#logger.info(
-        { winner: "innertube-android-vr", durationMs: Date.now() - startedAt },
+        {
+          winner: `innertube-${fast.client}`,
+          durationMs: Date.now() - startedAt,
+        },
         "Track metadata resolved",
       );
       return {
@@ -654,13 +658,16 @@ export class YoutubeResolver {
   async getAudioUrlFromUrl(url: string, signal?: AbortSignal): Promise<string> {
     const startedAt = Date.now();
 
-    const fastPathUrl = await this.#tryInnertubeFastPath(url, signal);
-    if (fastPathUrl !== undefined) {
+    const fastPath = await this.#tryInnertubeFastPath(url, signal);
+    if (fastPath !== undefined) {
       this.#logger.info(
-        { winner: "innertube-android-vr", durationMs: Date.now() - startedAt },
+        {
+          winner: `innertube-${fastPath.client}`,
+          durationMs: Date.now() - startedAt,
+        },
         "Audio URL resolved",
       );
-      return fastPathUrl;
+      return fastPath.audioUrl;
     }
 
     const daemonUrl = await this.#tryDaemonResolve(url, signal);
@@ -729,7 +736,7 @@ export class YoutubeResolver {
   async #tryInnertubeFastPath(
     url: string,
     signal?: AbortSignal,
-  ): Promise<string | undefined> {
+  ): Promise<InnertubePlayerAudio | undefined> {
     if (signal?.aborted) return undefined;
     const media = parseMediaInput(url);
     if (media.kind !== "youtube" || media.resource.type !== "video") {
