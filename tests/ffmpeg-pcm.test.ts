@@ -12,11 +12,66 @@ import {
   resolveFfmpegBinary,
   createFfmpegPcmStream,
   ffmpegEnvironment,
+  ffmpegRangeArguments,
   isFfmpegExit,
   isForbiddenResponse,
 } from "../src/audio/ffmpeg-pcm.js";
 
+const GOOGLEVIDEO_URL =
+  "https://rr1---sn-abc.googlevideo.com/videoplayback?itag=251&clen=3428715&mime=audio%2Fwebm";
+
+describe("ffmpegRangeArguments", () => {
+  it("asks googlevideo for a closed range ending at clen", () => {
+    expect(ffmpegRangeArguments(GOOGLEVIDEO_URL)).toEqual([
+      "-end_offset",
+      "3428715",
+    ]);
+  });
+
+  it("leaves other hosts, missing clen and large files open-ended", () => {
+    expect(
+      ffmpegRangeArguments("https://cdn.example.test/audio?clen=3428715"),
+    ).toEqual([]);
+    expect(
+      ffmpegRangeArguments(
+        "https://evil.example/googlevideo.com/videoplayback?clen=3428715",
+      ),
+    ).toEqual([]);
+    expect(
+      ffmpegRangeArguments(
+        "https://rr1---sn-abc.googlevideo.com/videoplayback?itag=251",
+      ),
+    ).toEqual([]);
+    expect(
+      ffmpegRangeArguments(
+        "https://rr1---sn-abc.googlevideo.com/videoplayback?clen=abc",
+      ),
+    ).toEqual([]);
+    expect(
+      ffmpegRangeArguments(
+        `https://rr1---sn-abc.googlevideo.com/videoplayback?clen=${11 * 1024 * 1024}`,
+      ),
+    ).toEqual([]);
+    expect(ffmpegRangeArguments("not a url")).toEqual([]);
+  });
+});
+
 describe("FFmpeg PCM source", () => {
+  it("sends a closed range to googlevideo as an input option", () => {
+    const args = buildFfmpegPcmArguments(GOOGLEVIDEO_URL, { seekSeconds: 30 });
+
+    const offset = args.indexOf("-end_offset");
+    expect(args[offset + 1]).toBe("3428715");
+    expect(offset).toBeGreaterThan(-1);
+    expect(offset).toBeLessThan(args.indexOf("-i"));
+  });
+
+  it("keeps a live stream open-ended", () => {
+    expect(
+      buildFfmpegPcmArguments(GOOGLEVIDEO_URL, { live: true }),
+    ).not.toContain("-end_offset");
+  });
+
   it("requests raw stereo PCM in the Rhapsod audio format", () => {
     const args = buildFfmpegPcmArguments("https://cdn.example.test/audio");
 

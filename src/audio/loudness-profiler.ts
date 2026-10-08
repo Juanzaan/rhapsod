@@ -1,7 +1,11 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
-import { ffmpegEgressArguments, ffmpegEnvironment } from "./ffmpeg-pcm.js";
+import {
+  ffmpegEgressArguments,
+  ffmpegEnvironment,
+  ffmpegRangeArguments,
+} from "./ffmpeg-pcm.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -152,6 +156,7 @@ export class LoudnessProfiler {
           ...(startSeconds !== undefined && startSeconds > 0
             ? ["-ss", String(startSeconds)]
             : []),
+          ...ffmpegRangeArguments(url),
           "-i",
           url,
           "-af",
