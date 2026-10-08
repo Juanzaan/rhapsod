@@ -102,6 +102,32 @@ export function ffmpegEnvironment(
   return env;
 }
 
+// googlevideo paces an open-ended response (ffmpeg's default `bytes=0-`) at
+// about 1.9x the track's bitrate, while a closed range comes back many times
+// faster (Melodix measured 144x on the same file). With `end_offset` ffmpeg
+// asks for `bytes=<offset>-<clen - 1>`, seeks and reconnects included. yt-dlp
+// downloads these files in 10 MiB ranges; bigger files keep the open request
+// rather than test how YouTube treats a larger range.
+const MAX_CLOSED_RANGE_BYTES = 10 * 1024 * 1024;
+
+/**
+ * `-end_offset` for a googlevideo URL that carries its file size (`clen`), so
+ * ffmpeg sends a closed byte range. Empty for any other input.
+ */
+export function ffmpegRangeArguments(url: string): string[] {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return [];
+  }
+  if (!parsed.hostname.endsWith(".googlevideo.com")) return [];
+  const clen = Number(parsed.searchParams.get("clen"));
+  if (!Number.isSafeInteger(clen) || clen <= 0) return [];
+  if (clen > MAX_CLOSED_RANGE_BYTES) return [];
+  return ["-end_offset", String(clen)];
+}
+
 export function buildFfmpegPcmArguments(
   url: string,
   options: FfmpegPcmOptions = {},
@@ -157,6 +183,7 @@ export function buildFfmpegPcmArguments(
   args.push("-fflags", "+nobuffer", "-flags", "+low_delay");
   args.push("-analyzeduration", "0", "-probesize", "327680");
   args.push(...ffmpegEgressArguments(proxy));
+  if (options.live !== true) args.push(...ffmpegRangeArguments(url));
   args.push(
     "-i",
     url,

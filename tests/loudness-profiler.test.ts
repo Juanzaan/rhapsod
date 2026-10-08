@@ -65,6 +65,24 @@ describe("LoudnessProfiler", () => {
     );
   });
 
+  it("downloads a googlevideo file as one closed range", async () => {
+    const execFile = vi.fn(() => Promise.resolve(MEASURED));
+    const profiler = new LoudnessProfiler({ execFile });
+    profiler.measure(
+      "https://youtu.be/abc",
+      "https://rr1---sn-abc.googlevideo.com/videoplayback?itag=251&clen=3428715",
+      200,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const args =
+      ((execFile.mock.calls[0] as unknown[] | undefined)?.[1] as
+        string[] | undefined) ?? [];
+    expect(args.slice(0, args.indexOf("-i"))).toEqual(
+      expect.arrayContaining(["-end_offset", "3428715"]),
+    );
+  });
+
   it("measures from the music start when an intro is trimmed", async () => {
     const execFile = vi.fn(() => Promise.resolve(MEASURED));
     const profiler = new LoudnessProfiler({ execFile });

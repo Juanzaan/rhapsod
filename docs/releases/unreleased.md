@@ -8,6 +8,7 @@ A pasted YouTube link starts sooner: its title and duration come from the same r
 
 - `!play <YouTube link>` reads the title, duration and audio URL from one Innertube player request. Live streams, unplayable videos and responses without a plain audio URL keep the yt-dlp path. The log line `Track metadata resolved` with `winner: "innertube-android-vr"` marks the fast path.
 - When the ANDROID_VR client answers without a plain audio URL or with an error, the bot asks the VISIONOS client before starting yt-dlp. A timeout does not move to the next client, so the wait before yt-dlp stays at 5 s. The log shows `winner: "innertube-visionos"` when the second client wins. TV and mobile web clients are not used: their URLs need YouTube's player JavaScript to decode.
+- ffmpeg now asks YouTube's media servers for a closed byte range (`-end_offset` set to the file size from the URL's `clen`) instead of an open `bytes=0-` request. googlevideo sends open requests at about 1.9 times the track's bitrate, which made the loudness measurement of a 4-minute track take about 2 minutes. Files over 10 MiB and live streams keep the open request.
 - The Docker image no longer carries the build's development packages (TypeScript, esbuild, ESLint, Vitest and others, about 75 MB uncompressed): `npm prune` now runs in the build stage, before `node_modules` is copied into the runtime image.
 
 ## Upgrade
