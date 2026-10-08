@@ -25,30 +25,74 @@ interface InnertubePlayerResponse {
   };
 }
 
-export interface InnertubePlayerTrack {
+export type InnertubeClientName = "android-vr" | "visionos";
+
+export interface InnertubePlayerAudio {
   readonly audioUrl: string;
+  readonly client: InnertubeClientName;
+}
+
+export interface InnertubePlayerTrack extends InnertubePlayerAudio {
   readonly durationSeconds: number;
   readonly title: string;
 }
 
-const ANDROID_VR_API_KEY = "AIzaSyA8eiZmM1FaDVjRy-df2KTyQ_vz_yYM39w";
-const ANDROID_VR_CLIENT = {
-  androidSdkVersion: 30,
-  clientName: "ANDROID_VR",
-  clientVersion: "1.58.0",
-  gl: "US",
-  hl: "en",
-};
-const ANDROID_VR_USER_AGENT =
-  "com.google.android.apps.youtube.vr.oculus/1.58.0";
+interface InnertubeClient {
+  readonly context: Record<string, unknown>;
+  readonly headers: Record<string, string>;
+  readonly key?: string;
+  readonly name: InnertubeClientName;
+}
+
+// Only clients whose formats carry a plain `url`: TV, MWEB and WEB return
+// ciphered URLs that need YouTube's player JS to decode, which the bot does not
+// run. VISIONOS mirrors yt-dlp's JS-less default and covers ANDROID_VR when
+// YouTube enforces PO tokens or SABR on it.
+const INNERTUBE_CLIENTS: readonly InnertubeClient[] = [
+  {
+    context: {
+      androidSdkVersion: 30,
+      clientName: "ANDROID_VR",
+      clientVersion: "1.58.0",
+      gl: "US",
+      hl: "en",
+    },
+    headers: {
+      "user-agent": "com.google.android.apps.youtube.vr.oculus/1.58.0",
+    },
+    key: "AIzaSyA8eiZmM1FaDVjRy-df2KTyQ_vz_yYM39w",
+    name: "android-vr",
+  },
+  {
+    context: {
+      clientName: "VISIONOS",
+      clientVersion: "1.02",
+      deviceMake: "Apple",
+      deviceModel: "RealityDevice17,1",
+      gl: "US",
+      hl: "en",
+      osName: "visionOS",
+      osVersion: "26.5.23O471",
+    },
+    headers: {
+      "user-agent":
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_7_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15",
+      "x-youtube-client-name": "101",
+      "x-youtube-client-version": "1.02",
+    },
+    name: "visionos",
+  },
+];
 const DEFAULT_TIMEOUT_MS = 5_000;
 
 export async function fetchInnertubePlayerAudioUrl(
   videoId: string,
   options: InnertubePlayerOptions = {},
-): Promise<string | undefined> {
-  const body = await fetchPlayerResponse(videoId, options);
-  return body === undefined ? undefined : preferredAudioUrl(body);
+): Promise<InnertubePlayerAudio | undefined> {
+  const result = await fetchPlayableResponse(videoId, options);
+  return result === undefined
+    ? undefined
+    : { audioUrl: result.audioUrl, client: result.client };
 }
 
 /**
@@ -60,9 +104,9 @@ export async function fetchInnertubePlayerTrack(
   videoId: string,
   options: InnertubePlayerOptions = {},
 ): Promise<InnertubePlayerTrack | undefined> {
-  const body = await fetchPlayerResponse(videoId, options);
-  const details = body?.videoDetails;
-  if (body === undefined || details === undefined) return undefined;
+  const result = await fetchPlayableResponse(videoId, options);
+  const details = result?.body.videoDetails;
+  if (result === undefined || details === undefined) return undefined;
   if (details.isLive === true || details.isLiveContent === true)
     return undefined;
   if (details.videoId !== undefined && details.videoId !== videoId)
@@ -71,16 +115,41 @@ export async function fetchInnertubePlayerTrack(
   const durationSeconds = Number(details.lengthSeconds);
   if (!title || !Number.isInteger(durationSeconds) || durationSeconds <= 0)
     return undefined;
-  const audioUrl = preferredAudioUrl(body);
-  return audioUrl === undefined
-    ? undefined
-    : { audioUrl, durationSeconds, title };
+  return {
+    audioUrl: result.audioUrl,
+    client: result.client,
+    durationSeconds,
+    title,
+  };
+}
+
+// A client that answers without a usable URL moves on to the next one; a
+// timeout or abort ends the chain, so the worst case before the yt-dlp
+// fallback stays at one timeout.
+async function fetchPlayableResponse(
+  videoId: string,
+  options: InnertubePlayerOptions,
+): Promise<
+  | (InnertubePlayerAudio & { readonly body: InnertubePlayerResponse })
+  | undefined
+> {
+  for (const client of INNERTUBE_CLIENTS) {
+    const attempt = await fetchPlayerResponse(videoId, client, options);
+    if (attempt === "stop") return undefined;
+    const audioUrl =
+      attempt === undefined ? undefined : preferredAudioUrl(attempt);
+    if (attempt !== undefined && audioUrl !== undefined)
+      return { audioUrl, body: attempt, client: client.name };
+  }
+  return undefined;
 }
 
 async function fetchPlayerResponse(
   videoId: string,
+  client: InnertubeClient,
   options: InnertubePlayerOptions,
-): Promise<InnertubePlayerResponse | undefined> {
+): Promise<InnertubePlayerResponse | "stop" | undefined> {
+  if (options.signal?.aborted) return "stop";
   const fetchImpl = options.fetchImpl ?? fetch;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const controller = new AbortController();
@@ -90,17 +159,21 @@ async function fetchPlayerResponse(
     options.signal === undefined
       ? controller.signal
       : AbortSignal.any([options.signal, controller.signal]);
+  const query =
+    client.key === undefined
+      ? "prettyPrint=false"
+      : `key=${encodeURIComponent(client.key)}&prettyPrint=false`;
   try {
     const response = await fetchImpl(
-      `https://www.youtube.com/youtubei/v1/player?key=${encodeURIComponent(ANDROID_VR_API_KEY)}&prettyPrint=false`,
+      `https://www.youtube.com/youtubei/v1/player?${query}`,
       {
         body: JSON.stringify({
-          context: { client: ANDROID_VR_CLIENT },
+          context: { client: client.context },
           videoId,
         }),
         headers: {
           "content-type": "application/json",
-          "user-agent": ANDROID_VR_USER_AGENT,
+          ...client.headers,
         },
         method: "POST",
         signal,
@@ -110,7 +183,7 @@ async function fetchPlayerResponse(
     const body = (await response.json()) as InnertubePlayerResponse;
     return body.playabilityStatus?.status === "OK" ? body : undefined;
   } catch {
-    return undefined;
+    return signal.aborted ? "stop" : undefined;
   } finally {
     clearTimeout(timer);
   }

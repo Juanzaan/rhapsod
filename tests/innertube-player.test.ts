@@ -36,9 +36,10 @@ describe("fetchInnertubePlayerAudioUrl", () => {
         },
       });
     }) as unknown as typeof fetch;
-    expect(await fetchInnertubePlayerAudioUrl("abc", { fetchImpl })).toBe(
-      "https://googlevideo.example/251",
-    );
+    expect(await fetchInnertubePlayerAudioUrl("abc", { fetchImpl })).toEqual({
+      audioUrl: "https://googlevideo.example/251",
+      client: "android-vr",
+    });
   });
 
   it("uses the highest-bitrate audio when 251 is absent", async () => {
@@ -62,9 +63,10 @@ describe("fetchInnertubePlayerAudioUrl", () => {
           ],
         },
       })) as unknown as typeof fetch;
-    expect(await fetchInnertubePlayerAudioUrl("abc", { fetchImpl })).toBe(
-      "https://googlevideo.example/141",
-    );
+    expect(await fetchInnertubePlayerAudioUrl("abc", { fetchImpl })).toEqual({
+      audioUrl: "https://googlevideo.example/141",
+      client: "android-vr",
+    });
   });
 
   it("returns undefined when the video is not playable", async () => {
@@ -127,6 +129,87 @@ describe("fetchInnertubePlayerAudioUrl", () => {
     controller.abort();
     await new Promise((resolve) => setImmediate(resolve));
     expect(await promise).toBeUndefined();
+  });
+
+  it("tries VISIONOS when ANDROID_VR has no plain audio URL", async () => {
+    const clients: string[] = [];
+    const fetchImpl = ((_input: string | URL, init?: RequestInit) => {
+      const body = JSON.parse(init?.body as string) as {
+        context: { client: { clientName: string } };
+      };
+      const clientName = body.context.client.clientName;
+      clients.push(clientName);
+      if (clientName === "ANDROID_VR")
+        return jsonResponse(200, {
+          playabilityStatus: { status: "OK" },
+          streamingData: {
+            adaptiveFormats: [
+              { itag: 251, mimeType: "audio/webm", signatureCipher: "s=x" },
+            ],
+          },
+        });
+      return jsonResponse(200, {
+        playabilityStatus: { status: "OK" },
+        streamingData: {
+          adaptiveFormats: [
+            {
+              itag: 251,
+              mimeType: "audio/webm",
+              url: "https://googlevideo.example/visionos",
+            },
+          ],
+        },
+      });
+    }) as unknown as typeof fetch;
+    expect(await fetchInnertubePlayerAudioUrl("abc", { fetchImpl })).toEqual({
+      audioUrl: "https://googlevideo.example/visionos",
+      client: "visionos",
+    });
+    expect(clients).toEqual(["ANDROID_VR", "VISIONOS"]);
+  });
+
+  it("tries VISIONOS after an HTTP error from ANDROID_VR", async () => {
+    const urls: string[] = [];
+    const fetchImpl = ((input: string | URL) => {
+      urls.push(String(input));
+      return urls.length === 1
+        ? jsonResponse(403, {})
+        : jsonResponse(200, {
+            playabilityStatus: { status: "OK" },
+            streamingData: {
+              adaptiveFormats: [
+                {
+                  itag: 251,
+                  mimeType: "audio/webm",
+                  url: "https://googlevideo.example/251",
+                },
+              ],
+            },
+          });
+    }) as unknown as typeof fetch;
+    expect(
+      (await fetchInnertubePlayerAudioUrl("abc", { fetchImpl }))?.client,
+    ).toBe("visionos");
+    expect(urls[0]).toContain("key=");
+    expect(urls[1]).not.toContain("key=");
+  });
+
+  it("stops the client chain after a timeout", async () => {
+    const fetchImpl = vi.fn(
+      (_input: string | URL, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () =>
+            reject(new Error("aborted")),
+          );
+        }),
+    );
+    expect(
+      await fetchInnertubePlayerAudioUrl("abc", {
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+        timeoutMs: 10,
+      }),
+    ).toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
   it("ignores a non-HTTPS preferred audio URL", async () => {
@@ -195,6 +278,7 @@ describe("fetchInnertubePlayerTrack", () => {
     });
     expect(await fetchInnertubePlayerTrack("abc", { fetchImpl })).toEqual({
       audioUrl: "https://googlevideo.example/251",
+      client: "android-vr",
       durationSeconds: 215,
       title: "Song title",
     });
